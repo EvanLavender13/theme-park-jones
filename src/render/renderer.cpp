@@ -3,6 +3,8 @@
 #include "core/profile.h"
 
 #include <SDL3/SDL.h>
+#include <imgui.h>
+#include <imgui_impl_sdlgpu3.h>
 
 #include <stddef.h>
 
@@ -316,7 +318,19 @@ bool createRenderer(Renderer &renderer, SDL_Window *window, float terrainSize) {
     return false;
   }
   renderer.DepthFormat = chooseDepthFormat(renderer.Device);
-  return createTerrainPipeline(renderer) && createTerrainMesh(renderer, terrainSize);
+  if (!createTerrainPipeline(renderer) || !createTerrainMesh(renderer, terrainSize)) {
+    return false;
+  }
+
+  ImGui_ImplSDLGPU3_InitInfo uiInfo = {};
+  uiInfo.Device = renderer.Device;
+  uiInfo.ColorTargetFormat = COLOR_FORMAT;
+  uiInfo.MSAASamples = SDL_GPU_SAMPLECOUNT_1;
+  renderer.UiInitialized = ImGui_ImplSDLGPU3_Init(&uiInfo);
+  if (!renderer.UiInitialized) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Cannot initialize the ImGui GPU backend");
+  }
+  return renderer.UiInitialized;
 }
 
 void destroyRenderer(Renderer &renderer) {
@@ -324,6 +338,9 @@ void destroyRenderer(Renderer &renderer) {
     return;
   }
   SDL_WaitForGPUIdle(renderer.Device);
+  if (renderer.UiInitialized) {
+    ImGui_ImplSDLGPU3_Shutdown();
+  }
   SDL_ReleaseGPUTexture(renderer.Device, renderer.ColorTarget);
   SDL_ReleaseGPUTexture(renderer.Device, renderer.DepthTarget);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.TerrainVertices);
@@ -336,29 +353,13 @@ void destroyRenderer(Renderer &renderer) {
   renderer = Renderer{};
 }
 
-bool drawFrame(Renderer &renderer, const CameraView &camera, const char *capturePath) {
-  TPJ_PROFILE_ZONE();
-  SDL_GPUCommandBuffer *commands = SDL_AcquireGPUCommandBuffer(renderer.Device);
-  if (commands == nullptr) {
-    logError("Cannot acquire command buffer");
-    return false;
-  }
+void beginUiFrame() { ImGui_ImplSDLGPU3_NewFrame(); }
 
-  SDL_GPUTexture *swapchain = nullptr;
-  uint32_t width = 0;
-  uint32_t height = 0;
-  if (!SDL_WaitAndAcquireGPUSwapchainTexture(commands, renderer.Window, &swapchain, &width,
-                                             &height)) {
-    logError("Cannot acquire swapchain texture");
-    SDL_CancelGPUCommandBuffer(commands);
-    return false;
-  }
-  // A null swapchain texture means the window is minimized; skip the frame.
-  if (swapchain == nullptr || !ensureRenderTargets(renderer, width, height)) {
-    return SDL_SubmitGPUCommandBuffer(commands) && swapchain == nullptr;
-  }
+namespace {
 
-  const float aspect = static_cast<float>(width) / static_cast<float>(height);
+void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const CameraView &camera) {
+  const float aspect =
+      static_cast<float>(renderer.TargetWidth) / static_cast<float>(renderer.TargetHeight);
   CameraUniforms uniforms = {};
   uniforms.ViewProjection = multiply(perspective(camera.FovY, aspect, camera.NearZ, camera.FarZ),
                                      lookAt(camera.Eye, camera.Target, {0.0f, 1.0f, 0.0f}));
@@ -391,17 +392,64 @@ bool drawFrame(Renderer &renderer, const CameraView &camera, const char *capture
   SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
   SDL_DrawGPUIndexedPrimitives(pass, renderer.TerrainIndexCount, 1, 0, 0, 0);
   SDL_EndGPURenderPass(pass);
+}
 
+// The UI draws into the offscreen target over the scene, so captures include it.
+void drawUi(const Renderer &renderer, SDL_GPUCommandBuffer *commands, ImDrawData *ui) {
+  ImGui_ImplSDLGPU3_PrepareDrawData(ui, commands);
+  SDL_GPUColorTargetInfo uiTarget = {};
+  uiTarget.texture = renderer.ColorTarget;
+  uiTarget.load_op = SDL_GPU_LOADOP_LOAD;
+  uiTarget.store_op = SDL_GPU_STOREOP_STORE;
+  SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(commands, &uiTarget, 1, nullptr);
+  ImGui_ImplSDLGPU3_RenderDrawData(ui, commands, pass);
+  SDL_EndGPURenderPass(pass);
+}
+
+void blitToSwapchain(const Renderer &renderer, SDL_GPUCommandBuffer *commands,
+                     SDL_GPUTexture *swapchain) {
   SDL_GPUBlitInfo blit = {};
   blit.source.texture = renderer.ColorTarget;
-  blit.source.w = width;
-  blit.source.h = height;
+  blit.source.w = renderer.TargetWidth;
+  blit.source.h = renderer.TargetHeight;
   blit.destination.texture = swapchain;
-  blit.destination.w = width;
-  blit.destination.h = height;
+  blit.destination.w = renderer.TargetWidth;
+  blit.destination.h = renderer.TargetHeight;
   blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
   blit.filter = SDL_GPU_FILTER_NEAREST;
   SDL_BlitGPUTexture(commands, &blit);
+}
+
+} // namespace
+
+bool drawFrame(Renderer &renderer, const CameraView &camera, ImDrawData *ui,
+               const char *capturePath) {
+  TPJ_PROFILE_ZONE();
+  SDL_GPUCommandBuffer *commands = SDL_AcquireGPUCommandBuffer(renderer.Device);
+  if (commands == nullptr) {
+    logError("Cannot acquire command buffer");
+    return false;
+  }
+
+  SDL_GPUTexture *swapchain = nullptr;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  if (!SDL_WaitAndAcquireGPUSwapchainTexture(commands, renderer.Window, &swapchain, &width,
+                                             &height)) {
+    logError("Cannot acquire swapchain texture");
+    SDL_CancelGPUCommandBuffer(commands);
+    return false;
+  }
+  // A null swapchain texture means the window is minimized; skip the frame.
+  if (swapchain == nullptr || !ensureRenderTargets(renderer, width, height)) {
+    return SDL_SubmitGPUCommandBuffer(commands) && swapchain == nullptr;
+  }
+
+  drawScene(renderer, commands, camera);
+  if (ui != nullptr && renderer.UiInitialized) {
+    drawUi(renderer, commands, ui);
+  }
+  blitToSwapchain(renderer, commands, swapchain);
 
   if (capturePath != nullptr) {
     return submitWithCapture(renderer, commands, capturePath);

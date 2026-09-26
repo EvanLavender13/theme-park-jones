@@ -4,7 +4,7 @@ add_library(tpj_render STATIC
     math.cpp
     renderer.cpp)
 target_include_directories(tpj_render PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tpj_render PUBLIC tpj_core SDL3::SDL3)
+target_link_libraries(tpj_render PUBLIC tpj_core SDL3::SDL3 tpj_imgui)
 tpj_configure_target(tpj_render)
 
 set(TPJ_SHADER_SOURCES

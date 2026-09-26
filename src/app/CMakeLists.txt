@@ -1,4 +1,5 @@
 add_executable(tpj_app
+    debug_panel.cpp
     main.cpp
     orbit_camera.cpp)
 set_target_properties(tpj_app PROPERTIES OUTPUT_NAME ThemeParkJones)

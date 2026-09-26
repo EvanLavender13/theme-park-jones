@@ -34,6 +34,12 @@ if(TPJ_TRACY)
         OPTIONS "TRACY_ENABLE ON" "TRACY_ON_DEMAND ON")
 endif()
 
+CPMAddPackage(
+    NAME EnTT
+    URL https://github.com/skypjack/entt/archive/refs/tags/v4.0.0.tar.gz
+    SYSTEM YES
+    EXCLUDE_FROM_ALL YES)
+
 add_subdirectory(src/core)
 add_subdirectory(src/sim)
 
@@ -55,6 +61,22 @@ if(TPJ_BUILD_APP)
         OPTIONS
             "ENABLE_OPT OFF" "ENABLE_HLSL OFF" "ENABLE_SPVREMAPPER OFF"
             "GLSLANG_TESTS OFF" "GLSLANG_ENABLE_INSTALL OFF" "ENABLE_GLSLANG_BINARIES ON")
+
+    # Dear ImGui ships no CMake build; tpj_imgui compiles it with the SDL3 and SDL_GPU backends.
+    CPMAddPackage(
+        NAME imgui
+        URL https://github.com/ocornut/imgui/archive/refs/tags/v1.92.9b-docking.tar.gz
+        DOWNLOAD_ONLY YES)
+    add_library(tpj_imgui STATIC
+        ${imgui_SOURCE_DIR}/imgui.cpp
+        ${imgui_SOURCE_DIR}/imgui_demo.cpp
+        ${imgui_SOURCE_DIR}/imgui_draw.cpp
+        ${imgui_SOURCE_DIR}/imgui_tables.cpp
+        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlgpu3.cpp)
+    target_include_directories(tpj_imgui SYSTEM PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+    target_link_libraries(tpj_imgui PUBLIC SDL3::SDL3)
 
     add_subdirectory(src/render)
     add_subdirectory(src/app)

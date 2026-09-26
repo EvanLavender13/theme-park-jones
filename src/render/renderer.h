@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 
+struct ImDrawData;
 struct SDL_GPUBuffer;
 struct SDL_GPUDevice;
 struct SDL_GPUGraphicsPipeline;
@@ -35,15 +36,22 @@ struct Renderer {
   int DepthFormat = 0;
   uint32_t TargetWidth = 0;
   uint32_t TargetHeight = 0;
+  bool UiInitialized = false;
 };
 
-// Creates the GPU device and a flat square terrain of `terrainSize` meters centered on the
-// origin. Returns false and logs through SDL on failure.
+// Creates the GPU device, a flat square terrain of `terrainSize` meters centered on the origin,
+// and the Dear ImGui GPU backend. An ImGui context must already exist. Returns false and logs
+// through SDL on failure.
 bool createRenderer(Renderer &renderer, SDL_Window *window, float terrainSize);
 void destroyRenderer(Renderer &renderer);
 
-// Draws one frame. When `capturePath` is non-null the frame is also written there as a BMP.
-bool drawFrame(Renderer &renderer, const CameraView &camera, const char *capturePath);
+// Starts the GPU backend's part of an ImGui frame. Call before ImGui::NewFrame.
+void beginUiFrame();
+
+// Draws one frame: the scene, then `ui` over it when non-null. When `capturePath` is non-null
+// the frame, including the UI, is also written there as a BMP.
+bool drawFrame(Renderer &renderer, const CameraView &camera, ImDrawData *ui,
+               const char *capturePath);
 
 } // namespace tpj
 

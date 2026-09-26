@@ -1,3 +1,4 @@
+#include "app/debug_panel.h"
 #include "app/orbit_camera.h"
 #include "core/profile.h"
 #include "render/renderer.h"
@@ -5,6 +6,8 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#include <imgui.h>
+#include <imgui_impl_sdl3.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -42,24 +45,36 @@ float keyAxis(const bool *keys, SDL_Scancode positive, SDL_Scancode negative) {
   return (keys[positive] ? 1.0f : 0.0f) - (keys[negative] ? 1.0f : 0.0f);
 }
 
-// Drains pending events into one frame of camera input. Returns false when the app should quit.
+void addMouseInput(const SDL_Event &event, tpj::CameraInput &input) {
+  if (event.type == SDL_EVENT_MOUSE_MOTION) {
+    if ((event.motion.state & SDL_BUTTON_RMASK) != 0) {
+      input.OrbitDx += event.motion.xrel;
+      input.OrbitDy += event.motion.yrel;
+    } else if ((event.motion.state & SDL_BUTTON_MMASK) != 0) {
+      input.PanDx += event.motion.xrel;
+      input.PanDy += event.motion.yrel;
+    }
+  } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+    input.Zoom += event.wheel.y;
+  }
+}
+
+// Drains pending events into ImGui and one frame of camera input. Input ImGui is using does
+// not reach the camera. Returns false when the app should quit.
 bool gatherInput(tpj::CameraInput &input) {
   bool keepRunning = true;
+  const ImGuiIO &io = ImGui::GetIO();
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
+    ImGui_ImplSDL3_ProcessEvent(&event);
     if (event.type == SDL_EVENT_QUIT) {
       keepRunning = false;
-    } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
-      if ((event.motion.state & SDL_BUTTON_RMASK) != 0) {
-        input.OrbitDx += event.motion.xrel;
-        input.OrbitDy += event.motion.yrel;
-      } else if ((event.motion.state & SDL_BUTTON_MMASK) != 0) {
-        input.PanDx += event.motion.xrel;
-        input.PanDy += event.motion.yrel;
-      }
-    } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-      input.Zoom += event.wheel.y;
+    } else if (!io.WantCaptureMouse) {
+      addMouseInput(event, input);
     }
+  }
+  if (io.WantCaptureKeyboard) {
+    return keepRunning;
   }
   const bool *keys = SDL_GetKeyboardState(nullptr);
   input.MoveForward = keyAxis(keys, SDL_SCANCODE_W, SDL_SCANCODE_S);
@@ -101,8 +116,19 @@ bool runLoop(tpj::Renderer &renderer, const Options &options) {
     view.Eye = tpj::orbitCameraEye(camera);
     view.Target = camera.Focus;
 
+    tpj::beginUiFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+    tpj::DebugStats stats;
+    stats.SimTick = world.Tick;
+    stats.Focus = camera.Focus;
+    stats.Distance = camera.Distance;
+    tpj::drawDebugPanel(stats);
+    ImGui::Render();
+
     const bool lastFrame = options.FrameLimit > 0 && frame >= options.FrameLimit;
-    if (!tpj::drawFrame(renderer, view, lastFrame ? options.CapturePath : nullptr)) {
+    if (!tpj::drawFrame(renderer, view, ImGui::GetDrawData(),
+                        lastFrame ? options.CapturePath : nullptr)) {
       return false;
     }
     TPJ_PROFILE_FRAME();
@@ -125,15 +151,25 @@ int main(int argc, char **argv) {
   }
   SDL_Window *window = SDL_CreateWindow("Theme Park Jones", 1600, 900,
                                         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-  tpj::Renderer renderer;
-  bool ok = false;
   if (window == nullptr) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateWindow: %s", SDL_GetError());
-  } else if (tpj::createRenderer(renderer, window, PARK_SIZE_METERS)) {
-    ok = runLoop(renderer, options);
+    SDL_Quit();
+    return EXIT_FAILURE;
   }
 
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+  ImGui::StyleColorsDark();
+  ImGui_ImplSDL3_InitForSDLGPU(window);
+
+  tpj::Renderer renderer;
+  const bool ok =
+      tpj::createRenderer(renderer, window, PARK_SIZE_METERS) && runLoop(renderer, options);
+
   tpj::destroyRenderer(renderer);
+  ImGui_ImplSDL3_Shutdown();
+  ImGui::DestroyContext();
   SDL_DestroyWindow(window);
   SDL_Quit();
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;
