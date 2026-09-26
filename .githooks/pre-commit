@@ -1,0 +1,37 @@
+#!/bin/bash
+# pre-commit: clang-format staged C/C++ files (decision 0021).
+# clang-tidy runs in the linux-debug build, which the pre-push hook gates.
+# Activate once per clone: git config core.hooksPath .githooks
+#
+# A file with no unstaged changes is formatted in place and re-staged. A file with unstaged
+# changes has only its staged version formatted, so work left out of the commit stays out.
+
+if command -v clang-format &> /dev/null; then
+    CLANG_FORMAT="clang-format"
+elif command -v clang-format.exe &> /dev/null; then
+    CLANG_FORMAT="clang-format.exe"
+else
+    echo "pre-commit: clang-format not found; skipping format pass."
+    exit 0
+fi
+
+git diff --cached --name-only --diff-filter=ACM -z -- '*.cpp' '*.h' |
+while IFS= read -r -d '' FILE; do
+    if git diff --quiet -- "$FILE"; then
+        $CLANG_FORMAT -i "$FILE"
+        if ! git diff --quiet -- "$FILE"; then
+            git add -- "$FILE"
+            echo "Formatted: $FILE"
+        fi
+    else
+        STAGED_BLOB=$(git rev-parse ":$FILE")
+        FORMATTED_BLOB=$(git cat-file blob "$STAGED_BLOB" |
+            $CLANG_FORMAT --assume-filename="$FILE" | git hash-object -w --stdin)
+        if [ "$FORMATTED_BLOB" != "$STAGED_BLOB" ]; then
+            MODE=$(git ls-files -s -- "$FILE" | cut -d' ' -f1)
+            git update-index --cacheinfo "$MODE,$FORMATTED_BLOB,$FILE"
+            echo "Formatted staged version only (unstaged changes kept as they were): $FILE"
+        fi
+    fi
+done
+exit 0

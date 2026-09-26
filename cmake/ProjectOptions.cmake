@@ -13,7 +13,7 @@ function(tpj_configure_target target)
         find_program(TPJ_CLANG_TIDY_EXE NAMES clang-tidy REQUIRED)
         # GCC-only warning flags in the compile line are unknown to clang.
         set_target_properties(${target} PROPERTIES
-            CXX_CLANG_TIDY "${TPJ_CLANG_TIDY_EXE};--extra-arg=-Wno-unknown-warning-option")
+            CXX_CLANG_TIDY "${TPJ_CLANG_TIDY_EXE};--warnings-as-errors=*;--extra-arg=-Wno-unknown-warning-option")
     endif()
 
     # A static runtime lets the Windows binary run outside an MSYS2 shell.

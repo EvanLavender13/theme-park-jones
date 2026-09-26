@@ -1,0 +1,140 @@
+---
+name: planning-features
+description: Use whenever the user wants to plan a feature inside an approved milestone. Reads the parent MILESTONE.md, the principles, and the module specs the feature touches, explores the code, researches implementation patterns, brainstorms with the user one question at a time, and writes FEATURE.md (the contract the separate test pass derives tests from) and PLAN.md (spec, interface, and implementation tasks the implementer follows without further design decisions). Stops at the plan; does not write code or invoke implementing-features. Use this even for small features.
+---
+
+# Planning Features
+
+## Purpose
+
+Take one feature from a milestone brief. Produce two artifacts:
+
+- FEATURE.md, defining the feature precisely enough that tests can be derived from it without seeing the implementation.
+- PLAN.md, with bite-sized tasks the implementer can follow without making design decisions.
+
+## Hard gate
+
+Do not write code. Do not scaffold files. Do not invoke `implementing-features`. The parent MILESTONE.md must exist at plans/<capability-slug>/<milestone-slug>/MILESTONE.md.
+
+`researching` and `maintaining-backlog` are the only callable skills from here: `researching` to retain research at this node, `maintaining-backlog` to deposit speculative items and to drop items this feature draws from or supersedes.
+
+## Checklist
+
+Create a task for each item. Complete in order.
+
+1. Read the parent MILESTONE.md in full and confirm which feature you are planning.
+2. Read the grandparent CAPABILITY.md and confirm scope alignment.
+3. Explore related code: docs/principles.md, the SPEC.md of every module the feature touches, relevant decision records, and the files the feature will touch or depend on. Identify patterns to follow.
+4. Reconcile the backlog: drop the item this feature draws from, and any item it supersedes, via `maintaining-backlog`.
+5. Research implementation patterns via the `researching` skill. It writes findings to plans/<capability-slug>/<milestone-slug>/<feature-slug>/RESEARCH.md.
+6. Ask clarifying questions, one at a time. Cover acceptance criteria, edge cases, and integration boundaries.
+7. Name the simplest version that works. Strip polish, edge cases, and nice-to-haves and send them to `maintaining-backlog`.
+8. Map the medium and principle checks: the fields and flows the feature samples, emits, draws, or supplies, and for each principle the feature can violate in code (1 to 6, 8, 10), the property a test should assert. Apply the principles gate from `planning-overview`.
+9. Draft the spec change: the exact sentences to add or change in each affected SPEC.md, and the public interface (header declarations) the feature exposes.
+10. List files to touch, with specific paths, each marked create or modify.
+11. Decompose into bite-sized tasks, each one action of two to five minutes, in the task structure below.
+12. Write FEATURE.md at plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md.
+13. Write PLAN.md at the same path.
+14. Self-review: every acceptance criterion is testable from FEATURE.md and the specs alone; every task has exact paths, exact commands, and expected outputs. Fix inline.
+15. Ask the user to approve both artifacts.
+
+## Process notes
+
+Assume the implementer has no project context. Write paths and commands in full. Do not say "add validation" when you can write the validation itself.
+
+Tests come from a separate pass. The implementer does not write the feature's tests; the `test-writer` agent derives them from FEATURE.md, the specs, and the principles, without reading PLAN.md. So FEATURE.md must carry everything a test needs: acceptance criteria with concrete values, edge cases, and the principle checks. PLAN.md contains no test code.
+
+Order of work inside PLAN.md: spec tasks first (update SPEC.md), then interface tasks (public headers with stub definitions that compile, so tests can be written against them), then the test pass (one task that says to run it, no content), then implementation tasks, then the commit.
+
+Graybox first. When a feature combines mechanics and presentation, deliver mechanics first and add presentation in later tasks.
+
+One commit per feature. The final task ends with the feature's single commit via the `commit-hygiene` skill. No other task commits.
+
+One concept per task. A task that combines two unrelated changes hides a dependency. Split it.
+
+Defer everything optional. Anything that does not contribute to acceptance criteria goes in FEATURE.md's Out of scope section and into the backlog.
+
+## Task structure
+
+```markdown
+### Task N: <Name>
+
+Files:
+- Create: `exact/path/to/file.ext`
+- Modify: `exact/path/to/existing.ext:123-145`
+
+Step 1: <Action>
+
+[Exact code, command, or content.]
+
+Step 2: <Action>
+
+Run: `exact command`
+Expected: <exact expected output>
+```
+
+Implementation tasks verify with the linux-debug build and the tests: `cmake --build --preset linux-debug` and `ctest --preset linux-debug`, stating which of the test pass's tests are expected to pass after the task.
+
+## FEATURE.md format
+
+```markdown
+# Feature: <Name>
+
+## Summary
+
+One paragraph. What this feature does.
+
+## Acceptance criteria
+
+Concrete, testable conditions with concrete values.
+
+## Medium
+
+Fields sampled and emitted, flows drawn and supplied, and the entities on the other side of each.
+
+## Principle checks
+
+For each principle the feature can violate in code, the property a test asserts. For example: principle 3, the supply flow's total quantity is unchanged by transport; principle 10, two runs from the same seed give identical state.
+
+## Spec changes
+
+The SPEC.md files this feature changes and what they will say.
+
+## Files affected
+
+Paths to create or modify.
+
+## Dependencies
+
+Code, libraries, content, or sibling features required.
+
+## Out of scope
+
+What this feature deliberately does not do. Items that remain valuable belong in the backlog.
+
+## Open questions
+
+Each with what could resolve it.
+```
+
+## PLAN.md format
+
+```markdown
+# Implementation Plan: <Feature Name>
+
+## Goal
+
+One sentence describing what this plan delivers.
+
+## Approach
+
+Two to three sentences on the technical approach.
+
+## Tasks
+
+[Spec tasks, interface tasks, the test pass task, implementation tasks, and the final commit, in the structure above.]
+```
+
+## Next step
+
+The user invokes `implementing-features` against the PLAN.md.

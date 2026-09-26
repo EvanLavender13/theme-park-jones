@@ -16,7 +16,7 @@ The Linux build is for verification. linux-debug runs AddressSanitizer, UBSan, a
     cmake --build --preset linux-debug
     ctest --preset linux-debug
 
-A change is finished when linux-debug builds without warnings and its tests pass. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
+A change is finished when linux-debug builds without warnings and its tests pass. Git hooks format on commit, check commit messages, and gate pushes on linux-debug; activate them once per clone with `git config core.hooksPath .githooks`. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
 
 ## Authority
 
@@ -24,11 +24,15 @@ docs/principles.md is the highest authority. When a request or plan conflicts wi
 
 Decisions that are expensive to reverse are recorded in docs/decisions/; see its README. docs/design-notes.md is provisional thinking, not a spec. Questions in docs/open-questions.md are Evan's to decide: ask about them, do not decide them in code.
 
+## Workflow
+
+Planning and building go through the skills in .claude/skills; start at planning-overview, which routes to the rest. Commit messages follow the commit-hygiene skill.
+
 ## Specs and verification
 
 Each module keeps a SPEC.md beside its code, updated in the same change as the code it describes. Scale ceremony to the change: a small fix needs no spec edit.
 
-Tests are derived from the principles and specs and written in a separate pass from the implementation, not by the context that wrote the code. After implementing, have a fresh-context reviewer check the diff against the spec and report only gaps that affect correctness or stated requirements. Report results with evidence such as test output, never as self-assessment.
+Tests are derived from the principles and specs and written in a separate pass from the implementation, by the test-writer agent, never by the context that writes the code. After implementing, the reviewer agent checks the diff against the spec and the principles with fresh context and reports only gaps that affect correctness or stated requirements. Report results with evidence such as test output, never as self-assessment.
 
 Anything mechanically checkable belongs in a test, hook, or CI check, not in a document.
 

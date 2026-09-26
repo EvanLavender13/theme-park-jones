@@ -1,0 +1,32 @@
+#!/bin/bash
+# pre-push: build linux-debug (ASan, UBSan, clang-tidy, warnings as errors) and run its tests
+# (decision 0021). Checks the working tree, so commit or stash unrelated changes first.
+# Activate once per clone: git config core.hooksPath .githooks
+
+if [ "$(uname -s)" != "Linux" ]; then
+    echo "pre-push: the linux-debug checks run under WSL; push from WSL, or use --no-verify."
+    exit 1
+fi
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+if [ ! -f build/linux-debug/CMakeCache.txt ]; then
+    cmake --preset linux-debug > /dev/null || { echo "pre-push: configure failed."; exit 1; }
+fi
+
+BUILD_LOG=$(cmake --build --preset linux-debug 2>&1)
+BUILD_STATUS=$?
+# Compiler and clang-tidy diagnostics only (file:line:column:), not make's own messages such
+# as clock-skew notices on the Windows drive, and not dependency code.
+WARNINGS=$(echo "$BUILD_LOG" | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):" | grep -v "/.cpm-cache/" || true)
+if [ $BUILD_STATUS -ne 0 ] || [ -n "$WARNINGS" ]; then
+    echo "$WARNINGS"
+    echo "pre-push: linux-debug build failed or has warnings; push aborted."
+    exit 1
+fi
+
+if ! ctest --preset linux-debug; then
+    echo "pre-push: tests failed; push aborted."
+    exit 1
+fi
+exit 0

@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""commit-msg hook: validate the commit message against project hygiene rules; exit 1 to abort."""
+import os
+import re
+import sys
+
+
+PREFIX_RE = re.compile(r"^[A-Z][A-Za-z0-9]+:\s")
+NARRATION_RE = re.compile(r"^\s*(First|Then|Next|Finally|After that)[\s,]", re.IGNORECASE)
+FIRST_PERSON_RE = re.compile(
+    r"^\s*I\s+(did|add(ed)?|fix(ed)?|made|change(d)?|remove(d)?|wrote|implement(ed)?|create(d)?|update(d)?|refactor(ed)?)\b",
+    re.IGNORECASE,
+)
+PAST_TENSE_WARN = {
+    "Added", "Fixed", "Updated", "Changed", "Removed", "Refactored",
+    "Created", "Deleted", "Renamed", "Moved", "Implemented",
+}
+SCISSORS_RE = re.compile(r"^\s*#\s*-+\s*>8\s*-+")
+
+
+def clean(text):
+    out = []
+    for line in text.split("\n"):
+        if SCISSORS_RE.match(line):
+            break
+        if line.lstrip().startswith("#"):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def check(msg):
+    errors, warnings = [], []
+    msg = msg.strip("\n")
+    lines = msg.split("\n")
+    subject = lines[0] if lines else ""
+
+    if len(subject) > 65:
+        errors.append(f"subject exceeds 65 chars (got {len(subject)}): {subject!r}")
+    if subject.endswith("."):
+        errors.append(f"subject ends with '.': {subject!r}")
+    if not PREFIX_RE.match(subject):
+        errors.append(
+            f"subject missing 'Subsystem: ' prefix "
+            f"(single capitalized word + colon + space): {subject!r}"
+        )
+
+    if len(lines) >= 2 and lines[1].strip() != "":
+        errors.append(f"missing blank line between subject and body: line 2 is {lines[1]!r}")
+
+    for idx, line in enumerate(lines[2:], start=3):
+        if len(line) > 72:
+            errors.append(f"body line {idx} exceeds 72 chars (got {len(line)}): {line!r}")
+        if NARRATION_RE.match(line):
+            errors.append(f"narration lead-in on body line {idx}: {line!r}")
+        if FIRST_PERSON_RE.match(line):
+            errors.append(f"first-person narration on body line {idx}: {line!r}")
+
+    if "Co-Authored-By:" not in msg:
+        errors.append("missing 'Co-Authored-By:' footer")
+
+    # Total body length cap. Most commits don't need a body at all; when one
+    # is justified (a non-obvious WHY), 12 lines is plenty. Strip trailing
+    # blanks and the Co-Authored-By trailer + its preceding blank.
+    body_lines = list(lines[2:])
+    while body_lines and not body_lines[-1].strip():
+        body_lines.pop()
+    while body_lines and re.match(r"^Co-Authored-By:\s", body_lines[-1]):
+        body_lines.pop()
+    while body_lines and not body_lines[-1].strip():
+        body_lines.pop()
+    if len(body_lines) > 12:
+        errors.append(
+            f"body exceeds 12 lines (got {len(body_lines)}); "
+            f"trim or split — see the commit-hygiene skill"
+        )
+
+    m = PREFIX_RE.match(subject)
+    if m:
+        after = subject[m.end():].strip().split()
+        first_word = after[0] if after else ""
+        if first_word in PAST_TENSE_WARN:
+            warnings.append(
+                f"subject uses past-tense verb {first_word!r}; prefer imperative "
+                f"(e.g. 'Add' not 'Added')"
+            )
+
+    return errors, warnings
+
+
+def main():
+    if len(sys.argv) < 2:
+        sys.exit(0)
+    try:
+        with open(sys.argv[1], "r", encoding="utf-8") as f:
+            raw = f.read()
+    except OSError:
+        sys.exit(0)
+
+    cleaned = clean(raw)
+    # Merges and reverts carry git-generated messages; they are exempt from the format.
+    git_dir = os.environ.get("GIT_DIR", ".git")
+    subject = cleaned.strip("\n").split("\n")[0]
+    if os.path.exists(os.path.join(git_dir, "MERGE_HEAD")) or subject.startswith(("Merge ", "Revert \"")):
+        sys.exit(0)
+
+    errors, warnings = check(cleaned)
+
+    if errors:
+        sys.stderr.write("commit-hygiene: refusing commit — fix and retry:\n")
+        for e in errors:
+            sys.stderr.write(f"  - {e}\n")
+        if warnings:
+            sys.stderr.write("warnings:\n")
+            for w in warnings:
+                sys.stderr.write(f"  - {w}\n")
+        sys.exit(1)
+
+    if warnings:
+        sys.stderr.write("commit-hygiene: warnings (commit allowed):\n")
+        for w in warnings:
+            sys.stderr.write(f"  - {w}\n")
+
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
