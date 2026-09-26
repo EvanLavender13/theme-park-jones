@@ -36,6 +36,10 @@ Anything mechanically checkable belongs in a test, hook, or CI check, not in a d
 
 Anything that does not fit fields, flows, or encapsulation is listed in docs/exceptions.md with a reason. If the list keeps growing, raise it with Evan: it means a principle is wrong.
 
+## Code
+
+Naming and file layout follow docs/conventions.md.
+
 ## Writing
 
 Documents use plain prose, no bold emphasis, and bullets only for genuinely distinct items.

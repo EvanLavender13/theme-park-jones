@@ -5,3 +5,6 @@ add_library(tpj_sim STATIC
 target_include_directories(tpj_sim PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tpj_sim PUBLIC tpj_core)
 tpj_configure_target(tpj_sim)
+
+# Results must be bit-identical across the Windows and Linux builds (decision 0022).
+target_compile_options(tpj_sim PRIVATE -ffp-contract=off)
