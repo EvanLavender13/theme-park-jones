@@ -1,0 +1,55 @@
+# clang-tidy configuration. Runs during the linux-debug build (TPJ_CLANG_TIDY).
+# Manual run: clang-tidy -p build/linux-debug src/file.cpp
+---
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  cert-*,
+  -cert-err58-cpp,
+  clang-analyzer-*,
+  concurrency-*,
+  misc-*,
+  -misc-no-recursion,
+  -misc-include-cleaner,
+  -misc-use-anonymous-namespace,
+  -misc-non-private-member-variables-in-classes,
+  performance-*,
+  -performance-enum-size,
+  readability-*,
+  -readability-magic-numbers,
+  -readability-named-parameter,
+  -readability-identifier-length,
+  -readability-function-cognitive-complexity,
+  -readability-uppercase-literal-suffix,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-using,
+  modernize-use-equals-default,
+  modernize-use-equals-delete
+
+# Treat these high-value checks as errors
+WarningsAsErrors: >
+  bugprone-infinite-loop,
+  bugprone-use-after-move,
+  clang-analyzer-core.NullDereference,
+  clang-analyzer-core.DivideZero,
+  clang-analyzer-security.*
+
+# Lint project headers only; dependencies are included as SYSTEM headers.
+HeaderFilterRegex: '.*/(src|tests)/.*'
+
+CheckOptions:
+  # Short loop / parameter names are fine.
+  - key: readability-identifier-length.MinimumVariableNameLength
+    value: 2
+  - key: readability-identifier-length.MinimumParameterNameLength
+    value: 2
+  # Reasonable function size for modern displays.
+  - key: readability-function-size.LineThreshold
+    value: 100
+  - key: readability-function-size.StatementThreshold
+    value: 60
+  - key: readability-function-size.ParameterThreshold
+    value: 8

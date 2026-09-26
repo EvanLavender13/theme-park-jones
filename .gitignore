@@ -1,0 +1,7 @@
+build/
+.cpm-cache/
+.vscode/
+.vs/
+.claude/settings.local.json
+imgui.ini
+*.bmp
