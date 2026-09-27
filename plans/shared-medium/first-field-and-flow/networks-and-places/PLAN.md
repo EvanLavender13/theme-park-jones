@@ -261,7 +261,7 @@ Step 3: In src/sim/park_schema.cpp, include `"sim/medium/network.h"`, and replac
 Step 4: Build.
 
 Run: `cmake --build --preset linux-debug 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; ctest --preset linux-debug`
-Expected: no diagnostic lines, and all 116 existing tests pass. If clang-tidy objects to a stub's unused parameter, leave the parameter unnamed, as above.
+Expected: no diagnostic lines, and all 116 existing tests pass. Leave stub parameters unnamed, as above. readability-convert-member-functions-to-static flags a const stub that touches no member, so each such stub starts with `static_cast<void>(this); // Stub until implemented.`
 
 ### Task 5: Test pass
 
@@ -410,8 +410,8 @@ std::optional<size_t> Network::findCarrierOf(const Place &place) const {
   if (found == Carriers.end() || found->Key != place.Carrier) {
     return std::nullopt;
   }
-  // Written so that a NaN distance fails too.
-  if (!(place.Distance >= 0.0 && place.Distance <= found->Points.back().Distance)) {
+  if (std::isnan(place.Distance) || place.Distance < 0.0 ||
+      place.Distance > found->Points.back().Distance) {
     return std::nullopt;
   }
   return static_cast<size_t>(found - Carriers.begin());
