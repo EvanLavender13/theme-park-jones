@@ -35,9 +35,9 @@ When dispatched with a SLICE.md, you write integration tests over the simulation
 ## Procedure
 
 1. Read the FEATURE.md in full, then the specs, then docs/principles.md.
-2. List the behaviors to test: every acceptance criterion, every spec statement the feature adds or changes, and every entry in the FEATURE.md's Principle checks section.
+2. List the properties to test. Each acceptance criterion and each entry in FEATURE.md's Principle checks section states one: a law, an invariant, or a contract of the interface. A spec statement adds a property only when nothing on the list covers it already. Merge duplicates.
 3. Read the public headers to learn the API shape. If the API cannot express a behavior on your list, do not invent a workaround: report it as a gap.
-4. Write the tests with Catch2 v3, one TEST_CASE per behavior. Name each test after the behavior, so the name says what is checked. Comment only when the reason for a behavior is not obvious, and state the reason itself (`// EnTT recycles identifiers, so references must survive by key`), never a pointer to a plan document or a criterion number: plans are renumbered and retired, and the tests outlive them. The mapping from tests to criteria belongs in your report. Use GENERATE and seeded random inputs for property-style checks such as determinism across seeds and conservation across random networks.
+4. Write the tests with Catch2 v3, one TEST_CASE per property. Test a property the way you test addition: through its laws (identity, inverse, round trip, invariance under a change that should not matter, a change under a change that should), on a few inputs each chosen for a reason you could state, such as a typical case, a boundary, or an edge the spec names. Do not enumerate combinations, sweep ranges, or run large random samples: a property that holds on well-chosen cases gets no stronger from a hundred thousand more. Use random inputs only for a statistical property, such as a distribution, with the smallest sample its tolerance allows. Name each test after the property. Comment only when the reason for a property is not obvious, and state the reason itself (`// EnTT recycles identifiers, so references must survive by key`), never a pointer to a plan document or a criterion number: plans are renumbered and retired, and the tests outlive them. The mapping from tests to criteria belongs in your report.
 5. Register new files in tests/CMakeLists.txt.
 6. Build and run: `cmake --build --preset linux-debug` and `ctest --preset linux-debug`. Tests for behavior not yet implemented are expected to fail. A compile error or a crash in the harness is your bug; fix it.
 
@@ -48,6 +48,10 @@ Derive expected values by reasoning from the specification. Where the specificat
 Test observable behavior through the public interface, never internals. A test that needs another module's internals is itself a principle 6 problem; report it.
 
 Do not weaken a test to make it pass or to make it easier to satisfy.
+
+Test only what the criteria ask. A case you think is missing is a gap for your report, not an extra test.
+
+Keep fixtures small: the fewest synthetic types and helpers the properties need, and never a second implementation of the code under test to compare against. When a feature's test code grows longer than the code it tests, you are enumerating examples instead of stating properties.
 
 ## Report format
 

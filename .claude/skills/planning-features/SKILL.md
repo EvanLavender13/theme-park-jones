@@ -42,7 +42,9 @@ Create a task for each item. Complete in order.
 
 Assume the implementer has no project context. Write paths and commands in full. Do not say "add validation" when you can write the validation itself.
 
-Tests come from a separate pass. The implementer does not write the feature's tests; the `test-writer` agent derives them from FEATURE.md, the specs, and the principles, without reading PLAN.md. So FEATURE.md must carry everything a test needs: acceptance criteria with concrete values, edge cases, and the principle checks. PLAN.md contains no test code.
+Tests come from a separate pass. The implementer does not write the feature's tests; the `test-writer` agent derives them from FEATURE.md, the specs, and the principles, without reading PLAN.md. So FEATURE.md must carry everything a test needs: acceptance criteria stated as properties, the edge cases the spec names, and the principle checks.
+
+Criteria are properties, not enumerations. State each one once, as a law or invariant of the public interface (a copy equals its original; a save loads back equal; a malformed name is refused), with concrete values only where the value is the contract. Never list example inputs for the test to repeat. A feature needs a handful; more than about eight means the feature is too big or its criteria are listing examples. PLAN.md contains no test code.
 
 Order of work inside PLAN.md: spec tasks first (update SPEC.md), then interface tasks (public headers with stub definitions that compile, so tests can be written against them), then the test pass (one task that says to run it, no content), then implementation tasks, then the commit.
 
@@ -86,7 +88,7 @@ One paragraph. What this feature does.
 
 ## Acceptance criteria
 
-Concrete, testable conditions with concrete values.
+The properties the feature guarantees, each stated once and testable through the public interface. Concrete values only where the value is the contract.
 
 ## Medium
 

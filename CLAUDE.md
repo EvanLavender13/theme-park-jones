@@ -32,7 +32,7 @@ Planning and building go through the skills in .claude/skills; start at planning
 
 Each module keeps a SPEC.md beside its code, updated in the same change as the code it describes. Scale ceremony to the change: a small fix needs no spec edit.
 
-Tests are derived from the principles and specs and written in a separate pass from the implementation, by the test-writer agent, never by the context that writes the code. After implementing, the reviewer agent checks the diff against the spec and the principles with fresh context and reports only gaps that affect correctness or stated requirements. Report results with evidence such as test output, never as self-assessment.
+Tests are derived from the principles and specs, assert properties rather than enumerated examples, and are written in a separate pass from the implementation, by the test-writer agent, never by the context that writes the code. After implementing, the reviewer agent checks the diff against the spec and the principles with fresh context and reports only gaps that affect correctness or stated requirements. Report results with evidence such as test output, never as self-assessment.
 
 Anything mechanically checkable belongs in a test, hook, or CI check, not in a document.
 
