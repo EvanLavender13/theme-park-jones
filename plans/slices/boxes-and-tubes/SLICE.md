@@ -23,7 +23,7 @@ Then the player deletes the backstage path to the first shop. Its offer at once 
 Three park files are checked in: tests/parks/fed.park (entrance, guest path, one shop, depot, backstage path, no guests yet), tests/parks/warm.park (fed.park after a warmup, with guests in the park), and tests/parks/cut.park (warm.park with the backstage path removed).
 
 1. Running fed.park for 3000 ticks serves meals, and every served guest's hunger, as its inspection record reports it, fell when it ate. (integration test)
-2. Supplies and meals are conserved in every tick of fed.park, warm.park, and cut.park: supplies sent by the depot equal supplies in transit plus in shop stock plus converted to meals, and meals made equal meals eaten plus meals in stock. (integration test)
+2. Supplies and meals are conserved in every tick of fed.park, warm.park, and cut.park: supplies sent by the depot equal supplies in transit plus in shop stock plus converted to meals, and meals made equal meals in shop stock plus meals in transit to guests plus meals held by guests plus meals eaten. (integration test)
 3. Running cut.park and warm.park each for 3000 ticks: in cut.park the shop's offer reports no meals available from the first tick, no guest chooses the shop afterwards, its queue empties with every queued guest either served or returned unserved, and mean guest hunger ends higher than in warm.park. (integration test)
 4. Food availability at every sampled place can be reconstructed exactly from its attributed per-shop contributions. (integration test)
 5. In warm.park, the preview of placing a second shop touching both paths equals the resolved park immediately after the placement is committed, and food availability rises by a nonzero amount at the places nearest the new shop. (integration test)
@@ -35,32 +35,33 @@ Three park files are checked in: tests/parks/fed.park (entrance, guest path, one
 
 ## Medium
 
-Fields and flows between capabilities. Abbreviations: SM shared-medium, NN navigable-networks, BG believable-guests, PO plausible-operations, LS legible-simulation, EB effortless-building.
+Fields and flows between capabilities. Abbreviations: DS deterministic-simulation, SM shared-medium, NN navigable-networks, BG believable-guests, PO plausible-operations, LS legible-simulation, EB effortless-building.
 
-- Networks: the guest and backstage graphs, with edge lengths, derived from the drawn paths. Produced by NN. Consumed by SM (flows travel along them) and BG (guests move along them). A shared structure rather than a field or flow; it is the ground both kinds of medium live on.
+- Networks: the guest and backstage graphs, with edge lengths, derived from the drawn paths. The network type and its places are defined by SM; the park's networks are produced by NN. Consumed by BG (guests move along them) and by every field, which is sampled at network places. Flows do not travel edge by edge: a sender takes a packet's delay from route distance. A shared structure rather than a field or flow; it is the ground both kinds of medium live on.
 - Route distance: field (sampled, not consumed) over the networks, the distance between places along the paths (principle 4). Produced by NN. Consumed by BG (choice), PO (a shop's supply route length), LS (overlay discount, preview context).
 - Food offer: field on guest network nodes, one entry per shop: the relief a meal gives, the expected wait including time until stock arrives, and whether the shop is supplied. Produced by PO. Consumed by BG (choice) and LS (overlay, attribution).
 - Hungry footfall: field on guest network edges, how many hungry guests pass. Produced by BG. Consumed by LS (preview context). A shop's demand in this slice is the guests actually arriving in its queue, not this field.
 - Guest visits: flow of guests into a shop's queue and back out, served or unserved. Produced by BG, consumed by PO; PO returns every guest to BG, unserved when the shop cannot serve it.
 - Meals: flow, conserved, from a shop to the guest it served. Produced by PO, consumed by BG, which lowers its own hunger when it eats (hunger stays private to the guest).
-- Supplies: flow, conserved, from depot to shop along the backstage network. Produced and consumed within PO; listed because it travels on NN's network through SM's flow transport. Each shipment carries its arrival time, so shipments in transit when their route is removed still arrive and remain valid in a save.
+- Supplies: flow, conserved, from depot to shop along the backstage network. Produced and consumed within PO; listed because it moves through SM's flow transport with a delay PO takes from NN's route distance. Each shipment carries its arrival time, so shipments in transit when their route is removed still arrive and remain valid in a save.
 
 Dependencies that are not fields or flows, ruled outside principle 3 by decision 0025:
 
 - Park intent: the drawn paths and placed boxes, which with the simulation state are the saved park (principle 1). Authored by EB. NN, PO, and BG derive their parts of the world from it.
-- Candidate resolution: for a preview, EB supplies tentative intent, SM provides a candidate copy of the world, and NN and PO resolve it through the same derivation they use for committed intent. LS samples the candidate world's fields through the normal field interface and never calls another capability's derivation directly.
+- Candidate resolution: for a preview, EB supplies tentative intent, DS provides a candidate copy of the world, and NN and PO resolve it through the same derivation they use for committed intent. LS samples the candidate world's fields through the normal field interface and never calls another capability's derivation directly.
 - Inspection records: what a guest or shop publishes about itself for display, such as a guest's hunger and last choice with its factors, or a shop's limiting factor. Produced by BG and PO, read only by LS and by tests.
 
 ## Members
 
 Ordered for building. Milestone slugs are provisional until each capability is planned. Operations and guests exchange medium both ways (offers one way, guest visits and meals the other); operations lands first because guests cannot choose without offers, and its milestone is tested against synthetic guest visits.
 
-1. `shared-medium/first-field-and-flow`: the field sampling interface with per-source attribution, conserved flow transport with delay over an abstract network, candidate copies of the world, and the deterministic tick and state hash, tested with synthetic networks. Depends on: none.
-2. `effortless-building/sketch-a-park`: park intent for curves and boxes, tools to draw paths and place and delete boxes with a ghost for tentative placements, rendering paths as tubes and boxes as boxes, saving and loading parks, and the --park, --ticks, and --hash options for scripted captures and the cross-build check. Depends on: none.
-3. `navigable-networks/paths-become-routes`: guest and backstage graphs derived from path intent, committed or candidate, shops connecting to nearby paths of both kinds, and the route distance field. Depends on: members 1 and 2.
-4. `plausible-operations/supplied-food-shop`: the depot and the generic food shop, resolved from committed or candidate intent, with supplies over the backstage network, meal production limited by the scarcest of demand, supply, and a fixed service rate, the food offer, unserved returns, the shop's inspection record, and a starved state shown on the box. Depends on: members 1, 2, and 3.
-5. `believable-guests/hungry-guests`: guests arriving, wandering, getting hungry, choosing offers by scored utility with a seeded softmax, queuing, eating, and leaving, drawn as simple shapes on the paths, plus the hungry footfall field and inspection records with hunger and choice explanations. Depends on: members 1, 3, and 4.
-6. `legible-simulation/explained-food`: the food-availability overlay with hover attribution and an --overlay option to turn it on for scripted captures, the guest and shop inspectors, and the placement preview sampling a candidate world. Depends on: members 1 through 5.
+1. `deterministic-simulation/<to be planned>`: the world as a copyable, hashable value with the deterministic tick, candidate copies of the world, the state hash, a seeded random source, and the simulation's own exp and log (decision 0022). Depends on: none.
+2. `shared-medium/first-field-and-flow`: the network type with network places, the field sampling interface with per-source attribution, and conserved flow transport with delay, tested with synthetic networks. Depends on: member 1.
+3. `effortless-building/sketch-a-park`: park intent for curves and boxes, tools to draw paths and place and delete boxes with a ghost for tentative placements, rendering paths as tubes and boxes as boxes, saving and loading parks, and the --park, --ticks, and --hash options for scripted captures and the cross-build check. Depends on: none.
+4. `navigable-networks/paths-become-routes`: guest and backstage graphs derived from path intent, committed or candidate, shops connecting to nearby paths of both kinds, and the route distance field. Depends on: members 2 and 3.
+5. `plausible-operations/supplied-food-shop`: the depot and the generic food shop, resolved from committed or candidate intent, with supplies over the backstage network, meal production limited by the scarcest of demand, supply, and a fixed service rate, the food offer, unserved returns, the shop's inspection record, and a starved state shown on the box. Depends on: members 2, 3, and 4.
+6. `believable-guests/hungry-guests`: guests arriving, wandering, getting hungry, choosing offers by scored utility with a seeded softmax, queuing, eating, and leaving, drawn as simple shapes on the paths, plus the hungry footfall field and inspection records with hunger and choice explanations. Depends on: members 1, 2, 4, and 5.
+7. `legible-simulation/explained-food`: the food-availability overlay with hover attribution and an --overlay option to turn it on for scripted captures, the guest and shop inspectors, and the placement preview sampling a candidate world. Depends on: members 1 through 6.
 
 ## Out of scope
 
@@ -69,7 +70,7 @@ Staff (a service rate stands in for them), money and payment, needs other than h
 ## Open questions
 
 - The fixed entrance and automatic shop-to-path connection are draft assumptions. Resolved when effortless-building and navigable-networks are planned.
-- How long 3000 ticks takes in the sanitized Linux build decides whether the criteria's run lengths hold. Resolved when shared-medium's tick exists.
+- How long 3000 ticks takes in the sanitized Linux build decides whether the criteria's run lengths hold. Resolved when deterministic-simulation's tick and hash exist.
 
 ## Research notes
 
