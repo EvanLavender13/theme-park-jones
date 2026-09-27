@@ -29,7 +29,7 @@ Its value is trust. Tests on Linux are evidence for what a player sees on Window
 This capability introduces no fields or flows. It is the ground they live on:
 
 - Every capability registers its component types with the walk. Each type has a name, a class (intent, state, or derived), and functions to copy, compare, hash, encode, and decode it. The functions live in the owning module, so another module never sees a layout (principle 6).
-- Every capability registers its step systems and its resolvers with the cycle. Each tick runs in a fixed order: step the systems, swap the shared-medium buffers, then run resolvers in their declared dependency order if intent changed (plans/shared-medium/CAPABILITY.md).
+- Every capability registers its step systems and its resolvers with the cycle. Each tick runs in a fixed order: step the systems, swap the shared-medium buffers, apply the intent commands queued since the last cycle in the order they were submitted, then run resolvers in their declared dependency order if intent changed (plans/shared-medium/CAPABILITY.md).
 - Stable entity keys and keyed random draws are available to all simulation code. believable-guests' seeded softmax (decision 0019) is the first consumer.
 - Candidate copies serve legible-simulation's previews, through the resolution rules of decision 0025.
 - effortless-building owns the park file as a player document: the save and load commands, and intent as what the player authored. The encoding of the file is this capability's walk.
@@ -53,7 +53,7 @@ The foundation is the world as a value, proven on synthetic registered component
 
 ## Milestones
 
-1. `world-as-value`: the tick cycle with registered systems and resolvers, stable entity keys, the registered state walk with intent, state, and derived classes, copy, equality, and hash, canonical text save and load, keyed random draws with uniform and weighted-pick distributions, a port of musl's exp and log, the undefined-symbol check, and the cross-build script with its pre-push trigger. All of it is tested on synthetic component types and scenarios. Member of the boxes-and-tubes slice. Depends on: none.
+1. `world-as-value`: the tick cycle with registered systems and resolvers and a queue of intent commands applied between the swap and resolution, stable entity keys, the registered state walk with intent, state, and derived classes, copy, equality, and hash, canonical text save and load, keyed random draws with uniform and weighted-pick distributions, a port of musl's exp and log, the undefined-symbol check, and the cross-build script with its pre-push trigger. All of it is tested on synthetic component types and scenarios. Member of the boxes-and-tubes slice. Depends on: none.
 
 Later milestones are drawn from the deepening candidates once the slice shows where determinism strains.
 

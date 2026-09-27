@@ -69,7 +69,7 @@ Staff (a service rate stands in for them), money and payment, needs other than h
 
 ## Open questions
 
-- The fixed entrance and automatic shop-to-path connection are draft assumptions. Resolved when effortless-building and navigable-networks are planned.
+- How far a box can be from a path and still connect. effortless-building settled that the entrance comes fixed with the new-park template and that connections are derived by navigable-networks, never saved as intent. The reach is resolved when navigable-networks is planned.
 - How long 3000 ticks takes in the sanitized Linux build decides whether the criteria's run lengths hold. Resolved by measurement once the members step real content, after believable-guests lands, using the harness deterministic-simulation provides.
 
 ## Research notes
