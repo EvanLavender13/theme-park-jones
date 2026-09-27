@@ -15,7 +15,7 @@ A slice completes. Its member milestones live in their capabilities and keep the
 
 Do not invoke a planning or implementing skill until the user has approved SLICE.md. Do not write CAPABILITY.md, MILESTONE.md, or code.
 
-While planning, `researching` and `maintaining-backlog` are the only callable skills: `researching` to retain research at this node, `maintaining-backlog` to deposit speculative items. While closing a slice, `reviewing` and `commit-hygiene` are also callable, as the closing steps say.
+While planning, `researching`, `maintaining-backlog`, and `reviewing` are the only callable skills: `researching` to retain research at this node, `maintaining-backlog` to deposit speculative items, and `reviewing` for the review before approval. While closing a slice, `reviewing` and `commit-hygiene` are also callable, as the closing steps say.
 
 ## Checklist
 
@@ -32,7 +32,8 @@ Create a task for each item. Complete in order.
 9. Write acceptance criteria: observable end-to-end conditions in the running app, and properties that can be checked by an integration test over the simulation. Each criterion names how it is checked: an integration test, a capture of a scripted scenario (the member milestone that delivers the script is named in Members), or a manual check by Evan.
 10. Write SLICE.md at plans/slices/<slug>/SLICE.md in the format below.
 11. Self-review for placeholders, contradictions, cross-capability interactions missing from the medium map, members out of order, and criteria that cannot be observed or tested. Fix inline.
-12. Ask the user to approve.
+12. Review: stage SLICE.md and RESEARCH.md, then dispatch the reviewer via `reviewing`. Present the findings; fix the ones the user accepts, within the review budget.
+13. Ask the user to approve.
 
 ## Closing a slice
 

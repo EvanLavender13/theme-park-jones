@@ -27,7 +27,7 @@ Content-heavy domains need the same treatment. A catalog of shops or rides grows
 
 Do not invoke a planning or implementing skill until the user has approved CAPABILITY.md. Do not write a MILESTONE.md, code, or scaffolding. Even a small capability gets a brief.
 
-`researching` and `maintaining-backlog` are the only callable skills from here: `researching` to retain research at this node, `maintaining-backlog` only to deposit speculative items.
+`researching`, `maintaining-backlog`, and `reviewing` are the only callable skills from here: `researching` to retain research at this node, `maintaining-backlog` only to deposit speculative items, and `reviewing` for the review before approval.
 
 ## Checklist
 
@@ -44,7 +44,8 @@ Create a task for each item. Complete in order.
 9. Separate foundation from backlog. Commit the milestones that establish the foundation; everything beyond goes to `maintaining-backlog`.
 10. Write CAPABILITY.md at plans/<capability-slug>/CAPABILITY.md in the format below.
 11. Self-review for placeholders, contradictions, foundation criteria that imply a finish line, scope that reaches into another quality, and interactions that bypass the medium. Fix inline.
-12. Ask the user to approve the brief.
+12. Review: stage CAPABILITY.md and RESEARCH.md, then dispatch the reviewer via `reviewing`, with SLICE.md as context when a slice names this capability. Present the findings; fix the ones the user accepts, within the review budget.
+13. Ask the user to approve the brief.
 
 ## Process notes
 

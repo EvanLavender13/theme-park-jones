@@ -13,7 +13,7 @@ Take one milestone from a capability brief. Produce MILESTONE.md defining the mi
 
 Do not invoke a planning or implementing skill until the user has approved MILESTONE.md. Do not write a FEATURE.md or code. The parent CAPABILITY.md must exist at plans/<capability-slug>/CAPABILITY.md.
 
-`researching` and `maintaining-backlog` are the only callable skills from here: `researching` to retain research at this node, `maintaining-backlog` to deposit speculative items and to drop items this milestone draws from or supersedes.
+`researching`, `maintaining-backlog`, and `reviewing` are the only callable skills from here: `researching` to retain research at this node, `maintaining-backlog` to deposit speculative items and to drop items this milestone draws from or supersedes, and `reviewing` for the review before approval.
 
 ## Checklist
 
@@ -33,7 +33,8 @@ Create a task for each item. Complete in order.
 12. Write MILESTONE.md at plans/<capability-slug>/<milestone-slug>/MILESTONE.md in the format below.
 13. Record the milestone in the parent CAPABILITY.md's Milestones list when it is not already there.
 14. Self-review for placeholders, contradictions, scope drift, vague acceptance criteria, and interactions that bypass the medium. Fix inline.
-15. Ask the user to approve.
+15. Review: stage MILESTONE.md and RESEARCH.md, then dispatch the reviewer via `reviewing`, with CAPABILITY.md and, for a slice member, SLICE.md as context. Present the findings; fix the ones the user accepts, within the review budget.
+16. Ask the user to approve.
 
 ## Process notes
 
