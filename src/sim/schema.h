@@ -5,6 +5,7 @@
 
 #include <entt/entity/registry.hpp>
 
+#include <any>
 #include <bit>
 #include <stdint.h>
 #include <string>
@@ -14,6 +15,8 @@
 #include <vector>
 
 namespace tpj {
+
+class World;
 
 // What a registered component is to the save (principle 1): intent the player authored, state the
 // simulation changes, or data derived from those, which is never saved.
@@ -72,6 +75,29 @@ struct ComponentType {
   void (*Emit)(const entt::registry &registry, entt::entity entity, WordSink &sink) = nullptr;
 };
 
+// A system, swap function, or resolver. It takes only the world, so it can hold no state outside
+// it (principle 10).
+using WorldFunction = void (*)(World &world);
+
+struct ResolverType {
+  std::string Name;
+  WorldFunction Resolve = nullptr;
+  std::vector<std::string> Dependencies;
+};
+
+// A registered command type. Apply calls the owning module's applyCommand on a queued value.
+struct CommandType {
+  entt::id_type TypeId = 0;
+  std::string_view TypeName;
+  void (*Apply)(World &world, const std::any &command) = nullptr;
+};
+
+// A command type names the function that applies it, found by argument-dependent lookup,
+//   void applyCommand(World &world, const PlacePath &command);
+template <typename T>
+concept HasApplyCommand =
+    requires(World &world, const T &command) { applyCommand(world, command); };
+
 // The component types a world may hold, in registration order. Built once by explicit calls in a
 // written order, never by static self-registration, then shared by worlds as a const value.
 class WorldSchema {
@@ -79,16 +105,36 @@ public:
   // Registers T. The name is lowercase letters, digits, and hyphens. Throws std::invalid_argument
   // for a malformed or repeated name, or for a type already registered.
   template <typename T> void addComponent(std::string_view name, DataKind kind);
+  // Every cycle steps the systems, and runs the swap functions, in registration order.
+  void addSystem(WorldFunction step);
+  void addSwap(WorldFunction swap);
+  // Registers a resolver after the resolvers it depends on. Throws std::invalid_argument for a
+  // malformed or repeated name, or for a dependency that is not an already registered resolver.
+  void addResolver(std::string_view name, WorldFunction resolve,
+                   std::vector<std::string> dependencies = {});
+  // Registers T as a command type. Throws std::invalid_argument if T is already registered.
+  template <typename T> void addCommand();
 
   [[nodiscard]] const std::vector<ComponentType> &components() const { return Components; }
   [[nodiscard]] const ComponentType *findComponent(entt::id_type typeId) const;
   // True when both list the same names, kinds, and types in the same order.
   [[nodiscard]] bool sameComponents(const WorldSchema &other) const;
 
+  [[nodiscard]] const std::vector<WorldFunction> &systems() const { return Systems; }
+  [[nodiscard]] const std::vector<WorldFunction> &swaps() const { return Swaps; }
+  [[nodiscard]] const std::vector<ResolverType> &resolvers() const { return Resolvers; }
+  [[nodiscard]] const std::vector<CommandType> &commands() const { return Commands; }
+  [[nodiscard]] const CommandType *findCommand(entt::id_type typeId) const;
+
 private:
   void addComponentType(ComponentType type);
+  void addCommandType(CommandType type);
 
   std::vector<ComponentType> Components;
+  std::vector<WorldFunction> Systems;
+  std::vector<WorldFunction> Swaps;
+  std::vector<ResolverType> Resolvers;
+  std::vector<CommandType> Commands;
 };
 
 // Field types: bool, integers, double, EntityKey, enums, std::vector of a field type (not bool),
@@ -151,6 +197,18 @@ template <typename T> void WorldSchema::addComponent(std::string_view name, Data
     }
   };
   addComponentType(std::move(type));
+}
+
+template <typename T> void WorldSchema::addCommand() {
+  static_assert(std::is_copy_constructible_v<T>, "a command must be copyable");
+  static_assert(HasApplyCommand<T>, "a command type needs an applyCommand function");
+  CommandType type;
+  type.TypeId = entt::type_id<T>().hash();
+  type.TypeName = entt::type_id<T>().name();
+  type.Apply = [](World &world, const std::any &command) {
+    applyCommand(world, std::any_cast<const T &>(command));
+  };
+  addCommandType(type);
 }
 
 } // namespace tpj

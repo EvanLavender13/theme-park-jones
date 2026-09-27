@@ -1,6 +1,7 @@
 #ifndef TPJ_SIM_WORLD_H
 #define TPJ_SIM_WORLD_H
 
+#include "sim/command_queue.h"
 #include "sim/entity_key.h"
 #include "sim/schema.h"
 
@@ -52,6 +53,9 @@ public:
 
   [[nodiscard]] const WorldSchema &schema() const { return *Schema; }
   [[nodiscard]] uint64_t nextKey() const { return NextKey; }
+  // True from construction until the first resolution, and from each applied command until the
+  // next.
+  [[nodiscard]] bool isResolvePending() const { return ResolvePending; }
 
   // A new entity keyed from the counter.
   EntityKey createEntity();
@@ -83,11 +87,17 @@ private:
   uint64_t NextKey = 1;
   std::map<EntityKey, EntityRecord> ByKey;
   std::unordered_map<entt::entity, EntityKey> KeyByEntity;
+  bool ResolvePending = true;
+  // Set only while resolvers run, so that createEntity can refuse them in debug builds.
+  bool Resolving = false;
 
   friend World copyWorld(const World &world);
   friend bool worldsEqual(const World &left, const World &right);
   friend uint64_t hashWorld(const World &world);
   friend void validateWorld(const World &world);
+  friend void resolveWorld(World &world);
+  friend void stepWorld(World &world, CommandQueue &commands);
+  friend World makeCandidate(const World &world, const CommandQueue &commands);
 };
 
 // A world equal to this one, sharing its schema, and independent of it from then on.
@@ -99,7 +109,17 @@ uint64_t hashWorld(const World &world);
 // Throws WorldInvariantError if the walk cannot cover the world fully.
 void validateWorld(const World &world);
 
+// Calls every registered resolver once, in registration order, and clears the pending resolution.
+void resolveWorld(World &world);
+// One cycle: resolve if pending, step the systems, advance Tick, run the swaps, apply the queued
+// commands in submission order, and resolve if pending. Empties the queue. Throws
+// std::invalid_argument, changing nothing, if a queued command's type is not registered.
+void stepWorld(World &world, CommandQueue &commands);
+// One cycle with no commands.
 void stepWorld(World &world);
+// A copy of the world with the commands applied and resolved, not stepped. The world is unchanged.
+// Throws std::invalid_argument if a command's type is not registered.
+World makeCandidate(const World &world, const CommandQueue &commands);
 
 } // namespace tpj
 

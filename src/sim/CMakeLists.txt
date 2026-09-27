@@ -1,6 +1,7 @@
 # The simulation. It must build and run without any rendering, windowing, or input library
 # (principle 10), so this target links nothing beyond tpj_core and EnTT.
 add_library(tpj_sim STATIC
+    cycle.cpp
     schema.cpp
     walk.cpp
     world.cpp)
