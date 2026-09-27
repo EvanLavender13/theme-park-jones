@@ -65,7 +65,7 @@ Later milestones are drawn from the deepening candidates once the slice has show
 
 ## Open questions
 
-- What happens to units when their endpoint is removed, both the stock it holds and packets in transit to it? They could be returned to their sender, held at a place in the network, or recorded as consumed with a cause. Conservation and principle 2 constrain the answer. Resolved while planning first-field-and-flow.
+- What happens to units when their endpoint is removed, both the stock it holds and packets in transit to it? plausible-operations requires packets in transit to a removed endpoint to return to their sender when the sender still exists, and each owner disposes of the units it holds itself when it is removed. What happens when the sender is gone too could be holding the units at a place in the network, or recording them as consumed with a cause. Conservation and principle 2 constrain the answer. Resolved while planning first-field-and-flow.
 - How long a sampled world and its double buffers take to copy and hash at slice scale, and so whether candidate copies stay cheap enough to rebuild on every preview update. Resolved by measurement once deterministic-simulation's copy and hash exist.
 
 ## Research notes

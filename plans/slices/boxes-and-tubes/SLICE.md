@@ -43,6 +43,7 @@ Fields and flows between capabilities. Abbreviations: DS deterministic-simulatio
 - Hungry footfall: field on guest network edges, how many hungry guests pass. Produced by BG. Consumed by LS (preview context). A shop's demand in this slice is the guests actually arriving in its queue, not this field.
 - Guest visits: flow of guests into a shop's queue and back out, served or unserved. Produced by BG, consumed by PO; PO returns every guest to BG, unserved when the shop cannot serve it.
 - Meals: flow, conserved, from a shop to the guest it served. Produced by PO, consumed by BG, which lowers its own hunger when it eats (hunger stays private to the guest).
+- Supply orders: flow, conserved, from a shop to the nearest depot it can reach, placed by an (s, S) policy and consumed when the depot ships. Produced and consumed within PO; listed because it moves through SM's flow transport.
 - Supplies: flow, conserved, from depot to shop along the backstage network. Produced and consumed within PO; listed because it moves through SM's flow transport with a delay PO takes from NN's route distance. Each shipment carries its arrival time, so shipments in transit when their route is removed still arrive and remain valid in a save.
 
 Dependencies that are not fields or flows, ruled outside principle 3 by decision 0025:
