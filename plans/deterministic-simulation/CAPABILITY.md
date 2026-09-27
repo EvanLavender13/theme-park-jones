@@ -68,7 +68,6 @@ Later milestones are drawn from the deepening candidates once the slice shows wh
 
 ## Open questions
 
-- Which medium contents count as state and which as derived? Field entries published while stepping and still readable at the start of a tick look like state. Entries produced by resolution look like derived data. A field can hold both. Resolved while planning shared-medium's first-field-and-flow.
 - Whether 3000 ticks runs quickly enough under the sanitizers for the slice's criteria. Resolved by measurement once the slice's members step real content. This capability provides the harness.
 
 ## Research notes
