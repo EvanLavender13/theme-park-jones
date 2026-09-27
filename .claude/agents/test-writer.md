@@ -37,7 +37,7 @@ When dispatched with a SLICE.md, you write integration tests over the simulation
 1. Read the FEATURE.md in full, then the specs, then docs/principles.md.
 2. List the behaviors to test: every acceptance criterion, every spec statement the feature adds or changes, and every entry in the FEATURE.md's Principle checks section.
 3. Read the public headers to learn the API shape. If the API cannot express a behavior on your list, do not invent a workaround: report it as a gap.
-4. Write the tests with Catch2 v3, one TEST_CASE per behavior. Name each test after the behavior, and put a one-line comment above it citing its source (for example `// FEATURE.md acceptance criterion 2` or `// Principle 3: flows conserve their quantities`). Use GENERATE and seeded random inputs for property-style checks such as determinism across seeds and conservation across random networks.
+4. Write the tests with Catch2 v3, one TEST_CASE per behavior. Name each test after the behavior, so the name says what is checked. Comment only when the reason for a behavior is not obvious, and state the reason itself (`// EnTT recycles identifiers, so references must survive by key`), never a pointer to a plan document or a criterion number: plans are renumbered and retired, and the tests outlive them. The mapping from tests to criteria belongs in your report. Use GENERATE and seeded random inputs for property-style checks such as determinism across seeds and conservation across random networks.
 5. Register new files in tests/CMakeLists.txt.
 6. Build and run: `cmake --build --preset linux-debug` and `ctest --preset linux-debug`. Tests for behavior not yet implemented are expected to fail. A compile error or a crash in the harness is your bug; fix it.
 
