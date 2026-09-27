@@ -469,10 +469,10 @@ namespace {
 // compiler cannot fold the operations, and results are compared by bits because comparing a
 // subnormal as a double would read it as zero when denormals-are-zero is set.
 bool isDefaultFloatEnvironment() {
-  volatile double one = 1.0;
-  volatile double beyondHalfUlp = 0x1.8p-53;
-  volatile double smallestNormal = std::numeric_limits<double>::min();
-  volatile double smallestSubnormal = std::numeric_limits<double>::denorm_min();
+  const volatile double one = 1.0;
+  const volatile double beyondHalfUlp = 0x1.8p-53;
+  const volatile double smallestNormal = std::numeric_limits<double>::min();
+  const volatile double smallestSubnormal = std::numeric_limits<double>::denorm_min();
   // Only round-to-nearest rounds both of these away from 1.
   const double above = one + beyondHalfUlp;
   const double below = -one - beyondHalfUlp;
@@ -510,6 +510,8 @@ Step 4: Build and test.
 
 Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
 Expected: the build succeeds with no warnings, and the environment tests pass.
+
+Note from implementing: misc-const-correctness asked for the probe's volatile operands to be const volatile, which still forces each read, so the step's code now declares them that way.
 
 ### Task 8: The symbol check
 
