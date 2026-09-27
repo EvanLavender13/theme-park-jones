@@ -18,7 +18,7 @@ Two reasons.
 
 1. Identify the artifact: One file, a set of files, a commit range, or the staged diff. Ask the user if ambiguous.
 2. Identify the artifact type: Plan document, implementation plan, code change, or other. The subagent applies a different lens to each.
-3. Identify required context: Parent artifacts the reviewer must read. A `MILESTONE.md` review requires its `CAPABILITY.md`. A `PLAN.md` review requires its `FEATURE.md`. A code change requires FEATURE.md when one exists, the SPEC.md of every module it touches, and docs/principles.md. Do not summarize these for the reviewer; pass paths so the reviewer reads them itself.
+3. Identify required context: Parent artifacts the reviewer must read. A `MILESTONE.md` review requires its `CAPABILITY.md`, plus its `SLICE.md` when it is a slice member. A `SLICE.md` review requires docs/vision.md and the CAPABILITY.md and MILESTONE.md of every existing member. A `PLAN.md` review requires its `FEATURE.md`. A code change requires FEATURE.md when one exists, the SPEC.md of every module it touches, and docs/principles.md. Do not summarize these for the reviewer; pass paths so the reviewer reads them itself.
 4. Dispatch via the Agent tool: Use `subagent_type: reviewer`. The dispatch prompt contains only:
     - The artifact path or paths.
     - The artifact type.

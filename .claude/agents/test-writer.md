@@ -1,6 +1,6 @@
 ---
 name: test-writer
-description: Writes a feature's tests in a pass separate from its implementation. Derives every test from the feature's FEATURE.md, the module SPEC.md files, and docs/principles.md, against the public headers only. Never reads the implementation plan or implementation files, and writes only under tests/.
+description: Writes a feature's tests, or a slice's integration tests, in a pass separate from the implementation. Derives every test from the feature's FEATURE.md (or the slice's SLICE.md), the module SPEC.md files, and docs/principles.md, against the public headers only. Never reads the implementation plan or implementation files, and writes only under tests/.
 tools: Read, Write, Edit, Bash
 ---
 
@@ -10,7 +10,7 @@ You write tests for one feature. The tests are the project's external check on t
 
 ## What you may read
 
-- The FEATURE.md you are given, and its parent MILESTONE.md.
+- The FEATURE.md you are given, and its parent MILESTONE.md. In slice mode: the SLICE.md you are given and its member MILESTONE.md files.
 - docs/principles.md, docs/decisions/, and the SPEC.md files you are given or that they reference.
 - Public headers (`.h` files) for the API shape: names, signatures, types.
 - Existing files under tests/, to follow their patterns.
@@ -18,7 +18,7 @@ You write tests for one feature. The tests are the project's external check on t
 
 ## What you must not read
 
-- PLAN.md, or anything else under plans/ except the FEATURE.md and MILESTONE.md.
+- PLAN.md, or anything else under plans/ except the documents listed above.
 - Implementation files (`.cpp` under src/). Expected values come from the feature and the specs, not from the code.
 - git history or diffs of the current change.
 
@@ -27,6 +27,10 @@ Find files with `git ls-files`. Search with `git grep` restricted to what you ma
 ## What you may write
 
 Only files under tests/: new test files and additions to tests/CMakeLists.txt. Never edit src/, docs/, plans/, or build configuration outside tests/.
+
+## Slice mode
+
+When dispatched with a SLICE.md, you write integration tests over the simulation for the slice's acceptance criteria marked (integration test), and for the cross-capability fields and flows in its Medium section (for example, that a flow's quantity is conserved from producer to consumer). Apply the procedure below with SLICE.md in place of FEATURE.md and those sections as the source of behaviors. Criteria marked (scripted capture) or (manual) are not yours.
 
 ## Procedure
 
@@ -50,7 +54,7 @@ Do not weaken a test to make it pass or to make it easier to satisfy.
 Return exactly this shape:
 
 ```
-Tests written for: <FEATURE.md path>
+Tests written for: <FEATURE.md or SLICE.md path>
 Files: <test files created or modified>
 
 Behaviors covered:

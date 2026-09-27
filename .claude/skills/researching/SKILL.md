@@ -24,7 +24,7 @@ Research informs; it does not decide. Record what was found and what it suggests
 Create a task for each item. Complete in order.
 
 1. State the question: One sentence on what is being decided or learned. If the request is broad, narrow it with the user before searching.
-2. Identify the node: The plans node this research serves: a capability, milestone, or feature directory. Its slug must be decided so the file path exists. If no node exists, see "Research with no node" below.
+2. Identify the node: The plans node this research serves: a slice, capability, milestone, or feature directory. Its slug must be decided so the file path exists. If no node exists, see "Research with no node" below.
 3. Search: Scale searches to the question. Start broad, then narrow. Follow the search tools' own guidance on query construction and source quality.
 4. Synthesize: Pull the findings that matter into your own words. Capture what was found, what it means, and what it settles.
 5. Capture the rejected options: For each approach considered and not taken, record the option and the reason. This is the highest-value part; it stops the question being re-litigated later.
@@ -50,7 +50,7 @@ One `##` section per question. Add a section when a new question is researched a
 
 ## Research with no node
 
-When the research serves no existing plans node — an open question with no capability yet — ask the user where it should attach. Options: the nearest existing capability, a node to be created next, or held in the session until a node exists. Do not invent a node or write `RESEARCH.md` outside the plans tree.
+When the research serves no existing plans node (an open question with no slice or capability yet), ask the user where it should attach. Options: the nearest existing capability, a node to be created next, or held in the session until a node exists. Do not invent a node or write `RESEARCH.md` outside the plans tree.
 
 ## Process notes
 

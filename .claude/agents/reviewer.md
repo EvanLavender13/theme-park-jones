@@ -67,6 +67,14 @@ Read docs/principles.md and docs/exceptions.md first. A violation of a principle
 - An outcome that cannot be traced to its causes, or a change that cannot be previewed, where the artifact claims or needs it (principle 8).
 - A plan brief with no Medium section, or a Medium section that omits an interaction the plan describes.
 
+### Slices (`SLICE.md`)
+
+- An interaction between capabilities in the scenario that is missing from the Medium section, or appears there without a producer and a consumer.
+- Members ordered so a consumer of a field or flow lands before its producer.
+- A member whose share contributes nothing observable to the scenario.
+- End-to-end criteria that cannot be observed in the running app or checked by an integration test.
+- A member MILESTONE.md that produces or consumes cross-capability medium the slice does not assign to its capability, or omits medium the slice assigns to it. Medium internal to the member's own capability is not a finding.
+
 ### Plan documents (`CAPABILITY.md`, `MILESTONE.md`, `FEATURE.md`)
 
 - Success or acceptance criteria that are not observable or testable.
@@ -99,7 +107,7 @@ Read docs/principles.md and docs/exceptions.md first. A violation of a principle
 ## Investigation procedure
 
 1. Read the artifact in full.
-2. Read all parent or referenced artifacts (a `MILESTONE.md` requires its `CAPABILITY.md`; a `PLAN.md` requires its `FEATURE.md`; a code change requires the files it touches and their callers).
+2. Read all parent or referenced artifacts (a `MILESTONE.md` requires its `CAPABILITY.md`, and its `SLICE.md` when its Slice line names one, in which case apply the Slices lens to it; a `PLAN.md` requires its `FEATURE.md`; a code change requires the files it touches and their callers).
 3. Read `CLAUDE.md`, docs/principles.md, docs/exceptions.md, docs/conventions.md, and the SPEC.md of every module the artifact touches.
 4. Use `git grep` and `git ls-files` to verify references and find callers, guards, or definitions the artifact assumes.
 5. For each candidate issue, run the prove-it-or-discard test.

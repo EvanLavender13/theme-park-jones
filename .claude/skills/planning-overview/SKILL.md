@@ -1,6 +1,6 @@
 ---
 name: planning-overview
-description: Read this first whenever the user asks to plan, design, scope, decompose, build, or implement anything. Names the planning hierarchy (capability, milestone, feature, plan, implementation), the principles gate every level passes, where artifacts live, and which skill to invoke next. Consult before any of planning-capabilities, planning-milestones, planning-features, implementing-features, or maintaining-backlog.
+description: Read this first whenever the user asks to plan, design, scope, decompose, build, or implement anything. Names the planning hierarchy (capability, milestone, feature, plan, implementation) and the slices that span capabilities, the principles gate every level passes, where artifacts live, and which skill to invoke next. Consult before any of planning-slices, planning-capabilities, planning-milestones, planning-features, implementing-features, or maintaining-backlog.
 ---
 
 # Planning Overview
@@ -11,18 +11,24 @@ This skill routes. It does not plan, decompose, or build.
 
 Work decomposes through four levels.
 
-1. Capability: a durable quality the game deepens over many milestones; never completes.
+1. Capability: a durable quality, discipline, or principle implementation the game deepens over many milestones; never completes.
 2. Milestone: weeks of work; one coherent slice that deepens a capability; completes.
 3. Feature: hours to days; one implementable unit; completes.
 4. Implementation: code satisfying a feature's plan, with the module specs updated to match.
 
 Each level produces an artifact the next level consumes. The principles sit above the whole tree: docs/principles.md outranks every artifact in it.
 
+A slice sits beside the tree (decision 0023). It is a goal no single capability owns, met when member milestones in several capabilities land together. The slice fixes the end-to-end criteria and the fields and flows that pass between capabilities; each member milestone stays in its own capability and names its slice.
+
 ## File layout
 
 ```
 plans/
   BACKLOG.md
+  slices/
+    <slice-slug>/
+      SLICE.md
+      RESEARCH.md
   <capability-slug>/
     CAPABILITY.md
     RESEARCH.md
@@ -39,6 +45,7 @@ Plans are the route to a change. The long-lived contract is each module's SPEC.m
 
 | User intent | Skill |
 | --- | --- |
+| Plan, check, or close a goal that spans capabilities | `planning-slices` |
 | Plan a capability | `planning-capabilities` |
 | Plan a milestone inside an existing capability | `planning-milestones` |
 | Plan a feature inside an existing milestone | `planning-features` |
@@ -51,7 +58,7 @@ If the level is ambiguous, ask. Do not guess.
 
 ## Hard gates
 
-- `planning-milestones` requires an approved parent `CAPABILITY.md`.
+- `planning-milestones` requires an approved parent `CAPABILITY.md`, and for a slice member also the approved `SLICE.md`.
 - `planning-features` requires an approved parent `MILESTONE.md`.
 - `implementing-features` requires an approved target `PLAN.md`.
 
@@ -65,7 +72,7 @@ A tree gives each thing one owner, which is why cross-cutting mechanics felt wro
 - A plan in which one system depends on another's internals fails the gate (principle 6). Rework it so the interaction goes through the shared medium.
 - Anything that genuinely cannot fit fields, flows, or encapsulation is raised with Evan before planning continues. If he accepts it, it goes in docs/exceptions.md with a reason.
 - A plan that conflicts with any principle is surfaced to Evan, not planned around.
-- Work that cuts across capabilities lives under the capability whose quality it primarily deepens. It names the other capabilities it touches, and reaches them only through the medium.
+- Work that cuts across capabilities lives under the capability whose quality it primarily deepens. It names the other capabilities it touches, and reaches them only through the medium. A goal that needs several capabilities to move together is a slice, and its medium map is where the gate applies across them.
 
 ## Rules every planning skill enforces
 

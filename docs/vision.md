@@ -21,6 +21,6 @@ The target is a plausible theme park, not a realistic one and not an unconstrain
 
 Realistic-feeling rides with stylized graphics; procedural building; procedural painting of nature and paths (paths want structure, nature wants scatter); a compelling simulation.
 
-## First milestone
+## First slice
 
-A boxes-and-tubes slice, a few weeks of work: terrain with an orbit camera; a path drawn as a curve that becomes a graph; one generic food shop as a box that samples demand and draws supplies from a depot over a backstage path; guests as simple shapes that carry hunger and pathfind by network distance; one field overlay with source attribution; a placement preview. No procedural building geometry and no coasters yet.
+The boxes-and-tubes slice, a few weeks of work spanning several foundational capabilities (decision 0023): terrain with an orbit camera; a path drawn as a curve that becomes a graph; one generic food shop as a box that samples demand and draws supplies from a depot over a backstage path; guests as simple shapes that carry hunger and pathfind by network distance; one field overlay with source attribution; a placement preview. No procedural building geometry and no coasters yet.

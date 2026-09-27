@@ -20,7 +20,7 @@ Do not invoke a planning or implementing skill until the user has approved MILES
 Create a task for each item. Complete in order.
 
 1. Read the parent CAPABILITY.md in full and treat it as ground. Confirm which milestone you are planning and its dependency position.
-2. Read sibling milestones if present and note relationships.
+2. Read sibling milestones if present and note relationships. If the milestone is a slice member, read its SLICE.md in full: the milestone must deliver its share of the scenario and produce or consume exactly the cross-capability fields and flows the slice's medium map assigns to its capability. It may add fields and flows internal to its own capability. A needed change to cross-capability medium goes back to `planning-slices`, not into the milestone.
 3. Explore related context: docs/principles.md, the SPEC.md of modules the milestone touches, relevant decision records, and the code. Identify patterns to follow.
 4. Reconcile the backlog: drop the item this milestone draws from, and any item it supersedes, via `maintaining-backlog`.
 5. Research tactical patterns via the `researching` skill. It writes findings to plans/<capability-slug>/<milestone-slug>/RESEARCH.md.
@@ -49,6 +49,8 @@ Weak core features fail the brief. A milestone whose first feature produces noth
 
 ```markdown
 # Milestone: <Name>
+
+Slice: <slice-slug>, or none
 
 ## Summary
 
