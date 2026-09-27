@@ -51,7 +51,7 @@ Do not weaken a test to make it pass or to make it easier to satisfy.
 
 Test only what the criteria ask. A case you think is missing is a gap for your report, not an extra test.
 
-Keep fixtures small: the fewest synthetic types and helpers the properties need, and never a second implementation of the code under test to compare against. When a feature's test code grows longer than the code it tests, you are enumerating examples instead of stating properties.
+Keep fixtures small: the fewest synthetic types and helpers the properties need, and never a second implementation of the code under test to compare against. Each test states one property, and no property is tested more than once: when one piece of logic serves several entry points, test the logic once and show separately that each entry point uses it.
 
 ## Report format
 

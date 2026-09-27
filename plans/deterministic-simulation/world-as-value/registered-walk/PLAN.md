@@ -300,7 +300,7 @@ Expected: the placeholder test passes.
 Dispatch the test-writer agent through implementing-features' test pass template. Feature: this directory's FEATURE.md. Specs: `src/sim/SPEC.md`. Public headers: `src/sim/mix.h`, `src/sim/entity_key.h`, `src/sim/schema.h`, `src/sim/world.h`.
 
 Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
-Expected: the tests build. Tests of keys, the schema, copy, equality, hash, and validation fail against the stubs. Tests of mix64, Hasher, hashName, deriveKey, isDerivedKey, and stepWorld's tick count pass.
+Expected: the tests build. The test that each step advances Tick by one passes, since stepWorld is unchanged. Tests of keys, the schema, copy, equality, hash, and validation fail against the stubs.
 
 ### Task 8: Emit fields and register types
 
@@ -335,7 +335,7 @@ Step 3: In `src/sim/schema.cpp`, implement the three functions:
 - `sameComponents` is `std::equal` over both vectors, comparing Name, Kind, and TypeId.
 
 Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
-Expected: the schema tests (criteria 8 to 10) pass.
+Expected: the schema tests (criterion 4) pass.
 
 ### Task 9: Keys
 
@@ -353,7 +353,7 @@ Step 2: Implement the key functions:
 - `findEntity` looks the key up in ByKey, and returns `entt::null` when it is absent. `keyOf` looks the entity up in KeyByEntity, and returns `NULL_KEY` when it is absent. `keys()` collects ByKey's keys in map order.
 
 Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
-Expected: the key tests (criteria 1 to 7) pass.
+Expected: the key tests (criteria 1 to 3) pass.
 
 ### Task 10: Validate
 
@@ -372,7 +372,7 @@ Step 2: Implement `validateWorld` with four checks, in this order:
 Keys appear in messages in decimal.
 
 Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
-Expected: the tests that call validateWorld directly (criterion 17) pass.
+Expected: the validateWorld tests (criterion 8) pass. The test that copy, equality, and hash validate first (criterion 9) still fails until Tasks 11 and 12.
 
 ### Task 11: The word stream, equality, and hash
 
@@ -392,7 +392,7 @@ Step 3: Implement `worldsEqual(left, right)`. If `WORLD_CHECKS` is true, validat
 Step 4: Implement `hashWorld(world)`. Validate it if `WORLD_CHECKS` is true, emit it into a WordHash, and return the Hasher's value.
 
 Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
-Expected: the equality, hash, storage-order, and stepping tests (criteria 13 to 16, 18) pass. The copy tests still fail.
+Expected: the equality, hash, storage-order, and stepping tests (criteria 6, 7, and 10) pass. The copy tests and criterion 9's copy section still fail.
 
 ### Task 12: Copy
 

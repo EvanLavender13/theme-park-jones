@@ -35,7 +35,7 @@ Create a task for each item. Complete in order.
 11. Decompose into bite-sized tasks, each one action of two to five minutes, in the task structure below.
 12. Write FEATURE.md at plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md.
 13. Write PLAN.md at the same path.
-14. Self-review: every acceptance criterion is testable from FEATURE.md and the specs alone; every task has exact paths, exact commands, and expected outputs. Fix inline.
+14. Self-review: every acceptance criterion is testable from FEATURE.md and the specs alone, and each states one property, with no lists of example inputs and nothing that reads as every function against every case; every spec statement the feature adds or changes is covered by a criterion; every task has exact paths, exact commands, and expected outputs. Fix inline.
 15. Ask the user to approve both artifacts.
 
 ## Process notes

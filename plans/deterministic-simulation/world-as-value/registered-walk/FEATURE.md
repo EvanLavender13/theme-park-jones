@@ -6,39 +6,18 @@ registered-walk makes the world a value. Every entity gets a stable key. Compone
 
 ## Acceptance criteria
 
-Keys
+1. Counter keys are unique and never reused. createEntity returns keys ascending from 1, nextKey() is the key the next call will return, and destroying an entity never lets its key come back.
+2. Derived keys are a pure function of (owner, purpose, index), lie outside the counter's range (isDerivedKey tells them apart, and NULL_KEY is neither), and createDerivedEntity is idempotent: calling it again returns the same entity with its components, and never moves the counter.
+3. findEntity and keyOf are inverses for live entities, and give entt::null and NULL_KEY for anything not live. destroyEntity removes the entity and its components, and is a no-op returning false for a key that is not live. keys() is ascending.
+4. A schema accepts component names of lowercase ASCII letters, digits, and hyphens, and refuses a malformed name, a repeated name, or a type registered twice, with std::invalid_argument and no change to the schema. components() keeps registration order.
+5. A copy equals its original and hashes the same, and from then on the two are independent: a change to either leaves the other unchanged.
+6. Equality and the hash agree, and see every registered value: worlds built by the same calls are equal and hash equal, including on separately built identical schemas, and a change to any one thing the walk covers (Tick, Seed, the key counter, the live keys, a component's presence, or any field, with doubles compared by their bits) makes them unequal and changes the hash. Worlds on different schemas are never equal.
+7. The walk ignores EnTT's storage order: the same keys and components added in a different order give an equal world with the same hash.
+8. validateWorld throws WorldInvariantError for each world the walk cannot cover: a component of an unregistered type (the message names the type; an empty storage is not an error), an entity not created by the world, a live key whose entity was destroyed on the registry, and a NaN in a registered double (the message names the component, field, and key). It accepts every other world.
+9. In debug builds (WORLD_CHECKS), copyWorld, worldsEqual (on either side), and hashWorld each run validateWorld first, so each refuses an invalid world.
+10. Each call to stepWorld advances Tick by exactly one, and two worlds built by the same calls stay equal, with the same hash, after every step.
 
-1. A world made with `World()` has Tick 0, Seed 0, `nextKey()` 1, and no entities. A world made with `World(schema, 42)` has Seed 42.
-2. `createEntity()` returns keys 1, 2, 3, and so on, in call order. After key 2 is destroyed, the next call returns 4, and `nextKey()` is 5. No sequence of creates and destroys ever returns a key twice.
-3. `findEntity(key)` returns the entity for a live key and `entt::null` for a key never created or already destroyed. `keyOf(entity)` returns the key of a live entity, and `NULL_KEY` for `entt::null` or an entity the world did not create. `destroyEntity(key)` returns true and removes the entity with all its components, or returns false and changes nothing when the key is not live.
-4. `keys()` lists live keys in ascending order, whatever order they were created and destroyed in. Derived keys, which have the top bit set, sort after every counter key.
-5. `deriveKey(owner, purpose, index)` is constexpr and depends only on its arguments. `isDerivedKey` is true for every derived key and false for every counter key and for `NULL_KEY`. Over all combinations of owners 1 to 100, purposes `hashName("a")` and `hashName("b")`, and indexes 0 to 499 (100,000 keys), no two derived keys are equal.
-6. `createDerivedEntity(owner, purpose, index)` returns `deriveKey(owner, purpose, index)`. It creates the entity on the first call, and on later calls with the same arguments it returns the same key without creating another entity, and keeps its components. It never changes `nextKey()`. After the entity is destroyed, the same call creates it again under the same key.
-7. `hashName` is constexpr, gives the same value for equal strings, and gives distinct values for the 1,000 strings "name0" to "name999".
-
-Schema
-
-8. `addComponent<T>(name, kind)` accepts names made of lowercase ASCII letters, digits, and hyphens, such as "shop" and "box-2". It throws `std::invalid_argument` for "", "Shop", "a b", "a_b", and a name already registered, and for a type already registered under another name. After a throw, the schema is unchanged.
-9. `components()` lists the registered types in registration order, with their names and kinds. `findComponent(entt::type_id<T>().hash())` returns the entry for a registered T, and nullptr otherwise.
-10. Field types a visitFields may list: bool, every integer type, double, EntityKey, enums, std::vector of any of these except bool, and structs with their own visitFields, nested to any depth. A component type with no members (a tag) registers without a visitFields. A component with a field of any other type, such as float, fails to compile.
-
-Copy, equality, and hash
-
-11. `copyWorld(world)` gives a world that `worldsEqual` reports equal to the original and whose `hashWorld` is equal. Its Tick, Seed, `nextKey()`, `keys()`, and components on every key are the same. An EntityKey field copied into the copy finds, through the copy's `findEntity`, the entity with that key.
-12. After a copy, each of these changes to the copy leaves the original's hash, `keys()`, and components unchanged: changing a field, adding or removing a component, creating or destroying an entity, and changing Tick or Seed. The same holds with the roles swapped.
-13. `worldsEqual(left, right)` is false when the worlds differ in any one of: Tick, Seed, `nextKey()`, the set of live keys, which keys hold a given component, or any field value. It compares doubles by their bits, so 0.0 and -0.0 differ. Two worlds built by the same sequence of calls are equal, even when each uses its own separately built schema, provided the schemas register the same names, kinds, and types in the same order. Worlds whose schemas differ are never equal.
-14. Changing any single value changes `hashWorld`: flipping a bool, adding 1 to an integer, changing a double to the next representable value, changing 0.0 to -0.0, changing an EntityKey, changing an enum, changing one element or the length of a vector, changing a nested struct's field, adding or removing a tag component, and changing Tick, Seed, or `nextKey()` (by creating and destroying an entity). A randomized test does this over many worlds, types, entities, and fields.
-15. The hash and equality ignore EnTT's storage order. Two worlds with the same keys and components, where the components were added in different orders or removed and re-added, are equal and hash equal.
-16. `stepWorld` still advances Tick by one per call. Two worlds built by the same calls and stepped 100 times have equal hashes after every step.
-
-Debug checks
-
-17. `WORLD_CHECKS` is true in builds without NDEBUG. When it is true, `copyWorld`, `worldsEqual`, and `hashWorld` call `validateWorld` on each world they are given. `validateWorld` can also be called directly in any build, and throws `WorldInvariantError` in these cases:
-    - A component of a type not registered with the world's schema is attached to any entity. The message contains the type's name. An unregistered type whose storage exists but is empty, for example after a view of it, is not an error.
-    - An entity exists in the registry that the world did not create, for example through `Registry.create()`.
-    - A live key's entity was destroyed directly through `Registry.destroy()`.
-    - A registered double field holds NaN, including inside a vector or a nested struct. The message contains the component's name, the field's name, and the entity's key in decimal.
-18. A world with entities that have no components, and an empty world, are valid, and copy, compare, and hash like any other.
+Which field types visitFields may list is enforced at compile time by a static_assert in emitField, not by a test.
 
 ## Medium
 
@@ -50,10 +29,10 @@ This feature introduces no fields or flows. It provides:
 
 ## Principle checks
 
-- Principle 10: two worlds built by the same calls and stepped the same number of ticks hash equal every tick (criterion 16), and the walk ignores EnTT's storage order (criterion 15). The hash is built only from integers, bit patterns, and names, never from addresses or entt::entity values.
+- Principle 10: two worlds built by the same calls and stepped the same number of ticks hash equal every tick, and the walk ignores EnTT's storage order. The hash is built only from integers, bit patterns, and names, never from addresses or entt::entity values.
 - Principle 6: the tests declare their synthetic component types in the test file and register them through the public schema. The walk reaches them only through the registered functions, and no walk header names a component type.
 - Principle 1: every registered type carries a data kind. Derived types are covered by copy, equality, and hash like the others, and text-saves later leaves them out of saves.
-- Principle 2: an empty world, and entities without components, are legitimate and walk normally (criterion 18). Invalid worlds fail loudly in debug instead of hashing to a value that hides missing state (criterion 17).
+- Principle 2: an empty world, and entities without components, are legitimate and walk normally. Invalid worlds fail loudly in debug instead of hashing to a value that hides missing state.
 
 ## Spec changes
 
