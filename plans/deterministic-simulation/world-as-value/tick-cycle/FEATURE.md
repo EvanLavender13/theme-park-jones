@@ -78,4 +78,6 @@ makeCandidate copies a world, applies commands to the copy, and resolves it, wit
 
 ## Open questions
 
-None.
+- Whether resolveWorld on a world that is already resolved calls the resolvers again. The implementation does, and resolvers that derive from intent alone give the same result either way. Resolved when a caller depends on the answer.
+- Whether a resolver may share a name with a component type. Nothing stops it, since the two lists are separate. Resolved if names come to share one namespace, for example in diagnostics or saves.
+- What state a world is left in when a resolver throws, and whether it is still pending. The implementation clears the resolving flag and leaves resolution pending. Resolved when some caller recovers from a failed resolution rather than treating it as fatal.
