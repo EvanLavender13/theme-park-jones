@@ -55,9 +55,9 @@ Dependencies that are not fields or flows, ruled outside principle 3 by decision
 
 Ordered for building. Milestone slugs are provisional until each capability is planned. Operations and guests exchange medium both ways (offers one way, guest visits and meals the other); operations lands first because guests cannot choose without offers, and its milestone is tested against synthetic guest visits.
 
-1. `deterministic-simulation/<to be planned>`: the world as a copyable, hashable value with the deterministic tick, candidate copies of the world, the state hash, a seeded random source, and the simulation's own exp and log (decision 0022). Depends on: none.
+1. `deterministic-simulation/world-as-value`: the world as a copyable, hashable, saveable value with the deterministic tick cycle, candidate copies of the world, the state hash, keyed random draws, the simulation's own exp and log (decision 0022), and the cross-build check script. Depends on: none.
 2. `shared-medium/first-field-and-flow`: the network type with network places, the field sampling interface with per-source attribution, and conserved flow transport with delay, tested with synthetic networks. Depends on: member 1.
-3. `effortless-building/sketch-a-park`: park intent for curves and boxes, tools to draw paths and place and delete boxes with a ghost for tentative placements, rendering paths as tubes and boxes as boxes, saving and loading parks, and the --park, --ticks, and --hash options for scripted captures and the cross-build check. Depends on: none.
+3. `effortless-building/sketch-a-park`: park intent for curves and boxes, tools to draw paths and place and delete boxes with a ghost for tentative placements, rendering paths as tubes and boxes as boxes, saving and loading park files through deterministic-simulation's state walk, and the --park, --ticks, and --hash options for scripted captures and the cross-build check. Depends on: member 1.
 4. `navigable-networks/paths-become-routes`: guest and backstage graphs derived from path intent, committed or candidate, shops connecting to nearby paths of both kinds, and the route distance field. Depends on: members 2 and 3.
 5. `plausible-operations/supplied-food-shop`: the depot and the generic food shop, resolved from committed or candidate intent, with supplies over the backstage network, meal production limited by the scarcest of demand, supply, and a fixed service rate, the food offer, unserved returns, the shop's inspection record, and a starved state shown on the box. Depends on: members 2, 3, and 4.
 6. `believable-guests/hungry-guests`: guests arriving, wandering, getting hungry, choosing offers by scored utility with a seeded softmax, queuing, eating, and leaving, drawn as simple shapes on the paths, plus the hungry footfall field and inspection records with hunger and choice explanations. Depends on: members 1, 2, 4, and 5.
@@ -70,7 +70,7 @@ Staff (a service rate stands in for them), money and payment, needs other than h
 ## Open questions
 
 - The fixed entrance and automatic shop-to-path connection are draft assumptions. Resolved when effortless-building and navigable-networks are planned.
-- How long 3000 ticks takes in the sanitized Linux build decides whether the criteria's run lengths hold. Resolved when deterministic-simulation's tick and hash exist.
+- How long 3000 ticks takes in the sanitized Linux build decides whether the criteria's run lengths hold. Resolved by measurement once the members step real content, after believable-guests lands, using the harness deterministic-simulation provides.
 
 ## Research notes
 
