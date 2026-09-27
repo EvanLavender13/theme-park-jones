@@ -3,6 +3,7 @@ include(Catch)
 # Tests link the sim alone, which also proves the sim builds without rendering.
 add_executable(tpj_tests
     cycle_test.cpp
+    draw_test.cpp
     entity_key_test.cpp
     placeholder_test.cpp
     schema_test.cpp

@@ -2,6 +2,7 @@
 # (principle 10), so this target links nothing beyond tpj_core and EnTT.
 add_library(tpj_sim STATIC
     cycle.cpp
+    draw.cpp
     schema.cpp
     walk.cpp
     world.cpp)
