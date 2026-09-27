@@ -42,6 +42,9 @@ EntityKey World::createDerivedEntity(EntityKey owner, uint64_t purpose, uint64_t
   if (found == ByKey.end()) {
     addEntity(key);
     ByKey.at(key).Origin = origin;
+  } else if (!found->second.Origin) {
+    // A loaded entity takes the origin it is resolved from.
+    found->second.Origin = origin;
   } else if (WORLD_CHECKS && found->second.Origin != origin) {
     throw WorldInvariantError("derived key " + std::to_string(static_cast<uint64_t>(key)) +
                               " is shared by two origins");

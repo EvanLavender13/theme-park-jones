@@ -335,8 +335,6 @@ concept HasTextFields = requires(FieldWriter &writer, T &value) { visitFields(wr
 template <typename Field> void writeValue(std::string &out, std::string_view name, Field &value) {
   if constexpr (std::is_same_v<Field, bool>) {
     out += value ? "true" : "false";
-  } else if constexpr (std::is_same_v<Field, double>) {
-    writeNumber(out, value);
   } else if constexpr (std::is_same_v<Field, EntityKey>) {
     writeNumber(out, static_cast<uint64_t>(value));
   } else if constexpr (std::is_enum_v<Field>) {
@@ -353,7 +351,7 @@ template <typename Field> void writeValue(std::string &out, std::string_view nam
                                   std::to_string(index) + ", which has no name");
     }
     out += names[index];
-  } else if constexpr (std::is_integral_v<Field>) {
+  } else if constexpr (std::is_same_v<Field, double> || std::is_integral_v<Field>) {
     writeNumber(out, value);
   } else if constexpr (IsVector<Field>::value) {
     out += '[';
@@ -377,6 +375,8 @@ template <typename Field> void writeValue(std::string &out, std::string_view nam
   }
 }
 ```
+
+Doubles and integers share one branch, after enums, because clang-tidy's bugprone-branch-clone refuses two branches with the same body.
 
 Step 2: In `WorldSchema::addComponent` in `src/sim/schema.h`, replace the Write stub with:
 
@@ -669,6 +669,29 @@ uint64_t readHeaderNumber(const SaveLine &line, std::string_view label) {
   return value;
 }
 
+// The values of a save's four header lines.
+struct SaveHeader {
+  uint64_t Seed = 0;
+  uint64_t Tick = 0;
+  uint64_t NextKey = 1;
+};
+
+SaveHeader readHeader(LineReader &reader) {
+  const SaveLine &header = reader.next("its header");
+  if (header.Text != SAVE_HEADER) {
+    throw LoadError(header.Number, "expected the header 'tpj-park 1'");
+  }
+  SaveHeader values;
+  values.Seed = readHeaderNumber(reader.next("seed"), "seed");
+  values.Tick = readHeaderNumber(reader.next("tick"), "tick");
+  const SaveLine &nextKeyLine = reader.next("next-key");
+  values.NextKey = readHeaderNumber(nextKeyLine, "next-key");
+  if (values.NextKey == 0 || values.NextKey > DERIVED_KEY_BIT) {
+    throw LoadError(nextKeyLine.Number, "next-key must be from 1 to 2^63");
+  }
+  return values;
+}
+
 // Where the sections read so far allow the next one to be.
 struct SectionOrder {
   bool EntitiesAllowed = true;
@@ -727,24 +750,18 @@ EntityKey readKey(TextCursor &cursor, EntityKey previous, uint64_t nextKey) {
 }
 ```
 
+The header is read by its own helper because clang-tidy's readability-function-size allows loadWorld at most 60 statements.
+
 Step 2: Replace the loadWorld stub with:
 
 ```cpp
 World loadWorld(std::shared_ptr<const WorldSchema> schema, std::string_view text) {
   TPJ_PROFILE_ZONE();
   LineReader reader(text);
-  const SaveLine &header = reader.next("its header");
-  if (header.Text != SAVE_HEADER) {
-    throw LoadError(header.Number, "expected the header 'tpj-park 1'");
-  }
-  const uint64_t seed = readHeaderNumber(reader.next("seed"), "seed");
-  World world(std::move(schema), seed);
-  world.Tick = readHeaderNumber(reader.next("tick"), "tick");
-  const SaveLine &nextKeyLine = reader.next("next-key");
-  world.NextKey = readHeaderNumber(nextKeyLine, "next-key");
-  if (world.NextKey == 0 || world.NextKey > DERIVED_KEY_BIT) {
-    throw LoadError(nextKeyLine.Number, "next-key must be from 1 to 2^63");
-  }
+  const SaveHeader header = readHeader(reader);
+  World world(std::move(schema), header.Seed);
+  world.Tick = header.Tick;
+  world.NextKey = header.NextKey;
 
   SectionOrder order;
   bool inSection = false;
@@ -810,13 +827,13 @@ Expected: the tests of malformed lines, line endings, and loaded headers pass. R
 Files:
 - Modify: `src/sim/world.cpp` (`World::createDerivedEntity`)
 
-Step 1: Replace the `else if` branch of `World::createDerivedEntity` with:
+Step 1: Replace the `else if` branch of `World::createDerivedEntity` with the following. The last branch compares the optional itself, which bugprone-unchecked-optional-access accepts, rather than dereferencing it:
 
 ```cpp
   } else if (!found->second.Origin) {
     // A loaded entity takes the origin it is resolved from.
     found->second.Origin = origin;
-  } else if (WORLD_CHECKS && *found->second.Origin != origin) {
+  } else if (WORLD_CHECKS && found->second.Origin != origin) {
     throw WorldInvariantError("derived key " + std::to_string(static_cast<uint64_t>(key)) +
                               " is shared by two origins");
   }

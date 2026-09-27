@@ -5,20 +5,13 @@
 
 namespace tpj {
 
-namespace {
-
-bool isValidName(std::string_view name) {
-  return !name.empty() && std::all_of(name.begin(), name.end(), [](char ch) {
-    return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-';
-  });
-}
-
-} // namespace
-
 void WorldSchema::addComponentType(ComponentType type) {
   if (!isValidName(type.Name)) {
     throw std::invalid_argument("component name '" + type.Name +
                                 "' must be lowercase letters, digits, and hyphens");
+  }
+  if (type.Name == ENTITIES_SECTION) {
+    throw std::invalid_argument("component name 'entities' is reserved for saves");
   }
   for (const ComponentType &existing : Components) {
     if (existing.Name == type.Name) {

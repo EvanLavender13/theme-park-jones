@@ -12,6 +12,8 @@
 #include <optional>
 #include <stdexcept>
 #include <stdint.h>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -98,6 +100,8 @@ private:
   friend void resolveWorld(World &world);
   friend void stepWorld(World &world, CommandQueue &commands);
   friend World makeCandidate(const World &world, const CommandQueue &commands);
+  friend std::string saveWorld(const World &world);
+  friend World loadWorld(std::shared_ptr<const WorldSchema> schema, std::string_view text);
 };
 
 // A world equal to this one, sharing its schema, and independent of it from then on.

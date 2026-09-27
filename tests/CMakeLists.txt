@@ -6,6 +6,7 @@ add_executable(tpj_tests
     draw_test.cpp
     entity_key_test.cpp
     placeholder_test.cpp
+    save_test.cpp
     schema_test.cpp
     walk_test.cpp
     world_checks_test.cpp)

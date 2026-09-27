@@ -6,8 +6,10 @@
 #include "sim/schema.h"
 #include "sim/world.h"
 
+#include <array>
 #include <memory>
 #include <stdint.h>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -16,6 +18,8 @@
 namespace tpj::test {
 
 enum class Mood : uint8_t { Calm, Excited };
+
+constexpr std::array<std::string_view, 2> enumNames(Mood /*value*/) { return {"calm", "excited"}; }
 
 struct Offset {
   double X = 0.0;

@@ -2,6 +2,7 @@
 #define TPJ_SIM_SCHEMA_H
 
 #include "sim/entity_key.h"
+#include "sim/field_text.h"
 
 #include <entt/entity/registry.hpp>
 
@@ -57,12 +58,6 @@ private:
 template <typename T>
 concept HasVisitFields = requires(FieldEmitter &emitter, T &value) { visitFields(emitter, value); };
 
-template <typename T> struct IsVector : std::false_type {};
-template <typename T, typename Allocator>
-struct IsVector<std::vector<T, Allocator>> : std::true_type {};
-
-template <typename> inline constexpr bool UNSUPPORTED_FIELD = false;
-
 // A registered component type, handled opaquely through functions its owning module instantiates
 // (principle 6).
 struct ComponentType {
@@ -73,6 +68,10 @@ struct ComponentType {
   void (*Copy)(const entt::registry &from, entt::entity source, entt::registry &to,
                entt::entity target) = nullptr;
   void (*Emit)(const entt::registry &registry, entt::entity entity, WordSink &sink) = nullptr;
+  // Writes the component's fields for its save line, each as a space and name=value.
+  void (*Write)(const entt::registry &registry, entt::entity entity, std::string &line) = nullptr;
+  // Reads what Write wrote and adds the component to the entity. Throws LoadError.
+  void (*Read)(TextCursor &cursor, entt::registry &registry, entt::entity entity) = nullptr;
 };
 
 // A system, swap function, or resolver. It takes only the world, so it can hold no state outside
@@ -172,6 +171,8 @@ template <typename T> void WorldSchema::addComponent(std::string_view name, Data
   static_assert(std::is_copy_constructible_v<T>, "a registered component must be copyable");
   static_assert(std::is_empty_v<T> || HasVisitFields<T>,
                 "a registered component needs a visitFields function");
+  static_assert(std::is_default_constructible_v<T>,
+                "a registered component must be default constructible, so that a load can fill it");
   ComponentType type;
   type.Name = std::string(name);
   type.Kind = kind;
@@ -194,6 +195,23 @@ template <typename T> void WorldSchema::addComponent(std::string_view name, Data
       // reads, and the stored component is not itself const.
       FieldEmitter emitter(sink);
       visitFields(emitter, const_cast<T &>(registry.get<T>(entity)));
+    }
+  };
+  type.Write = [](const entt::registry &registry, entt::entity entity, std::string &line) {
+    if constexpr (!std::is_empty_v<T>) {
+      // As in Emit, writing only reads, and the stored component is not itself const.
+      FieldWriter writer(line, true);
+      visitFields(writer, const_cast<T &>(registry.get<T>(entity)));
+    }
+  };
+  type.Read = [](TextCursor &cursor, entt::registry &registry, entt::entity entity) {
+    if constexpr (std::is_empty_v<T>) {
+      registry.emplace<T>(entity);
+    } else {
+      T value{};
+      FieldReader reader(cursor, true);
+      visitFields(reader, value);
+      registry.emplace<T>(entity, std::move(value));
     }
   };
   addComponentType(std::move(type));
