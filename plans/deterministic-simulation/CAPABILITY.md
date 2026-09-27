@@ -17,7 +17,7 @@ Its value is trust. Tests on Linux are evidence for what a player sees on Window
 
 ## Foundation criteria
 
-- Two worlds built identically and stepped the same number of ticks have equal state hashes at every tick. The cross-build script gives equal hash sequences from the Windows and Linux builds for every registered scenario. The pre-push hook runs the script whenever the pushed commits touch anything tpj_sim's build depends on: src/sim, src/core, cmake/, the top-level CMakeLists.txt and CMakePresets.json, the scenarios, or the script itself.
+- Two worlds built identically and stepped the same number of ticks have equal state hashes at every tick. The cross-build script gives equal hash sequences from the Windows and Linux builds for every registered scenario. The pre-push hook runs the script whenever the pushed commits touch anything tpj_sim's build depends on: src/sim, src/core, cmake/, the top-level CMakeLists.txt and CMakePresets.json, the scenarios and park files it runs, or the script itself.
 - A copy of a world equals the original. Stepping each gives equal worlds at every tick, and changing the copy never changes the original.
 - A save holds only intent and state, never derived data. Loading a save and resolving gives a world equal to the one saved, and saving the loaded world again gives an identical file, byte for byte.
 - The hash covers everything the walk covers: changing any single registered value in a randomized synthetic world changes the hash. A component type that is stored in the world but not registered with the walk fails loudly in debug builds, so nothing can escape copy, hash, or save.
