@@ -10,3 +10,4 @@ if(TPJ_STRAY_TEST_FILES)
 endif()
 
 add_subdirectory(sim)
+add_subdirectory(scenarios)

@@ -16,7 +16,7 @@ The Linux build is for verification. linux-debug runs AddressSanitizer, UBSan, a
     cmake --build --preset linux-debug
     ctest --preset linux-debug
 
-A change is finished when linux-debug builds without warnings and its tests pass. Git hooks format on commit, check commit messages, and gate pushes on linux-debug; activate them once per clone with `git config core.hooksPath .githooks`. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
+A change is finished when linux-debug builds without warnings and its tests pass. Git hooks format on commit, check commit messages, and gate pushes on linux-debug; activate them once per clone with `git config core.hooksPath .githooks`. scripts/cross-build-check.sh compares the Windows and Linux builds' simulation outputs (decision 0022), and pre-push runs it when the simulation's inputs change. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
 
 ## Authority
 
