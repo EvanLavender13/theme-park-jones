@@ -27,7 +27,7 @@ world-as-value turns the skeleton's tick counter into a world that can be copied
     12 kind=shop x=4.5 z=-2 facing=1.5707963267948966
     ```
 
-9. Loading a save and resolving gives a world equal to the one saved, and saving the loaded world again gives an identical file, byte for byte, for randomized synthetic worlds, including state that is part-way through a multi-tick process. A malformed or unknown line fails the load with an error naming the line number, and never crashes.
+9. Loading a save of a resolved world and resolving gives a world equal to the one saved, and saving the loaded world again gives an identical file, byte for byte, for randomized synthetic worlds, including state that is part-way through a multi-tick process. A malformed or unknown line fails the load with an error naming the line number, and never crashes.
 10. A draw is a function of its key alone (world seed, entity key, purpose, tick, index), giving 64 bits, with a uniform double in [0, 1) from the top 53 bits and a pick from integer or double weights. Draws made in shuffled orders give the same values. Uniform draws pass a chi-square test over a million samples, weighted picks match their weights within a stated tolerance over a million samples, and a checked-in table of expected draws matches on every build.
 11. The simulation's exp and log are ports of musl's, kept with their MIT notice. They match a checked-in table of correctly rounded reference values within 1 ULP, including special values (zero, negative, infinities, NaN, subnormals, and the overflow and underflow limits). Creating a world asserts that the rounding mode is the default.
 12. A test runs nm -u on the built libtpj_sim.a and fails on any transcendental function from the C runtime's denylist. It is proven by a planted object that calls exp, which the check rejects.
@@ -72,6 +72,7 @@ registered-walk is the core. It makes a world a value, with stable keys and regi
 
 - Release builds in the cross-build check: compare windows-release too, once players run release builds.
 - A first-divergence report: when the script finds differing hashes, rerun both sides with per-type hashes to name the first diverging type and entity. Gated on: a divergence that is hard to find.
+- Incremental resolution: run only the resolvers an applied command affects, in dependency order, instead of every resolver. Gated on: resolution cost showing up in the tick or in a preview's candidate.
 
 ## Open questions
 
