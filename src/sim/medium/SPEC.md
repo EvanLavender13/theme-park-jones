@@ -1,6 +1,6 @@
 # medium
 
-The shared medium (principles 3 and 6, decision 0005): the networks every field is sampled on. It is part of tpj_sim and follows its contract (src/sim/SPEC.md).
+The shared medium (principles 3 and 6, decision 0005): the networks, and the fields sampled on them. It is part of tpj_sim and follows its contract (src/sim/SPEC.md).
 
 ## Networks
 
@@ -37,3 +37,15 @@ carryOver moves a place held across a re-derivation, given the network before an
 - Otherwise its carrier's geometry changed, and it carries over to nearestPlaceOn, in the network after, of its carrier and its ground point in the network before. It stays on its own carrier and keeps its ground position as nearly as the new line allows.
 
 addNetworkComponent registers Network as the derived component type network. Producers put networks on entities they derive in resolution. Place has a visitFields, so holders can keep places in their own components.
+
+## Fields
+
+A field is a set of entries published at places, each attributed to the source that published it (principles 3 and 8). Its owning module defines it as a type with three public static members: Entry, the entries' type, which must be default constructible, copyable, and a registrable field type; Name, a std::string_view of lowercase letters, digits, and hyphens; and Kind, FieldKind::Entry or FieldKind::Scalar. A scalar field's Entry is double, which a compile-time check enforces. The type may also define a static function sampleEdge, its owner's rule for places inside an edge.
+
+addField registers a field with a schema: the derived component type named its name followed by -resolved, which holds its resolved entries, and the resolver named its name followed by -field, which empties them. It throws std::invalid_argument when either name is malformed or already registered. Resolvers run in registration order, so a module registers a field before the resolvers that publish into it, and those may name the field's resolver as a dependency. The entries sit on an entity keyed fieldKey(name), which is deriveKey(NULL_KEY, hashName("field"), hashName(name)), and which the field's resolver creates.
+
+Resolved entries are derived data (principle 1). A resolver calls publishResolved with a source's entries, each a place and a value. They are readable at once, by later resolvers and after the resolution, and every resolution replaces every source's entries in full, so a source that does not publish in a resolution has none afterwards. Sources are held in ascending key order, whatever order they publish in, and each source's entries in the order it gave them. publishResolved throws std::logic_error when the world is not resolving, or when it holds no resolved entries for the field, as before the field's resolver first runs. It throws std::invalid_argument for the null source key, and for a source that has already published into the field in this resolution, which an empty list of entries counts as. A publishResolved that throws changes nothing. Entries are not otherwise checked, and the walk's checks apply to them as to any registered data.
+
+sampleField gives a field's entries at a place on a network, each with its source, sources in ascending key order. A place that does not resolve on the network, or a world holding no entries for the field, gives none, and that is a legitimate sample (principle 2). An entry whose place does not resolve on the network is never sampled. At a place that resolves to a node, a source's entries are those whose places resolve to the same node, whatever carrier they name, in the source's order, whether or not the field has sampleEdge. At a place strictly inside an edge, a field without sampleEdge gives each source's entries whose places equal it, the same carrier at the same distance. A field with sampleEdge calls it once for each source with an entry at either of the edge's nodes or strictly inside the edge, in ascending source order, and the entries it returns are that source's at the place. It receives an EdgeSample: the edge; the place's FromOffset and ToOffset as resolve gives them; the source's entries whose places resolve to the edge's From node, and those that resolve to its To node, which are the same list when both ends are one node; and its entries whose places resolve inside the edge, each with its FromOffset and ToOffset as resolve gives them. Each list is in the source's order. This is how route distance reads a place between nodes (principle 4).
+
+fieldValue gives a scalar field's value at a place: 0.0, with each entry sampleField gives added in turn, in its order. A place with no entries has the value 0.0.

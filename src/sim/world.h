@@ -59,6 +59,8 @@ public:
   // True from construction until the first resolution, and from each applied command until the
   // next.
   [[nodiscard]] bool isResolvePending() const { return ResolvePending; }
+  // True only while the resolvers run.
+  [[nodiscard]] bool isResolving() const { return Resolving; }
 
   // A new entity keyed from the counter.
   EntityKey createEntity();
