@@ -32,7 +32,7 @@ Create a task for each item. Complete in order.
 9. Write acceptance criteria: observable end-to-end conditions in the running app, and properties that can be checked by an integration test over the simulation. Each criterion names how it is checked: an integration test, a capture of a scripted scenario (the member milestone that delivers the script is named in Members), or a manual check by Evan.
 10. Write SLICE.md at plans/slices/<slug>/SLICE.md in the format below.
 11. Self-review for placeholders, contradictions, cross-capability interactions missing from the medium map, members out of order, and criteria that cannot be observed or tested. Fix inline.
-12. Review: stage SLICE.md and RESEARCH.md, then dispatch the reviewer via `reviewing`. Present the findings; fix the ones the user accepts, within the review budget.
+12. Review: stage SLICE.md and RESEARCH.md, then dispatch the reviewer via `reviewing`. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
 13. Ask the user to approve.
 
 ## Closing a slice

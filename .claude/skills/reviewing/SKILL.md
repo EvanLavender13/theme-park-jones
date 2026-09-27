@@ -29,6 +29,16 @@ Two reasons.
 6. Present the findings to the user verbatim: Do not summarize, reorder, soften, or add commentary. The point of dispatching to a fresh subagent is wasted if this session filters its output.
 7. Ask the user what to act on: Do not propose fixes yourself. The user decides which findings to address and which skill to invoke next.
 
+Planning briefs are the exception. When a planning skill dispatches the review of its own brief (CAPABILITY.md, MILESTONE.md, or SLICE.md) before approval, steps 6 and 7 are replaced:
+
+- Fix Minor findings directly.
+- Fix Major findings directly when the fix follows from the principles and settled decisions without a new design choice.
+- Bring the user only the Major findings that need a design choice. Give each one a sentence or two and a recommended option.
+- Report the rest in one line, for example "review fixed A, B, and C".
+- Dispatch the follow-up review only when a Major fix changed a core definition that other plans rely on. Before dispatching it, check the fix against every kind of edit or case the definition covers.
+
+Code reviews and reviews the user asks for directly still follow steps 6 and 7.
+
 ## Dispatch hygiene
 
 The dispatch prompt must not contain:

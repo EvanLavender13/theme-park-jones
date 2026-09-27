@@ -33,7 +33,7 @@ Create a task for each item. Complete in order.
 12. Write MILESTONE.md at plans/<capability-slug>/<milestone-slug>/MILESTONE.md in the format below.
 13. Record the milestone in the parent CAPABILITY.md's Milestones list when it is not already there.
 14. Self-review for placeholders, contradictions, scope drift, vague acceptance criteria, and interactions that bypass the medium. Fix inline.
-15. Review: stage MILESTONE.md and RESEARCH.md, then dispatch the reviewer via `reviewing`, with CAPABILITY.md and, for a slice member, SLICE.md as context. Present the findings; fix the ones the user accepts, within the review budget.
+15. Review: stage MILESTONE.md and RESEARCH.md, then dispatch the reviewer via `reviewing`, with CAPABILITY.md and, for a slice member, SLICE.md as context. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
 16. Ask the user to approve.
 
 ## Process notes
