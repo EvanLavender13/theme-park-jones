@@ -61,6 +61,8 @@ public:
   [[nodiscard]] bool isResolvePending() const { return ResolvePending; }
   // True only while the resolvers run.
   [[nodiscard]] bool isResolving() const { return Resolving; }
+  // True only while the systems step.
+  [[nodiscard]] bool isStepping() const { return Stepping; }
 
   // A new entity keyed from the counter.
   EntityKey createEntity();
@@ -95,6 +97,10 @@ private:
   bool ResolvePending = true;
   // Set only while resolvers run, so that createEntity can refuse them in debug builds.
   bool Resolving = false;
+  // Set only while finishers run, so that createEntity can refuse them in debug builds too.
+  bool Finishing = false;
+  // Set only while the systems step, so that functions meant for systems can refuse others.
+  bool Stepping = false;
 
   friend World copyWorld(const World &world);
   friend bool worldsEqual(const World &left, const World &right);

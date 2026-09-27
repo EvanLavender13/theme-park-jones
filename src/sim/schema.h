@@ -111,6 +111,8 @@ public:
   // malformed or repeated name, or for a dependency that is not an already registered resolver.
   void addResolver(std::string_view name, WorldFunction resolve,
                    std::vector<std::string> dependencies = {});
+  // Every resolution runs the finishers after its resolvers, in registration order.
+  void addFinisher(WorldFunction finish);
   // Registers T as a command type. Throws std::invalid_argument if T is already registered.
   template <typename T> void addCommand();
 
@@ -122,6 +124,7 @@ public:
   [[nodiscard]] const std::vector<WorldFunction> &systems() const { return Systems; }
   [[nodiscard]] const std::vector<WorldFunction> &swaps() const { return Swaps; }
   [[nodiscard]] const std::vector<ResolverType> &resolvers() const { return Resolvers; }
+  [[nodiscard]] const std::vector<WorldFunction> &finishers() const { return Finishers; }
   [[nodiscard]] const std::vector<CommandType> &commands() const { return Commands; }
   [[nodiscard]] const CommandType *findCommand(entt::id_type typeId) const;
 
@@ -133,6 +136,7 @@ private:
   std::vector<WorldFunction> Systems;
   std::vector<WorldFunction> Swaps;
   std::vector<ResolverType> Resolvers;
+  std::vector<WorldFunction> Finishers;
   std::vector<CommandType> Commands;
 };
 

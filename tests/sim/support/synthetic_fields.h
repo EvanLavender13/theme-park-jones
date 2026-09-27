@@ -96,11 +96,13 @@ private:
   PublishOrder Previous;
 };
 
-// Publishes each entity holding Emits<F> as a source, in the current publish order.
-template <typename F> void publishSources(World &world) {
-  std::vector<std::pair<EntityKey, std::vector<PlacedEntry<double>>>> sources;
-  world.Registry.view<Emits<F>>().each([&](entt::entity entity, const Emits<F> &emits) {
-    sources.emplace_back(world.keyOf(entity), emits.Entries);
+using SourceEntries = std::vector<std::pair<EntityKey, std::vector<PlacedEntry<double>>>>;
+
+// The entities holding Component, with its entries, in the current publish order.
+template <typename Component> SourceEntries sourcesInPublishOrder(World &world) {
+  SourceEntries sources;
+  world.Registry.view<Component>().each([&](entt::entity entity, const Component &component) {
+    sources.emplace_back(world.keyOf(entity), component.Entries);
   });
   std::ranges::sort(sources, [](const auto &left, const auto &right) {
     return static_cast<uint64_t>(left.first) < static_cast<uint64_t>(right.first);
@@ -110,9 +112,43 @@ template <typename F> void publishSources(World &world) {
   } else if (publishOrder() == PublishOrder::Rotated && !sources.empty()) {
     std::ranges::rotate(sources, sources.begin() + 1);
   }
-  for (auto &[source, entries] : sources) {
+  return sources;
+}
+
+// Publishes each entity holding Emits<F> as a source, in the current publish order.
+template <typename F> void publishSources(World &world) {
+  for (auto &[source, entries] : sourcesInPublishOrder<Emits<F>>(world)) {
     publishResolved<F>(world, source, std::move(entries));
   }
+}
+
+// A source's state for field F: the entries a system publishes for it every tick. Each value is
+// published raised by the tick it is published in, so a sample shows which tick published it.
+template <typename F> struct Steps {
+  std::vector<PlacedEntry<double>> Entries;
+};
+
+template <typename Visitor, typename F> void visitFields(Visitor &visitor, Steps<F> &steps) {
+  visitor.field("entries", steps.Entries);
+}
+
+// Publishes, while stepping, each entity holding Steps<F> whose key the filter selects, in the
+// current publish order.
+template <typename F> void publishSteppedSourcesWhere(World &world, bool (*select)(EntityKey)) {
+  for (auto &[source, entries] : sourcesInPublishOrder<Steps<F>>(world)) {
+    if (!select(source)) {
+      continue;
+    }
+    for (PlacedEntry<double> &entry : entries) {
+      entry.Value += static_cast<double>(world.Tick);
+    }
+    publishStepped<F>(world, source, std::move(entries));
+  }
+}
+
+// Publishes every entity holding Steps<F>.
+template <typename F> void publishSteppedSources(World &world) {
+  publishSteppedSourcesWhere<F>(world, [](EntityKey) { return true; });
 }
 
 // The intent a network is derived from.
@@ -196,6 +232,21 @@ inline std::shared_ptr<WorldSchema> makeFieldSchema() {
   return schema;
 }
 
+// Registers the stepping sources' state, footfall-steps and reach-steps.
+inline void addStepsComponents(WorldSchema &schema) {
+  schema.addComponent<Steps<Footfall>>("footfall-steps", DataKind::State);
+  schema.addComponent<Steps<Reach>>("reach-steps", DataKind::State);
+}
+
+// The field schema with the stepping sources' state and their systems, footfall's then reach's.
+inline std::shared_ptr<WorldSchema> makeSteppedFieldSchema() {
+  auto schema = makeFieldSchema();
+  addStepsComponents(*schema);
+  schema->addSystem(publishSteppedSources<Footfall>);
+  schema->addSystem(publishSteppedSources<Reach>);
+  return schema;
+}
+
 // The key the standard world's layout entity takes, as the first from the counter.
 inline constexpr EntityKey LAYOUT_KEY{1};
 
@@ -217,6 +268,22 @@ template <typename F>
 EntityKey addSource(World &world, const std::vector<PlacedEntry<double>> &entries) {
   const EntityKey key = world.createEntity();
   world.Registry.emplace<Emits<F>>(world.findEntity(key), Emits<F>{.Entries = entries});
+  return key;
+}
+
+// Makes the entity a source that publishes the entries into F while stepping, beside any entries
+// it publishes in resolution.
+template <typename F>
+void setSteps(World &world, EntityKey source, const std::vector<PlacedEntry<double>> &entries) {
+  world.Registry.emplace_or_replace<Steps<F>>(world.findEntity(source),
+                                              Steps<F>{.Entries = entries});
+}
+
+// A new source publishing the entries into F only while stepping.
+template <typename F>
+EntityKey addStepper(World &world, const std::vector<PlacedEntry<double>> &entries) {
+  const EntityKey key = world.createEntity();
+  setSteps<F>(world, key, entries);
   return key;
 }
 

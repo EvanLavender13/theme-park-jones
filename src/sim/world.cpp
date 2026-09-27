@@ -58,8 +58,9 @@ entt::entity World::addEntity(EntityKey key) {
 }
 
 EntityKey World::createEntity() {
-  if (WORLD_CHECKS && Resolving) {
-    throw WorldInvariantError("a resolver called createEntity; resolvers take derived keys");
+  if (WORLD_CHECKS && (Resolving || Finishing)) {
+    throw WorldInvariantError(
+        "createEntity was called during resolution, which takes derived keys");
   }
   if (NextKey >= DERIVED_KEY_BIT) {
     throw WorldInvariantError("the entity key counter is exhausted");

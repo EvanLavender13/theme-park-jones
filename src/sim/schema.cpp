@@ -44,6 +44,8 @@ void WorldSchema::addSystem(WorldFunction step) { Systems.push_back(step); }
 
 void WorldSchema::addSwap(WorldFunction swap) { Swaps.push_back(swap); }
 
+void WorldSchema::addFinisher(WorldFunction finish) { Finishers.push_back(finish); }
+
 void WorldSchema::addResolver(std::string_view name, WorldFunction resolve,
                               std::vector<std::string> dependencies) {
   ResolverType resolver{std::string(name), resolve, std::move(dependencies)};
