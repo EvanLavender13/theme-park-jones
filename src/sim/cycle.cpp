@@ -39,6 +39,17 @@ void resolveWorld(World &world) {
     throw;
   }
   world.Resolving = false;
+  // Finishers run with isResolving false, so they cannot publish after the comparisons they make.
+  world.Finishing = true;
+  try {
+    for (const WorldFunction finish : world.schema().finishers()) {
+      finish(world);
+    }
+  } catch (...) {
+    world.Finishing = false;
+    throw;
+  }
+  world.Finishing = false;
   world.ResolvePending = false;
 }
 
@@ -48,9 +59,16 @@ void stepWorld(World &world, CommandQueue &commands) {
   if (world.ResolvePending) {
     resolveWorld(world);
   }
-  for (const WorldFunction step : world.schema().systems()) {
-    step(world);
+  world.Stepping = true;
+  try {
+    for (const WorldFunction step : world.schema().systems()) {
+      step(world);
+    }
+  } catch (...) {
+    world.Stepping = false;
+    throw;
   }
+  world.Stepping = false;
   ++world.Tick;
   for (const WorldFunction swap : world.schema().swaps()) {
     swap(world);

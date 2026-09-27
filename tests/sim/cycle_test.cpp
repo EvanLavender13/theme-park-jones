@@ -2,6 +2,7 @@
 
 #include "sim/command_queue.h"
 #include "sim/entity_key.h"
+#include "sim/save.h"
 #include "sim/schema.h"
 #include "sim/world.h"
 
@@ -424,6 +425,113 @@ TEST_CASE("createDerivedEntity works during resolution, and resolving again recr
 
   resolveWorld(world);
   REQUIRE(world.keys() == expected);
+}
+
+// A command that records whether the world is stepping when it is applied.
+struct Look {
+  int Id = 0;
+};
+
+void recordStepping(const std::string &stage, const World &world) {
+  journal().push_back(stage + (world.isStepping() ? " stepping" : " not stepping"));
+}
+
+[[maybe_unused]] void applyCommand(World &world, const Look & /*look*/) {
+  recordStepping("command", world);
+}
+
+TEST_CASE("isStepping is true while a system runs and false otherwise") {
+  auto schema = std::make_shared<WorldSchema>();
+  schema->addSystem([](World &world) { recordStepping("system 1", world); });
+  schema->addSystem([](World &world) { recordStepping("system 2", world); });
+  schema->addSwap([](World &world) { recordStepping("swap", world); });
+  schema->addResolver("watch", [](World &world) { recordStepping("resolver", world); });
+  schema->addFinisher([](World &world) { recordStepping("finisher", world); });
+  schema->addCommand<Look>();
+  World world(schema, 0);
+  REQUIRE_FALSE(world.isStepping());
+
+  journal().clear();
+  CommandQueue queue;
+  queue.push(Look{});
+  stepWorld(world, queue);
+
+  REQUIRE(journal() == std::vector<std::string>{
+                           "resolver not stepping",
+                           "finisher not stepping",
+                           "system 1 stepping",
+                           "system 2 stepping",
+                           "swap not stepping",
+                           "command not stepping",
+                           "resolver not stepping",
+                           "finisher not stepping",
+                       });
+  REQUIRE_FALSE(world.isStepping());
+}
+
+// Finishers are registered between resolvers, so that only running them after every resolver
+// explains the calls.
+std::shared_ptr<const WorldSchema> makeFinishingSchema() {
+  auto schema = std::make_shared<WorldSchema>();
+  schema->addFinisher([](World &world) { record("finisher 1", world); });
+  schema->addResolver("zones", [](World &world) { record("resolver zones", world); });
+  schema->addFinisher([](World &world) { record("finisher 2", world); });
+  schema->addResolver("access", [](World &world) { record("resolver access", world); }, {"zones"});
+  schema->addSystem([](World &world) { record("system", world); });
+  schema->addCommand<Note>();
+  return schema;
+}
+
+TEST_CASE("every resolution runs each finisher once, after all of its resolvers, in registration "
+          "order") {
+  const auto schema = makeFinishingSchema();
+  const std::vector<std::string> resolution = {"resolver zones @0", "resolver access @0",
+                                               "finisher 1 @0", "finisher 2 @0"};
+
+  SECTION("resolveWorld") {
+    World world(schema, 0);
+    journal().clear();
+    resolveWorld(world);
+    REQUIRE(journal() == resolution);
+  }
+  SECTION("a cycle's resolutions, before stepping and after a command") {
+    World world(schema, 0);
+    CommandQueue queue;
+    queue.push(Note{.Id = 1});
+    journal().clear();
+    stepWorld(world, queue);
+    REQUIRE(journal() == std::vector<std::string>{
+                             "resolver zones @0",
+                             "resolver access @0",
+                             "finisher 1 @0",
+                             "finisher 2 @0",
+                             "system @0",
+                             "note 1 @1",
+                             "resolver zones @1",
+                             "resolver access @1",
+                             "finisher 1 @1",
+                             "finisher 2 @1",
+                         });
+  }
+  SECTION("a candidate's") {
+    World world(schema, 0);
+    resolveWorld(world);
+    CommandQueue queue;
+    queue.push(Note{.Id = 1});
+    journal().clear();
+    static_cast<void>(makeCandidate(world, queue));
+    REQUIRE(journal() == std::vector<std::string>{"note 1 @0", "resolver zones @0",
+                                                  "resolver access @0", "finisher 1 @0",
+                                                  "finisher 2 @0"});
+  }
+  SECTION("a loaded world's") {
+    World world(schema, 0);
+    resolveWorld(world);
+    World loaded = loadWorld(schema, saveWorld(world));
+    journal().clear();
+    resolveWorld(loaded);
+    REQUIRE(journal() == resolution);
+  }
 }
 
 } // namespace

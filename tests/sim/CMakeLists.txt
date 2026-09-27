@@ -7,6 +7,7 @@ add_executable(tpj_sim_tests
     medium/carry_over_test.cpp
     medium/field_test.cpp
     medium/network_test.cpp
+    medium/stepped_field_test.cpp
     save_test.cpp
     schema_test.cpp
     sim_math_test.cpp

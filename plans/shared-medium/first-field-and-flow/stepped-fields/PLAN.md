@@ -140,6 +140,8 @@ Step 2: In resolveWorld in src/sim/cycle.cpp, inside the try block, after the lo
     }
 ```
 
+Code review fix: the finishers run after `world.Resolving` is cleared, under a separate `Finishing` flag in World that createEntity also refuses in debug builds, so isResolving is false while they run.
+
 Step 3: Build and test.
 
 Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
