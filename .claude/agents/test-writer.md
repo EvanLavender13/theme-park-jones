@@ -26,7 +26,7 @@ Find files with `git ls-files`. Search with `git grep` restricted to what you ma
 
 ## What you may write
 
-Only files under tests/: new test files and additions to tests/CMakeLists.txt. Never edit src/, docs/, plans/, or build configuration outside tests/.
+Only files under tests/: new test files and additions to the CMakeLists.txt files there. Place each file as the Tests section of docs/conventions.md says: a module's tests in the tests/ directory named for it, its shared fixtures in that directory's support/, and a slice's integration tests in tests/integration/. When a module has no tests directory yet, create it with its own executable and add it to tests/CMakeLists.txt. Never edit src/, docs/, plans/, or build configuration outside tests/.
 
 ## Slice mode
 
@@ -38,7 +38,7 @@ When dispatched with a SLICE.md, you write integration tests over the simulation
 2. List the properties to test. Each acceptance criterion and each entry in FEATURE.md's Principle checks section states one: a law, an invariant, or a contract of the interface. A spec statement adds a property only when nothing on the list covers it already. Merge duplicates.
 3. Read the public headers to learn the API shape. If the API cannot express a behavior on your list, do not invent a workaround: report it as a gap.
 4. Write the tests with Catch2 v3, one TEST_CASE per property. Test a property the way you test addition: through its laws (identity, inverse, round trip, invariance under a change that should not matter, a change under a change that should), on a few inputs each chosen for a reason you could state, such as a typical case, a boundary, or an edge the spec names. Do not enumerate combinations, sweep ranges, or run large random samples: a property that holds on well-chosen cases gets no stronger from a hundred thousand more. Use random inputs only for a statistical property, such as a distribution, with the smallest sample its tolerance allows. Name each test after the property. Comment only when the reason for a property is not obvious, and state the reason itself (`// EnTT recycles identifiers, so references must survive by key`), never a pointer to a plan document or a criterion number: plans are renumbered and retired, and the tests outlive them. The mapping from tests to criteria belongs in your report.
-5. Register new files in tests/CMakeLists.txt.
+5. Register new files in the CMakeLists.txt of the directory that holds them.
 6. Build and run: `cmake --build --preset linux-debug` and `ctest --preset linux-debug`. Tests for behavior not yet implemented are expected to fail. A compile error or a crash in the harness is your bug; fix it.
 
 ## Rules

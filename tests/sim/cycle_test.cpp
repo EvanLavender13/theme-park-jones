@@ -1,4 +1,4 @@
-#include "synthetic_types.h"
+#include "support/synthetic_types.h"
 
 #include "sim/command_queue.h"
 #include "sim/entity_key.h"

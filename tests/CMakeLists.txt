@@ -1,15 +1,12 @@
 include(Catch)
 
-# Tests link the sim alone, which also proves the sim builds without rendering.
-add_executable(tpj_tests
-    cycle_test.cpp
-    draw_test.cpp
-    entity_key_test.cpp
-    placeholder_test.cpp
-    save_test.cpp
-    schema_test.cpp
-    walk_test.cpp
-    world_checks_test.cpp)
-target_link_libraries(tpj_tests PRIVATE tpj_sim Catch2::Catch2WithMain)
-tpj_configure_target(tpj_tests)
-catch_discover_tests(tpj_tests)
+# Tests mirror src/: each module's tests live in the directory named for it, with their shared
+# fixtures in its support/ subdirectory. Nothing but directories and this file sits at the root.
+file(GLOB TPJ_STRAY_TEST_FILES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/*.h)
+if(TPJ_STRAY_TEST_FILES)
+    message(FATAL_ERROR "Test sources belong in the tests/ directory of the module they test, "
+        "not at the tests/ root: ${TPJ_STRAY_TEST_FILES}")
+endif()
+
+add_subdirectory(sim)

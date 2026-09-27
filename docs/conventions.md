@@ -23,3 +23,7 @@ File names are lowercase snake_case and match their contents: `orbit_camera.h`. 
 Headers must compile from their own include list. Forward-declare types when a pointer or reference is enough.
 
 In a `.cpp` file, include the matching header first, then other project headers, then third-party headers, then system headers, sorted within each group.
+
+## Tests
+
+Tests mirror src/. A module's tests live in the tests/ directory named for it, as tests/sim/ holds the sim's, and build into one executable per module named for it, such as `tpj_sim_tests`, linking only what that module links. Test files are named for what they test with a `_test.cpp` suffix. Fixtures shared within a module's tests, and any script that generates them, go in that directory's support/ subdirectory, and their include guards are named for the path under tests/: `tests/sim/support/synthetic_types.h` becomes `TPJ_TESTS_SIM_SUPPORT_SYNTHETIC_TYPES_H`. Tests that span modules, such as a slice's integration tests, go in tests/integration/, and checked-in park files in tests/parks/. The tests/ root holds only directories and its CMakeLists.txt, which refuses to configure otherwise.

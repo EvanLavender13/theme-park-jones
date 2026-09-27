@@ -1,5 +1,5 @@
-#ifndef TPJ_TESTS_SYNTHETIC_TYPES_H
-#define TPJ_TESTS_SYNTHETIC_TYPES_H
+#ifndef TPJ_TESTS_SIM_SUPPORT_SYNTHETIC_TYPES_H
+#define TPJ_TESTS_SIM_SUPPORT_SYNTHETIC_TYPES_H
 
 #include "sim/entity_key.h"
 #include "sim/mix.h"

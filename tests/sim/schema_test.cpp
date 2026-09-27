@@ -1,4 +1,4 @@
-#include "synthetic_types.h"
+#include "support/synthetic_types.h"
 
 #include "sim/schema.h"
 #include "sim/world.h"

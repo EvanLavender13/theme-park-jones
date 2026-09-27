@@ -1,5 +1,5 @@
-#include "expected_draws.h"
-#include "synthetic_types.h"
+#include "support/expected_draws.h"
+#include "support/synthetic_types.h"
 
 #include "sim/command_queue.h"
 #include "sim/draw.h"
@@ -62,8 +62,8 @@ void requireProportional(const std::vector<uint64_t> &counts, const std::vector<
   }
 }
 
-// The table in expected_draws.h is written by tests/expected_draws.py, a separate implementation of
-// the definitions in src/sim/SPEC.md: python3 tests/expected_draws.py > tests/expected_draws.h.
+// The table in expected_draws.h is written by tests/sim/support/expected_draws.py, a separate
+// implementation of the definitions in src/sim/SPEC.md.
 // Draws that match it on every build are the same on every build.
 TEST_CASE("draws match the table computed independently from the specification") {
   const std::span<const uint64_t> integerWeights(test::EXPECTED_DRAW_INTEGER_WEIGHTS);
