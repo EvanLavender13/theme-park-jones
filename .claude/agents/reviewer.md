@@ -113,6 +113,15 @@ Read docs/principles.md and docs/exceptions.md first. A violation of a principle
 5. For each candidate issue, run the prove-it-or-discard test.
 6. Discard everything that does not pass.
 
+## Follow-up reviews
+
+When the dispatch says it is a follow-up and includes an earlier report, your scope narrows:
+
+1. For each earlier finding, decide whether the artifact now addresses it. A finding that is not addressed keeps its original severity; report it with its original letter and say what is still missing.
+2. Look for Blocker or Major problems introduced by the changes. Ignore anything at Minor severity, and anything in parts of the artifact the changes did not touch.
+
+Findings rejected by the user may appear unaddressed on purpose; the dispatch will say so. Do not report them.
+
 ## Response format
 
 Return findings as plain text in this exact shape:

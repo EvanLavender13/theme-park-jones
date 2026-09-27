@@ -1,0 +1,76 @@
+# Slice: Boxes and Tubes
+
+Status: planned
+
+## Summary
+
+The first playable loop, drawn in boxes and tubes: the player lays out paths, food shops, and a supply depot, guests get hungry and eat, and when the player changes the park they can see the consequence coming and understand it afterwards. It is the right first goal because it puts every foundational capability to work at once and exercises the principles that make this game different from its references: interaction only through fields and flows (3, 6), distance along routes (4), gradients instead of gates (5), and outcomes that explain themselves and can be previewed (8).
+
+## End-to-end scenario
+
+A new park is flat grass with a fixed entrance at its edge. The player draws a guest path from the entrance as a curve and places a food shop box beside it; the shop connects to the path by itself. Behind the shop the player places a supply depot and draws a backstage path between them, which the shop also connects to. Nothing about the order matters: a shop with no path or no supply route is a legitimate state that simply does poorly (principles 2 and 5).
+
+Guests, drawn as simple shapes, arrive at the entrance at a steady rate and wander the paths. Their hunger rises. When it matters enough, a guest scores the food offers it can reach, weighing relief against route distance and expected wait (decision 0019), walks to the chosen shop, queues, is served a meal, and eats it. Some time later the guest leaves by the entrance. Supplies travel from the depot to the shop along the backstage path, each shipment taking time proportional to the route length, and the shop turns supplies into meals. A shop offers food while it has a live supply route; its expected wait includes any time until stock arrives.
+
+The player turns on the food-availability overlay. The ground is shaded by how well fed a guest standing there could be, measured along the paths, and hovering a spot lists which shops contribute and by how much.
+
+The player picks up a second shop and moves it along the paths. Before committing, the overlay shows the food availability the park would have with the shop there, and the ghost shop shows the context it would see: nearby hungry footfall and the length of its supply route. Where the ghost touches both the guest path and the backstage path, availability rises around it; where it has no supply route, availability does not change and its context says it has no supply route. The player commits it where it is supplied, and the park matches the preview.
+
+Then the player deletes the backstage path to the first shop. Its offer at once tells guests no meals are available, and its box shows that it is starved. It serves the guests already queued from its remaining stock and sends the rest away unserved. Shipments already on their way still arrive. Guests stop choosing it; those near it walk to the second shop or stay hungry, and the overlay dims around it. Clicking the shop shows its missing supply route as its limiting factor. Clicking a hungry guest shows its hunger and its last choice with the factors that decided it.
+
+## Acceptance criteria
+
+Three park files are checked in: tests/parks/fed.park (entrance, guest path, one shop, depot, backstage path, no guests yet), tests/parks/warm.park (fed.park after a warmup, with guests in the park), and tests/parks/cut.park (warm.park with the backstage path removed).
+
+1. Running fed.park for 3000 ticks serves meals, and every served guest's hunger, as its inspection record reports it, fell when it ate. (integration test)
+2. Supplies and meals are conserved in every tick of fed.park, warm.park, and cut.park: supplies sent by the depot equal supplies in transit plus in shop stock plus converted to meals, and meals made equal meals eaten plus meals in stock. (integration test)
+3. Running cut.park and warm.park each for 3000 ticks: in cut.park the shop's offer reports no meals available from the first tick, no guest chooses the shop afterwards, its queue empties with every queued guest either served or returned unserved, and mean guest hunger ends higher than in warm.park. (integration test)
+4. Food availability at every sampled place can be reconstructed exactly from its attributed per-shop contributions. (integration test)
+5. In warm.park, the preview of placing a second shop touching both paths equals the resolved park immediately after the placement is committed, and food availability rises by a nonzero amount at the places nearest the new shop. (integration test)
+6. Loading a saved park and saving it again gives an identical file, and a world regenerated from a save equals the world that was saved, including cut.park's shipments in transit. (integration test)
+7. Two runs of fed.park for 3000 ticks give identical state hashes, and the hash from the Windows build equals the hash from the Linux build (decision 0022). (integration test, plus the hash printed by both builds)
+8. A capture of warm.park after 3000 ticks with the food overlay on shows the guest path and backstage path as tubes, the shop and depot as boxes, guests on the paths, and the food-availability overlay on the ground. (scripted capture: effortless-building, believable-guests, legible-simulation)
+9. A capture of cut.park after 3000 ticks with the food overlay on shows the starved shop marked as starved and the overlay dimmed around it compared with the warm.park capture. (scripted capture: effortless-building, plausible-operations, legible-simulation)
+10. In the running app, drawing paths, placing boxes, the preview ghost updating the overlay before commit, hovering the overlay for attribution, and clicking a guest and a shop for their explanations all work as the scenario describes. (manual)
+
+## Medium
+
+Fields and flows between capabilities. Abbreviations: SM shared-medium, NN navigable-networks, BG believable-guests, PO plausible-operations, LS legible-simulation, EB effortless-building.
+
+- Networks: the guest and backstage graphs, with edge lengths, derived from the drawn paths. Produced by NN. Consumed by SM (flows travel along them) and BG (guests move along them). A shared structure rather than a field or flow; it is the ground both kinds of medium live on.
+- Route distance: field (sampled, not consumed) over the networks, the distance between places along the paths (principle 4). Produced by NN. Consumed by BG (choice), PO (a shop's supply route length), LS (overlay discount, preview context).
+- Food offer: field on guest network nodes, one entry per shop: the relief a meal gives, the expected wait including time until stock arrives, and whether the shop is supplied. Produced by PO. Consumed by BG (choice) and LS (overlay, attribution).
+- Hungry footfall: field on guest network edges, how many hungry guests pass. Produced by BG. Consumed by LS (preview context). A shop's demand in this slice is the guests actually arriving in its queue, not this field.
+- Guest visits: flow of guests into a shop's queue and back out, served or unserved. Produced by BG, consumed by PO; PO returns every guest to BG, unserved when the shop cannot serve it.
+- Meals: flow, conserved, from a shop to the guest it served. Produced by PO, consumed by BG, which lowers its own hunger when it eats (hunger stays private to the guest).
+- Supplies: flow, conserved, from depot to shop along the backstage network. Produced and consumed within PO; listed because it travels on NN's network through SM's flow transport. Each shipment carries its arrival time, so shipments in transit when their route is removed still arrive and remain valid in a save.
+
+Dependencies that are not fields or flows, ruled outside principle 3 by decision 0025:
+
+- Park intent: the drawn paths and placed boxes, which with the simulation state are the saved park (principle 1). Authored by EB. NN, PO, and BG derive their parts of the world from it.
+- Candidate resolution: for a preview, EB supplies tentative intent, SM provides a candidate copy of the world, and NN and PO resolve it through the same derivation they use for committed intent. LS samples the candidate world's fields through the normal field interface and never calls another capability's derivation directly.
+- Inspection records: what a guest or shop publishes about itself for display, such as a guest's hunger and last choice with its factors, or a shop's limiting factor. Produced by BG and PO, read only by LS and by tests.
+
+## Members
+
+Ordered for building. Milestone slugs are provisional until each capability is planned. Operations and guests exchange medium both ways (offers one way, guest visits and meals the other); operations lands first because guests cannot choose without offers, and its milestone is tested against synthetic guest visits.
+
+1. `shared-medium/first-field-and-flow`: the field sampling interface with per-source attribution, conserved flow transport with delay over an abstract network, candidate copies of the world, and the deterministic tick and state hash, tested with synthetic networks. Depends on: none.
+2. `effortless-building/sketch-a-park`: park intent for curves and boxes, tools to draw paths and place and delete boxes with a ghost for tentative placements, rendering paths as tubes and boxes as boxes, saving and loading parks, and the --park, --ticks, and --hash options for scripted captures and the cross-build check. Depends on: none.
+3. `navigable-networks/paths-become-routes`: guest and backstage graphs derived from path intent, committed or candidate, shops connecting to nearby paths of both kinds, and the route distance field. Depends on: members 1 and 2.
+4. `plausible-operations/supplied-food-shop`: the depot and the generic food shop, resolved from committed or candidate intent, with supplies over the backstage network, meal production limited by the scarcest of demand, supply, and a fixed service rate, the food offer, unserved returns, the shop's inspection record, and a starved state shown on the box. Depends on: members 1, 2, and 3.
+5. `believable-guests/hungry-guests`: guests arriving, wandering, getting hungry, choosing offers by scored utility with a seeded softmax, queuing, eating, and leaving, drawn as simple shapes on the paths, plus the hungry footfall field and inspection records with hunger and choice explanations. Depends on: members 1, 3, and 4.
+6. `legible-simulation/explained-food`: the food-availability overlay with hover attribution and an --overlay option to turn it on for scripted captures, the guest and shop inspectors, and the placement preview sampling a candidate world. Depends on: members 1 through 5.
+
+## Out of scope
+
+Staff (a service rate stands in for them), money and payment, needs other than hunger, shop forms and procedural building geometry, garbage and litter, smell, noise and other fields, terrain editing, rides and coasters, player-facing UI (tooling panels in ImGui stand in, and the question stays open), and previews that simulate ahead in time.
+
+## Open questions
+
+- The fixed entrance and automatic shop-to-path connection are draft assumptions. Resolved when effortless-building and navigable-networks are planned.
+- How long 3000 ticks takes in the sanitized Linux build decides whether the criteria's run lengths hold. Resolved when shared-medium's tick exists.
+
+## Research notes
+
+None at the slice level. Technique research (curves to graphs, route distance fields, flow transport, candidate worlds) belongs to the member capabilities.

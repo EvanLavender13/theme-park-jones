@@ -41,6 +41,16 @@ The dispatch prompt must not contain:
 
 The reviewer needs the artifact, the context paths, and the type. Nothing else.
 
+## Review budget
+
+A reviewer asked to find issues will keep finding smaller ones, so reviews of one artifact are capped.
+
+- One full review per artifact. Stage or commit the artifact first, so later fixes show up as a diff.
+- At most one follow-up review, and only when the full review had Blocker or Major findings whose fixes changed the design, not just wording. The follow-up checks that each finding was addressed and reports only Blocker or Major problems the fixes introduced. It does not re-review untouched parts.
+- No third pass. Anything the follow-up finds is fixed without another review, or recorded as an open question.
+
+Later stages catch what plan reviews miss: milestone and feature reviews against their parents, the separate test pass, and slice closing. A plan does not need to be flawless before it moves on.
+
 ## Dispatch template
 
 ```
@@ -54,13 +64,30 @@ Focus (optional, only if the user specified): <one short phrase>
 Follow your standard procedure. Return findings in the standard format.
 ```
 
+## Follow-up dispatch template
+
+Include the full review's report verbatim. It is the reviewer's own output, not your assessment, so it does not break dispatch hygiene. Do not describe the fixes; the reviewer reads them from the artifact and the diff.
+
+```
+Follow-up review of the following artifact.
+
+Artifact: <path>
+Changes since the full review: <git command that shows them, or "the artifact was revised throughout">
+Required context (read these before reviewing): <comma-separated paths>
+
+Full review report:
+<verbatim report>
+
+Follow your follow-up procedure. Return findings in the standard format.
+```
+
 ## After the review
 
 The user chooses one of:
 
 - Accept some or all findings and invoke the appropriate planning or implementation skill to address them.
 - Reject findings with reasoning. Do not argue.
-- Re-dispatch a narrower review on a specific finding.
+- Dispatch the one follow-up review the review budget allows, when it applies.
 
 You do not edit the artifact. You do not invoke another skill on the user's behalf.
 
