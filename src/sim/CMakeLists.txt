@@ -3,6 +3,8 @@
 add_library(tpj_sim STATIC
     cycle.cpp
     draw.cpp
+    musl_exp.cpp
+    musl_log.cpp
     save.cpp
     schema.cpp
     walk.cpp

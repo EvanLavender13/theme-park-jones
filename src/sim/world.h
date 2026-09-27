@@ -30,7 +30,8 @@ constexpr bool WORLD_CHECKS = true;
 #endif
 
 // A world the walk cannot cover fully: an unregistered component, an entity without a key, a NaN
-// in registered state, or two derived origins sharing a key.
+// in registered state, or two derived origins sharing a key. Also thrown when a world is created
+// under a floating-point environment that would change the simulation's arithmetic.
 class WorldInvariantError : public std::logic_error {
 public:
   using std::logic_error::logic_error;
