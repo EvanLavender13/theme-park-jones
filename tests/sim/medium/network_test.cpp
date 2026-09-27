@@ -27,6 +27,8 @@
 namespace tpj {
 namespace {
 
+using test::distanceToCarrier;
+using test::groundDistance;
 using test::makeSyntheticNetwork;
 using test::SyntheticNetwork;
 using test::SyntheticRandom;
@@ -160,28 +162,12 @@ World holdNetworks(std::shared_ptr<const WorldSchema> schema,
   return world;
 }
 
-double groundDistance(GroundPoint a, GroundPoint b) {
-  return std::sqrt(((a.X - b.X) * (a.X - b.X)) + ((a.Z - b.Z) * (a.Z - b.Z)));
-}
-
 // The distance from the point to the nearest point of any carrier's ground line, which is the
 // bound the nearest place's ground point must meet.
 double distanceToCarriers(const Network &network, GroundPoint point) {
   double nearest = INFINITE;
   for (const Carrier &carrier : network.carriers()) {
-    for (size_t i = 0; i + 1 < carrier.Points.size(); ++i) {
-      const CarrierPoint &a = carrier.Points[i];
-      const CarrierPoint &b = carrier.Points[i + 1];
-      const double dx = b.X - a.X;
-      const double dz = b.Z - a.Z;
-      const double squared = (dx * dx) + (dz * dz);
-      const double t =
-          squared == 0.0
-              ? 0.0
-              : std::clamp((((point.X - a.X) * dx) + ((point.Z - a.Z) * dz)) / squared, 0.0, 1.0);
-      nearest =
-          std::min(nearest, groundDistance(point, {.X = a.X + (t * dx), .Z = a.Z + (t * dz)}));
-    }
+    nearest = std::min(nearest, distanceToCarrier(carrier, point));
   }
   return nearest;
 }

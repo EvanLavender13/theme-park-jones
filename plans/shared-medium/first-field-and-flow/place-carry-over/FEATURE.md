@@ -33,7 +33,7 @@ Before the paragraph beginning "addNetworkComponent registers Network", add a se
 
 "## Carry-over
 
-carryOver moves a place held across a re-derivation, given the network before and the network after. Each holder applies it to its own places. A carrier's geometry is its points, and its stops are not part of it, so adding, moving, or removing nodes along a carrier leaves its geometry unchanged.
+carryOver moves a place held across a re-derivation, given the network before and the network after. Each holder applies it to its own places. A carrier's geometry is its points, and its stops are not part of it, so adding, moving, or removing nodes along a carrier leaves its geometry unchanged. Points are equal when their coordinates and distances compare equal as numbers, so 0 and -0 are the same.
 
 - A place that does not resolve in the network before, or whose carrier the network after lacks, carries over to none. It is retired, a legitimate state its holder handles (principle 2).
 - A place whose carrier's points are equal in both networks carries over unchanged, so a node that splits its edge leaves it at the same ground position.
