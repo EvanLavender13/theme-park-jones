@@ -5,6 +5,7 @@ add_executable(tpj_sim_tests
     entity_key_test.cpp
     fp_environment_test.cpp
     medium/carry_over_test.cpp
+    medium/field_test.cpp
     medium/network_test.cpp
     save_test.cpp
     schema_test.cpp

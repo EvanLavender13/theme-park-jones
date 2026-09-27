@@ -1,51 +1,3 @@
-# Implementation Plan: Resolved Fields
-
-## Goal
-
-Add the medium's fields in src/sim/medium/field.h: field definitions, addField, publishResolved, sampleField with the default and owner rules, and fieldValue, with World::isResolving to guard publication.
-
-## Approach
-
-Everything is templates over the field's definition type, so field.h is header-only. addField registers ResolvedEntries<F> as a derived component and a resolver, emptyResolvedEntries<F>, that creates the field's derived-key entity and replaces its component with an empty one. Because resolvers run in registration order, it runs before every producer registered after the field. Slots are kept sorted by source key with a lower_bound insert. sampleField resolves the place once and each entry's place as it scans, and calls the owner's rule through `if constexpr` when the definition has one, so no function pointer is stored anywhere the walk would see.
-
-## Tasks
-
-### Task 1: Update the medium spec
-
-Files:
-- Modify: `src/sim/medium/SPEC.md`
-
-Step 1: In the first paragraph, replace "the networks every field is sampled on" with "the networks, and the fields sampled on them". At the end of the file, add the Fields section with the exact text in FEATURE.md's Spec changes, headed `## Fields`.
-
-### Task 2: Update the sim spec
-
-Files:
-- Modify: `src/sim/SPEC.md`
-
-Step 1: After the sentence "Resolvers never draw from the key counter: in debug builds, createEntity during resolution throws WorldInvariantError.", add, in the same paragraph:
-
-"isResolving is true only while the resolvers run, so functions meant only for resolvers can refuse other callers."
-
-### Task 3: Expose whether the world is resolving
-
-Files:
-- Modify: `src/sim/world.h`
-
-Step 1: After isResolvePending's declaration, add:
-
-```cpp
-  // True only while the resolvers run.
-  [[nodiscard]] bool isResolving() const { return Resolving; }
-```
-
-### Task 4: Declare fields with stubs
-
-Files:
-- Create: `src/sim/medium/field.h`
-
-Step 1: Write the header. The five function templates at the end have stub bodies, replaced in Tasks 6 to 9.
-
-```cpp
 #ifndef TPJ_SIM_MEDIUM_FIELD_H
 #define TPJ_SIM_MEDIUM_FIELD_H
 
@@ -158,70 +110,13 @@ void visitFields(Visitor &visitor, ResolvedEntries<F> &resolved) {
 }
 
 // The field's resolver: empties its resolved entries, creating the entity that holds them.
-template <FieldDefinition F> void emptyResolvedEntries(World & /*world*/) {
-  // Stub until implemented.
-}
-
-// Registers the field's derived component, <name>-resolved, and its resolver, <name>-field.
-// Throws std::invalid_argument when either name is malformed or already registered.
-template <FieldDefinition F> void addField(WorldSchema & /*schema*/) {
-  // Stub until implemented.
-}
-
-// Gives a source's entries for this resolution. Resolvers only. Throws std::logic_error when the
-// world is not resolving or holds no resolved entries for the field, and std::invalid_argument for
-// the null key or a source that has already published into the field in this resolution.
-template <FieldDefinition F>
-void publishResolved(World & /*world*/, EntityKey /*source*/,
-                     std::vector<PlacedEntry<typename F::Entry>> /*entries*/) {
-  // Stub until implemented.
-}
-
-// The field's entries at the place on the network, each with its source, sources in ascending key
-// order, by the default rule or the field's sampleEdge.
-template <FieldDefinition F>
-std::vector<SampledEntry<typename F::Entry>>
-sampleField(const World & /*world*/, const Network & /*network*/, const Place & /*place*/) {
-  return {}; // Stub until implemented.
-}
-
-// A scalar field's value at the place: 0.0 with each sampled entry added in turn.
-template <FieldDefinition F>
-  requires(F::Kind == FieldKind::Scalar)
-double fieldValue(const World & /*world*/, const Network & /*network*/, const Place & /*place*/) {
-  return 0.0; // Stub until implemented.
-}
-
-} // namespace tpj
-
-#endif
-```
-
-Step 2: Build and test.
-
-Run: `cmake --build --preset linux-debug 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; ctest --preset linux-debug`
-Expected: no diagnostic lines, and all 147 existing tests pass. No source includes field.h yet, so the header is compiled only once the tests include it.
-
-### Task 5: Test pass
-
-Step 1: Dispatch the test-writer agent for this feature, with FEATURE.md, src/sim/medium/SPEC.md, src/sim/SPEC.md, and the public headers src/sim/medium/field.h, src/sim/medium/network.h, and src/sim/world.h. It creates tests/sim/medium/field_test.cpp and the synthetic fields and network producer it needs in tests/sim/support/, and adds the test file to tpj_sim_tests in tests/sim/CMakeLists.txt.
-
-Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
-Expected: the tests build, and the 147 existing tests pass. The new tests of registration, publication, replacement, source order, both sampling rules, scalar values, and candidates fail against the stubs. Tests that hold vacuously may pass, such as "no entries" and a value of 0.0 where nothing is published.
-
-### Task 6: Register fields
-
-Files:
-- Modify: `src/sim/medium/field.h`
-
-Step 1: Replace the stubs of emptyResolvedEntries and addField:
-
-```cpp
 template <FieldDefinition F> void emptyResolvedEntries(World &world) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, FIELD_PURPOSE, hashName(F::Name));
   world.Registry.emplace_or_replace<ResolvedEntries<F>>(world.findEntity(key));
 }
 
+// Registers the field's derived component, <name>-resolved, and its resolver, <name>-field.
+// Throws std::invalid_argument when either name is malformed or already registered.
 template <FieldDefinition F> void addField(WorldSchema &schema) {
   static_assert(F::Kind != FieldKind::Scalar || std::is_same_v<typename F::Entry, double>,
                 "a scalar field's entries are doubles");
@@ -229,21 +124,10 @@ template <FieldDefinition F> void addField(WorldSchema &schema) {
   schema.addComponent<ResolvedEntries<F>>(name + "-resolved", DataKind::Derived);
   schema.addResolver(name + "-field", &emptyResolvedEntries<F>);
 }
-```
 
-Step 2: Build and test.
-
-Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
-Expected: the build is clean, and the registration tests pass.
-
-### Task 7: Publish resolved entries
-
-Files:
-- Modify: `src/sim/medium/field.h`
-
-Step 1: Replace publishResolved's stub. The checks run in the order FEATURE.md lists them, and the lower_bound insert keeps slots in ascending source order.
-
-```cpp
+// Gives a source's entries for this resolution. Resolvers only. Throws std::logic_error when the
+// world is not resolving or holds no resolved entries for the field, and std::invalid_argument for
+// the null key or a source that has already published into the field in this resolution.
 template <FieldDefinition F>
 void publishResolved(World &world, EntityKey source,
                      std::vector<PlacedEntry<typename F::Entry>> entries) {
@@ -270,21 +154,9 @@ void publishResolved(World &world, EntityKey source,
   }
   slots.insert(at, Slot{source, std::move(entries)});
 }
-```
 
-Step 2: Build and test.
-
-Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
-Expected: the build is clean, and the publication tests that do not sample pass: the refusals, and entries never appearing in a save.
-
-### Task 8: Sample at nodes and inside edges
-
-Files:
-- Modify: `src/sim/medium/field.h`
-
-Step 1: Before sampleField, add two helpers:
-
-```cpp
+// The field's entries at the place on the network, each with its source, sources in ascending key
+// order, by the default rule or the field's sampleEdge.
 // Appends the source's entries whose places resolve to the node.
 template <typename Entry>
 void sampleSlotAtNode(const Network &network, const FieldSlot<Entry> &slot, uint32_t node,
@@ -344,14 +216,9 @@ void sampleSlotInEdge(const Network &network, const FieldSlot<typename F::Entry>
     }
   }
 }
-```
 
-Step 2: Replace sampleField's stub:
-
-```cpp
 template <FieldDefinition F>
-std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world,
-                                                         const Network &network,
+std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world, const Network &network,
                                                          const Place &place) {
   std::vector<SampledEntry<typename F::Entry>> sampled;
   const std::optional<NetworkPosition> position = network.resolve(place);
@@ -372,21 +239,8 @@ std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world,
   }
   return sampled;
 }
-```
 
-Step 3: Build and test.
-
-Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
-Expected: the build is clean, and every test passes except those of scalar values. The rule's entries are copied from a const reference: misc-const-correctness flags a mutable reference in the double instantiation, where moving gains nothing.
-
-### Task 9: Scalar values
-
-Files:
-- Modify: `src/sim/medium/field.h`
-
-Step 1: Replace fieldValue's stub:
-
-```cpp
+// A scalar field's value at the place: 0.0 with each sampled entry added in turn.
 template <FieldDefinition F>
   requires(F::Kind == FieldKind::Scalar)
 double fieldValue(const World &world, const Network &network, const Place &place) {
@@ -396,31 +250,7 @@ double fieldValue(const World &world, const Network &network, const Place &place
   }
   return value;
 }
-```
 
-Step 2: Build and test.
+} // namespace tpj
 
-Run: `cmake --build --preset linux-debug && ctest --preset linux-debug`
-Expected: the build is clean, and every test passes.
-
-### Task 10: Verify on both builds
-
-Step 1: Format the changed sources.
-
-Run: `git ls-files -m -o --exclude-standard -- '*.h' '*.cpp' | xargs clang-format -i`
-Expected: no output.
-
-Step 2: Run the full checks.
-
-Run: `cmake --build --preset linux-debug 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):" ; ctest --preset linux-debug`
-Expected: no diagnostic lines, and every test passes.
-
-Run: `cmake.exe --build --preset windows-debug && ctest.exe --preset windows-debug`
-Expected: the build succeeds, and every test passes.
-
-Run: `scripts/cross-build-check.sh`
-Expected: the script prints its stages and passes, with the scenarios' output unchanged, since no scenario has a field yet.
-
-### Task 11: Commit
-
-Step 1: Commit the feature once through the commit-hygiene skill, with the subject `Medium: Add resolved fields with per-source sampling`.
+#endif
