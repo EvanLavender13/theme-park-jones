@@ -5,6 +5,7 @@ add_library(tpj_sim STATIC
     draw.cpp
     musl_exp.cpp
     musl_log.cpp
+    park_schema.cpp
     save.cpp
     schema.cpp
     walk.cpp

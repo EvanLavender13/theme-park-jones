@@ -1,12 +1,17 @@
 #!/bin/bash
 # pre-push: build linux-debug (ASan, UBSan, clang-tidy, warnings as errors) and run its tests
-# (decision 0021). Checks the working tree, so commit or stash unrelated changes first.
+# (decision 0021). Checks the working tree, so commit or stash unrelated changes first. Then, when
+# the pushed commits touch the simulation's build inputs, runs scripts/cross-build-check.sh
+# (decision 0022).
 # Activate once per clone: git config core.hooksPath .githooks
 
 if [ "$(uname -s)" != "Linux" ]; then
     echo "pre-push: the linux-debug checks run under WSL; push from WSL, or use --no-verify."
     exit 1
 fi
+
+# git passes the pushed refs on standard input; read them before anything else can.
+PUSHED_REFS=$(cat)
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
@@ -35,6 +40,37 @@ echo "pre-push: running tests..."
 if ! ctest --preset linux-debug; then
     echo "pre-push: tests failed; push aborted."
     exit 1
+fi
+
+# Everything tpj_scenarios's output depends on.
+CROSS_BUILD_INPUTS='^(src/sim/|src/core/|src/scenarios/|cmake/|CMakeLists\.txt$|CMakePresets\.json$|tests/parks/|tests/sim/support/|scripts/cross-build-check\.sh$)'
+ZERO_SHA='^0+$'
+RUN_CROSS_BUILD=false
+while read -r _ local_sha _ remote_sha; do
+    if [ -z "$local_sha" ] || [[ $local_sha =~ $ZERO_SHA ]]; then
+        continue # nothing pushed, or a deletion
+    fi
+    if [[ $remote_sha =~ $ZERO_SHA ]]; then
+        FILES=$(git log --format= --name-only "$local_sha" --not --remotes)
+    else
+        FILES=$(git log --format= --name-only "$remote_sha..$local_sha")
+    fi
+    # A range git cannot list, such as a force push over unfetched commits, runs the check.
+    # shellcheck disable=SC2181
+    if [ $? -ne 0 ] || grep -qE "$CROSS_BUILD_INPUTS" <<<"$FILES"; then
+        RUN_CROSS_BUILD=true
+        break
+    fi
+done <<<"$PUSHED_REFS"
+
+if $RUN_CROSS_BUILD; then
+    echo "pre-push: the pushed commits touch the simulation's build inputs; running the cross-build check..."
+    if ! scripts/cross-build-check.sh; then
+        echo "pre-push: the cross-build check failed; push aborted."
+        exit 1
+    fi
+else
+    echo "pre-push: the pushed commits touch none of the simulation's build inputs; skipping the cross-build check."
 fi
 echo "pre-push: all checks passed; pushing."
 exit 0
