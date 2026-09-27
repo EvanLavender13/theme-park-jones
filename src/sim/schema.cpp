@@ -47,4 +47,46 @@ bool WorldSchema::sameComponents(const WorldSchema &other) const {
       });
 }
 
+void WorldSchema::addSystem(WorldFunction step) { Systems.push_back(step); }
+
+void WorldSchema::addSwap(WorldFunction swap) { Swaps.push_back(swap); }
+
+void WorldSchema::addResolver(std::string_view name, WorldFunction resolve,
+                              std::vector<std::string> dependencies) {
+  ResolverType resolver{std::string(name), resolve, std::move(dependencies)};
+  const auto isRegistered = [this](std::string_view resolverName) {
+    return std::any_of(Resolvers.begin(), Resolvers.end(),
+                       [resolverName](const ResolverType &r) { return r.Name == resolverName; });
+  };
+  if (!isValidName(resolver.Name)) {
+    throw std::invalid_argument("resolver name '" + resolver.Name +
+                                "' must be lowercase letters, digits, and hyphens");
+  }
+  if (isRegistered(resolver.Name)) {
+    throw std::invalid_argument("resolver name '" + resolver.Name + "' is already registered");
+  }
+  for (const std::string &dependency : resolver.Dependencies) {
+    if (!isRegistered(dependency)) {
+      throw std::invalid_argument("resolver '" + resolver.Name + "' depends on '" + dependency +
+                                  "', which is not an already registered resolver");
+    }
+  }
+  Resolvers.push_back(std::move(resolver));
+}
+
+void WorldSchema::addCommandType(CommandType type) {
+  if (findCommand(type.TypeId) != nullptr) {
+    throw std::invalid_argument("command type " + std::string(type.TypeName) +
+                                " is already registered");
+  }
+  Commands.push_back(type);
+}
+
+const CommandType *WorldSchema::findCommand(entt::id_type typeId) const {
+  const auto found =
+      std::find_if(Commands.begin(), Commands.end(),
+                   [typeId](const CommandType &type) { return type.TypeId == typeId; });
+  return found == Commands.end() ? nullptr : &*found;
+}
+
 } // namespace tpj

@@ -82,6 +82,7 @@ void World::emitWords(WordSink &sink) const {
   sink.word(Tick);
   sink.word(Seed);
   sink.word(NextKey);
+  sink.word(ResolvePending ? 1U : 0U);
   sink.word(ByKey.size());
   for (const auto &[key, record] : ByKey) {
     sink.word(static_cast<uint64_t>(key));
@@ -144,6 +145,7 @@ World copyWorld(const World &world) {
   World copy(world.Schema, world.Seed);
   copy.Tick = world.Tick;
   copy.NextKey = world.NextKey;
+  copy.ResolvePending = world.ResolvePending;
   for (const auto &[key, record] : world.ByKey) {
     copy.addEntity(key);
     copy.ByKey.at(key).Origin = record.Origin;

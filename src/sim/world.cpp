@@ -1,7 +1,5 @@
 #include "sim/world.h"
 
-#include "core/profile.h"
-
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -25,6 +23,9 @@ entt::entity World::addEntity(EntityKey key) {
 }
 
 EntityKey World::createEntity() {
+  if (WORLD_CHECKS && Resolving) {
+    throw WorldInvariantError("a resolver called createEntity; resolvers take derived keys");
+  }
   if (NextKey >= DERIVED_KEY_BIT) {
     throw WorldInvariantError("the entity key counter is exhausted");
   }
@@ -77,11 +78,6 @@ std::vector<EntityKey> World::keys() const {
     result.push_back(entry.first);
   }
   return result;
-}
-
-void stepWorld(World &world) {
-  TPJ_PROFILE_ZONE();
-  ++world.Tick;
 }
 
 } // namespace tpj
