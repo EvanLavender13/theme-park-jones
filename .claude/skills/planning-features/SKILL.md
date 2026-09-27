@@ -16,7 +16,7 @@ Take one feature from a milestone brief. Produce two artifacts:
 
 Do not write code. Do not scaffold files. Do not invoke `implementing-features`. The parent MILESTONE.md must exist at plans/<capability-slug>/<milestone-slug>/MILESTONE.md.
 
-`researching` and `maintaining-backlog` are the only callable skills from here: `researching` to retain research at this node, `maintaining-backlog` to deposit speculative items and to drop items this feature draws from or supersedes.
+`researching`, `maintaining-backlog`, and `reviewing` are the only callable skills from here: `researching` to retain research at this node, `maintaining-backlog` to deposit speculative items and to drop items this feature draws from or supersedes, and `reviewing` for the review before approval.
 
 ## Checklist
 
@@ -36,7 +36,8 @@ Create a task for each item. Complete in order.
 12. Write FEATURE.md at plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md.
 13. Write PLAN.md at the same path.
 14. Self-review: every acceptance criterion is testable from FEATURE.md and the specs alone, and each states one property, with no lists of example inputs and nothing that reads as every function against every case; every spec statement the feature adds or changes is covered by a criterion; every task has exact paths, exact commands, and expected outputs. Fix inline.
-15. Ask the user to approve both artifacts.
+15. Review: stage FEATURE.md, PLAN.md, and RESEARCH.md, then dispatch the reviewer via `reviewing`, with MILESTONE.md, the SPEC.md of every module the feature touches, and docs/principles.md as context. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
+16. Ask the user to approve both artifacts.
 
 ## Process notes
 

@@ -18,7 +18,7 @@ Two reasons.
 
 1. Identify the artifact: One file, a set of files, a commit range, or the staged diff. Ask the user if ambiguous.
 2. Identify the artifact type: Plan document, implementation plan, code change, or other. The subagent applies a different lens to each.
-3. Identify required context: Parent artifacts the reviewer must read. A `MILESTONE.md` review requires its `CAPABILITY.md`, plus its `SLICE.md` when it is a slice member. A `SLICE.md` review requires docs/vision.md and the CAPABILITY.md and MILESTONE.md of every existing member. A `PLAN.md` review requires its `FEATURE.md`. A code change requires FEATURE.md when one exists, the SPEC.md of every module it touches, and docs/principles.md. Do not summarize these for the reviewer; pass paths so the reviewer reads them itself.
+3. Identify required context: Parent artifacts the reviewer must read. A `MILESTONE.md` review requires its `CAPABILITY.md`, plus its `SLICE.md` when it is a slice member. A `SLICE.md` review requires docs/vision.md and the CAPABILITY.md and MILESTONE.md of every existing member. A `FEATURE.md` and `PLAN.md` review requires its `MILESTONE.md`, the SPEC.md of every module the feature touches, and docs/principles.md. A code change requires FEATURE.md when one exists, the SPEC.md of every module it touches, and docs/principles.md. Do not summarize these for the reviewer; pass paths so the reviewer reads them itself.
 4. Dispatch via the Agent tool: Use `subagent_type: reviewer`. The dispatch prompt contains only:
     - The artifact path or paths.
     - The artifact type.
@@ -29,7 +29,7 @@ Two reasons.
 6. Present the findings to the user verbatim: Do not summarize, reorder, soften, or add commentary. The point of dispatching to a fresh subagent is wasted if this session filters its output.
 7. Ask the user what to act on: Do not propose fixes yourself. The user decides which findings to address and which skill to invoke next.
 
-Planning briefs are the exception. When a planning skill dispatches the review of its own brief (CAPABILITY.md, MILESTONE.md, or SLICE.md) before approval, steps 6 and 7 are replaced:
+Planning briefs are the exception. When a planning skill dispatches the review of its own brief (CAPABILITY.md, MILESTONE.md, SLICE.md, or FEATURE.md with PLAN.md) before approval, steps 6 and 7 are replaced:
 
 - Fix Minor findings directly.
 - Fix Major findings directly when the fix follows from the principles and settled decisions without a new design choice.
