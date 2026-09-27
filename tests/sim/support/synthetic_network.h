@@ -5,13 +5,39 @@
 #include "sim/medium/network.h"
 #include "sim/mix.h"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <set>
+#include <stddef.h>
 #include <stdint.h>
 #include <vector>
 
-// Random synthetic networks, in which each edge is its own straight carrier.
+// Random synthetic networks, in which each edge is its own straight carrier, and the ground
+// distances that checks of nearest places are bounded by.
 namespace tpj::test {
+
+inline double groundDistance(GroundPoint a, GroundPoint b) {
+  return std::sqrt(((a.X - b.X) * (a.X - b.X)) + ((a.Z - b.Z) * (a.Z - b.Z)));
+}
+
+// The distance from the point to the nearest point of the carrier's ground line.
+inline double distanceToCarrier(const Carrier &carrier, GroundPoint point) {
+  double nearest = std::numeric_limits<double>::infinity();
+  for (size_t i = 0; i + 1 < carrier.Points.size(); ++i) {
+    const CarrierPoint &a = carrier.Points[i];
+    const CarrierPoint &b = carrier.Points[i + 1];
+    const double dx = b.X - a.X;
+    const double dz = b.Z - a.Z;
+    const double squared = (dx * dx) + (dz * dz);
+    const double t =
+        squared == 0.0
+            ? 0.0
+            : std::clamp((((point.X - a.X) * dx) + ((point.Z - a.Z) * dz)) / squared, 0.0, 1.0);
+    nearest = std::min(nearest, groundDistance(point, {.X = a.X + (t * dx), .Z = a.Z + (t * dz)}));
+  }
+  return nearest;
+}
 
 // A counter-based generator, so a network depends only on its seed.
 class SyntheticRandom {

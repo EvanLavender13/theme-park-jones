@@ -26,4 +26,14 @@ groundPoint gives a place's ground position, or none where resolve gives none. A
 
 nearestPlace gives the place whose ground position is nearest a given one. It projects the position onto each segment of each carrier's polyline, clamped to the segment, and a projection at the fraction t of a segment from a to b is the ground point a.X + t * (b.X - a.X), a.Z + t * (b.Z - a.Z) at distance a.Distance + t * (b.Distance - a.Distance). When t is 0 or 1 it is exactly a or b, with its coordinates and distance, so a junction is equally near on every carrier that stops there. A segment whose two points share a ground position projects to a, with t 0. Ties go to the lower carrier key, then the lower distance. It is the medium's only straight-line measure, and it is used only to snap a ground position onto the network (principle 4). An empty network, or a position that is not finite, gives none.
 
+nearestPlaceOn gives the place on one carrier whose ground position is nearest a given one, by the same projection, with ties going to the lower distance. It gives none when the carrier is not in the network or the position is not finite. nearestPlace's result is nearestPlaceOn of its own carrier.
+
+## Carry-over
+
+carryOver moves a place held across a re-derivation, given the network before and the network after. Each holder applies it to its own places. A carrier's geometry is its points, and its stops are not part of it, so adding, moving, or removing nodes along a carrier leaves its geometry unchanged. Points are equal when their coordinates and distances compare equal as numbers, so 0 and -0 are the same.
+
+- A place that does not resolve in the network before, or whose carrier the network after lacks, carries over to none. It is retired, a legitimate state its holder handles (principle 2).
+- A place whose carrier's points are equal in both networks carries over unchanged, so a node that splits its edge leaves it at the same ground position.
+- Otherwise its carrier's geometry changed, and it carries over to nearestPlaceOn, in the network after, of its carrier and its ground point in the network before. It stays on its own carrier and keeps its ground position as nearly as the new line allows.
+
 addNetworkComponent registers Network as the derived component type network. Producers put networks on entities they derive in resolution. Place has a visitFields, so holders can keep places in their own components.

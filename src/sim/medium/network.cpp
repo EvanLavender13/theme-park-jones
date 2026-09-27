@@ -82,6 +82,44 @@ void requireValidAnchors(const std::vector<NodeAnchor> &anchors, uint32_t nodeCo
   }
 }
 
+// The carrier with the key, or null when there is none.
+const Carrier *findCarrier(const std::vector<Carrier> &carriers, EntityKey key) {
+  const auto found = std::ranges::lower_bound(carriers, key, {}, &Carrier::Key);
+  return found != carriers.end() && found->Key == key ? &*found : nullptr;
+}
+
+// Projects the point onto each segment of the carrier, replacing best only with a strictly nearer
+// projection, so earlier carriers and then lower distances win ties.
+void projectOnto(const Carrier &carrier, GroundPoint point, std::optional<Place> &best,
+                 double &bestSquared) {
+  for (size_t i = 0; i + 1 < carrier.Points.size(); ++i) {
+    const CarrierPoint &a = carrier.Points[i];
+    const CarrierPoint &b = carrier.Points[i + 1];
+    const double dx = b.X - a.X;
+    const double dz = b.Z - a.Z;
+    const double lengthSquared = dx * dx + dz * dz;
+    double t = 0.0;
+    if (lengthSquared > 0.0) {
+      t = std::clamp(((point.X - a.X) * dx + (point.Z - a.Z) * dz) / lengthSquared, 0.0, 1.0);
+    }
+    // A segment's ends are exact, so a junction is equally near on every carrier stopping there
+    // and the tie rule decides between them.
+    CarrierPoint projected{a.X + t * dx, a.Z + t * dz, a.Distance + t * (b.Distance - a.Distance)};
+    if (t == 0.0) {
+      projected = a;
+    } else if (t == 1.0) {
+      projected = b;
+    }
+    const double offX = point.X - projected.X;
+    const double offZ = point.Z - projected.Z;
+    const double squared = offX * offX + offZ * offZ;
+    if (!best || squared < bestSquared) {
+      best = Place{carrier.Key, projected.Distance};
+      bestSquared = squared;
+    }
+  }
+}
+
 } // namespace
 
 Network::Network(std::vector<Carrier> carriers, uint32_t nodeCount, std::vector<NodeAnchor> anchors)
@@ -199,35 +237,35 @@ std::optional<Place> Network::nearestPlace(GroundPoint point) const {
   std::optional<Place> best;
   double bestSquared = 0.0;
   for (const Carrier &carrier : Carriers) {
-    for (size_t i = 0; i + 1 < carrier.Points.size(); ++i) {
-      const CarrierPoint &a = carrier.Points[i];
-      const CarrierPoint &b = carrier.Points[i + 1];
-      const double dx = b.X - a.X;
-      const double dz = b.Z - a.Z;
-      const double lengthSquared = dx * dx + dz * dz;
-      double t = 0.0;
-      if (lengthSquared > 0.0) {
-        t = std::clamp(((point.X - a.X) * dx + (point.Z - a.Z) * dz) / lengthSquared, 0.0, 1.0);
-      }
-      // A segment's ends are exact, so a junction is equally near on every carrier stopping there
-      // and the tie rule decides between them.
-      CarrierPoint projected{a.X + t * dx, a.Z + t * dz,
-                             a.Distance + t * (b.Distance - a.Distance)};
-      if (t == 0.0) {
-        projected = a;
-      } else if (t == 1.0) {
-        projected = b;
-      }
-      const double offX = point.X - projected.X;
-      const double offZ = point.Z - projected.Z;
-      const double squared = offX * offX + offZ * offZ;
-      if (!best || squared < bestSquared) {
-        best = Place{carrier.Key, projected.Distance};
-        bestSquared = squared;
-      }
-    }
+    projectOnto(carrier, point, best, bestSquared);
   }
   return best;
+}
+
+std::optional<Place> Network::nearestPlaceOn(EntityKey carrier, GroundPoint point) const {
+  const Carrier *found = findCarrier(Carriers, carrier);
+  if (found == nullptr || !isFinite(point.X) || !isFinite(point.Z)) {
+    return std::nullopt;
+  }
+  std::optional<Place> best;
+  double bestSquared = 0.0;
+  projectOnto(*found, point, best, bestSquared);
+  return best;
+}
+
+std::optional<Place> carryOver(const Place &place, const Network &before, const Network &after) {
+  const std::optional<GroundPoint> ground = before.groundPoint(place);
+  const Carrier *now = findCarrier(after.carriers(), place.Carrier);
+  if (!ground || now == nullptr) {
+    return std::nullopt;
+  }
+  // The place resolves before, so its carrier is there. Stops are not geometry, so a split keeps
+  // it.
+  const Carrier *was = findCarrier(before.carriers(), place.Carrier);
+  if (was != nullptr && was->Points == now->Points) {
+    return place;
+  }
+  return after.nearestPlaceOn(place.Carrier, *ground);
 }
 
 void addNetworkComponent(WorldSchema &schema) {

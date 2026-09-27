@@ -19,6 +19,8 @@ struct CarrierPoint {
   double X = 0.0;
   double Z = 0.0;
   double Distance = 0.0;
+
+  bool operator==(const CarrierPoint &) const = default;
 };
 
 template <typename Visitor> void visitFields(Visitor &visitor, CarrierPoint &point) {
@@ -137,6 +139,9 @@ public:
   // The place whose ground position is nearest the point, ties to the lower carrier key and then
   // the lower distance. None for an empty network or a point that is not finite.
   [[nodiscard]] std::optional<Place> nearestPlace(GroundPoint point) const;
+  // The place on the carrier whose ground position is nearest the point, ties to the lower
+  // distance. None when the carrier is not in the network or the point is not finite.
+  [[nodiscard]] std::optional<Place> nearestPlaceOn(EntityKey carrier, GroundPoint point) const;
 
   // Lists the inputs. The edges and node places are rebuilt from them only by the constructor, so
   // Network is never loaded: it is derived, and saves never hold it.
@@ -160,6 +165,12 @@ private:
   std::vector<uint32_t> FirstEdges;
   std::vector<Place> NodePlaces;
 };
+
+// Moves a place held across a re-derivation from the network before to the network after: kept
+// when its carrier's points are unchanged, moved to the carrier's nearest point to its old ground
+// position when they changed, and none when it did not resolve before or its carrier is gone.
+[[nodiscard]] std::optional<Place> carryOver(const Place &place, const Network &before,
+                                             const Network &after);
 
 // Registers Network as the derived component type network.
 void addNetworkComponent(WorldSchema &schema);
