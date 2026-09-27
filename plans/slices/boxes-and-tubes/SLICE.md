@@ -16,7 +16,7 @@ The player turns on the food-availability overlay. The ground is shaded by how w
 
 The player picks up a second shop and moves it along the paths. Before committing, the overlay shows the food availability the park would have with the shop there, and the ghost shop shows the context it would see: nearby hungry footfall and the length of its supply route. Where the ghost touches both the guest path and the backstage path, availability rises around it; where it has no supply route, availability does not change and its context says it has no supply route. The player commits it where it is supplied, and the park matches the preview.
 
-Then the player deletes the backstage path to the first shop. Its offer at once tells guests no meals are available, and its box shows that it is starved. It serves the guests already queued from its remaining stock and sends the rest away unserved. Shipments already on their way still arrive. Guests stop choosing it; those near it walk to the second shop or stay hungry, and the overlay dims around it. Clicking the shop shows its missing supply route as its limiting factor. Clicking a hungry guest shows its hunger and its last choice with the factors that decided it.
+Then the player hovers the backstage path to the first shop with the delete tool, and the preview shows the shop starving and the overlay dimming around it. The player deletes the path. Its offer at once tells guests no meals are available, and its box shows that it is starved. It serves the guests already queued from its remaining stock and sends the rest away unserved. Shipments already on their way still arrive. Guests stop choosing it; those near it walk to the second shop or stay hungry, and the overlay dims around it. Clicking the shop shows its missing supply route as its limiting factor. Clicking a hungry guest shows its hunger and its last choice with the factors that decided it.
 
 ## Acceptance criteria
 
@@ -31,7 +31,7 @@ Three park files are checked in: tests/parks/fed.park (entrance, guest path, one
 7. Two runs of fed.park for 3000 ticks give identical state hashes, and the hash from the Windows build equals the hash from the Linux build (decision 0022). (integration test, plus the hash printed by both builds)
 8. A capture of warm.park after 3000 ticks with the food overlay on shows the guest path and backstage path as tubes, the shop and depot as boxes, guests on the paths, and the food-availability overlay on the ground. (scripted capture: effortless-building, believable-guests, legible-simulation)
 9. A capture of cut.park after 3000 ticks with the food overlay on shows the starved shop marked as starved and the overlay dimmed around it compared with the warm.park capture. (scripted capture: effortless-building, plausible-operations, legible-simulation)
-10. In the running app, drawing paths, placing boxes, the preview ghost updating the overlay before commit, hovering the overlay for attribution, and clicking a guest and a shop for their explanations all work as the scenario describes. (manual)
+10. In the running app, drawing paths, placing boxes, the preview ghost updating the overlay before commit, the delete tool previewing a deletion, hovering the overlay for attribution, and clicking a guest and a shop for their explanations all work as the scenario describes. (manual)
 
 ## Medium
 

@@ -15,7 +15,7 @@ Its value is that the park's layout matters to someone. A shop's reach, its wait
 - At its target shop's anchor, a guest sends its visit through the guest-visit flow and waits. A guest never sends a visit to a shop it did not target. It resumes when the visit comes back, served or unserved, and a served guest eats the meal that arrives for it.
 - A guest heading home walks to the entrance by route distance and leaves the park there. A guest whose place resolves to no place after an edit, because its path was deleted, moves to the nearest point of the guest network. With no guest network left, it leaves the park. A guest whose target has no route distance entry at its place, because the shop or a path ahead was deleted, or whose target's offer now says no meals, drops the target at once and re-scores where it stands rather than waiting for a junction. A guest with no route home when its stay ends keeps wandering until a route exists. Every one of these is a legitimate state, tested (principle 2).
 - Guests publish hungry footfall on the guest network: footfall weighted by each passing guest's hunger, averaged over a recent window, with no hunger threshold.
-- Each guest publishes an inspection record (decision 0025): its state, hunger, current target, and its last choice with every option's terms and probability. Guests are drawn as simple shapes on the paths.
+- Each guest publishes an inspection record (decision 0025): its state, ground position (for picking in tooling), hunger, current target, and its last choice with every option's terms and probability. Guests are drawn as simple shapes on the paths.
 - Every behavior is tested with synthetic networks and synthetic offers, and with plausible-operations' shop once it lands.
 
 ## Medium
