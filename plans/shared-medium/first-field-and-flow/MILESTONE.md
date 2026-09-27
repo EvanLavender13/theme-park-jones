@@ -64,7 +64,6 @@ networks-and-places is the core. Fields are sampled at places, carry-over moves 
 
 ## Open questions
 
-- How a carrier's ground geometry is held: a polyline with the producer's arc lengths at its vertices, or a function the producer supplies. It must give exactly the arc lengths navigable-networks computes by quadrature. Resolved while planning networks-and-places, with navigable-networks' research on curves.
 - Copy and hash cost of the medium's tables at slice scale. Resolved by measurement with tpj_scenarios once believable-guests lands, as the capability's open question says.
 
 ## Research notes

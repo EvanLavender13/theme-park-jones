@@ -4,12 +4,15 @@ add_executable(tpj_sim_tests
     draw_test.cpp
     entity_key_test.cpp
     fp_environment_test.cpp
+    medium/network_test.cpp
     save_test.cpp
     schema_test.cpp
     sim_math_test.cpp
     walk_test.cpp
     world_checks_test.cpp)
 target_link_libraries(tpj_sim_tests PRIVATE tpj_sim Catch2::Catch2WithMain)
+# So that tests in subdirectories, such as medium/, include the shared fixtures as support/....
+target_include_directories(tpj_sim_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 tpj_configure_target(tpj_sim_tests)
 catch_discover_tests(tpj_sim_tests)
 
