@@ -3,6 +3,7 @@
 add_library(tpj_sim STATIC
     cycle.cpp
     draw.cpp
+    save.cpp
     schema.cpp
     walk.cpp
     world.cpp)
