@@ -3,6 +3,7 @@
 add_library(tpj_render STATIC
     math.cpp
     park_mesh.cpp
+    picking.cpp
     renderer.cpp)
 target_include_directories(tpj_render PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tpj_render PUBLIC tpj_core tpj_sim SDL3::SDL3 tpj_imgui)

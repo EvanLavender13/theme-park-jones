@@ -10,6 +10,10 @@ The app owns the Dear ImGui context and its SDL3 platform backend, created befor
 
 The app starts from makeNewPark(1), or from the park file --park names, loaded with makeParkSchema, and resolves it. Before the first frame it steps the world --ticks cycles with no commands. Whenever the world's intent, as parkEntrances, parkPaths, and parkBoxes give it, differs from the intent last drawn, it builds the park mesh and gives it to the renderer. When it builds the first mesh, and the mesh has vertices, it frames the camera on the mesh's bounds: the focus moves to their center, and the distance becomes their half diagonal divided by the sine of half the vertical field of view, so a sphere around them fits the view, within the camera's distance limits.
 
+## Tools
+
+The Tools panel selects the tool (tools/SPEC.md): Look, which is ToolKind None and the tool at start, Place shop, Place depot, Move box, and Delete. Each frame, the left button's press and release reach the tool before the frame's ticks, so they act on the world and pointer the ghost on screen was built from: a press only when ImGui does not want the mouse, and a release always. Then, after the camera moves, the app gives the tool the ground position under the cursor, from groundAtCursor with the cursor's position in the window, or none while ImGui wants the mouse. An edit a release gives is queued with queueEdit, and the ticks step the world with that queue, so it applies at the next tick. Whenever the tool's edit or highlight differs from the one last drawn, or the park mesh was rebuilt, the app builds the ghost mesh, buildGhostMesh's for the edit followed by appendEntity of the highlighted entity in HIGHLIGHT_TINT, and gives it to the renderer with setGhostMesh.
+
 ## Camera
 
 An orbit camera around a focus point on the ground.

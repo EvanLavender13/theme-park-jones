@@ -1,6 +1,8 @@
 #ifndef TPJ_RENDER_PARK_MESH_H
 #define TPJ_RENDER_PARK_MESH_H
 
+#include "sim/entity_key.h"
+#include "sim/park/edits.h"
 #include "sim/park/geometry.h"
 #include "sim/park/intent.h"
 #include "sim/world.h"
@@ -54,8 +56,16 @@ constexpr Rgba boxColor(BoxKind kind) {
 // The color a box's front face takes: red, green, and blue moved 0.4 of the way to 1.
 Rgba lightened(Rgba color);
 
+// Ghosts and highlights are translucent.
+inline constexpr float GHOST_ALPHA = 0.5f;
+inline constexpr Rgba INVALID_TINT{0.95f, 0.15f, 0.15f, 0.5f};
+inline constexpr Rgba DELETE_TINT{1.0f, 0.55f, 0.1f, 0.6f};
+inline constexpr Rgba HIGHLIGHT_TINT{1.0f, 1.0f, 1.0f, 0.35f};
+
 // Adds the path's flat ribbon along its ground line, or nothing when the line is empty.
 void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &points);
+// The same ribbon in the color given.
+void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &points, Rgba color);
 
 // Adds an open-bottomed box of the height over the pose's footprint, or nothing when the pose has
 // no footprint.
@@ -63,6 +73,14 @@ void appendBox(ParkMesh &mesh, const Pose &pose, FootprintSize size, float heigh
 
 // The world's entrances, paths, and boxes, in that order and each in key order.
 ParkMesh buildParkMesh(const World &world);
+
+// Adds the box or path the key holds as buildParkMesh draws it, in the color. Nothing when the key
+// holds neither.
+void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
+
+// The ghost of an edit on a world: translucent in its kind's color when accepted, INVALID_TINT when
+// not, and DELETE_TINT for a deletion. See render/SPEC.md.
+ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit);
 
 // A rectangle on the ground.
 struct GroundBounds {
