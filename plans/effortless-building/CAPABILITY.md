@@ -21,7 +21,7 @@ Its value is that every other capability has a park to work on, and the player c
 - Physical validity is the only refusal (principle 5). A box overlapping a box, a path passing through a box, or a footprint or curve leaving the park's bounds shows the ghost as invalid, and its commit is refused. Bounds are checked on the whole curve, since a curve can swing outside between points that are inside. A refused commit leaves the world unchanged. Nothing else is refused: a shop far from any path, or a depot with no route, is placed and simply does poorly.
 - Tools never write to the world. Each commit is a command queued to deterministic-simulation's cycle, which applies it after the buffer swap and before resolution, so the next tick already sees the resolved result. Randomized sequences of add, move, and delete commands in any order leave a legitimate world at every step (principle 2): nothing crashes, and every derived part rebuilds.
 - Intent is saved as the clicked points and box poses, never as sampled or meshed geometry (principle 1). A park saved after any command sequence loads back equal, through deterministic-simulation's walk. A committed placement derives exactly what its ghost showed.
-- Paths render as tubes and boxes as boxes, with the ghost drawn distinctly. Box rendering also shows display state the box's owner publishes in its inspection record, such as a shop marked as starved (decision 0025: display reads records, and never feeds back). The app's --park PATH option loads a park file, --ticks N runs N ticks, and --hash prints the state hash. With --capture, these make scripted captures of park files possible.
+- Paths render flat on the ground, their width wide, and boxes as boxes, with the ghost drawn distinctly. Box rendering also shows display state the box's owner publishes in its inspection record, such as a shop marked as starved (decision 0025: display reads records, and never feeds back). The app's --park PATH option loads a park file, --ticks N runs N ticks, and --hash prints the state hash. With --capture, these make scripted captures of park files possible.
 
 ## Medium
 
@@ -35,7 +35,7 @@ The physical-validity check reads only intent geometry and the park's bounds: bo
 
 ## Principles
 
-- Principle 1 is at risk when derived geometry is saved or edited. Intent holds only points and poses. Tubes, connections, and graphs are derived, and saves are checked to contain no derived types (deterministic-simulation's classes).
+- Principle 1 is at risk when derived geometry is saved or edited. Intent holds only points and poses. Path meshes, connections, and graphs are derived, and saves are checked to contain no derived types (deterministic-simulation's classes).
 - Principle 2 is at risk from edits that leave half-built states. Randomized command-sequence tests check that every intermediate world is legitimate.
 - Principle 5 is at risk from convenience gates, such as requiring a shop to touch a path. The only refusals are overlap and leaving the park's bounds, and they are tested both ways: those refused, everything else accepted.
 - Principle 8 is at risk if the ghost differs from the result. Tests check that a committed placement derives what its ghost showed.
@@ -51,11 +51,11 @@ The physical-validity check reads only intent geometry and the park's bounds: bo
 
 ## Foundation
 
-The foundation is intent for curves and boxes, the path and box tools with ghosts and the overlap check, commands applied between ticks, tubes and boxes on screen, and park files with the command-line options that script them. That is the smallest version that lets a player sketch a park and lets every other slice member derive from it. It produces value on its own: a park can be drawn, reshaped, saved, and captured before anything in it simulates.
+The foundation is intent for curves and boxes, the path and box tools with ghosts and the overlap check, commands applied between ticks, paths and boxes on screen, and park files with the command-line options that script them. That is the smallest version that lets a player sketch a park and lets every other slice member derive from it. It produces value on its own: a park can be drawn, reshaped, saved, and captured before anything in it simulates.
 
 ## Milestones
 
-1. `sketch-a-park`: the new-park template with its entrance, guest and backstage paths drawn by clicked points as centripetal Catmull-Rom curves with endpoint snapping, placing, moving, and deleting shop and depot boxes, ghosts with the overlap check, edits as commands applied between ticks, tubes and boxes rendered, save and load, and the --park, --ticks, and --hash options. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value.
+1. `sketch-a-park`: the new-park template with its entrance, guest and backstage paths drawn by clicked points as centripetal Catmull-Rom curves with endpoint snapping, placing, moving, and deleting shop and depot boxes, ghosts with the overlap check, edits as commands applied between ticks, paths and boxes rendered, save and load, and the --park, --ticks, and --hash options. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value.
 
 Later milestones are drawn from the deepening candidates once the slice has been played.
 
@@ -67,7 +67,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 - Snapping guides: parallel offsets, angle hints, and alignment with nearby boxes, offered and never forced.
 - Moving the entrance, and parks with several entrances.
 - Box sizes and shapes: resizable footprints, and later procedural building forms resolved from context (decision 0004, docs/design-notes.md). Gated on: the slice's boxes working as shops.
-- Paths on terrain: paths following or cutting terrain, with rotation-minimizing frames for their tubes. Gated on: terrain editing.
+- Paths on terrain: paths that follow the ground, or climb it as ramps and stairs. Gated on: terrain editing.
 - Path styles and widths as intent, with queue lines as a kind of path.
 
 ## Open questions
@@ -79,7 +79,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 
 - Centripetal Catmull-Rom never forms cusps or loops from uneven clicks.
 - Tiny Glade shows that forgiving strokes with rich inferred results are the draw.
-- Tubes on flat ground need no special framing; rotation-minimizing frames matter once paths climb.
+- Paths are flat ribbons on the ground, never tubes, which are the plain look coasters will take. Ramps and stairs wait for terrain.
 - Edits are Command-pattern values applied between ticks, which enables previews, and later undo and replay.
 
 Depth is in RESEARCH.md.

@@ -51,7 +51,7 @@ Finding crossings between curves needs a robust curve-curve intersection. For sh
 
 Rejected:
 
-- Chord-length polylines as edge lengths: they underestimate curved paths and would let the drawn tube and the walked route disagree.
+- Chord-length polylines as edge lengths: they underestimate curved paths and would let the drawn path and the walked route disagree.
 - Closed-form arc length: none exists for cubic splines in general.
 
 Sources:

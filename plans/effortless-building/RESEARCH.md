@@ -12,7 +12,7 @@ The cost is a few square roots per segment, which are exact basic operations and
 
 Cities: Skylines builds roads from Bézier segments between graph nodes, and snaps to existing roads, angles, and guides. Its sequel offers simple, complex, and continuous curve modes, which are different ways of placing Bézier control points. Bézier control points do not lie on the curve, so the player shapes the road indirectly. That suits a road tool with handles, and suits click-to-draw less.
 
-Because the path's curve is intent, it is saved as the clicked points, never as sampled geometry (principle 1). Everything else, including arc length, sample points, the tube mesh, and the network graph, is derived by whoever needs it. navigable-networks samples the same curve through a shared evaluation function, so the rendered tube and the walked route agree.
+Because the path's curve is intent, it is saved as the clicked points, never as sampled geometry (principle 1). Everything else, including arc length, sample points, the path mesh, and the network graph, is derived by whoever needs it. navigable-networks samples the same curve through a shared evaluation function, so the rendered tube and the walked route agree.
 
 Rejected:
 
@@ -32,7 +32,7 @@ Sources:
 
 Tiny Glade is the reference for dabbling. It lays out no grid and asks for little precision, and hand-authored procedural rules react to simple strokes: a path drawn to a wall makes an archway, a path over water becomes a bridge, a window at ground level becomes a door. The player never places those details. The game grew out of a procedural wall generator, and its developers were surprised how much people enjoyed simply drawing walls. Direct, forgiving strokes with rich derived results are the draw.
 
-For this project, the foundation's derived results are modest: tubes from curves, and connections and junctions that navigable-networks derives. But the same stance applies. The player expresses a stroke or a box, and everything that can be inferred is inferred and previewed live, not placed by hand. Snapping serves that too: an endpoint that lands on an existing path snaps onto it, so the junction the player meant is the junction that is derived.
+For this project, the foundation's derived results are modest: path meshes from curves, and connections and junctions that navigable-networks derives. But the same stance applies. The player expresses a stroke or a box, and everything that can be inferred is inferred and previewed live, not placed by hand. Snapping serves that too: an endpoint that lands on an existing path snaps onto it, so the junction the player meant is the junction that is derived.
 
 Rejected:
 
@@ -43,23 +43,21 @@ Sources:
 - https://tinyglade.wiki.gg/wiki/Gridless_building: gridless building, and the derived reactions to paths and walls.
 - https://80.lv/articles/exclusive-tiny-glade-developers-discuss-bevy-proceduralism-publishers-cozy-games: the origin in a procedural wall generator, and why drawing is the fun.
 
-## How should a path render as a tube?
+## How should a path render?
 
-A tube is a circular cross-section swept along the curve, oriented at each sample by a frame. Frenet frames flip and twist where the curve straightens or bends the other way. Rotation-minimizing frames, also called parallel-transport or Bishop frames, carry the orientation along the curve with no twist and are stable through inflections.
+A path is flat ground people walk on, not a tube: on flat terrain it is a ribbon its width wide, laid along the curve. Tubes are the plain look coasters will take, which is where the slice's name comes from. Each sample of the curve gives two edge points, offset by half the width to either side along the ground perpendicular to the tangent, and consecutive pairs form the ribbon's quads. Where the tangent turns, averaging the neighbouring tangents keeps the edges joined without gaps. On flat ground the up direction gives a stable frame, so no curve framing is needed. Once terrain can be edited, paths follow it, and steep stretches become ramps or stairs. Rotation-minimizing frames matter then, and for coaster tubes, where Frenet frames twist and flip at inflections.
 
-On the foundation's flat terrain, the ground normal gives a trivially stable frame, so the renderer can use up and the curve's tangent directly. Rotation-minimizing frames become necessary once paths climb terrain or ramps.
-
-The tube mesh is presentation derived from intent, built by the renderer or a mesh builder outside tpj_sim. It never feeds back into the simulation (principles 1 and 10).
+The path mesh is presentation derived from intent, built by the renderer or a mesh builder outside tpj_sim. It never feeds back into the simulation (principles 1 and 10).
 
 Rejected:
 
-- Frenet frames: twist and flip at inflections.
+- Paths as tubes: a path is walked on, and tubes are the look of coasters.
 - Storing meshes in the save: they are derived (principle 1).
 
 Sources:
 
-- https://janakiev.com/blog/framing-parametric-curves/: Frenet frames against parallel-transport frames.
-- https://www.semanticscholar.org/paper/Parallel-Transport-Approach-to-Curve-Framing-Hanson-Ma/ed416d01742e5e704357538c6817312ca6d8cb38: Hanson and Ma, parallel-transport framing for tubes.
+- https://janakiev.com/blog/framing-parametric-curves/: Frenet frames against parallel-transport frames, for climbing paths and coasters later.
+- https://www.semanticscholar.org/paper/Parallel-Transport-Approach-to-Curve-Framing-Hanson-Ma/ed416d01742e5e704357538c6817312ca6d8cb38: Hanson and Ma, parallel-transport framing.
 
 ## How should tools change the park?
 
