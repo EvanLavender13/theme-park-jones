@@ -21,14 +21,14 @@ Its value is that every other capability has a park to work on, and the player c
 - Physical validity is the only refusal (principle 5). A box overlapping a box, a path passing through a box, or a footprint or curve leaving the park's bounds shows the ghost as invalid, and its commit is refused. Bounds are checked on the whole curve, since a curve can swing outside between points that are inside. A refused commit leaves the world unchanged. Nothing else is refused: a shop far from any path, or a depot with no route, is placed and simply does poorly.
 - Tools never write to the world. Each commit is a command queued to deterministic-simulation's cycle, which applies it after the buffer swap and before resolution, so the next tick already sees the resolved result. Randomized sequences of add, move, and delete commands in any order leave a legitimate world at every step (principle 2): nothing crashes, and every derived part rebuilds.
 - Intent is saved as the clicked points and box poses, never as sampled or meshed geometry (principle 1). A park saved after any command sequence loads back equal, through deterministic-simulation's walk. A committed placement derives exactly what its ghost showed.
-- Paths render flat on the ground, their width wide, and boxes as boxes, with the ghost drawn distinctly. Box rendering also shows display state the box's owner publishes in its inspection record, such as a shop marked as starved (decision 0025: display reads records, and never feeds back). The app's --park PATH option loads a park file, --ticks N runs N ticks, and --hash prints the state hash. With --capture, these make scripted captures of park files possible.
+- Paths render flat on the ground, their width wide, and boxes as boxes, with the ghost drawn distinctly. Every connector navigable-networks derives from a box's door to a path renders as a walkway, a ribbon of its kind's width and color, and a ghost for a valid edit shows the walkways the edit's candidate world has, so the player sees what connects, and what does not, before committing. Box rendering also shows display state the box's owner publishes in its inspection record, such as a shop marked as starved (decision 0025: display reads records, and never feeds back). The app's --park PATH option loads a park file, --ticks N runs N ticks, and --hash prints the state hash. With --capture, these make scripted captures of park files possible.
 
 ## Medium
 
 This capability introduces no fields or flows. What it produces sits outside principle 3 by decision 0025:
 
 - Park intent: path curves by kind (guest, backstage), boxes by kind (shop, depot) with position and facing, and the entrance. navigable-networks derives the networks and connections from it, plausible-operations derives shops and the depot, and believable-guests takes the entrance as where guests arrive. Connections between boxes and paths are derived, never saved.
-- Tentative intent: the edit a ghost stands for. deterministic-simulation provides a candidate copy of the world, the other capabilities resolve the edit there, and legible-simulation samples the candidate's fields for preview context. This capability shows the ghost's own geometry and validity. It never samples fields or calls another capability's derivation.
+- Tentative intent: the edit a ghost stands for. deterministic-simulation provides a candidate copy of the world, the other capabilities resolve the edit there, and legible-simulation samples the candidate's fields for preview context. This capability shows the ghost's own geometry and validity, and the walkways of the candidate world's networks, read through the medium's public queries. It never samples fields or calls another capability's derivation.
 - The park file: this capability owns the save and load commands and the new-park template. The file's encoding is deterministic-simulation's state walk.
 
 The physical-validity check reads only intent geometry and the park's bounds: box footprints, path curves, and the terrain square.
@@ -45,7 +45,7 @@ The physical-validity check reads only intent geometry and the park's bounds: bo
 
 - deterministic-simulation (world-as-value): the state walk for intent and saves, candidate copies for ghosts, and the command queue its cycle applies between the swap and resolution. Unmet; planned.
 - shared-medium: nothing directly. The foundation publishes no fields.
-- navigable-networks: derives connections and junctions from intent. The foundation's tools and rendering work without it, and junction snapping only has to place endpoints on existing curves. Unmet; to be planned.
+- navigable-networks: derives connections and junctions from intent. The park and its ghosts draw its connectors as walkways, so walkway rendering waits on its box-connections feature. Junction snapping only has to place endpoints on existing curves.
 - The renderer, camera, and ImGui tooling UI: met.
 - The player-facing UI question (docs/open-questions.md): open. ImGui tool buttons stand in for the foundation.
 
