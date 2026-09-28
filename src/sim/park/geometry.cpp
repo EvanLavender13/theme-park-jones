@@ -20,23 +20,6 @@ double chord(const ParkPoint &from, const ParkPoint &to) {
   return std::sqrt(dx * dx + dz * dz);
 }
 
-// The points in order, without any closer than MIN_POINT_SPACING to the last kept one.
-std::vector<ParkPoint> keptPoints(const std::vector<ParkPoint> &points) {
-  constexpr double MIN_SQUARED = MIN_POINT_SPACING * MIN_POINT_SPACING;
-  std::vector<ParkPoint> kept;
-  for (const ParkPoint &point : points) {
-    if (!kept.empty()) {
-      const double dx = point.X - kept.back().X;
-      const double dz = point.Z - kept.back().Z;
-      if (dx * dx + dz * dz < MIN_SQUARED) {
-        continue;
-      }
-    }
-    kept.push_back(point);
-  }
-  return kept;
-}
-
 // The neighbor beyond an end of the path: the end's other neighbor reflected through it.
 ParkPoint phantom(const ParkPoint &end, const ParkPoint &neighbor) {
   return {2.0 * end.X - neighbor.X, 2.0 * end.Z - neighbor.Z};
@@ -71,6 +54,22 @@ void appendPoint(std::vector<CarrierPoint> &line, const ParkPoint &point) {
 }
 
 } // namespace
+
+std::vector<ParkPoint> keptPoints(const std::vector<ParkPoint> &points) {
+  constexpr double MIN_SQUARED = MIN_POINT_SPACING * MIN_POINT_SPACING;
+  std::vector<ParkPoint> kept;
+  for (const ParkPoint &point : points) {
+    if (!kept.empty()) {
+      const double dx = point.X - kept.back().X;
+      const double dz = point.Z - kept.back().Z;
+      if (dx * dx + dz * dz < MIN_SQUARED) {
+        continue;
+      }
+    }
+    kept.push_back(point);
+  }
+  return kept;
+}
 
 std::vector<CarrierPoint> groundLine(const std::vector<ParkPoint> &points) {
   if (!std::ranges::all_of(points, isInsidePark)) {

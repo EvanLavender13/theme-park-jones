@@ -17,6 +17,9 @@ inline constexpr double MIN_POINT_SPACING = 0.01;
 inline constexpr double GROUND_LINE_SPACING = 1.0;
 inline constexpr int MIN_SEGMENT_SAMPLES = 8;
 
+// The points in order, without any closer than MIN_POINT_SPACING to the last kept one.
+std::vector<ParkPoint> keptPoints(const std::vector<ParkPoint> &points);
+
 // The path's centripetal Catmull-Rom curve through its points as a line with distances, or an empty
 // line when a point is not finite or outside the park, or fewer than two points are kept. See
 // sim/park/SPEC.md.

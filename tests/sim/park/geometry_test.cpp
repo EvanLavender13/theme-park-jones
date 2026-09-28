@@ -129,6 +129,20 @@ TEST_CASE("Points within 1 cm of the last kept point are dropped without changin
   CHECK(sameLine(withRepeats, keptOnly));
 }
 
+TEST_CASE(
+    "keptPoints gives the points groundLine keeps, in order, each at least 1 cm from the last "
+    "kept one") {
+  // The third point is within 1 cm of the second but not of the first, which is the last kept, and
+  // the fifth lies exactly 1 cm from the fourth.
+  const std::vector<ParkPoint> points{{0.0, 0.0},   {0.0, 0.0},    {0.006, 0.0},
+                                      {0.012, 0.0}, {0.012, 0.01}, {5.0, 5.0}};
+  const std::vector<ParkPoint> kept = keptPoints(points);
+
+  const std::vector<ParkPoint> expected{{0.0, 0.0}, {0.012, 0.0}, {0.012, 0.01}, {5.0, 5.0}};
+  CHECK(kept == expected);
+  CHECK(sameLine(groundLine(kept), groundLine(points)));
+}
+
 TEST_CASE("Each ground line segment holds max(8, ceil(chord / 1 m)) points, counting its start") {
   // Chords of 3, 12, and 9.5 m: below the minimum, a whole number of meters, and a fraction.
   const std::vector<ParkPoint> points{{0.0, -20.0}, {0.0, -17.0}, {0.0, -5.0}, {0.0, 4.5}};
