@@ -80,7 +80,9 @@ In src/sim/SPEC.md, the sentence "It registers the medium's types first (sim/med
 - Connectors, anchors, and boxes of any kind, which box-connections adds.
 - Drawing the networks, which graph-view adds.
 - Joining lines whose ribbons overlap but whose center lines stay farther apart than the tolerance, a milestone deepening candidate.
-- A sweep-line search for meetings. The pairwise test with a bounding-box reject serves the slice's parks.
+- A two-dimensional sweep-line search or spatial index for meetings. The search sweeps segments by their x spans with a bounding-box reject (PLAN.md's approved deviation), which serves the slice's parks.
+- Checking criterion 2 against every meeting of an arbitrary park, which would take a second implementation of the meeting search in the tests. Its tests use parks whose meetings follow from their geometry, and random parks are covered by criteria 6 and 7.
+- Tests of each stop's exact distance within its group, the group's first or the length, beyond lying within the tolerance of its meetings. The rule only makes the value deterministic, which criterion 6 and the cross-build check cover.
 - A bound on how far apart two stops of one node may lie when many meetings chain within a millimeter of each other. Nodes form only through meetings, which criteria 2 and 3 cover.
 
 ## Open questions

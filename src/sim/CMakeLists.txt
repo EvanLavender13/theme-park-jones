@@ -11,6 +11,7 @@ add_library(tpj_sim STATIC
     park/geometry.cpp
     park/intent.cpp
     park_schema.cpp
+    routes/networks.cpp
     save.cpp
     schema.cpp
     walk.cpp
