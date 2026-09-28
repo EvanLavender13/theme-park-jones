@@ -4,7 +4,7 @@
 
 namespace tpj {
 
-void drawDebugPanel(const DebugStats &stats) {
+void drawDebugPanel(const DebugStats &stats, bool &showGraph) {
   ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_FirstUseEver);
   if (ImGui::Begin("Debug", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
     const ImGuiIO &io = ImGui::GetIO();
@@ -12,6 +12,7 @@ void drawDebugPanel(const DebugStats &stats) {
     ImGui::Text("Sim tick %llu", static_cast<unsigned long long>(stats.SimTick));
     ImGui::Text("Focus %.1f, %.1f", stats.Focus.X, stats.Focus.Z);
     ImGui::Text("Distance %.1f m", stats.Distance);
+    ImGui::Checkbox("Graph", &showGraph);
   }
   ImGui::End();
 }

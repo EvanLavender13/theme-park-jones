@@ -177,7 +177,10 @@ TEST_CASE("A command line the app does not accept exits with a nonzero status an
       {"--hash", "--ticks", "12x"},
       {"--hash", "--ticks", "-1"},
       {"--hash", "--ticks", "0", "--frames", "5"},
-      {"--hash", "--ticks", "0", "--capture", capture}};
+      {"--hash", "--ticks", "0", "--capture", capture},
+      // --graph takes no value, so it is refused wherever it stands.
+      {"--hash", "--ticks", "0", "--graph"},
+      {"--graph", "--hash", "--ticks", "0"}};
   for (const std::vector<std::string> &arguments : cases) {
     std::string shown;
     for (const std::string &argument : arguments) {

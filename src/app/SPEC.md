@@ -34,12 +34,14 @@ Pitch stays between about 10 and 85 degrees, distance between 4 and 400 m, and t
 
 ## Tooling UI
 
-A Debug panel shows the frame rate, the simulation tick, and the camera focus and distance. ImGui docking is enabled.
+A Debug panel shows the frame rate, the simulation tick, and the camera focus and distance, and a Graph checkbox, off at start unless --graph is given. While it is checked, each frame, after the panels are built, the app draws buildGraphOverlay for the world, the frame's CameraView, and ImGui's display size on ImGui's background draw list, which lies over the scene and behind every panel: each line in graphColor of its kind, GRAPH_LINE_THICKNESS thick, and then each node as a filled circle of GRAPH_NODE_RADIUS in GRAPH_NODE_COLOR (render/SPEC.md). ImGui docking is enabled.
 
 ## Command line
 
 --frames N exits after N frames. --capture PATH writes the last frame to PATH as a BMP and exits after 3 frames unless --frames says otherwise. Together they make the app usable for automated visual checks.
 
+--graph checks the Debug panel's Graph checkbox at start, so a capture shows the networks.
+
 --park PATH starts from that park file. --ticks N, a decimal count, steps N cycles before the first frame, and N is 0 without it. --hash writes `tick <t> hash <h>` to standard output after them, with t the world's tick in decimal and h hashWorld's value as 16 lowercase hexadecimal digits, as tpj_scenarios writes them for the same file and ticks, and exits with status 0 without opening a window.
 
-An unknown option, an option missing its value, a --ticks value that is not a decimal count, or --hash given with --frames or --capture, whatever their values, prints the usage and exits with a nonzero status. A park file that cannot be read or loaded exits with a nonzero status after writing to standard error a message naming the file and, for a load error, LoadError's message.
+An unknown option, an option missing its value, a --ticks value that is not a decimal count, or --hash given with --frames, --capture, or --graph, whatever their values, prints the usage and exits with a nonzero status. A park file that cannot be read or loaded exits with a nonzero status after writing to standard error a message naming the file and, for a load error, LoadError's message.
