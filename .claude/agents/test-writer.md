@@ -49,6 +49,8 @@ Test observable behavior through the public interface, never internals. A test t
 
 Do not weaken a test to make it pass or to make it easier to satisfy.
 
+A test of behavior not yet implemented is expected to fail, including a check that a fixture or random sequence reaches some state. Do not confirm by other means that a fixture, generator, or expected value is right: no probe programs, no scratch computations, no re-deriving the implementation's geometry. Build, run once, and report; the implementation pass shows whether the test holds.
+
 Test only what the criteria ask. A case you think is missing is a gap for your report, not an extra test.
 
 Keep fixtures small: the fewest synthetic types and helpers the properties need, and never a second implementation of the code under test to compare against. Each test states one property, and no property is tested more than once: when one piece of logic serves several entry points, test the logic once and show separately that each entry point uses it.
