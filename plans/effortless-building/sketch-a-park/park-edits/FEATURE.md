@@ -54,7 +54,7 @@ Paths never conflict with each other: where they cross, navigable-networks deriv
 
 Five commands change intent: AddPath, a kind and points; AddBox, a kind and a pose; MoveBox, a box's key and a pose; DeletePath, a path's key; and DeleteBox, a box's key. addParkEdits registers them in that order, and makeParkSchema calls it after addParkIntent. Tools submit them to the command queue, so they apply between ticks (sim/SPEC.md).
 
-isAccepted gives whether a command would be applied to a world. applyCommand calls it on the world it is given and changes nothing when it is false, so what a ghost shows as valid is what its commit does, as long as nothing else changes intent first.
+isAccepted gives whether a command would be applied to a world. applyCommand calls it on the world it is given and changes nothing when it is false, so what a ghost shows as valid is what its commit does, as long as nothing else changes intent first. It changes only intent and the key counter: marking resolution pending is the cycle's and makeCandidate's (sim/SPEC.md).
 
 - AddPath is accepted when the ground line of its kept points is not empty, does not leave the park, and meets no solid. It creates an entity from the key counter holding a path of its kind through its kept points. A path with a point that is not finite or outside the square, or fewer than two kept points, is refused.
 - AddBox is accepted when its pose has a footprint for its kind's size, and that footprint does not leave the park, overlaps no solid, and meets no line. It creates an entity from the key counter holding a box of its kind with its pose exactly as given.
@@ -146,6 +146,10 @@ park-intent: the intent components, public queries, groundLine, footprintOf, siz
 - A refusal's reason, such as which box a ghost overlaps. Nothing reads it yet, and the ghost shows only valid or invalid.
 - Moving or deleting the entrance, reshaping paths, and undo: capability deepening candidates.
 - Caching ground lines between checks. Each check recomputes the lines it compares.
+- Observing makeParkSchema's call order beyond its command list, which is all a schema shows of commands. Tests check that the five commands are registered in order.
+- isAccepted and the queries on a world whose schema lacks park intent. Every park world is made with makeParkSchema.
+- Checking park-edits' world on cycles that apply no command. Only commands change intent, so tests check it after each cycle that applies one.
+- A distribution for park-edits' facings beyond components drawn from -1 to 1, which tests check as facings in every quadrant.
 
 ## Open questions
 

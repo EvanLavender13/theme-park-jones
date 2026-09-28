@@ -2,6 +2,7 @@
 # tpj_scenarios itself, so it is built first.
 add_executable(tpj_scenarios_tests
     main_test.cpp
+    park_edits_test.cpp
     runner_test.cpp
     scenarios_test.cpp
     stalls_test.cpp)

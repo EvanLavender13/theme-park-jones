@@ -8,6 +8,7 @@ namespace tpj {
 Scenario walkersScenario();
 Scenario beaconsScenario();
 Scenario stallsScenario();
+Scenario parkEditsScenario();
 
 } // namespace tpj
 

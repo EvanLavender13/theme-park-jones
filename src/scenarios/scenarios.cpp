@@ -6,8 +6,8 @@
 namespace tpj {
 
 std::span<const Scenario> registeredScenarios() {
-  static const std::array<Scenario, 3> SCENARIOS = {walkersScenario(), beaconsScenario(),
-                                                    stallsScenario()};
+  static const std::array<Scenario, 4> SCENARIOS = {walkersScenario(), beaconsScenario(),
+                                                    stallsScenario(), parkEditsScenario()};
   return SCENARIOS;
 }
 
