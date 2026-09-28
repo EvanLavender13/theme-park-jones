@@ -16,6 +16,8 @@ namespace tpj {
 
 // The graph view's colors, opaque and distinct from each other and from the paths' ribbons.
 inline constexpr Rgba GRAPH_NODE_COLOR{1.0f, 1.0f, 1.0f, 1.0f};
+inline constexpr Rgba GRAPH_CONNECTOR_COLOR{1.0f, 0.90f, 0.10f, 1.0f};
+inline constexpr Rgba GRAPH_ANCHOR_COLOR{1.0f, 0.45f, 0.10f, 1.0f};
 
 constexpr Rgba graphColor(PathKind kind) {
   return kind == PathKind::Guest ? Rgba{0.10f, 0.85f, 1.0f, 1.0f} : Rgba{1.0f, 0.30f, 0.80f, 1.0f};
@@ -24,6 +26,7 @@ constexpr Rgba graphColor(PathKind kind) {
 // In window units.
 inline constexpr float GRAPH_LINE_THICKNESS = 2.0f;
 inline constexpr float GRAPH_NODE_RADIUS = 4.0f;
+inline constexpr float GRAPH_ANCHOR_RADIUS = 6.0f;
 
 // A position in a window, from its top left corner.
 struct WindowPoint {
@@ -39,12 +42,16 @@ struct GraphLine {
   uint32_t Segment = 0;
   WindowPoint From;
   WindowPoint To;
+  // Whether the carrier is a connector rather than a path.
+  bool Connector = false;
 };
 
 struct GraphNode {
   PathKind Kind = PathKind::Guest;
   uint32_t Node = 0;
   WindowPoint At;
+  // The node's anchored entity, or NULL_KEY.
+  EntityKey Anchor = NULL_KEY;
 };
 
 struct GraphOverlay {

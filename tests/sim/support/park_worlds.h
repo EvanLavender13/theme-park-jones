@@ -45,11 +45,14 @@ inline void writeKey(std::string &out, EntityKey key) {
 }
 
 // A world with makeParkSchema's schema holding exactly the intent, each entity under its given key,
-// with the next key above them all.
+// with the next key above every counter key among them. A derived key, which only a hand-written
+// save gives intent, lies outside the counter's range.
 inline World worldOf(ParkIntent intent) {
   uint64_t highest = 0;
   const auto note = [&highest](EntityKey key) {
-    highest = std::max(highest, static_cast<uint64_t>(key));
+    if (!isDerivedKey(key)) {
+      highest = std::max(highest, static_cast<uint64_t>(key));
+    }
   };
   const auto byKey = [](const auto &left, const auto &right) { return left.Key < right.Key; };
   std::ranges::sort(intent.Entrances, byKey);

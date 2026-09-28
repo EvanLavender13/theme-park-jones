@@ -328,8 +328,8 @@ TEST_CASE("buildGraphOverlay gives an empty overlay for a window with no width o
 }
 
 TEST_CASE("The graph colors are opaque and differ from each other and from both paths' colors") {
-  const std::array<Rgba, 3> graph = {graphColor(PathKind::Guest), graphColor(PathKind::Backstage),
-                                     GRAPH_NODE_COLOR};
+  const std::array<Rgba, 5> graph = {graphColor(PathKind::Guest), graphColor(PathKind::Backstage),
+                                     GRAPH_NODE_COLOR, GRAPH_CONNECTOR_COLOR, GRAPH_ANCHOR_COLOR};
   const std::array<Rgba, 2> paths = {pathColor(PathKind::Guest), pathColor(PathKind::Backstage)};
   const auto differs = [](Rgba a, Rgba b) { return a.R != b.R || a.G != b.G || a.B != b.B; };
   for (size_t i = 0; i < graph.size(); ++i) {
@@ -342,6 +342,55 @@ TEST_CASE("The graph colors are opaque and differ from each other and from both 
       CHECK(differs(graph[i], path));
     }
   }
+}
+
+// A guest path along z = 0 and a backstage path along z = -12, with a shop between them facing +z:
+// its front door, (0, -3), connects to the guest path and its back door, (0, -9), to the
+// backstage path. Seen from DOWNWARD, all of it lies in front of the near plane.
+constexpr std::string_view CONNECTED_PARK = "tpj-park 1\nseed 1\ntick 0\nnext-key 4\n"
+                                            "\n[path]\n"
+                                            "1 kind=guest points=[{x=-10 z=0} {x=10 z=0}]\n"
+                                            "2 kind=backstage points=[{x=-10 z=-12} {x=10 z=-12}]\n"
+                                            "\n[box]\n"
+                                            "3 kind=shop x=0 z=-6 facing-x=0 facing-z=1\n";
+
+World connectedPark() {
+  World world = loadWorld(makeParkSchema(), CONNECTED_PARK);
+  resolveWorld(world);
+  return world;
+}
+
+TEST_CASE("A line is marked a connector exactly when its carrier is not the key of a path") {
+  const World world = connectedPark();
+  std::vector<EntityKey> paths;
+  for (const ParkPath &path : parkPaths(world)) {
+    paths.push_back(path.Key);
+  }
+  const GraphOverlay overlay = buildGraphOverlay(world, DOWNWARD, WIDTH, HEIGHT);
+  size_t connectors = 0;
+  for (const GraphLine &line : overlay.Lines) {
+    INFO("carrier " << static_cast<uint64_t>(line.Carrier) << ", segment " << line.Segment);
+    const bool path = std::ranges::find(paths, line.Carrier) != paths.end();
+    CHECK(line.Connector == !path);
+    connectors += line.Connector ? 1 : 0;
+  }
+  // The shop's two connectors, one straight segment each, beside the paths' segments.
+  CHECK(connectors == 2);
+  CHECK(overlay.Lines.size() > connectors);
+}
+
+TEST_CASE("Each graph node holds nodeAnchor of its node as its anchor") {
+  const World world = connectedPark();
+  const GraphOverlay overlay = buildGraphOverlay(world, DOWNWARD, WIDTH, HEIGHT);
+  size_t anchored = 0;
+  for (const GraphNode &node : overlay.Nodes) {
+    INFO("kind " << static_cast<int>(node.Kind) << ", node " << node.Node);
+    CHECK(node.Anchor == parkNetwork(world, node.Kind).nodeAnchor(node.Node));
+    anchored += node.Anchor != NULL_KEY ? 1 : 0;
+  }
+  // The shop's two doors, one in each network.
+  CHECK(anchored == 2);
+  CHECK(overlay.Nodes.size() > anchored);
 }
 
 // The overlay is drawn every frame the checkbox is on, so it must leave nothing behind in what is

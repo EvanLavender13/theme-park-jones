@@ -5,6 +5,7 @@
 #include "sim/world.h"
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 #include <optional>
 #include <stddef.h>
@@ -215,10 +216,115 @@ private:
   std::vector<size_t> Parents;
 };
 
-Network deriveNetwork(const std::vector<ParkPath> &paths, PathKind kind) {
-  std::vector<Carrier> carriers = pathCarriers(paths, kind);
-  const std::vector<Meeting> meetings = findMeetings(carriers);
+// The midpoint of an entity's face, serving one network kind.
+struct Door {
+  EntityKey Entity = NULL_KEY;
+  Face Side = Face::Front;
+  GroundPoint At;
+};
 
+// Adds the door at the midpoint of the face of the pose's footprint for the size: the first two
+// corners for the front, the last two for the back. Nothing when the pose has no footprint.
+void addDoor(std::vector<Door> &doors, EntityKey entity, const Pose &pose, FootprintSize size,
+             Face face) {
+  const std::optional<Footprint> footprint = footprintOf(pose, size);
+  if (!footprint) {
+    return;
+  }
+  const size_t first = face == Face::Front ? 0 : 2;
+  const ParkPoint &a = footprint->Corners[first];
+  const ParkPoint &b = footprint->Corners[first + 1];
+  doors.push_back({.Entity = entity, .Side = face, .At = {(a.X + b.X) / 2.0, (a.Z + b.Z) / 2.0}});
+}
+
+// The doors serving the kind: an entrance's front serves guests, a shop's front guests and its back
+// backstage, and a depot's front backstage.
+std::vector<Door> doorsServing(const std::vector<ParkEntrance> &entrances,
+                               const std::vector<ParkBox> &boxes, PathKind kind) {
+  std::vector<Door> doors;
+  if (kind == PathKind::Guest) {
+    for (const ParkEntrance &entrance : entrances) {
+      addDoor(doors, entrance.Key, entrance.At, ENTRANCE_SIZE, Face::Front);
+    }
+  }
+  for (const ParkBox &box : boxes) {
+    const bool shop = box.Kind == BoxKind::Shop;
+    if (kind == PathKind::Guest && shop) {
+      addDoor(doors, box.Key, box.At, boxSize(box.Kind), Face::Front);
+    } else if (kind == PathKind::Backstage) {
+      addDoor(doors, box.Key, box.At, boxSize(box.Kind), shop ? Face::Back : Face::Front);
+    }
+  }
+  return doors;
+}
+
+// The path carriers, each stopping only at its two ends, as a network nearestPlace can search.
+Network linesOnly(const std::vector<Carrier> &carriers) {
+  std::vector<Carrier> lines = carriers;
+  uint32_t nodeCount = 0;
+  for (Carrier &line : lines) {
+    line.Stops = {{.Distance = 0.0, .Node = nodeCount},
+                  {.Distance = line.Points.back().Distance, .Node = nodeCount + 1}};
+    nodeCount += 2;
+  }
+  return Network(std::move(lines), nodeCount, {});
+}
+
+// A connector, its door's entity, and the index of the path carrier it meets and the distance
+// there.
+struct Connection {
+  Carrier Connector;
+  EntityKey Entity = NULL_KEY;
+  size_t Path = 0;
+  double PathDistance = 0.0;
+};
+
+// The connectors of the doors whose nearest point on the path carriers lies within reach. The
+// carriers are in key order.
+std::vector<Connection> findConnections(const std::vector<Carrier> &carriers,
+                                        const std::vector<Door> &doors) {
+  std::vector<Connection> connections;
+  if (carriers.empty()) {
+    return connections;
+  }
+  const Network lines = linesOnly(carriers);
+  for (const Door &door : doors) {
+    const std::optional<Place> place = lines.nearestPlace(door.At);
+    if (!place) {
+      continue;
+    }
+    const std::optional<GroundPoint> point = lines.groundPoint(*place);
+    if (!point) {
+      continue;
+    }
+    const double dx = point->X - door.At.X;
+    const double dz = point->Z - door.At.Z;
+    const double reach = std::sqrt((dx * dx) + (dz * dz));
+    if (reach > CONNECTION_REACH || !(reach > JUNCTION_TOLERANCE)) {
+      continue;
+    }
+    // A path keyed like the connector, which only a hand-written save holds, keeps carrier keys
+    // unique by leaving the door unconnected.
+    const EntityKey key = connectorKey(door.Entity, door.Side);
+    if (std::ranges::binary_search(carriers, key, {}, &Carrier::Key)) {
+      continue;
+    }
+    const auto path = std::ranges::lower_bound(carriers, place->Carrier, {}, &Carrier::Key);
+    connections.push_back(
+        {.Connector = {.Key = key,
+                       .Points = {{.X = door.At.X, .Z = door.At.Z, .Distance = 0.0},
+                                  {.X = point->X, .Z = point->Z, .Distance = reach}},
+                       .Stops = {}},
+         .Entity = door.Entity,
+         .Path = static_cast<size_t>(path - carriers.begin()),
+         .PathDistance = place->Distance});
+  }
+  return connections;
+}
+
+// Gives each carrier its stops, grouping each carrier's distances and joining the stops each
+// meeting names into nodes, and returns the node count.
+uint32_t addStops(std::vector<Carrier> &carriers, const std::vector<Meeting> &meetings) {
   std::vector<std::vector<double>> distances(carriers.size());
   for (size_t c = 0; c < carriers.size(); ++c) {
     distances[c] = {0.0, carriers[c].Points.back().Distance};
@@ -244,11 +350,16 @@ Network deriveNetwork(const std::vector<ParkPath> &paths, PathKind kind) {
         firstStops[meeting.Second] + groupHolding(starts[meeting.Second], meeting.SecondDistance));
   }
 
-  // Nodes are numbered in order of first stop, carriers in key order and stops by distance.
+  // Nodes are numbered in order of first stop, carriers in key order and stops by distance. Paths
+  // and connectors are walked together, since a hand-written save can give a path a key above a
+  // connector's.
+  std::vector<size_t> keyOrder(carriers.size());
+  std::iota(keyOrder.begin(), keyOrder.end(), size_t{0});
+  std::ranges::sort(keyOrder, {}, [&carriers](size_t c) { return carriers[c].Key; });
   constexpr uint32_t UNNUMBERED = UINT32_MAX;
   std::vector<uint32_t> numbers(stopCount, UNNUMBERED);
   uint32_t nodeCount = 0;
-  for (size_t c = 0; c < carriers.size(); ++c) {
+  for (const size_t c : keyOrder) {
     const double length = carriers[c].Points.back().Distance;
     for (size_t k = 0; k < starts[c].size(); ++k) {
       const size_t root = joins.root(firstStops[c] + k);
@@ -261,13 +372,42 @@ Network deriveNetwork(const std::vector<ParkPath> &paths, PathKind kind) {
           {.Distance = last ? length : starts[c][k], .Node = numbers[root]});
     }
   }
-  return Network(std::move(carriers), nodeCount, {});
+  return nodeCount;
+}
+
+Network deriveNetwork(const std::vector<ParkPath> &paths, const std::vector<Door> &doors,
+                      PathKind kind) {
+  std::vector<Carrier> carriers = pathCarriers(paths, kind);
+  std::vector<Meeting> meetings = findMeetings(carriers);
+
+  // Each connector meets its path at its connection.
+  std::vector<Connection> connections = findConnections(carriers, doors);
+  const size_t pathCount = carriers.size();
+  for (Connection &connection : connections) {
+    meetings.push_back({.First = connection.Path,
+                        .FirstDistance = connection.PathDistance,
+                        .Second = carriers.size(),
+                        .SecondDistance = connection.Connector.Points.back().Distance});
+    carriers.push_back(std::move(connection.Connector));
+  }
+
+  const uint32_t nodeCount = addStops(carriers, meetings);
+
+  // Each connector's door is its first stop, a node nothing else meets, anchored to its entity.
+  std::vector<NodeAnchor> anchors;
+  for (size_t k = 0; k < connections.size(); ++k) {
+    anchors.push_back(
+        {.Node = carriers[pathCount + k].Stops.front().Node, .Entity = connections[k].Entity});
+  }
+  return Network(std::move(carriers), nodeCount, std::move(anchors));
 }
 
 void resolvePathNetworks(World &world) {
   const std::vector<ParkPath> paths = parkPaths(world);
+  const std::vector<ParkEntrance> entrances = parkEntrances(world);
+  const std::vector<ParkBox> boxes = parkBoxes(world);
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
-    Network network = deriveNetwork(paths, kind);
+    Network network = deriveNetwork(paths, doorsServing(entrances, boxes, kind), kind);
     const EntityKey key =
         world.createDerivedEntity(NULL_KEY, NETWORK_PURPOSE, static_cast<uint64_t>(kind));
     world.Registry.emplace_or_replace<Network>(world.findEntity(key), std::move(network));

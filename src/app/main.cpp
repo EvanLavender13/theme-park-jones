@@ -420,19 +420,23 @@ ImU32 imColor(tpj::Rgba color) {
   return ImGui::ColorConvertFloat4ToU32(ImVec4(color.R, color.G, color.B, color.A));
 }
 
-// Draws the networks over the scene and behind every panel: lines in their kind's graph color,
-// then nodes.
+// Draws the networks over the scene and behind every panel: lines in their kind's graph color, or
+// the connector color, then nodes, anchored ones larger in the anchor color.
 void drawGraph(const tpj::World &world, const tpj::CameraView &view) {
   const ImVec2 size = ImGui::GetIO().DisplaySize;
   const tpj::GraphOverlay overlay = tpj::buildGraphOverlay(world, view, size.x, size.y);
   ImDrawList *drawList = ImGui::GetBackgroundDrawList();
   for (const tpj::GraphLine &line : overlay.Lines) {
+    const tpj::Rgba color =
+        line.Connector ? tpj::GRAPH_CONNECTOR_COLOR : tpj::graphColor(line.Kind);
     drawList->AddLine(ImVec2(line.From.X, line.From.Y), ImVec2(line.To.X, line.To.Y),
-                      imColor(tpj::graphColor(line.Kind)), tpj::GRAPH_LINE_THICKNESS);
+                      imColor(color), tpj::GRAPH_LINE_THICKNESS);
   }
   for (const tpj::GraphNode &node : overlay.Nodes) {
-    drawList->AddCircleFilled(ImVec2(node.At.X, node.At.Y), tpj::GRAPH_NODE_RADIUS,
-                              imColor(tpj::GRAPH_NODE_COLOR));
+    const bool anchored = node.Anchor != tpj::NULL_KEY;
+    drawList->AddCircleFilled(ImVec2(node.At.X, node.At.Y),
+                              anchored ? tpj::GRAPH_ANCHOR_RADIUS : tpj::GRAPH_NODE_RADIUS,
+                              imColor(anchored ? tpj::GRAPH_ANCHOR_COLOR : tpj::GRAPH_NODE_COLOR));
   }
 }
 

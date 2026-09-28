@@ -1,9 +1,12 @@
 #include "render/graph_overlay.h"
 
 #include "render/math.h"
+#include "sim/park/intent.h"
 #include "sim/routes/networks.h"
 
+#include <algorithm>
 #include <cstddef>
+#include <vector>
 
 namespace tpj {
 
@@ -28,7 +31,8 @@ GroundPoint pointAtDepth(GroundPoint behind, GroundPoint ahead, float behindDept
 
 // Adds a line for each segment of the network's carriers with a part in front of the near plane.
 void appendLines(GraphOverlay &overlay, const Network &network, PathKind kind,
-                 const CameraView &view, float width, float height) {
+                 const std::vector<EntityKey> &pathKeys, const CameraView &view, float width,
+                 float height) {
   for (const Carrier &carrier : network.carriers()) {
     for (std::size_t index = 0; index + 1 < carrier.Points.size(); ++index) {
       GroundPoint a{carrier.Points[index].X, carrier.Points[index].Z};
@@ -46,8 +50,8 @@ void appendLines(GraphOverlay &overlay, const Network &network, PathKind kind,
       const std::optional<WindowPoint> from = windowPoint(view, width, height, a);
       const std::optional<WindowPoint> to = windowPoint(view, width, height, b);
       if (from && to) {
-        overlay.Lines.push_back(
-            GraphLine{kind, carrier.Key, static_cast<uint32_t>(index), *from, *to});
+        overlay.Lines.push_back(GraphLine{kind, carrier.Key, static_cast<uint32_t>(index), *from,
+                                          *to, !std::ranges::binary_search(pathKeys, carrier.Key)});
       }
     }
   }
@@ -63,7 +67,7 @@ void appendNodes(GraphOverlay &overlay, const Network &network, PathKind kind,
       continue;
     }
     if (const std::optional<WindowPoint> at = windowPoint(view, width, height, *ground)) {
-      overlay.Nodes.push_back(GraphNode{kind, node, *at});
+      overlay.Nodes.push_back(GraphNode{kind, node, *at, network.nodeAnchor(node)});
     }
   }
 }
@@ -93,8 +97,13 @@ GraphOverlay buildGraphOverlay(const World &world, const CameraView &view, float
   if (!(width > 0.0f) || !(height > 0.0f)) {
     return overlay;
   }
+  // parkPaths gives paths in ascending key order, so their keys can be searched.
+  std::vector<EntityKey> pathKeys;
+  for (const ParkPath &path : parkPaths(world)) {
+    pathKeys.push_back(path.Key);
+  }
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
-    appendLines(overlay, parkNetwork(world, kind), kind, view, width, height);
+    appendLines(overlay, parkNetwork(world, kind), kind, pathKeys, view, width, height);
     appendNodes(overlay, parkNetwork(world, kind), kind, view, width, height);
   }
   return overlay;
