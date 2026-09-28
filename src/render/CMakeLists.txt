@@ -2,12 +2,15 @@
 # selects its Vulkan backend on every platform (decision 0009).
 add_library(tpj_render STATIC
     math.cpp
+    park_mesh.cpp
     renderer.cpp)
 target_include_directories(tpj_render PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tpj_render PUBLIC tpj_core SDL3::SDL3 tpj_imgui)
+target_link_libraries(tpj_render PUBLIC tpj_core tpj_sim SDL3::SDL3 tpj_imgui)
 tpj_configure_target(tpj_render)
 
 set(TPJ_SHADER_SOURCES
+    park.vert
+    park.frag
     terrain.vert
     terrain.frag)
 set(TPJ_SHADER_OUTPUTS)

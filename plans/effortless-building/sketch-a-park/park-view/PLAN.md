@@ -320,14 +320,14 @@ Step 3: In src/render/CMakeLists.txt, set TPJ_SHADER_SOURCES to `park.vert park.
 Run: `cmake --build --preset linux-debug 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; ls build/linux-debug/shaders`
 Expected: no warnings or errors, and the listing shows park.frag.spv, park.vert.spv, terrain.frag.spv, and terrain.vert.spv.
 
-### Task 11: Create the park pipeline and bias the terrain
+### Task 11: Create the park pipeline and reverse depth
 
 Files:
 - Modify: `src/render/renderer.cpp`
 
-Step 1: Generalize createTerrainPipeline into `SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *vertexFile, const char *fragmentFile, const SDL_GPUVertexAttribute *attributes, uint32_t attributeCount, uint32_t pitch, bool biasAway)`, keeping its shader loading, vertex buffer description, and states. When biasAway is true, set `info.rasterizer_state.enable_depth_bias = true`, `depth_bias_constant_factor = 1.0f`, and `depth_bias_slope_factor = 1.0f`. It logs "Cannot create pipeline" with the vertex file's name and returns null on failure.
+Step 1: Generalize createTerrainPipeline into `SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *vertexFile, const char *fragmentFile, const SDL_GPUVertexAttribute *attributes, uint32_t attributeCount, uint32_t pitch)`, keeping its shader loading, vertex buffer description, and states, with the depth test's compare op SDL_GPU_COMPAREOP_GREATER. In drawScene, clear depth to 0. In src/render/math.cpp, reverse perspective's depth: M[10] = nearZ / (farZ - nearZ) and M[14] = nearZ * farZ / (farZ - nearZ), so the near plane maps to 1 and the far plane to 0, and say so in math.h's comment. (Amended after Evan's zoomed-out check: a terrain depth bias left paths flickering seen from above.) It logs "Cannot create pipeline" with the vertex file's name and returns null on failure.
 
-Step 2: createTerrainPipeline keeps its two attributes and calls createPipeline with "terrain.vert.spv", "terrain.frag.spv", sizeof(TerrainVertex), and biasAway true. Add createParkPipeline with three attributes at locations 0, 1, and 2: FLOAT3 at offsetof(ParkVertex, Position), FLOAT3 at offsetof(ParkVertex, Normal), and FLOAT4 at offsetof(ParkVertex, Color), calling createPipeline with "park.vert.spv", "park.frag.spv", sizeof(ParkVertex), and biasAway false. Add `static_assert(sizeof(Rgba) == 4 * sizeof(float));` beside it.
+Step 2: createTerrainPipeline keeps its two attributes and calls createPipeline with "terrain.vert.spv", "terrain.frag.spv", sizeof(TerrainVertex). Add createParkPipeline with three attributes at locations 0, 1, and 2: FLOAT3 at offsetof(ParkVertex, Position), FLOAT3 at offsetof(ParkVertex, Normal), and FLOAT4 at offsetof(ParkVertex, Color), calling createPipeline with "park.vert.spv", "park.frag.spv", sizeof(ParkVertex). Add `static_assert(sizeof(Rgba) == 4 * sizeof(float));` beside it.
 
 Step 3: In createRenderer, create the park pipeline after the terrain pipeline, returning false when it fails. In destroyRenderer, release ParkVertices, ParkIndices, and ParkPipeline beside the terrain's.
 
@@ -355,7 +355,7 @@ Files:
 
 Step 1: Add to Options `const char *ParkPath = nullptr;`, `uint64_t Ticks = 0;`, and `bool PrintHash = false;`. In parseOptions, accept `--park PATH`, `--ticks N`, parsed with std::from_chars over the whole value and refused when empty, not decimal, or not wholly consumed, and `--hash`. Add `bool FramesGiven = false;` to Options, set when --frames is parsed. After the loop, refuse --hash when FramesGiven is true or CapturePath is set, whatever their values. Every refusal logs the usage `Usage: %s [--park PATH] [--ticks N] [--hash] [--frames N] [--capture PATH]` and returns false. Update the comment above parseOptions to name the new options.
 
-Step 2: Add `std::optional<tpj::World> startingWorld(const Options &options)`: when ParkPath is null, `tpj::makeNewPark(1)`. Otherwise read the file with SDL_LoadFile, logging "Cannot read <path>: <SDL error>" and returning none on failure, then `tpj::loadWorld(tpj::makeParkSchema(), text)`, catching tpj::LoadError to log "Cannot load <path>: <what>" and return none, and SDL_free the text. Then call `tpj::resolveWorld(world)` and `tpj::stepWorld(world)` Ticks times, and return it.
+Step 2: Add `std::optional<tpj::World> startingWorld(const Options &options)`: when ParkPath is null, `tpj::makeNewPark(1)`. Otherwise read the file with SDL_LoadFile, writing "Cannot read <path>: <SDL error>" to standard error and returning none on failure, then `tpj::loadWorld(tpj::makeParkSchema(), text)`, catching tpj::LoadError to write "Cannot load <path>: <what>" to standard error and return none, and SDL_free the text. Then call `tpj::resolveWorld(world)` and `tpj::stepWorld(world)` Ticks times, and return it.
 
 Step 3: In main, after parseOptions and before SDL_Init, call startingWorld and return EXIT_FAILURE when it gives none. When PrintHash is set, write `tick <t> hash <h>` with `printf("tick %llu hash %016llx\n", ...)`, casting Tick and hashWorld's value to unsigned long long, and return EXIT_SUCCESS. Otherwise pass the world into runLoop by reference, replacing the default-constructed world there.
 

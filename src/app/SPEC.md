@@ -6,6 +6,10 @@ The executable: owns the window, the main loop, and input, and connects the simu
 
 The app owns the Dear ImGui context and its SDL3 platform backend, created before the renderer and destroyed after it. Each frame gathers input, advances the simulation by as many fixed ticks as the elapsed time covers, updates the camera, builds the tooling UI, and draws. Elapsed time per frame is clamped to 0.25 s so a stall does not trigger a burst of ticks.
 
+## Park
+
+The app starts from makeNewPark(1), or from the park file --park names, loaded with makeParkSchema, and resolves it. Before the first frame it steps the world --ticks cycles with no commands. Whenever the world's intent, as parkEntrances, parkPaths, and parkBoxes give it, differs from the intent last drawn, it builds the park mesh and gives it to the renderer. When it builds the first mesh, and the mesh has vertices, it frames the camera on the mesh's bounds: the focus moves to their center, and the distance becomes their half diagonal divided by the sine of half the vertical field of view, so a sphere around them fits the view, within the camera's distance limits.
+
 ## Camera
 
 An orbit camera around a focus point on the ground.
@@ -25,3 +29,7 @@ A Debug panel shows the frame rate, the simulation tick, and the camera focus an
 ## Command line
 
 --frames N exits after N frames. --capture PATH writes the last frame to PATH as a BMP and exits after 3 frames unless --frames says otherwise. Together they make the app usable for automated visual checks.
+
+--park PATH starts from that park file. --ticks N, a decimal count, steps N cycles before the first frame, and N is 0 without it. --hash writes `tick <t> hash <h>` to standard output after them, with t the world's tick in decimal and h hashWorld's value as 16 lowercase hexadecimal digits, as tpj_scenarios writes them for the same file and ticks, and exits with status 0 without opening a window.
+
+An unknown option, an option missing its value, a --ticks value that is not a decimal count, or --hash given with --frames or --capture, whatever their values, prints the usage and exits with a nonzero status. A park file that cannot be read or loaded exits with a nonzero status after writing to standard error a message naming the file and, for a load error, LoadError's message.

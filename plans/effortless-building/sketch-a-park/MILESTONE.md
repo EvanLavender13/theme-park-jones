@@ -46,8 +46,8 @@ park-intent is the core. It gives the park its first content: the intent types r
 
 1. `park-intent`: the module src/sim/park with path, box, and entrance intent registered as intent in makeParkSchema, the park's square, fixed sizes and path widths, the centripetal Catmull-Rom evaluation and ground line, box footprints and faces, public queries over intent, and the new-park template. Depends on: none.
 2. `park-edits`: the add, move, and delete commands with duplicate points dropped, the physical-validity check as the only refusal, exposed as a query tools use for ghosts, and the randomized command-sequence and save tests. Depends on: feature 1.
-3. `park-view`: a lit mesh pipeline drawing flat paths along ground lines, boxes, and the entrance from intent, a translucent pass for ghosts and highlights, the app starting from the new-park template, the --park, --ticks, and --hash options, and tests/parks/sketch.park. Depends on: feature 1.
-4. `box-tools`: the library src/tools with tool state driven by ground positions, the tooling panel's tool selection, cursor-to-ground picking, the place, move, and delete tools for boxes, and the delete tool for paths, with ghosts and hover highlights. Depends on: features 2 and 3.
+3. `park-view`: a lit mesh pipeline drawing flat paths along ground lines, boxes, and the entrance from intent, the app starting from the new-park template, the --park, --ticks, and --hash options, and tests/parks/sketch.park. Depends on: feature 1.
+4. `box-tools`: the library src/tools with tool state driven by ground positions, the tooling panel's tool selection, cursor-to-ground picking, the place, move, and delete tools for boxes, and the delete tool for paths, with ghosts and hover highlights drawn in a translucent pass. Depends on: features 2 and 3.
 5. `path-tool`: drawing a guest or backstage path by clicking points, with its ghost curve, endpoint snapping onto same-kind paths, finishing and cancelling. Depends on: feature 4.
 6. `park-files`: new, open, and save from the tooling panel through SDL's file dialogs, replacing the world and emptying the command queue on open and new. Depends on: feature 4.
 
@@ -69,6 +69,7 @@ The capability leaves these to this milestone. Playing adjusts them.
 - Undo and redo, and reshaping paths, from the capability's pool.
 - A refusal's reason given with isAccepted, such as which box a ghost overlaps, so the ghost can say why it is invalid.
 - Ground lines cached as derived data, so the physical-validity check stops recomputing every path's line on each query, if box-tools' ghosts show the cost.
+- Crossings and junctions drawn cleanly: where ribbons meet or cross they overlap, and ribbons of different kinds tie in depth where they cross.
 
 ## Open questions
 

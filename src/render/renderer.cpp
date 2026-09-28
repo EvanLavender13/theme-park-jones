@@ -7,6 +7,7 @@
 #include <imgui_impl_sdlgpu3.h>
 
 #include <stddef.h>
+#include <vector>
 
 namespace tpj {
 namespace {
@@ -69,31 +70,25 @@ SDL_GPUTextureFormat chooseDepthFormat(SDL_GPUDevice *device) {
   return SDL_GPU_TEXTUREFORMAT_D16_UNORM;
 }
 
-bool createTerrainPipeline(Renderer &renderer) {
+// A lit, depth-tested pipeline with back faces culled. Depth is reversed: nearer is greater.
+SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *vertexFile,
+                                        const char *fragmentFile,
+                                        const SDL_GPUVertexAttribute *attributes,
+                                        uint32_t attributeCount, uint32_t pitch) {
   SDL_GPUShader *vertexShader =
-      loadShader(renderer.Device, "terrain.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 1);
+      loadShader(renderer.Device, vertexFile, SDL_GPU_SHADERSTAGE_VERTEX, 1);
   SDL_GPUShader *fragmentShader =
-      loadShader(renderer.Device, "terrain.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0);
+      loadShader(renderer.Device, fragmentFile, SDL_GPU_SHADERSTAGE_FRAGMENT, 0);
   if (vertexShader == nullptr || fragmentShader == nullptr) {
     SDL_ReleaseGPUShader(renderer.Device, vertexShader);
     SDL_ReleaseGPUShader(renderer.Device, fragmentShader);
-    return false;
+    return nullptr;
   }
 
   SDL_GPUVertexBufferDescription vertexBuffer = {};
   vertexBuffer.slot = 0;
-  vertexBuffer.pitch = sizeof(TerrainVertex);
+  vertexBuffer.pitch = pitch;
   vertexBuffer.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-
-  SDL_GPUVertexAttribute attributes[2] = {};
-  attributes[0].location = 0;
-  attributes[0].buffer_slot = 0;
-  attributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
-  attributes[0].offset = offsetof(TerrainVertex, Position);
-  attributes[1].location = 1;
-  attributes[1].buffer_slot = 0;
-  attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
-  attributes[1].offset = offsetof(TerrainVertex, Normal);
 
   SDL_GPUColorTargetDescription colorTarget = {};
   colorTarget.format = COLOR_FORMAT;
@@ -104,27 +99,64 @@ bool createTerrainPipeline(Renderer &renderer) {
   info.vertex_input_state.vertex_buffer_descriptions = &vertexBuffer;
   info.vertex_input_state.num_vertex_buffers = 1;
   info.vertex_input_state.vertex_attributes = attributes;
-  info.vertex_input_state.num_vertex_attributes = 2;
+  info.vertex_input_state.num_vertex_attributes = attributeCount;
   info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
   info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
   info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
   info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
   info.depth_stencil_state.enable_depth_test = true;
   info.depth_stencil_state.enable_depth_write = true;
-  info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
+  info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_GREATER;
   info.target_info.color_target_descriptions = &colorTarget;
   info.target_info.num_color_targets = 1;
   info.target_info.depth_stencil_format = static_cast<SDL_GPUTextureFormat>(renderer.DepthFormat);
   info.target_info.has_depth_stencil_target = true;
 
-  renderer.TerrainPipeline = SDL_CreateGPUGraphicsPipeline(renderer.Device, &info);
+  SDL_GPUGraphicsPipeline *pipeline = SDL_CreateGPUGraphicsPipeline(renderer.Device, &info);
   SDL_ReleaseGPUShader(renderer.Device, vertexShader);
   SDL_ReleaseGPUShader(renderer.Device, fragmentShader);
-  if (renderer.TerrainPipeline == nullptr) {
-    logError("Cannot create terrain pipeline");
-    return false;
+  if (pipeline == nullptr) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Cannot create pipeline for %s: %s", vertexFile,
+                 SDL_GetError());
   }
-  return true;
+  return pipeline;
+}
+
+bool createTerrainPipeline(Renderer &renderer) {
+  SDL_GPUVertexAttribute attributes[2] = {};
+  attributes[0].location = 0;
+  attributes[0].buffer_slot = 0;
+  attributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+  attributes[0].offset = offsetof(TerrainVertex, Position);
+  attributes[1].location = 1;
+  attributes[1].buffer_slot = 0;
+  attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+  attributes[1].offset = offsetof(TerrainVertex, Normal);
+  renderer.TerrainPipeline = createPipeline(renderer, "terrain.vert.spv", "terrain.frag.spv",
+                                            attributes, 2, sizeof(TerrainVertex));
+  return renderer.TerrainPipeline != nullptr;
+}
+
+// The vertex attributes read the color as four floats.
+static_assert(sizeof(Rgba) == 4 * sizeof(float));
+
+bool createParkPipeline(Renderer &renderer) {
+  SDL_GPUVertexAttribute attributes[3] = {};
+  attributes[0].location = 0;
+  attributes[0].buffer_slot = 0;
+  attributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+  attributes[0].offset = offsetof(ParkVertex, Position);
+  attributes[1].location = 1;
+  attributes[1].buffer_slot = 0;
+  attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+  attributes[1].offset = offsetof(ParkVertex, Normal);
+  attributes[2].location = 2;
+  attributes[2].buffer_slot = 0;
+  attributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+  attributes[2].offset = offsetof(ParkVertex, Color);
+  renderer.ParkPipeline =
+      createPipeline(renderer, "park.vert.spv", "park.frag.spv", attributes, 3, sizeof(ParkVertex));
+  return renderer.ParkPipeline != nullptr;
 }
 
 constexpr uint32_t TERRAIN_VERTICES_PER_SIDE = TERRAIN_CELLS_PER_SIDE + 1;
@@ -175,48 +207,72 @@ SDL_GPUBuffer *createBuffer(SDL_GPUDevice *device, SDL_GPUBufferUsageFlags usage
   return SDL_CreateGPUBuffer(device, &info);
 }
 
-bool createTerrainMesh(Renderer &renderer, float terrainSize) {
-  renderer.TerrainVertices =
-      createBuffer(renderer.Device, SDL_GPU_BUFFERUSAGE_VERTEX, TERRAIN_VERTEX_BYTES);
-  renderer.TerrainIndices =
-      createBuffer(renderer.Device, SDL_GPU_BUFFERUSAGE_INDEX, TERRAIN_INDEX_BYTES);
+// Creates a vertex and an index buffer and uploads their contents in one copy pass.
+bool uploadMesh(SDL_GPUDevice *device, const void *vertices, uint32_t vertexBytes,
+                const void *indices, uint32_t indexBytes, SDL_GPUBuffer *&vertexBuffer,
+                SDL_GPUBuffer *&indexBuffer) {
+  vertexBuffer = createBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, vertexBytes);
+  indexBuffer = createBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, indexBytes);
 
   SDL_GPUTransferBufferCreateInfo transferInfo = {};
   transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-  transferInfo.size = TERRAIN_VERTEX_BYTES + TERRAIN_INDEX_BYTES;
-  SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(renderer.Device, &transferInfo);
-  if (renderer.TerrainVertices == nullptr || renderer.TerrainIndices == nullptr ||
-      transfer == nullptr) {
-    logError("Cannot create terrain buffers");
-    SDL_ReleaseGPUTransferBuffer(renderer.Device, transfer);
+  transferInfo.size = vertexBytes + indexBytes;
+  SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
+  if (vertexBuffer == nullptr || indexBuffer == nullptr || transfer == nullptr) {
+    logError("Cannot create mesh buffers");
+    SDL_ReleaseGPUTransferBuffer(device, transfer);
     return false;
   }
 
-  auto *mapped = static_cast<uint8_t *>(SDL_MapGPUTransferBuffer(renderer.Device, transfer, false));
-  writeTerrainGeometry(terrainSize, reinterpret_cast<TerrainVertex *>(mapped),
-                       reinterpret_cast<uint32_t *>(mapped + TERRAIN_VERTEX_BYTES));
-  SDL_UnmapGPUTransferBuffer(renderer.Device, transfer);
+  auto *mapped = static_cast<uint8_t *>(SDL_MapGPUTransferBuffer(device, transfer, false));
+  if (mapped == nullptr) {
+    logError("Cannot map mesh transfer buffer");
+    SDL_ReleaseGPUTransferBuffer(device, transfer);
+    return false;
+  }
+  SDL_memcpy(mapped, vertices, vertexBytes);
+  SDL_memcpy(mapped + vertexBytes, indices, indexBytes);
+  SDL_UnmapGPUTransferBuffer(device, transfer);
 
-  SDL_GPUCommandBuffer *commands = SDL_AcquireGPUCommandBuffer(renderer.Device);
+  SDL_GPUCommandBuffer *commands = SDL_AcquireGPUCommandBuffer(device);
+  if (commands == nullptr) {
+    logError("Cannot acquire command buffer");
+    SDL_ReleaseGPUTransferBuffer(device, transfer);
+    return false;
+  }
   SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(commands);
 
   SDL_GPUTransferBufferLocation source = {};
   source.transfer_buffer = transfer;
   SDL_GPUBufferRegion destination = {};
-  destination.buffer = renderer.TerrainVertices;
-  destination.size = TERRAIN_VERTEX_BYTES;
+  destination.buffer = vertexBuffer;
+  destination.size = vertexBytes;
   SDL_UploadToGPUBuffer(copy, &source, &destination, false);
 
-  source.offset = TERRAIN_VERTEX_BYTES;
-  destination.buffer = renderer.TerrainIndices;
-  destination.size = TERRAIN_INDEX_BYTES;
+  source.offset = vertexBytes;
+  destination.buffer = indexBuffer;
+  destination.size = indexBytes;
   SDL_UploadToGPUBuffer(copy, &source, &destination, false);
 
   SDL_EndGPUCopyPass(copy);
   const bool submitted = SDL_SubmitGPUCommandBuffer(commands);
-  SDL_ReleaseGPUTransferBuffer(renderer.Device, transfer);
-  renderer.TerrainIndexCount = TERRAIN_INDEX_COUNT;
+  SDL_ReleaseGPUTransferBuffer(device, transfer);
+  if (!submitted) {
+    logError("Cannot submit mesh upload");
+  }
   return submitted;
+}
+
+bool createTerrainMesh(Renderer &renderer, float terrainSize) {
+  std::vector<TerrainVertex> vertices(TERRAIN_VERTEX_COUNT);
+  std::vector<uint32_t> indices(TERRAIN_INDEX_COUNT);
+  writeTerrainGeometry(terrainSize, vertices.data(), indices.data());
+  if (!uploadMesh(renderer.Device, vertices.data(), TERRAIN_VERTEX_BYTES, indices.data(),
+                  TERRAIN_INDEX_BYTES, renderer.TerrainVertices, renderer.TerrainIndices)) {
+    return false;
+  }
+  renderer.TerrainIndexCount = TERRAIN_INDEX_COUNT;
+  return true;
 }
 
 // (Re)creates the offscreen color and depth targets when the swapchain size changes.
@@ -318,7 +374,8 @@ bool createRenderer(Renderer &renderer, SDL_Window *window, float terrainSize) {
     return false;
   }
   renderer.DepthFormat = chooseDepthFormat(renderer.Device);
-  if (!createTerrainPipeline(renderer) || !createTerrainMesh(renderer, terrainSize)) {
+  if (!createTerrainPipeline(renderer) || !createParkPipeline(renderer) ||
+      !createTerrainMesh(renderer, terrainSize)) {
     return false;
   }
 
@@ -346,11 +403,34 @@ void destroyRenderer(Renderer &renderer) {
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.TerrainVertices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.TerrainIndices);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.TerrainPipeline);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkVertices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkIndices);
+  SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.ParkPipeline);
   if (renderer.Window != nullptr) {
     SDL_ReleaseWindowFromGPUDevice(renderer.Device, renderer.Window);
   }
   SDL_DestroyGPUDevice(renderer.Device);
   renderer = Renderer{};
+}
+
+bool setParkMesh(Renderer &renderer, const ParkMesh &mesh) {
+  // SDL_GPU defers the release until the GPU no longer uses the buffers.
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkVertices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkIndices);
+  renderer.ParkVertices = nullptr;
+  renderer.ParkIndices = nullptr;
+  renderer.ParkIndexCount = 0;
+  if (mesh.Indices.empty()) {
+    return true;
+  }
+  const auto vertexBytes = static_cast<uint32_t>(mesh.Vertices.size() * sizeof(ParkVertex));
+  const auto indexBytes = static_cast<uint32_t>(mesh.Indices.size() * sizeof(uint32_t));
+  if (!uploadMesh(renderer.Device, mesh.Vertices.data(), vertexBytes, mesh.Indices.data(),
+                  indexBytes, renderer.ParkVertices, renderer.ParkIndices)) {
+    return false;
+  }
+  renderer.ParkIndexCount = static_cast<uint32_t>(mesh.Indices.size());
+  return true;
 }
 
 void beginUiFrame() { ImGui_ImplSDLGPU3_NewFrame(); }
@@ -377,7 +457,8 @@ void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const C
 
   SDL_GPUDepthStencilTargetInfo depthTarget = {};
   depthTarget.texture = renderer.DepthTarget;
-  depthTarget.clear_depth = 1.0f;
+  // Reversed depth clears to the far plane, 0.
+  depthTarget.clear_depth = 0.0f;
   depthTarget.load_op = SDL_GPU_LOADOP_CLEAR;
   depthTarget.store_op = SDL_GPU_STOREOP_DONT_CARE;
   depthTarget.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
@@ -391,6 +472,16 @@ void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const C
   const SDL_GPUBufferBinding indexBinding = {renderer.TerrainIndices, 0};
   SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
   SDL_DrawGPUIndexedPrimitives(pass, renderer.TerrainIndexCount, 1, 0, 0, 0);
+
+  // The camera uniforms pushed before the pass serve this pipeline too.
+  if (renderer.ParkIndexCount > 0) {
+    SDL_BindGPUGraphicsPipeline(pass, renderer.ParkPipeline);
+    const SDL_GPUBufferBinding parkVertexBinding = {renderer.ParkVertices, 0};
+    SDL_BindGPUVertexBuffers(pass, 0, &parkVertexBinding, 1);
+    const SDL_GPUBufferBinding parkIndexBinding = {renderer.ParkIndices, 0};
+    SDL_BindGPUIndexBuffer(pass, &parkIndexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    SDL_DrawGPUIndexedPrimitives(pass, renderer.ParkIndexCount, 1, 0, 0, 0);
+  }
   SDL_EndGPURenderPass(pass);
 }
 
