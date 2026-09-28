@@ -100,6 +100,32 @@ TEST_CASE("A release gives exactly the tentative edit of the moment before it wh
     pressPointer(tool, world);
     checkReleaseGivesGhost(tool, world, true);
   }
+  SECTION("GuestPath, accepted, finished by clicking the last point again") {
+    ToolState tool = toolOf(ToolKind::GuestPath);
+    for (const ParkPoint at :
+         {ParkPoint{60.0, 60.0}, ParkPoint{80.0, 60.0}, ParkPoint{80.0, 60.0}}) {
+      movePointer(tool, at);
+      pressPointer(tool, world);
+    }
+    checkReleaseGivesGhost(tool, world, true);
+  }
+  SECTION("BackstagePath, refused through a shop") {
+    ToolState tool = toolOf(ToolKind::BackstagePath);
+    for (const ParkPoint at : {ParkPoint{30.0, 0.0}, ParkPoint{50.0, 0.0}, ParkPoint{50.0, 0.0}}) {
+      movePointer(tool, at);
+      pressPointer(tool, world);
+    }
+    checkReleaseGivesGhost(tool, world, false);
+  }
+  SECTION("GuestPath, refused with a point off the park's square") {
+    ToolState tool = toolOf(ToolKind::GuestPath);
+    for (const ParkPoint at :
+         {ParkPoint{100.0, 100.0}, ParkPoint{130.0, 100.0}, ParkPoint{130.0, 100.0}}) {
+      movePointer(tool, at);
+      pressPointer(tool, world);
+    }
+    checkReleaseGivesGhost(tool, world, false);
+  }
 }
 
 TEST_CASE("A release gives none when no press before it took hold, even while a ghost shows") {
@@ -124,6 +150,14 @@ TEST_CASE("A release gives none when no press before it took hold, even while a 
     movePointer(tool, ParkPoint{80.0, 80.0});
     pressPointer(tool, world);
     movePointer(tool, ParkPoint{47.0, 0.0});
+    CHECK_FALSE(releasePointer(tool, world).has_value());
+  }
+  SECTION("GuestPath, pressed to add a point") {
+    ToolState tool = toolOf(ToolKind::GuestPath);
+    movePointer(tool, ParkPoint{60.0, 60.0});
+    pressPointer(tool, world);
+    movePointer(tool, ParkPoint{80.0, 60.0});
+    REQUIRE(tentativeEdit(tool, world).has_value());
     CHECK_FALSE(releasePointer(tool, world).has_value());
   }
   SECTION("PlaceShop, never pressed") {
@@ -349,8 +383,21 @@ TEST_CASE("Driving every tool leaves the world's save and hash unchanged") {
     static_cast<void>(highlightedEntity(tool, world));
     static_cast<void>(releasePointer(tool, world));
   }
+  // The path tools draw a snapped point and an open one, and finish on the open one.
+  for (const ToolKind kind : {ToolKind::GuestPath, ToolKind::BackstagePath}) {
+    ToolState tool = toolOf(kind);
+    for (const ParkPoint at :
+         {ParkPoint{-40.5, 1.5}, ParkPoint{60.0, 60.0}, ParkPoint{60.0, 60.0}}) {
+      movePointer(tool, at);
+      pressPointer(tool, world);
+      static_cast<void>(tentativeEdit(tool, world));
+    }
+    static_cast<void>(highlightedEntity(tool, world));
+    static_cast<void>(releasePointer(tool, world));
+  }
   static_cast<void>(boxAt(world, {47.0, 0.0}));
   static_cast<void>(pathAt(world, {-50.0, 1.0}));
+  static_cast<void>(snapToPath(world, PathKind::Guest, {-50.0, 1.0}));
 
   CHECK(saveWorld(world) == save);
   CHECK(hashWorld(world) == hash);

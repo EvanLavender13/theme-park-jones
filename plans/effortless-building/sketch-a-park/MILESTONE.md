@@ -59,6 +59,7 @@ The capability leaves these to this milestone. Playing adjusts them.
 - Path widths: guest 3 m, backstage 2 m.
 - Footprints: shop 8 m wide by 6 m deep, depot 12 m by 8 m, entrance 10 m by 3 m.
 - Snapping reach: 2 m from a path's ground line.
+- Finishing reach: 1 m from a path's last drawn point, where a click finishes the path.
 - The template: the entrance at the middle of the edge at +z, facing into the park, and a straight guest path of 20 m from just in front of it.
 
 ## Deepening candidates
@@ -84,5 +85,6 @@ The capability leaves these to this milestone. Playing adjusts them.
 - SDL3's asynchronous file dialogs open and save park files, and their callback only hands the path to the main loop.
 - Tool logic lives in a library driven by ground positions, so the ghost-equals-commit property is tested.
 - A highlight lies exactly on what it marks, so the translucent pass tests depth greater-or-equal, and park.vert's position is invariant so both pipelines agree on depth.
+- A click on a path's last drawn point finishes it, so a double-click does, and the ghost while the cursor rests there is the path that commits. The path tool snaps every point it draws onto the nearest point of a same-kind ground line.
 
 Depth is in RESEARCH.md.

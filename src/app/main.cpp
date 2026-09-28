@@ -270,9 +270,9 @@ void drawPanels(const tpj::World &world, const tpj::OrbitCamera &camera, tpj::To
   stats.Focus = camera.Focus;
   stats.Distance = camera.Distance;
   tpj::drawDebugPanel(stats);
-  tpj::ToolKind kind = tool.Kind;
-  if (tpj::drawToolPanel(kind)) {
-    tpj::selectTool(tool, kind);
+  if (const std::optional<tpj::ToolKind> kind =
+          tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty())) {
+    tpj::selectTool(tool, *kind);
   }
 }
 
