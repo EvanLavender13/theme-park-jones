@@ -73,7 +73,11 @@ struct FlowPacket {
 
   auto operator<=>(const FlowPacket &) const = default;
 };
+```
 
+Implementation fix: clang-tidy's readability-implicit-bool-conversion rejects the defaulted <=> because it compares Returning as an int. FlowPacket instead defaults operator== and defines operator<=> out of line, comparing a tuple of the fields in order with Returning as 0 or 1.
+
+```cpp
 template <typename Visitor> void visitFields(Visitor &visitor, FlowPacket &packet) {
   visitor.field("arrival", packet.Arrival);
   visitor.field("from", packet.From);

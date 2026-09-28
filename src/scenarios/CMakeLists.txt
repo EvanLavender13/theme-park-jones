@@ -5,6 +5,7 @@ add_library(tpj_scenarios_lib STATIC
     beacons.cpp
     runner.cpp
     scenarios.cpp
+    stalls.cpp
     walkers.cpp)
 target_include_directories(tpj_scenarios_lib PUBLIC ${CMAKE_SOURCE_DIR}/src PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(tpj_scenarios_lib PUBLIC tpj_sim)
