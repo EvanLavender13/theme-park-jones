@@ -34,7 +34,7 @@ Pitch stays between about 10 and 85 degrees, distance between 4 and 400 m, and t
 
 ## Tooling UI
 
-A Debug panel shows the frame rate, the simulation tick, and the camera focus and distance, and a Graph checkbox, off at start unless --graph is given. While it is checked, each frame, after the panels are built, the app draws buildGraphOverlay for the world, the frame's CameraView, and ImGui's display size on ImGui's background draw list, which lies over the scene and behind every panel: each line in graphColor of its kind, GRAPH_LINE_THICKNESS thick, and then each node as a filled circle of GRAPH_NODE_RADIUS in GRAPH_NODE_COLOR (render/SPEC.md). ImGui docking is enabled.
+A Debug panel shows the frame rate, the simulation tick, and the camera focus and distance, and a Graph checkbox, off at start unless --graph is given. While it is checked, each frame, after the panels are built, the app draws buildGraphOverlay for the world, the frame's CameraView, and ImGui's display size on ImGui's background draw list, which lies over the scene and behind every panel: each line in its color, GRAPH_LINE_THICKNESS thick, and then each node as a filled circle of its radius and color (render/SPEC.md). ImGui docking is enabled.
 
 ## Command line
 

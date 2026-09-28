@@ -1,4 +1,5 @@
 #include "support/park_worlds.h"
+#include "support/same_networks.h"
 
 #include "sim/command_queue.h"
 #include "sim/draw.h"
@@ -16,7 +17,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
+#include <optional>
+#include <set>
 #include <stdint.h>
 #include <string>
 #include <vector>
@@ -24,7 +28,7 @@
 namespace tpj {
 namespace {
 
-using test::sameBits;
+using test::sameNetworks;
 
 // Keyed draws, so a failing sequence is the same on every build and in every run.
 class Draws {
@@ -92,61 +96,91 @@ Pose posed(Draws &draws) {
               draws.between(-1.0, 1.0), draws.between(-1.0, 1.0)};
 }
 
+// A box beside a line already drawn, its front, or a shop's back, facing the line across a gap,
+// so its door lies sometimes within CONNECTION_REACH of the line and sometimes beyond it.
+AddBox besideLine(Draws &draws, const std::vector<ParkPath> &paths) {
+  const ParkPath &path = paths[draws.below(paths.size())];
+  const std::vector<CarrierPoint> line = groundLine(path.Points);
+  const auto kind = static_cast<BoxKind>(draws.below(2));
+  if (line.size() < 2) {
+    return AddBox{kind, posed(draws)};
+  }
+  const std::size_t index = draws.below(line.size() - 1);
+  const CarrierPoint &a = line[index];
+  const CarrierPoint &b = line[index + 1];
+  const double length = std::sqrt(((b.X - a.X) * (b.X - a.X)) + ((b.Z - a.Z) * (b.Z - a.Z)));
+  const double side = draws.oneIn(2) ? 1.0 : -1.0;
+  const double normalX = side * -(b.Z - a.Z) / length;
+  const double normalZ = side * (b.X - a.X) / length;
+  const double door = (pathWidth(path.Kind) / 2.0) + draws.between(0.05, 3.0);
+  const double center = door + (boxSize(kind).Depth / 2.0);
+  const bool backToLine = kind == BoxKind::Shop && draws.oneIn(2);
+  const double facing = backToLine ? 1.0 : -1.0;
+  return AddBox{kind, Pose{a.X + (center * normalX), a.Z + (center * normalZ), facing * normalX,
+                           facing * normalZ}};
+}
+
 // One park edit: mostly adding and deleting paths, which the networks follow, with some boxes,
-// which block paths.
+// which block paths and connect to them, and small moves, which keep a box's connectors.
 ParkEdit edit(Draws &draws, const World &world) {
   const std::vector<ParkPath> paths = parkPaths(world);
   const std::vector<ParkBox> boxes = parkBoxes(world);
-  const uint64_t choice = draws.below(10);
-  if (choice < 5) {
+  const uint64_t choice = draws.below(12);
+  if (choice < 4) {
     return addPath(draws, paths);
   }
-  if (choice < 8 && !paths.empty()) {
+  if (choice < 6 && !paths.empty()) {
     return DeletePath{paths[draws.below(paths.size())].Key};
   }
-  if (choice == 8 || boxes.empty()) {
+  if (choice < 9 && choice > 6 && !paths.empty()) {
+    return besideLine(draws, paths);
+  }
+  if (choice < 9 || boxes.empty()) {
     return AddBox{static_cast<BoxKind>(draws.below(2)), posed(draws)};
   }
-  const EntityKey box = boxes[draws.below(boxes.size())].Key;
-  if (draws.oneIn(2)) {
-    return MoveBox{box, posed(draws)};
+  const ParkBox &box = boxes[draws.below(boxes.size())];
+  switch (draws.below(4)) {
+  case 0:
+    return MoveBox{box.Key, posed(draws)};
+  case 1:
+    return DeleteBox{box.Key};
+  default:
+    return MoveBox{box.Key,
+                   Pose{box.At.X + draws.between(-1.0, 1.0), box.At.Z + draws.between(-1.0, 1.0),
+                        box.At.FacingX, box.At.FacingZ}};
   }
-  return DeleteBox{box};
 }
 
-// Networks are equal when their carriers, stops, and anchors are, doubles bit for bit.
-bool sameNetwork(const Network &left, const Network &right) {
-  if (left.nodeCount() != right.nodeCount() || left.carriers().size() != right.carriers().size()) {
-    return false;
-  }
-  for (std::size_t index = 0; index < left.carriers().size(); ++index) {
-    const Carrier &a = left.carriers()[index];
-    const Carrier &b = right.carriers()[index];
-    const bool samePoints =
-        std::ranges::equal(a.Points, b.Points, [](const CarrierPoint &p, const CarrierPoint &q) {
-          return sameBits(p.X, q.X) && sameBits(p.Z, q.Z) && sameBits(p.Distance, q.Distance);
-        });
-    const bool sameStops =
-        std::ranges::equal(a.Stops, b.Stops, [](const CarrierStop &p, const CarrierStop &q) {
-          return sameBits(p.Distance, q.Distance) && p.Node == q.Node;
-        });
-    if (a.Key != b.Key || !samePoints || !sameStops) {
-      return false;
-    }
-  }
-  for (uint32_t node = 0; node < left.nodeCount(); ++node) {
-    if (left.nodeAnchor(node) != right.nodeAnchor(node)) {
-      return false;
-    }
-  }
-  return true;
+const Carrier *findCarrier(const Network &network, EntityKey key) {
+  const auto found = std::ranges::find_if(
+      network.carriers(), [key](const Carrier &carrier) { return carrier.Key == key; });
+  return found == network.carriers().end() ? nullptr : &*found;
 }
 
-bool sameNetworks(const World &left, const World &right) {
-  return sameNetwork(parkNetwork(left, PathKind::Guest), parkNetwork(right, PathKind::Guest)) &&
-         sameNetwork(parkNetwork(left, PathKind::Backstage),
-                     parkNetwork(right, PathKind::Backstage));
-}
+// Whether the worlds a sequence reached had a box's door with a connector, and a door serving a
+// kind with none.
+struct DoorCoverage {
+  bool ConnectedBox = false;
+  bool Unconnected = false;
+
+  void note(const World &world) {
+    const auto door = [&](EntityKey entity, Face face, PathKind kind) {
+      const bool connected =
+          findCarrier(parkNetwork(world, kind), connectorKey(entity, face)) != nullptr;
+      Unconnected = Unconnected || !connected;
+      return connected;
+    };
+    for (const ParkEntrance &entrance : parkEntrances(world)) {
+      door(entrance.Key, Face::Front, PathKind::Guest);
+    }
+    for (const ParkBox &box : parkBoxes(world)) {
+      const bool front = door(box.Key, Face::Front,
+                              box.Kind == BoxKind::Shop ? PathKind::Guest : PathKind::Backstage);
+      const bool back = box.Kind == BoxKind::Shop && door(box.Key, Face::Back, PathKind::Backstage);
+      ConnectedBox = ConnectedBox || front || back;
+    }
+  }
+};
 
 // Whether some node is shared by two stops, so the sequence reached meetings. Every node has at
 // least one stop, so more stops than nodes means some node has two.
@@ -160,11 +194,12 @@ bool hasJunction(const Network &network) {
 
 constexpr int CYCLES = 60;
 
-TEST_CASE("Every world a random edit sequence reaches has the networks of its save loaded and "
-          "resolved") {
+TEST_CASE("Every world a random edit sequence reaches has the networks, anchors included, of its "
+          "save loaded and resolved") {
   Draws draws(21);
   World world = makeNewPark(5);
   bool reachedJunction = false;
+  DoorCoverage doors;
   for (int cycle = 0; cycle < CYCLES; ++cycle) {
     INFO("cycle " << cycle);
     CommandQueue queue;
@@ -176,14 +211,19 @@ TEST_CASE("Every world a random edit sequence reaches has the networks of its sa
     REQUIRE(sameNetworks(loaded, world));
     reachedJunction = reachedJunction || hasJunction(parkNetwork(world, PathKind::Guest)) ||
                       hasJunction(parkNetwork(world, PathKind::Backstage));
+    doors.note(world);
   }
   CHECK(reachedJunction);
+  CHECK(doors.ConnectedBox);
+  CHECK(doors.Unconnected);
 }
 
-TEST_CASE("A candidate made with an edit has the networks of the world after a cycle applies it") {
+TEST_CASE("A candidate made with an edit has the networks, anchors included, of the world after a "
+          "cycle applies it") {
   Draws draws(22);
   World world = makeNewPark(5);
   bool reachedJunction = false;
+  DoorCoverage doors;
   for (int cycle = 0; cycle < CYCLES; ++cycle) {
     INFO("cycle " << cycle);
     CommandQueue queue;
@@ -194,19 +234,25 @@ TEST_CASE("A candidate made with an edit has the networks of the world after a c
     REQUIRE(sameNetworks(candidate, world));
     reachedJunction = reachedJunction || hasJunction(parkNetwork(world, PathKind::Guest)) ||
                       hasJunction(parkNetwork(world, PathKind::Backstage));
+    doors.note(world);
   }
   CHECK(reachedJunction);
+  CHECK(doors.ConnectedBox);
+  CHECK(doors.Unconnected);
 }
 
 TEST_CASE("Every world a random edit sequence reaches resolves without throwing, including worlds "
-          "with no paths, a lone path, or paths of one kind only") {
+          "with no paths, a lone path, paths of one kind only, a connected box, and an unconnected "
+          "door") {
   Draws draws(28);
   World world = test::worldOf({});
   bool reachedNone = false;
   bool reachedLone = false;
   bool reachedOneKind = false;
   bool reachedBothKinds = false;
+  DoorCoverage doors;
   const auto note = [&](const World &resolved) {
+    doors.note(resolved);
     const std::vector<ParkPath> paths = parkPaths(resolved);
     const auto guests = std::ranges::count_if(
         paths, [](const ParkPath &path) { return path.Kind == PathKind::Guest; });
@@ -230,6 +276,74 @@ TEST_CASE("Every world a random edit sequence reaches resolves without throwing,
   CHECK(reachedLone);
   CHECK(reachedOneKind);
   CHECK(reachedBothKinds);
+  CHECK(doors.ConnectedBox);
+  CHECK(doors.Unconnected);
+}
+
+bool sameDistances(const std::vector<CarrierStop> &left, const std::vector<CarrierStop> &right) {
+  return std::ranges::equal(left, right, [](const CarrierStop &a, const CarrierStop &b) {
+    return test::sameBits(a.Distance, b.Distance);
+  });
+}
+
+TEST_CASE("Across every cycle of a random edit sequence, carryOver keeps a place on a path in both "
+          "networks, carries a place on a connector in both to that connector, and retires a place "
+          "on a carrier gone") {
+  Draws draws(24);
+  World world = makeNewPark(5);
+  resolveWorld(world);
+  bool reachedSplitPath = false;
+  bool reachedMovedConnector = false;
+  bool reachedGone = false;
+  for (int cycle = 0; cycle < CYCLES; ++cycle) {
+    INFO("cycle " << cycle);
+    std::set<EntityKey> paths;
+    for (const ParkPath &path : parkPaths(world)) {
+      paths.insert(path.Key);
+    }
+    const Network guest = parkNetwork(world, PathKind::Guest);
+    const Network backstage = parkNetwork(world, PathKind::Backstage);
+    CommandQueue queue;
+    queueEdit(queue, edit(draws, world));
+    stepWorld(world, queue);
+
+    for (const Network *before : {&guest, &backstage}) {
+      const Network &after =
+          parkNetwork(world, before == &guest ? PathKind::Guest : PathKind::Backstage);
+      for (const Carrier &carrier : before->carriers()) {
+        INFO("carrier " << static_cast<uint64_t>(carrier.Key));
+        const Carrier *later = findCarrier(after, carrier.Key);
+        const bool isPath = paths.contains(carrier.Key);
+        if (later == nullptr) {
+          reachedGone = true;
+        } else if (isPath) {
+          reachedSplitPath = reachedSplitPath || !sameDistances(carrier.Stops, later->Stops);
+        } else {
+          reachedMovedConnector = reachedMovedConnector || carrier.Points != later->Points;
+        }
+        // The carrier's two ends, and a place inside it that a new node may split off.
+        const double length = carrier.Points.back().Distance;
+        for (const double distance : {0.0, length / 2.0, length}) {
+          INFO("distance " << distance);
+          const Place place{.Carrier = carrier.Key, .Distance = distance};
+          const std::optional<Place> carried = carryOver(place, *before, after);
+          if (later == nullptr) {
+            CHECK_FALSE(carried.has_value());
+          } else if (isPath) {
+            CHECK(carried == std::optional<Place>{place});
+          } else {
+            REQUIRE(carried.has_value());
+            const Place moved = carried.value_or(Place{});
+            CHECK(moved.Carrier == carrier.Key);
+            CHECK(after.resolve(moved).has_value());
+          }
+        }
+      }
+    }
+  }
+  CHECK(reachedSplitPath);
+  CHECK(reachedMovedConnector);
+  CHECK(reachedGone);
 }
 
 } // namespace
