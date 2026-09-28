@@ -1,0 +1,30 @@
+#ifndef TPJ_APP_PARK_FILE_H
+#define TPJ_APP_PARK_FILE_H
+
+#include "sim/world.h"
+
+#include <optional>
+#include <string>
+#include <string_view>
+
+namespace tpj {
+
+// A park file's world, or why there is none.
+struct OpenedPark {
+  // Loaded with makeParkSchema and resolved.
+  std::optional<World> Park;
+  // Empty when Park holds a world.
+  std::string Error;
+};
+
+// Reads the park file at the path, loads it, and resolves it. See app/SPEC.md.
+OpenedPark openParkFile(const char *path);
+// Writes the world's save to the path, replacing any file there. Returns an empty message, or why
+// it could not.
+std::string saveParkFile(const World &world, const char *path);
+// The path, followed by .park when its file name has no extension.
+std::string withParkExtension(std::string_view path);
+
+} // namespace tpj
+
+#endif

@@ -20,25 +20,39 @@ constexpr ToolChoice TOOL_CHOICES[] = {{"Look", ToolKind::None},
 
 } // namespace
 
-std::optional<ToolKind> drawToolPanel(ToolKind current, bool drawing) {
-  std::optional<ToolKind> chosen;
+ToolPanelChoice drawToolPanel(ToolKind current, bool drawing, bool dialogShowing) {
+  ToolPanelChoice choice;
   ImGui::SetNextWindowPos(ImVec2(12.0f, 140.0f), ImGuiCond_FirstUseEver);
   if (ImGui::Begin("Tools", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-    for (const ToolChoice &choice : TOOL_CHOICES) {
-      if (ImGui::RadioButton(choice.Label, current == choice.Kind) && current != choice.Kind) {
-        chosen = choice.Kind;
+    ImGui::BeginDisabled(dialogShowing);
+    if (ImGui::Button("New park")) {
+      choice.Park = ParkAction::New;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Open park")) {
+      choice.Park = ParkAction::Open;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Save park")) {
+      choice.Park = ParkAction::Save;
+    }
+    ImGui::EndDisabled();
+    ImGui::Separator();
+    for (const ToolChoice &option : TOOL_CHOICES) {
+      if (ImGui::RadioButton(option.Label, current == option.Kind) && current != option.Kind) {
+        choice.Tool = option.Kind;
       }
     }
     if (drawing) {
       ImGui::Separator();
       ImGui::TextUnformatted("Click the last point again to finish.");
       if (ImGui::Button("Cancel path")) {
-        chosen = current;
+        choice.Tool = current;
       }
     }
   }
   ImGui::End();
-  return chosen;
+  return choice;
 }
 
 } // namespace tpj

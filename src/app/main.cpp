@@ -1,5 +1,6 @@
 #include "app/debug_panel.h"
 #include "app/orbit_camera.h"
+#include "app/park_file.h"
 #include "app/tool_panel.h"
 #include "core/profile.h"
 #include "render/park_mesh.h"
@@ -21,11 +22,13 @@
 
 #include <charconv>
 #include <exception>
+#include <mutex>
 #include <optional>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -87,31 +90,27 @@ bool parseOptions(int argc, char **argv, Options &options) {
   return true;
 }
 
+// A new park, resolved.
+tpj::World resolvedNewPark() {
+  tpj::World world = tpj::makeNewPark(1);
+  tpj::resolveWorld(world);
+  return world;
+}
+
 // The new park, or the park file, resolved and stepped the requested ticks. None, after a message
 // on standard error, when the file cannot be read or loaded.
 std::optional<tpj::World> startingWorld(const Options &options) {
   std::optional<tpj::World> world;
   if (options.ParkPath == nullptr) {
-    world = tpj::makeNewPark(1);
+    world = resolvedNewPark();
   } else {
-    size_t size = 0;
-    void *text = SDL_LoadFile(options.ParkPath, &size);
-    if (text == nullptr) {
-      (void)fprintf(stderr, "Cannot read %s: %s\n", options.ParkPath, SDL_GetError());
+    tpj::OpenedPark opened = tpj::openParkFile(options.ParkPath);
+    if (!opened.Park) {
+      (void)fprintf(stderr, "%s\n", opened.Error.c_str());
       return std::nullopt;
     }
-    try {
-      world = tpj::loadWorld(tpj::makeParkSchema(),
-                             std::string_view(static_cast<const char *>(text), size));
-    } catch (const tpj::LoadError &error) {
-      (void)fprintf(stderr, "Cannot load %s: %s\n", options.ParkPath, error.what());
-    }
-    SDL_free(text);
-    if (!world) {
-      return std::nullopt;
-    }
+    world = std::move(opened.Park);
   }
-  tpj::resolveWorld(*world);
   for (uint64_t tick = 0; tick < options.Ticks; ++tick) {
     tpj::stepWorld(*world);
   }
@@ -140,6 +139,153 @@ struct DrawnGhost {
 
   bool operator==(const DrawnGhost &) const = default;
 };
+
+// What the park buttons and the file dialogs ask of the main loop, handed over under a lock, since
+// a dialog's callback may run on another thread.
+struct FileRequests {
+  std::mutex Lock;
+  bool DialogShowing = false;
+  tpj::ParkAction Action = tpj::ParkAction::None;
+  std::string Path;
+};
+
+// One request, taken by the main loop.
+struct FileRequest {
+  tpj::ParkAction Action = tpj::ParkAction::None;
+  std::string Path;
+};
+
+constexpr SDL_DialogFileFilter PARK_FILTERS[] = {{"Park files", "park"}};
+
+// The parks folder beside the executable, where the dialogs start. The build links it to the
+// source tree's. It ends with a separator, since SDL's Windows dialog takes what follows the last
+// one as a file name.
+const char *parksFolder() {
+  static const std::string folder = [] {
+    const char *base = SDL_GetBasePath();
+    return std::string(base != nullptr ? base : "") + "parks/";
+  }();
+  return folder.c_str();
+}
+
+// Lives for the whole program, since a dialog left open at quit may still call back.
+FileRequests &fileRequests() {
+  static FileRequests requests;
+  return requests;
+}
+
+// A dialog's callback: hands the first chosen path to the main loop, and nothing when cancelled.
+void handOver(void *userdata, const char *const *filelist, tpj::ParkAction action) {
+  auto &requests = *static_cast<FileRequests *>(userdata);
+  if (filelist == nullptr) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "File dialog: %s", SDL_GetError());
+  }
+  const std::scoped_lock lock(requests.Lock);
+  requests.DialogShowing = false;
+  if (filelist != nullptr && filelist[0] != nullptr) {
+    requests.Action = action;
+    requests.Path = filelist[0];
+  }
+}
+
+void SDLCALL onOpenChosen(void *userdata, const char *const *filelist, int /*filter*/) {
+  handOver(userdata, filelist, tpj::ParkAction::Open);
+}
+
+void SDLCALL onSaveChosen(void *userdata, const char *const *filelist, int /*filter*/) {
+  handOver(userdata, filelist, tpj::ParkAction::Save);
+}
+
+bool dialogShowing() {
+  FileRequests &requests = fileRequests();
+  const std::scoped_lock lock(requests.Lock);
+  return requests.DialogShowing;
+}
+
+// Acts on a park button: New waits for the next frame, and Open and Save show their dialog. Does
+// nothing while a dialog is showing.
+void startParkAction(tpj::ParkAction action, SDL_Window *window) {
+  if (action == tpj::ParkAction::None) {
+    return;
+  }
+  FileRequests &requests = fileRequests();
+  {
+    const std::scoped_lock lock(requests.Lock);
+    if (requests.DialogShowing) {
+      return;
+    }
+    if (action == tpj::ParkAction::New) {
+      requests.Action = action;
+      requests.Path.clear();
+      return;
+    }
+    requests.DialogShowing = true;
+  }
+  // The callback may run before these return, so the lock is not held while they run.
+  if (action == tpj::ParkAction::Open) {
+    SDL_ShowOpenFileDialog(onOpenChosen, &requests, window, PARK_FILTERS, 1, parksFolder(), false);
+  } else {
+    SDL_ShowSaveFileDialog(onSaveChosen, &requests, window, PARK_FILTERS, 1, parksFolder());
+  }
+}
+
+FileRequest takeFileRequest() {
+  FileRequests &requests = fileRequests();
+  const std::scoped_lock lock(requests.Lock);
+  FileRequest request{requests.Action, std::move(requests.Path)};
+  requests.Action = tpj::ParkAction::None;
+  requests.Path.clear();
+  return request;
+}
+
+void reportFileError(SDL_Window *window, const std::string &message) {
+  SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", message.c_str());
+  (void)SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Theme Park Jones", message.c_str(), window);
+}
+
+// Asks whether to replace the file at the path. True when the player chooses Replace.
+bool confirmReplace(SDL_Window *window, const std::string &path) {
+  const std::string message = path + " already exists. Replace it?";
+  const SDL_MessageBoxButtonData buttons[] = {
+      {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Cancel"},
+      {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Replace"}};
+  const SDL_MessageBoxData data{
+      SDL_MESSAGEBOX_WARNING, window, "Theme Park Jones", message.c_str(), 2, buttons, nullptr};
+  int chosen = 0;
+  return SDL_ShowMessageBox(&data, &chosen) && chosen == 1;
+}
+
+// Saves, or replaces the world, as the request asks. Returns true when it replaced the world. A
+// save whose extension was added asks before replacing a file, since the dialog asked only about
+// the name as typed.
+bool useFileRequest(SDL_Window *window, const FileRequest &request, tpj::World &world) {
+  if (request.Action == tpj::ParkAction::Save) {
+    const std::string path = tpj::withParkExtension(request.Path);
+    if (path != request.Path && SDL_GetPathInfo(path.c_str(), nullptr) &&
+        !confirmReplace(window, path)) {
+      return false;
+    }
+    const std::string error = tpj::saveParkFile(world, path.c_str());
+    if (!error.empty()) {
+      reportFileError(window, error);
+    }
+    return false;
+  }
+  if (request.Action == tpj::ParkAction::New) {
+    world = resolvedNewPark();
+    return true;
+  }
+  if (request.Action == tpj::ParkAction::Open) {
+    tpj::OpenedPark opened = tpj::openParkFile(request.Path.c_str());
+    if (!opened.Park) {
+      reportFileError(window, opened.Error);
+      return false;
+    }
+    world = std::move(*opened.Park);
+    return true;
+  }
+  return false;
+}
 
 // Rebuilds the park mesh when the world's intent differs from what was last drawn, framing the
 // camera on the first one. Returns false if the upload failed, and sets rebuilt when it built a
@@ -263,17 +409,21 @@ void useButtons(tpj::ToolState &tool, const tpj::World &world, tpj::CommandQueue
   }
 }
 
-// Builds the Debug and Tools panels, selecting the tool the player chose.
-void drawPanels(const tpj::World &world, const tpj::OrbitCamera &camera, tpj::ToolState &tool) {
+// Builds the Debug and Tools panels, selecting the tool the player chose and starting the park
+// action they pressed.
+void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
+                tpj::ToolState &tool) {
   tpj::DebugStats stats;
   stats.SimTick = world.Tick;
   stats.Focus = camera.Focus;
   stats.Distance = camera.Distance;
   tpj::drawDebugPanel(stats);
-  if (const std::optional<tpj::ToolKind> kind =
-          tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty())) {
-    tpj::selectTool(tool, *kind);
+  const tpj::ToolPanelChoice choice =
+      tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty(), dialogShowing());
+  if (choice.Tool) {
+    tpj::selectTool(tool, *choice.Tool);
   }
+  startParkAction(choice.Park, window);
 }
 
 // Runs the main loop until quit or the frame limit. Returns false if rendering failed.
@@ -291,6 +441,11 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
     PointerButtons buttons;
     if (!gatherInput(input, buttons)) {
       return true;
+    }
+    if (useFileRequest(renderer.Window, takeFileRequest(), world)) {
+      commands.clear();
+      tpj::selectTool(tool, tool.Kind);
+      drawn.reset();
     }
 
     const uint64_t counter = SDL_GetPerformanceCounter();
@@ -327,7 +482,7 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
     tpj::beginUiFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
-    drawPanels(world, camera, tool);
+    drawPanels(renderer.Window, world, camera, tool);
     ImGui::Render();
 
     const bool lastFrame = options.FrameLimit > 0 && frame >= options.FrameLimit;

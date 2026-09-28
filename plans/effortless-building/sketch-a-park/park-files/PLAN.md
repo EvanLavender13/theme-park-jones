@@ -456,6 +456,24 @@ and change the drawPanels call to `drawPanels(renderer.Window, world, camera, to
 Run: `cmake --build --preset linux-debug --target tpj_app 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"`
 Expected: no output.
 
+### Task 7a: Start the dialogs in the linked parks folder
+
+Added after implementation at Evan's request, so saved parks survive a clean build, following SteelJones' resources link.
+
+Files:
+- Create: `parks/.gitkeep`
+- Modify: `src/app/CMakeLists.txt`
+- Modify: `src/app/main.cpp`
+
+Step 1: Create the empty file parks/.gitkeep.
+
+Step 2: At the end of src/app/CMakeLists.txt, link `${CMAKE_BINARY_DIR}/parks` to `${CMAKE_SOURCE_DIR}/parks` when it does not exist: on WIN32 with `cmd /c mklink /J` on the native paths, failing the configure if it fails, and elsewhere with `file(CREATE_LINK ... SYMBOLIC)`.
+
+Step 3: In src/app/main.cpp, give both dialogs the default location parksFolder(), SDL_GetBasePath() followed by parks, computed once.
+
+Run: `cmake --build --preset linux-debug --target tpj_app 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; ls -la build/linux-debug/parks`
+Expected: no warnings, and a link to the repository's parks directory.
+
 ### Task 8: Verify
 
 Step 1: Run: `git ls-files -m -o --exclude-standard -- '*.h' '*.cpp' | xargs -r clang-format -i`

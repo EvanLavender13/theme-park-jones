@@ -11,7 +11,7 @@ The player starts a new park, opens a park file, and saves one from the Tools pa
 3. openParkFile of a path it cannot read gives no world and a message naming the path. Of a file whose text loadWorld refuses, it gives no world and a message naming the path and holding the LoadError's message.
 4. saveParkFile to a path it cannot write gives a message naming the path.
 5. withParkExtension gives a path unchanged when its file name, the part after its last / or \, holds a '.', and otherwise the path followed by .park.
-6. In the running app, New park, Open park, and Save park in the Tools panel work: new and open replace the park and reframe the camera, a tool's hold or half-drawn path is dropped, a cancelled dialog changes nothing, saving over an existing park under a name typed without .park asks first, a failed open or save shows a message box and leaves the park, and a park saved from the app and reopened is unchanged. Checked by hand (manual).
+6. In the running app, New park, Open park, and Save park in the Tools panel work: the dialogs start in the repository's parks folder, new and open replace the park and reframe the camera, a tool's hold or half-drawn path is dropped, a cancelled dialog changes nothing, saving over an existing park under a name typed without .park asks first, a failed open or save shows a message box and leaves the park, and a park saved from the app and reopened is unchanged. Checked by hand (manual).
 
 ## Medium
 
@@ -35,7 +35,7 @@ src/app/SPEC.md, after "## Tools", a new section:
 
     The library tpj_park_files, in park_file.h, reads and writes park files apart from the window, so the app's tests call it. openParkFile reads a file whole, loads its text with makeParkSchema, and resolves the world. When the file cannot be read it gives no world and the message `Cannot read <path>: <reason>`, with SDL's reason, and when loadWorld refuses the text, `Cannot load <path>: <message>`, with the LoadError's message. saveParkFile writes saveWorld's text to a path, replacing any file there, and gives an empty message, or `Cannot save <path>: <reason>` when it cannot. withParkExtension gives a path unchanged when its file name, the part after its last / or \, holds a '.', and otherwise the path followed by .park.
 
-    The Tools panel has New park, Open park, and Save park buttons, which do nothing while a dialog is showing. Open park and Save park show SDL's open and save dialogs for the window, filtered to .park files. A dialog's callback, which may run on another thread, only hands the first chosen path to the main loop under a lock. A cancelled dialog hands nothing, and a failed one logs SDL's error. New park and a chosen path are acted on at the start of the next frame, before its buttons reach the tool. Saving writes the world as it is to withParkExtension of the path, so an edit queued but not yet applied is not in the file. When that added the extension and a file already exists there, the app first asks whether to replace it, since the dialog asked only about the name as typed, and saves nothing unless the player chooses Replace. New park and a successful open replace the world with makeNewPark(1), resolved, or openParkFile's world. They empty the command queue, select the current tool again so it drops any hold and drawn points, and frame the camera on the new park's mesh as at start. A failed open or save leaves the world as it was, and shows its message in an error message box and the log.
+    The Tools panel has New park, Open park, and Save park buttons, which do nothing while a dialog is showing. Open park and Save park show SDL's open and save dialogs for the window, filtered to .park files and starting in the parks folder beside the executable. The build links that folder to the repository's parks directory when it configures, a junction on Windows, which needs no privilege, and a symbolic link elsewhere, so parks saved there live in the source tree and survive a clean build. A dialog's callback, which may run on another thread, only hands the first chosen path to the main loop under a lock. A cancelled dialog hands nothing, and a failed one logs SDL's error. New park and a chosen path are acted on at the start of the next frame, before its buttons reach the tool. Saving writes the world as it is to withParkExtension of the path, so an edit queued but not yet applied is not in the file. When that added the extension and a file already exists there, the app first asks whether to replace it, since the dialog asked only about the name as typed, and saves nothing unless the player chooses Replace. New park and a successful open replace the world with makeNewPark(1), resolved, or openParkFile's world. They empty the command queue, select the current tool again so it drops any hold and drawn points, and frame the camera on the new park's mesh as at start. A failed open or save leaves the world as it was, and shows its message in an error message box and the log.
 
 ## Files affected
 
@@ -47,6 +47,7 @@ src/app/SPEC.md, after "## Tools", a new section:
 - Modify: `src/app/tool_panel.cpp`
 - Modify: `src/app/main.cpp`
 - Modify: `tests/app/CMakeLists.txt`
+- Create: `parks/.gitkeep`
 - Tests from the test pass, under `tests/app/`.
 
 ## Dependencies
@@ -63,6 +64,8 @@ src/app/SPEC.md, after "## Tools", a new section:
 - Choosing a new park's seed. New park uses seed 1, as the app's start does.
 - Saving queued edits that have not yet applied.
 - Automated checks of the dialogs, the message box, and the loop's wiring.
+- Saving atomically. A save that fails partway may leave the file at the path changed.
+- Paths the save dialog never gives, such as an empty one or one ending in a separator. withParkExtension's rule applies to them as written.
 
 ## Open questions
 
