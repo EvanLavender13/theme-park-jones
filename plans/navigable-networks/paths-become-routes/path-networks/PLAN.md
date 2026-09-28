@@ -458,6 +458,8 @@ Network deriveNetwork(const std::vector<ParkPath> &paths, PathKind kind) {
 Run: `cmake --build --preset linux-debug --target tpj_sim_tests 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; for f in tests/sim/routes/*_test.cpp; do build/linux-debug/tpj_sim_tests -# "[#$(basename "$f" .cpp)]" 2>&1 | tail -1; done`
 Expected: no warnings, and every test under tests/sim/routes passes.
 
+Deviation (approved by Evan): the pairwise search in findMeetings made the park-edits scenario about six times slower under the sanitizers. findMeetings now sweeps segments sorted by their least x and tests only pairs whose x spans come within farApart's margin, which rejects every other pair, so the meetings found are the same set. MEETING_MARGIN names that margin.
+
 ### Task 8: Verify
 
 Step 1: Run: `git ls-files -m -o --exclude-standard -- '*.h' '*.cpp' | xargs -r clang-format -i`
