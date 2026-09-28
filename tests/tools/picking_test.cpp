@@ -45,13 +45,13 @@ TEST_CASE("boxAt counts a footprint's edges as holding the point") {
 TEST_CASE("boxAt gives none where no box's footprint holds the point, and never the entrance") {
   const World world = toolPark();
   // 3.5 m along the turned shop's facing: outside its 6 m depth, inside its 8 m width.
-  CHECK(!boxAt(world, {36.5, 0.0}).has_value());
+  CHECK_FALSE(boxAt(world, {36.5, 0.0}).has_value());
   // Just past the overlapping shop's side.
-  CHECK(!boxAt(world, {48.01, 0.0}).has_value());
+  CHECK_FALSE(boxAt(world, {48.01, 0.0}).has_value());
   // The position of a box with no footprint.
-  CHECK(!boxAt(world, {80.0, -80.0}).has_value());
+  CHECK_FALSE(boxAt(world, {80.0, -80.0}).has_value());
   // Inside the entrance's footprint.
-  CHECK(!boxAt(world, {3.0, 127.0}).has_value());
+  CHECK_FALSE(boxAt(world, {3.0, 127.0}).has_value());
 }
 
 TEST_CASE("pathAt gives the least-keyed path whose ground line has a segment within half its "
@@ -79,9 +79,9 @@ TEST_CASE("pathAt gives none where no path's ground line comes within half its p
           "never the entrance") {
   const World world = toolPark();
   // 1.4 m from the backstage path: beyond its half width, though within a guest path's.
-  CHECK(!pathAt(world, {-38.6, 30.0}).has_value());
+  CHECK_FALSE(pathAt(world, {-38.6, 30.0}).has_value());
   // Inside the entrance's footprint, 5 m from the template path's start.
-  CHECK(!pathAt(world, {3.0, 127.0}).has_value());
+  CHECK_FALSE(pathAt(world, {3.0, 127.0}).has_value());
 }
 
 } // namespace

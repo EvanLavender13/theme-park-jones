@@ -76,18 +76,18 @@ TEST_CASE("groundAtCursor gives a ground point that drawFrame's projection maps 
 
 TEST_CASE("groundAtCursor gives none when the eye is not above the ground") {
   // Looking down, so the rays descend, from below the ground and from exactly on it.
-  CHECK(!groundAtCursor(CameraView{Vec3{0.0f, -5.0f, 10.0f}, Vec3{0.0f, -10.0f, 0.0f}}, 1.5f, 0.0f,
-                        0.0f)
-             .has_value());
-  CHECK(!groundAtCursor(CameraView{Vec3{0.0f, 0.0f, 10.0f}, Vec3{0.0f, -10.0f, 0.0f}}, 1.5f, 0.0f,
-                        0.0f)
-             .has_value());
+  CHECK_FALSE(groundAtCursor(CameraView{Vec3{0.0f, -5.0f, 10.0f}, Vec3{0.0f, -10.0f, 0.0f}}, 1.5f,
+                             0.0f, 0.0f)
+                  .has_value());
+  CHECK_FALSE(groundAtCursor(CameraView{Vec3{0.0f, 0.0f, 10.0f}, Vec3{0.0f, -10.0f, 0.0f}}, 1.5f,
+                             0.0f, 0.0f)
+                  .has_value());
 }
 
 TEST_CASE("groundAtCursor gives none when the ray through the cursor does not descend") {
   // The middle of a level view runs parallel to the ground, and above it the rays climb.
-  CHECK(!groundAtCursor(LEVEL, 1.5f, 0.0f, 0.0f).has_value());
-  CHECK(!groundAtCursor(LEVEL, 1.5f, -0.3f, 0.5f).has_value());
+  CHECK_FALSE(groundAtCursor(LEVEL, 1.5f, 0.0f, 0.0f).has_value());
+  CHECK_FALSE(groundAtCursor(LEVEL, 1.5f, -0.3f, 0.5f).has_value());
 }
 
 } // namespace

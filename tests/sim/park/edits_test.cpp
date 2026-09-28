@@ -32,9 +32,7 @@ constexpr double NOT_A_NUMBER = std::numeric_limits<double>::quiet_NaN();
 constexpr double INFINITE = std::numeric_limits<double>::infinity();
 
 // Kinds with no enumerator, which a command can still hold.
-// NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
 constexpr auto NO_PATH_KIND = static_cast<PathKind>(2);
-// NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
 constexpr auto NO_BOX_KIND = static_cast<BoxKind>(2);
 
 constexpr EntityKey ENTRANCE{1};
@@ -240,7 +238,7 @@ TEST_CASE("An accepted command given to applyCommand on a resolved world leaves 
 template <typename Command>
 void checkRefusalChangesNothing(const World &before, const Command &command) {
   World world = copyWorld(before);
-  REQUIRE(!isAccepted(world, command));
+  REQUIRE_FALSE(isAccepted(world, command));
   applyCommand(world, command);
   CHECK(worldsEqual(world, before));
   CHECK(world.nextKey() == before.nextKey());
@@ -263,7 +261,7 @@ CommandQueue editsJudgedInTurn(const World &world) {
   const AddBox place{BoxKind::Shop, facingSouth(80.0, -80.0)};
   const DeleteBox removeFirst{EntityKey{world.nextKey()}};
   REQUIRE(isAccepted(world, place));
-  REQUIRE(!isAccepted(world, removeFirst));
+  REQUIRE_FALSE(isAccepted(world, removeFirst));
 
   CommandQueue queue;
   queue.push(place);

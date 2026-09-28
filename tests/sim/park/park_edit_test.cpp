@@ -35,9 +35,9 @@ World editablePark() {
 template <typename Command>
 void checkSameAnswer(const World &world, const Command &accepted, const Command &refused) {
   REQUIRE(isAccepted(world, accepted));
-  REQUIRE(!isAccepted(world, refused));
+  REQUIRE_FALSE(isAccepted(world, refused));
   CHECK(isAccepted(world, ParkEdit{accepted}));
-  CHECK(!isAccepted(world, ParkEdit{refused}));
+  CHECK_FALSE(isAccepted(world, ParkEdit{refused}));
 }
 
 TEST_CASE("isAccepted on a ParkEdit equals isAccepted on the command it holds") {

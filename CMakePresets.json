@@ -104,6 +104,9 @@
       "configurePreset": "linux-debug",
       "output": {
         "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 16
       }
     },
     {
@@ -111,6 +114,9 @@
       "configurePreset": "windows-debug",
       "output": {
         "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 16
       }
     }
   ]
