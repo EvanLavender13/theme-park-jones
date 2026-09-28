@@ -2,6 +2,7 @@
 #define TPJ_RENDER_RENDERER_H
 
 #include "render/math.h"
+#include "render/park_mesh.h"
 
 #include <stdint.h>
 
@@ -31,6 +32,10 @@ struct Renderer {
   SDL_GPUBuffer *TerrainVertices = nullptr;
   SDL_GPUBuffer *TerrainIndices = nullptr;
   uint32_t TerrainIndexCount = 0;
+  SDL_GPUGraphicsPipeline *ParkPipeline = nullptr;
+  SDL_GPUBuffer *ParkVertices = nullptr;
+  SDL_GPUBuffer *ParkIndices = nullptr;
+  uint32_t ParkIndexCount = 0;
   SDL_GPUTexture *ColorTarget = nullptr;
   SDL_GPUTexture *DepthTarget = nullptr;
   int DepthFormat = 0;
@@ -44,6 +49,10 @@ struct Renderer {
 // through SDL on failure.
 bool createRenderer(Renderer &renderer, SDL_Window *window, float terrainSize);
 void destroyRenderer(Renderer &renderer);
+
+// Uploads the park mesh drawn from now on, replacing the one before. An empty mesh draws
+// nothing. Returns false and logs through SDL on failure.
+bool setParkMesh(Renderer &renderer, const ParkMesh &mesh);
 
 // Starts the GPU backend's part of an ImGui frame. Call before ImGui::NewFrame.
 void beginUiFrame();

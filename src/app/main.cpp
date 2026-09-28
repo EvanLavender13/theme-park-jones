@@ -1,7 +1,12 @@
 #include "app/debug_panel.h"
 #include "app/orbit_camera.h"
 #include "core/profile.h"
+#include "render/park_mesh.h"
 #include "render/renderer.h"
+#include "sim/field_text.h"
+#include "sim/park/intent.h"
+#include "sim/park_schema.h"
+#include "sim/save.h"
 #include "sim/world.h"
 
 #include <SDL3/SDL.h>
@@ -9,8 +14,15 @@
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 
+#include <charconv>
+#include <optional>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -19,26 +31,112 @@ constexpr double MAX_FRAME_SECONDS = 0.25;
 
 struct Options {
   int FrameLimit = 0;
+  bool FramesGiven = false;
   const char *CapturePath = nullptr;
+  const char *ParkPath = nullptr;
+  uint64_t Ticks = 0;
+  bool PrintHash = false;
 };
 
-// --frames N exits after N frames. --capture PATH writes the last frame to PATH as a BMP and
-// implies a short frame limit, which makes the app usable for automated visual checks.
+bool parseCount(const char *text, uint64_t &count) {
+  const std::string_view value(text);
+  const char *end = value.data() + value.size();
+  const auto result = std::from_chars(value.data(), end, count);
+  return !value.empty() && result.ec == std::errc() && result.ptr == end;
+}
+
+// --park PATH starts from a park file, --ticks N steps it N ticks before the first frame, and
+// --hash prints the state hash after them and exits. --frames N exits after N frames.
+// --capture PATH writes the last frame to PATH as a BMP and implies a short frame limit, which
+// makes the app usable for automated visual checks.
 bool parseOptions(int argc, char **argv, Options &options) {
-  for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
+  bool valid = true;
+  for (int i = 1; i < argc && valid; ++i) {
+    const bool hasValue = i + 1 < argc;
+    if (strcmp(argv[i], "--frames") == 0 && hasValue) {
       options.FrameLimit = static_cast<int>(strtol(argv[++i], nullptr, 10));
-    } else if (strcmp(argv[i], "--capture") == 0 && i + 1 < argc) {
+      options.FramesGiven = true;
+    } else if (strcmp(argv[i], "--capture") == 0 && hasValue) {
       options.CapturePath = argv[++i];
+    } else if (strcmp(argv[i], "--park") == 0 && hasValue) {
+      options.ParkPath = argv[++i];
+    } else if (strcmp(argv[i], "--ticks") == 0 && hasValue) {
+      valid = parseCount(argv[++i], options.Ticks);
+    } else if (strcmp(argv[i], "--hash") == 0) {
+      options.PrintHash = true;
     } else {
-      SDL_Log("Usage: %s [--frames N] [--capture PATH]", argv[0]);
-      return false;
+      valid = false;
     }
+  }
+  if (options.PrintHash && (options.FramesGiven || options.CapturePath != nullptr)) {
+    valid = false;
+  }
+  if (!valid) {
+    SDL_Log("Usage: %s [--park PATH] [--ticks N] [--hash] [--frames N] [--capture PATH]", argv[0]);
+    return false;
   }
   if (options.CapturePath != nullptr && options.FrameLimit <= 0) {
     options.FrameLimit = 3;
   }
   return true;
+}
+
+// The new park, or the park file, resolved and stepped the requested ticks. None, after a message
+// on standard error, when the file cannot be read or loaded.
+std::optional<tpj::World> startingWorld(const Options &options) {
+  std::optional<tpj::World> world;
+  if (options.ParkPath == nullptr) {
+    world = tpj::makeNewPark(1);
+  } else {
+    size_t size = 0;
+    void *text = SDL_LoadFile(options.ParkPath, &size);
+    if (text == nullptr) {
+      (void)fprintf(stderr, "Cannot read %s: %s\n", options.ParkPath, SDL_GetError());
+      return std::nullopt;
+    }
+    try {
+      world = tpj::loadWorld(tpj::makeParkSchema(),
+                             std::string_view(static_cast<const char *>(text), size));
+    } catch (const tpj::LoadError &error) {
+      (void)fprintf(stderr, "Cannot load %s: %s\n", options.ParkPath, error.what());
+    }
+    SDL_free(text);
+    if (!world) {
+      return std::nullopt;
+    }
+  }
+  tpj::resolveWorld(*world);
+  for (uint64_t tick = 0; tick < options.Ticks; ++tick) {
+    tpj::stepWorld(*world);
+  }
+  return world;
+}
+
+// The intent a park mesh was built from, so the mesh is rebuilt only when intent changes.
+struct DrawnIntent {
+  std::vector<tpj::ParkEntrance> Entrances;
+  std::vector<tpj::ParkPath> Paths;
+  std::vector<tpj::ParkBox> Boxes;
+
+  bool operator==(const DrawnIntent &) const = default;
+};
+
+// Rebuilds the park mesh when the world's intent differs from what was last drawn, framing the
+// camera on the first one. Returns false if the upload failed.
+bool updateParkMesh(tpj::Renderer &renderer, const tpj::World &world,
+                    std::optional<DrawnIntent> &drawn, tpj::OrbitCamera &camera) {
+  DrawnIntent current{tpj::parkEntrances(world), tpj::parkPaths(world), tpj::parkBoxes(world)};
+  if (drawn && *drawn == current) {
+    return true;
+  }
+  const tpj::ParkMesh mesh = tpj::buildParkMesh(world);
+  if (!drawn) {
+    if (const std::optional<tpj::GroundBounds> bounds = tpj::meshBounds(mesh)) {
+      tpj::frameOrbitCamera(camera, *bounds, tpj::CameraView{}.FovY);
+    }
+  }
+  drawn = std::move(current);
+  return tpj::setParkMesh(renderer, mesh);
 }
 
 float keyAxis(const bool *keys, SDL_Scancode positive, SDL_Scancode negative) {
@@ -84,9 +182,9 @@ bool gatherInput(tpj::CameraInput &input) {
 }
 
 // Runs the main loop until quit or the frame limit. Returns false if rendering failed.
-bool runLoop(tpj::Renderer &renderer, const Options &options) {
-  tpj::World world;
+bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world) {
   tpj::OrbitCamera camera;
+  std::optional<DrawnIntent> drawn;
   uint64_t lastCounter = SDL_GetPerformanceCounter();
   double simAccumulator = 0.0;
 
@@ -109,6 +207,9 @@ bool runLoop(tpj::Renderer &renderer, const Options &options) {
     while (simAccumulator >= tpj::SIM_TICK_SECONDS) {
       tpj::stepWorld(world);
       simAccumulator -= tpj::SIM_TICK_SECONDS;
+    }
+    if (!updateParkMesh(renderer, world, drawn, camera)) {
+      return false;
     }
 
     tpj::updateOrbitCamera(camera, input, static_cast<float>(dt), 0.5f * PARK_SIZE_METERS);
@@ -145,6 +246,16 @@ int main(int argc, char **argv) {
   if (!parseOptions(argc, argv, options)) {
     return EXIT_FAILURE;
   }
+  std::optional<tpj::World> world = startingWorld(options);
+  if (!world) {
+    return EXIT_FAILURE;
+  }
+  // The hash needs no window, so it can be checked where there is no display.
+  if (options.PrintHash) {
+    printf("tick %llu hash %016llx\n", static_cast<unsigned long long>(world->Tick),
+           static_cast<unsigned long long>(tpj::hashWorld(*world)));
+    return EXIT_SUCCESS;
+  }
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_Init: %s", SDL_GetError());
     return EXIT_FAILURE;
@@ -165,7 +276,7 @@ int main(int argc, char **argv) {
 
   tpj::Renderer renderer;
   const bool ok =
-      tpj::createRenderer(renderer, window, PARK_SIZE_METERS) && runLoop(renderer, options);
+      tpj::createRenderer(renderer, window, PARK_SIZE_METERS) && runLoop(renderer, options, *world);
 
   tpj::destroyRenderer(renderer);
   ImGui_ImplSDL3_Shutdown();

@@ -47,4 +47,12 @@ Vec3 orbitCameraEye(const OrbitCamera &camera) {
   return camera.Focus + offset;
 }
 
+void frameOrbitCamera(OrbitCamera &camera, const GroundBounds &bounds, float fovY) {
+  const float width = bounds.MaxX - bounds.MinX;
+  const float depth = bounds.MaxZ - bounds.MinZ;
+  const float radius = 0.5f * sqrtf(width * width + depth * depth);
+  camera.Focus = {0.5f * (bounds.MinX + bounds.MaxX), 0.0f, 0.5f * (bounds.MinZ + bounds.MaxZ)};
+  camera.Distance = clampf(radius / sinf(0.5f * fovY), MIN_DISTANCE, MAX_DISTANCE);
+}
+
 } // namespace tpj

@@ -34,9 +34,9 @@ Mat4 perspective(float fovY, float aspect, float nearZ, float farZ) {
   Mat4 result;
   result.M[0] = f / aspect;
   result.M[5] = f;
-  result.M[10] = farZ / (nearZ - farZ);
+  result.M[10] = nearZ / (farZ - nearZ);
   result.M[11] = -1.0f;
-  result.M[14] = nearZ * farZ / (nearZ - farZ);
+  result.M[14] = nearZ * farZ / (farZ - nearZ);
   return result;
 }
 

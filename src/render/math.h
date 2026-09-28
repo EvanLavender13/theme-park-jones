@@ -27,7 +27,9 @@ struct Mat4 {
 
 Mat4 multiply(const Mat4 &a, const Mat4 &b);
 
-// Right-handed view space looking down -Z; clip depth in [0, 1] as SDL_GPU expects.
+// Right-handed view space looking down -Z; clip depth in [0, 1] as SDL_GPU expects, reversed so
+// the near plane maps to 1 and the far plane to 0, which spreads a float depth buffer's precision
+// evenly across distance.
 Mat4 perspective(float fovY, float aspect, float nearZ, float farZ);
 Mat4 lookAt(Vec3 eye, Vec3 target, Vec3 up);
 
