@@ -11,3 +11,4 @@ endif()
 
 add_subdirectory(sim)
 add_subdirectory(scenarios)
+add_subdirectory(checks)
