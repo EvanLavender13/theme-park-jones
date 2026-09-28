@@ -67,6 +67,8 @@ The capability leaves these to this milestone. Playing adjusts them.
 - Snapping preferences: an endpoint near another path's end joins it end to end rather than landing beside it.
 - Keyboard shortcuts for tools and for finishing or cancelling a path.
 - Undo and redo, and reshaping paths, from the capability's pool.
+- A refusal's reason given with isAccepted, such as which box a ghost overlaps, so the ghost can say why it is invalid.
+- Ground lines cached as derived data, so the physical-validity check stops recomputing every path's line on each query, if box-tools' ghosts show the cost.
 
 ## Open questions
 
