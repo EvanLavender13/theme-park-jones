@@ -1,9 +1,15 @@
 #include "render/park_mesh.h"
 
+#include "sim/command_queue.h"
+#include "sim/medium/network.h"
+#include "sim/routes/networks.h"
+
 #include <algorithm>
 #include <array>
 #include <math.h>
+#include <numbers>
 #include <optional>
+#include <utility>
 #include <variant>
 
 namespace tpj {
@@ -66,6 +72,95 @@ Rgba ghostColor(const World &world, const ParkEdit &edit, Rgba color) {
   return isAccepted(world, edit) ? Rgba{color.R, color.G, color.B, GHOST_ALPHA} : INVALID_TINT;
 }
 
+// Adds the flat ribbon of the width along the line, PATH_LIFT above the ground. The line has at
+// least two points, each distinct from the next.
+void appendRibbon(ParkMesh &mesh, const std::vector<CarrierPoint> &line, double width, Rgba color) {
+  const auto first = static_cast<uint32_t>(mesh.Vertices.size());
+  const double half = 0.5 * width;
+  for (size_t i = 0; i < line.size(); ++i) {
+    const ParkPoint tangent = tangentAt(line, i);
+    const ParkPoint right{-tangent.Z, tangent.X};
+    addVertex(mesh, line[i].X - right.X * half, PATH_LIFT, line[i].Z - right.Z * half, {}, 1.0f,
+              color);
+    addVertex(mesh, line[i].X + right.X * half, PATH_LIFT, line[i].Z + right.Z * half, {}, 1.0f,
+              color);
+  }
+  for (uint32_t i = 0; i + 1 < line.size(); ++i) {
+    const uint32_t left0 = first + 2 * i;
+    const uint32_t right0 = left0 + 1;
+    const uint32_t left1 = left0 + 2;
+    const uint32_t right1 = left0 + 3;
+    mesh.Indices.insert(mesh.Indices.end(), {left0, right0, left1, left1, right0, right1});
+  }
+}
+
+// Adds a flat half disc of the radius beyond a ribbon's end at the point, PATH_LIFT above the
+// ground, for the ribbon's unit direction there: its center, then WALKWAY_JOINT_SEGMENTS + 1
+// vertices on its rim from the ribbon's right end corner around to its left, and a triangle facing
+// up from the center to each rim vertex and the next.
+void appendJoint(ParkMesh &mesh, const CarrierPoint &point, ParkPoint direction, double radius,
+                 Rgba color) {
+  const ParkPoint right{-direction.Z, direction.X};
+  const auto center = static_cast<uint32_t>(mesh.Vertices.size());
+  addVertex(mesh, point.X, PATH_LIFT, point.Z, {}, 1.0f, color);
+  for (uint32_t k = 0; k <= WALKWAY_JOINT_SEGMENTS; ++k) {
+    const double angle = std::numbers::pi * static_cast<double>(k) / WALKWAY_JOINT_SEGMENTS;
+    const double across = radius * cos(angle);
+    const double along = radius * sin(angle);
+    addVertex(mesh, point.X + across * right.X + along * direction.X, PATH_LIFT,
+              point.Z + across * right.Z + along * direction.Z, {}, 1.0f, color);
+  }
+  for (uint32_t k = 0; k < WALKWAY_JOINT_SEGMENTS; ++k) {
+    mesh.Indices.insert(mesh.Indices.end(), {center, center + 1 + k, center + 2 + k});
+  }
+}
+
+// Slides a ribbon's first left and right vertices, at first and first + 1, along its first segment
+// onto the line through its first point across the face's normal, so the ribbon starts flush with
+// the face. Leaves them where they are when the segment runs along the face, or when the slide
+// would reach the segment's end and fold the ribbon.
+void startFlush(ParkMesh &mesh, size_t first, const std::vector<CarrierPoint> &line, double half,
+                ParkPoint normal) {
+  const ParkPoint tangent = unitStep(line[0], line[1]);
+  const ParkPoint right{-tangent.Z, tangent.X};
+  const double along = tangent.X * normal.X + tangent.Z * normal.Z;
+  if (along == 0.0) {
+    return;
+  }
+  const double move = half * (right.X * normal.X + right.Z * normal.Z) / along;
+  const double length = hypot(line[1].X - line[0].X, line[1].Z - line[0].Z);
+  if (!(fabs(move) < length)) {
+    return;
+  }
+  for (const auto &[index, sign] : {std::pair{first, 1.0}, std::pair{first + 1, -1.0}}) {
+    ParkVertex &vertex = mesh.Vertices[index];
+    vertex.Position[0] =
+        static_cast<float>(line[0].X - sign * right.X * half + sign * tangent.X * move);
+    vertex.Position[2] =
+        static_cast<float>(line[0].Z - sign * right.Z * half + sign * tangent.Z * move);
+  }
+}
+
+// The normal of an entrance's or box's front and back faces: its footprint's Forward. None when the
+// key holds neither, or its pose has no footprint.
+std::optional<ParkPoint> faceNormalOf(const World &world, EntityKey entity) {
+  std::optional<Footprint> footprint;
+  for (const ParkEntrance &entrance : parkEntrances(world)) {
+    if (entrance.Key == entity) {
+      footprint = footprintOf(entrance.At, ENTRANCE_SIZE);
+    }
+  }
+  for (const ParkBox &box : parkBoxes(world)) {
+    if (box.Key == entity) {
+      footprint = footprintOf(box.At, boxSize(box.Kind));
+    }
+  }
+  if (!footprint) {
+    return std::nullopt;
+  }
+  return footprint->Forward;
+}
+
 } // namespace
 
 Rgba lightened(Rgba color) {
@@ -82,22 +177,43 @@ void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &poi
   if (line.empty()) {
     return;
   }
-  const auto first = static_cast<uint32_t>(mesh.Vertices.size());
-  const double half = 0.5 * pathWidth(kind);
-  for (size_t i = 0; i < line.size(); ++i) {
-    const ParkPoint tangent = tangentAt(line, i);
-    const ParkPoint right{-tangent.Z, tangent.X};
-    addVertex(mesh, line[i].X - right.X * half, PATH_LIFT, line[i].Z - right.Z * half, {}, 1.0f,
-              color);
-    addVertex(mesh, line[i].X + right.X * half, PATH_LIFT, line[i].Z + right.Z * half, {}, 1.0f,
-              color);
+  appendRibbon(mesh, line, pathWidth(kind), color);
+}
+
+void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
+                   Rgba color) {
+  appendWalkway(mesh, kind, points, std::nullopt, color);
+}
+
+void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
+                   std::optional<ParkPoint> faceNormal, Rgba color) {
+  if (points.size() < 2) {
+    return;
   }
-  for (uint32_t i = 0; i + 1 < line.size(); ++i) {
-    const uint32_t left0 = first + 2 * i;
-    const uint32_t right0 = left0 + 1;
-    const uint32_t left1 = left0 + 2;
-    const uint32_t right1 = left0 + 3;
-    mesh.Indices.insert(mesh.Indices.end(), {left0, right0, left1, left1, right0, right1});
+  const auto first = mesh.Vertices.size();
+  appendRibbon(mesh, points, pathWidth(kind), color);
+  if (faceNormal) {
+    startFlush(mesh, first, points, 0.5 * pathWidth(kind), *faceNormal);
+  }
+  appendJoint(mesh, points.back(), unitStep(points[points.size() - 2], points.back()),
+              0.5 * pathWidth(kind), color);
+}
+
+void appendWalkways(ParkMesh &mesh, const World &world, float alpha) {
+  for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
+    const Network &network = parkNetwork(world, kind);
+    const Rgba base = pathColor(kind);
+    const Rgba color{base.R, base.G, base.B, alpha};
+    for (const Carrier &carrier : network.carriers()) {
+      // path-networks anchors each connector's door node, and no other node.
+      if (carrier.Stops.empty()) {
+        continue;
+      }
+      const EntityKey entity = network.nodeAnchor(carrier.Stops.front().Node);
+      if (entity != NULL_KEY) {
+        appendWalkway(mesh, kind, carrier.Points, faceNormalOf(world, entity), color);
+      }
+    }
   }
 }
 
@@ -131,6 +247,7 @@ ParkMesh buildParkMesh(const World &world) {
   for (const ParkPath &path : parkPaths(world)) {
     appendPath(mesh, path.Kind, path.Points);
   }
+  appendWalkways(mesh, world, 1.0f);
   for (const ParkBox &box : parkBoxes(world)) {
     appendBox(mesh, box.At, boxSize(box.Kind), boxHeight(box.Kind), boxColor(box.Kind));
   }
@@ -185,6 +302,11 @@ ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit) {
     const EntityKey key = std::holds_alternative<DeletePath>(edit) ? std::get<DeletePath>(edit).Path
                                                                    : std::get<DeleteBox>(edit).Box;
     appendEntity(mesh, world, key, DELETE_TINT);
+  }
+  if (isAccepted(world, edit)) {
+    CommandQueue queue;
+    queueEdit(queue, edit);
+    appendWalkways(mesh, makeCandidate(world, queue), GHOST_ALPHA);
   }
   return mesh;
 }

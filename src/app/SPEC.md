@@ -8,7 +8,7 @@ The app owns the Dear ImGui context and its SDL3 platform backend, created befor
 
 ## Park
 
-The app starts from makeNewPark(1), resolved, or from the park file --park names, opened with openParkFile. Before the first frame it steps the world --ticks cycles with no commands. Whenever the world's intent, as parkEntrances, parkPaths, and parkBoxes give it, differs from the intent last drawn, it builds the park mesh and gives it to the renderer. When it builds the first mesh, and the mesh has vertices, it frames the camera on the mesh's bounds: the focus moves to their center, and the distance becomes their half diagonal divided by the sine of half the vertical field of view, so a sphere around them fits the view, within the camera's distance limits.
+The app starts from makeNewPark(1), resolved, or from the park file --park names, opened with openParkFile. Before the first frame it steps the world --ticks cycles with no commands. Whenever the world's intent, as parkEntrances, parkPaths, and parkBoxes give it, differs from the intent last drawn, it builds the park mesh and gives it to the renderer. The mesh holds the walkways of the world's networks, which derive from intent alone (sim/routes/SPEC.md) and are resolved in every world the app holds, so the mesh is rebuilt whenever they change, and the ghost, rebuilt with it, shows its candidate's walkways. When it builds the first mesh, and the mesh has vertices, it frames the camera on the mesh's bounds: the focus moves to their center, and the distance becomes their half diagonal divided by the sine of half the vertical field of view, so a sphere around them fits the view, within the camera's distance limits.
 
 ## Tools
 

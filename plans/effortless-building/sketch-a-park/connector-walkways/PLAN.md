@@ -166,7 +166,39 @@ void appendWalkways(ParkMesh &mesh, const World &world, float alpha) {
 Step 3: Verify
 
 Run: `cmake --build --preset linux-debug --target tpj_render_tests 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; build/linux-debug/tpj_render_tests -# "[#park_mesh_test]"`, and the same filtered to each file the test pass created under tests/render/.
-Expected: no build output. The tests of criteria 1 and 2 (appendWalkway's ribbon, and appendWalkways drawing each connector) pass. The tests of criteria 3 and 4 (walkways in buildParkMesh and in ghosts) may still fail until Tasks 8 and 9.
+Expected: no build output. The tests of criterion 1 (appendWalkway's ribbon) pass. Those of criterion 2 (the joint) fail until Task 7b, those of criteria 3 and 4 (the flush start, and appendWalkways) until Task 7c, and those of criteria 5 and 6 (walkways in buildParkMesh and in ghosts) may fail until Tasks 8 and 9.
+
+### Task 7b: The walkway's round joint
+
+Files:
+- Modify: `src/render/SPEC.md`, `src/render/park_mesh.h`, `src/render/park_mesh.cpp`
+
+Step 1: Add the round joint sentence FEATURE.md's Spec changes gives to the walkway paragraph of src/render/SPEC.md, and WALKWAY_JOINT_SEGMENTS, 16, to park_mesh.h beside appendWalkway.
+
+Step 2: Rerun the test pass for the revised criteria 1 and 2.
+
+Step 3: In park_mesh.cpp, add appendJoint in the anonymous namespace, taking the last point p, the last segment's unit direction t, and half the width h. It adds the center at p and WALKWAY_JOINT_SEGMENTS + 1 rim vertices at p + h * (cos(πk/N) * r + sin(πk/N) * t) with r = (-t.z, t.x), PATH_LIFT high with upward normals, and the triangles (center, rim k, rim k + 1) for k below N. appendWalkway calls it after appendRibbon with points.back() and unitStep of the last two points.
+
+Step 4: Verify
+
+Run: `cmake --build --preset linux-debug --target tpj_render_tests 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; build/linux-debug/tpj_render_tests -# "[#park_mesh_test]"`
+Expected: no build output. The tests of criteria 1 and 2 pass; those of criteria 3 and 4 fail until Task 7c, and those of criteria 5 and 6 may fail until Tasks 8 and 9.
+
+### Task 7c: The walkway's flush start
+
+Files:
+- Modify: `src/render/SPEC.md`, `src/render/park_mesh.h`, `src/render/park_mesh.cpp`
+
+Step 1: Add the flush-start sentences and the face normal in appendWalkways that FEATURE.md's Spec changes gives to src/render/SPEC.md, and declare in park_mesh.h, after appendWalkway, an overload `void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points, std::optional<ParkPoint> faceNormal, Rgba color);`, the four-argument one calling it with none.
+
+Step 2: Rerun the test pass for the new criterion 3 and the revised criterion 4.
+
+Step 3: In park_mesh.cpp, after appendRibbon in appendWalkway, when a normal is given, compute t = unitStep of the first two points, r = (-t.Z, t.X), and when dot(t, n) is not 0, move = h * dot(r, n) / dot(t, n); when |move| is less than the first segment's length, add t * move to the ribbon's first vertex and subtract it from its second. In appendWalkways, find the anchored entity's pose in parkEntrances (ENTRANCE_SIZE) or parkBoxes (boxSize), take footprintOf's Forward, and pass it.
+
+Step 4: Verify
+
+Run: `cmake --build --preset linux-debug --target tpj_render_tests 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; build/linux-debug/tpj_render_tests -# "[#park_mesh_test]"`
+Expected: no build output. The tests of criteria 1 to 4 pass; those of criteria 5 and 6 may fail until Tasks 8 and 9.
 
 ### Task 8: Walkways in the park mesh
 
