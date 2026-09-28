@@ -53,7 +53,7 @@ The foundation is hungry guests on one network with one need, choosing between f
 
 ## Milestones
 
-1. `hungry-guests`: arrivals, stays, and hunger from keyed draws, junction choice by softmax over food offers, carry-on, and head-home with a commitment bonus, movement by next edges and keyed wandering, queuing through guest visits, eating meals, leaving, the rules for stranded guests, hungry footfall, inspection records with choice explanations, and guests drawn as simple shapes. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value, shared-medium's first-field-and-flow, navigable-networks' paths-become-routes, and plausible-operations' supplied-food-shop.
+1. `hungry-guests`: arrivals, stays, and hunger from keyed draws, junction choice by softmax over food offers, carry-on, and head-home with a commitment bonus, movement by next edges and keyed wandering, queuing through guest visits, eating meals, leaving, the rules for stranded guests, hungry footfall, inspection records with choice explanations, and guests drawn as simple shapes. As the first holder of places, it also designs how the previous networks stay available until guests carry their places over, which navigable-networks' paths-become-routes handed to it. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value, shared-medium's first-field-and-flow, navigable-networks' paths-become-routes, and plausible-operations' supplied-food-shop.
 
 Later milestones are drawn from the deepening candidates once the slice has been played.
 

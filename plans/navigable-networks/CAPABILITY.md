@@ -8,7 +8,7 @@ Its value is that distance means what a guest's feet or a supply cart would expe
 
 ## Foundation criteria
 
-- Resolving path intent derives one graph per network kind, guest and backstage. Nodes sit at path endpoints, at snapped junctions, where same-kind paths cross, and where connectors meet a path. Each edge's length is its arc length along the curve. Paths of different kinds never connect, even where they cross.
+- Resolving path intent derives one graph per network kind, guest and backstage. Nodes sit at path endpoints, at snapped junctions, where same-kind paths cross, and where connectors meet a path. Each edge's length is its length along the path's ground line, the line that is drawn and refused. Paths of different kinds never connect, even where they cross.
 - Each kind of box connects from the face that serves each network kind to the nearest point of a path of that kind within a short fixed reach:
   - a shop's front connects to a guest path and its back to a backstage path;
   - a depot's front connects to a backstage path;
@@ -16,7 +16,7 @@ Its value is that distance means what a guest's feet or a supply cart would expe
   The connector is a derived edge whose length counts in routes, and its end node is anchored to the box's entity. Beyond reach there is no connection, which is a legitimate state (principle 2).
 - Every anchored entity is a route distance source on each network it connects to. Sampling the field at any place gives, for each source reachable from it, the distance along the network and the next edge toward the source. A place with no route to a source has no entry for it. On random synthetic graphs, the distances equal a reference shortest-path computation, and ties between equal routes break by a fixed rule.
 - From any place with an entry, repeatedly following the next edges reaches the source, and the length walked equals the sampled distance.
-- Carriers are keyed from intent: each path is a carrier, and each box connector is a carrier keyed by its box and face. A place is a carrier and an arc length along it, so it names the same ground position after any edit that leaves its carrier in place, even when a new connection splits the edge under it. Resolution keeps the previous networks available until holders have carried their places over (shared-medium's carry-over operation). A place on a carrier whose geometry changed, such as the connector of a moved box, moves to the nearest point on the same carrier, never onto another carrier. A place on a deleted path or connector resolves to no place. Tests hold a place on a connector while its box moves, and on a path while a new connection splits it. Ties between equal routes break by carrier key, then by arc length.
+- Carriers are keyed from intent: each path is a carrier, and each box connector is a carrier keyed by its box and face. A place is a carrier and an arc length along it, so it names the same ground position after any edit that leaves its carrier in place, even when a new connection splits the edge under it. Resolution keeps the previous networks available until holders have carried their places over (shared-medium's carry-over operation), a mechanism designed with the first holder, believable-guests' hungry-guests. A place on a carrier whose geometry changed, such as the connector of a moved box, moves to the nearest point on the same carrier, never onto another carrier. A place on a deleted path or connector resolves to no place. Tests hold a place on a connector while its box moves, and on a path while a new connection splits it. Ties between equal routes break by carrier key, then by arc length.
 - The derived networks and field depend only on the current intent. Different edit sequences that reach the same intent give identical networks and identical state hashes. Resolving tentative intent in a candidate copy gives exactly what committing it gives (decision 0025).
 - A tooling view in ImGui shows the derived graphs, with nodes, edges, connectors, and anchors, over the park.
 
@@ -30,7 +30,7 @@ Its value is that distance means what a guest's feet or a supply cart would expe
 
 - Principle 4 is this capability's reason to exist. Distances are only ever measured along graph edges. The one straight-line measure is the fixed reach of a connection, from a box face to the nearest path point. The reference shortest-path tests hold the rest.
 - Principle 1 and decision 0007 are at risk if derived networks depend on edit history. They are checked by the test that different edit sequences reaching the same intent hash the same.
-- Principle 10 is at risk from tie-breaking and from floating-point arc lengths. Tie rules are fixed, arc lengths use a fixed quadrature under the simulation's flags, and the cross-build script covers both.
+- Principle 10 is at risk from tie-breaking and from floating-point lengths and meetings. Tie rules are fixed, lengths and meetings use basic operations under the simulation's flags, and the cross-build script covers both.
 - Principle 2 is at risk when a box or path is removed. Unconnected boxes and unreachable places are ordinary states: they have no entries, and nothing crashes.
 - Principle 6 is at risk if other capabilities read graph internals rather than sampling. They reach networks only through shared-medium's network type and the route distance field.
 
@@ -63,13 +63,12 @@ Later milestones are drawn from the deepening candidates once the slice shows ho
 
 ## Open questions
 
-- Connection reach and junction snap tolerance are tuning values. They are settled while planning paths-become-routes, and adjusted by playing.
 - Whether one entry per source per place stays affordable as sources multiply. Resolved by profiling when a park has many shops. Hierarchical routing is the answer in waiting.
 
 ## Research notes
 
 - Brogue's Dijkstra maps and Supreme Commander 2's flow fields justify distance-plus-next-edge entries shared by all movers.
 - Parkitect keeps guest and staff networks apart, with a fallback for guests that suits a later deepening.
-- Arc lengths come from Gauss-Legendre quadrature per spline segment.
+- Edge lengths come from the ground line's distances, which sketch-a-park settled, rather than quadrature on the curve (paths-become-routes/RESEARCH.md).
 
 Depth is in RESEARCH.md.

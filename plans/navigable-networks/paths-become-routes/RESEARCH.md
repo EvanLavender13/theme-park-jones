@@ -1,0 +1,33 @@
+# Research: paths-become-routes
+
+## How long is an edge?
+
+The capability's research planned arc lengths by Gauss-Legendre quadrature over each spline segment. sketch-a-park settled a different measure: a path's ground line is the curve sampled at least every meter, with each point's distance the running sum of straight steps, and the medium interpolates along that line (src/sim/park/SPEC.md). The line is what is drawn, refused, and walked, and the medium takes every distance from its producer, so an edge's length is the difference of two ground-line distances. At a 1 m sampling spacing the polyline undershoots the curve's true length by well under a tenth of a percent on the park's gentle curves, which no mover or player can notice. Nothing in the route needs the curve itself.
+
+Rejected: quadrature arc lengths on the curve. Places would then measure a curve that the medium's ground positions do not lie on, so groundPoint and the distance would disagree. It would also add a second length rule beside the ground line's.
+
+## Where do same-kind paths meet?
+
+The path tool snaps every clicked point onto the nearest same-kind ground line within reach, and the ground line passes through every kept point bit for bit. A snapped junction is therefore a point of one line lying on a segment of another, up to a rounding error many orders below a millimeter. A crossing is two segments intersecting. Both are cases of one test on polylines: two segments of different same-kind lines come within a small tolerance of each other. A path may also cross itself, since the path tool snaps only onto committed paths, so the test covers pairs of segments of one line that are not neighbors along it; the medium lets a carrier stop at the same node twice. The standard test uses the orientation predicate, the sign of a cross product, to decide on which side of one segment each end of the other lies. Segments that straddle each other cross at the point their parameters give. Otherwise the pair meets where an end lies within the tolerance of the other segment, and that covers a snapped endpoint, a line passing exactly through another's end, and near-touches. Collinear overlaps are a separate case, since they meet along a stretch rather than at a point. Robust practice gives them explicit handling, such as a node at each end of the shared stretch. Tie-free results matter here too: the meeting points must be a function of the two lines alone, never of the order the pairs are tested in. Sorting each carrier's stops by distance, and merging stops closer than the tolerance, gives that.
+
+At slice scale a path has tens to hundreds of segments and a park a handful of paths, so testing every pair of segments of different lines, with a bounding-box reject first, is cheap. A sweep-line algorithm such as Bentley-Ottmann is the answer at larger scales, and is not needed now.
+
+Rejected: joining lines wherever their ribbons overlap, at half the path width. It would connect paths the player drew merely close together, and the gap between the two center lines would be a stretch of route with no length, against principle 4. Exact arithmetic with adaptive predicates: the tolerance absorbs rounding, and every build computes the same doubles under the simulation's flags (decision 0022).
+
+Sources: https://gamedev.net/forums/topic/479343-line-segment-intersections-and-collinear-overlaps/ — collinear overlaps need their own handling; https://scipedia.bohrium.com/en/sciencepedia/feynman/keyword/segment_intersection — the orientation predicate and the straddle test; https://arxiv.org/pdf/1305.4573 — pairwise tests against sweep-line algorithms for segment sets.
+
+## How does a box connect to a path?
+
+A connector is a short straight carrier from a point on a box's face to the nearest point of a same-kind ground line within a fixed reach. The medium's nearestPlace already gives the nearest point over a network's carriers, with ties to the lower carrier key and then the lower distance, so connecting to the path network before connectors are added reuses the medium's only straight-line measure (principle 4) instead of a second one. The connector's two points are the face point at distance 0 and the path point at its straight distance. Its far end is a stop on the path, which splits the path's edge there, and its near end is a node anchored to the box. Because the connector's key comes from the box and the face, a place on it survives edits that leave the box in place, and moves along the same connector when the box moves (src/sim/medium/SPEC.md, carry-over).
+
+## How is route distance published and read between nodes?
+
+One Dijkstra run per source over the network its anchor lies on gives each node's distance and the edge to leave by. A node's entry is published at its place. Between nodes the medium calls the field's sampleEdge with the source's entries at the edge's two ends and the place's two offsets, so a place partway along takes the better end: the smaller of its FromOffset plus the From node's distance and its ToOffset plus the To node's, with the direction toward the winning end. The next step can be stated without edge indices, which change whenever an edge is split: a carrier key and a direction along it, toward higher or lower distances. A mover on that carrier walks in that direction until it reaches the next stop, and samples again there. Ties between equal routes break by a fixed rule, the lower carrier key and then the direction toward lower distances, so the result never depends on the order of a priority queue (principle 10). Dijkstra's priority queue itself orders by distance and then node index, and node indices come from a deterministic numbering, so its pops are fixed as well.
+
+## How is the graph drawn over the park?
+
+Dear ImGui's background draw list draws two-dimensional lines and circles over the whole window, behind every ImGui window, which suits a tooling view over the rendered scene. The app projects each ground position through the camera's view and projection to window pixels and draws there. A point behind the camera projects through a negative w and lands on the wrong side of the screen, so a segment with an end behind the near plane is clipped to it before projecting, or dropped. The view draws only derived data it reads through the networks' public queries.
+
+Rejected: drawing the graph as meshes in the renderer's pipelines. It would need new vertex formats and a line pipeline for a view that is tooling only.
+
+Sources: https://github.com/ocornut/imgui/issues/545 — the background draw list for overlays on a 3D scene; https://github.com/ocornut/imgui/wiki/Glossary/eeb37193fcc6b72c5b6f6b278acc909dd71684b7 — background and foreground draw lists.

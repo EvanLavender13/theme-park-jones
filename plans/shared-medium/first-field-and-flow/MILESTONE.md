@@ -29,7 +29,7 @@ first-field-and-flow builds the medium every other slice member meets through: t
 This milestone introduces the medium's machinery, not any park field or flow. What its features provide to each other and to the slice:
 
 - The network type, places, anchors, and nearest-point query (networks-and-places): every field is sampled at places, and the carry-over, fields, and scenario features build on them. navigable-networks produces the park's networks in this type. believable-guests holds places, and plausible-operations finds anchored nodes.
-- Carry-over (place-carry-over): believable-guests carries each guest's place across a re-derivation. navigable-networks keeps the previous networks available for it.
+- Carry-over (place-carry-over): believable-guests carries each guest's place across a re-derivation. How the previous networks stay available for it is designed with believable-guests' hungry-guests, the first holder.
 - Resolved fields and owner-supplied sampling rules (resolved-fields): navigable-networks publishes route distance with its between-nodes rule. plausible-operations publishes the resolved layer of the food offer from intent and route distance.
 - Stepped fields and the layer rule (stepped-fields): plausible-operations republishes the food offer from its state, and believable-guests publishes hungry footfall. legible-simulation samples every field in committed and candidate worlds.
 - The ledger (flow-ledger): plausible-operations moves supply orders, supplies, and meals, and exchanges guest visits with believable-guests, taking each packet's delay from route distance.
