@@ -3,7 +3,8 @@
 add_executable(tpj_scenarios_tests
     main_test.cpp
     runner_test.cpp
-    scenarios_test.cpp)
+    scenarios_test.cpp
+    stalls_test.cpp)
 target_include_directories(tpj_scenarios_tests PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(tpj_scenarios_tests PRIVATE tpj_scenarios_lib Catch2::Catch2WithMain)
 target_compile_definitions(tpj_scenarios_tests PRIVATE

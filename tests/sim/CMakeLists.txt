@@ -6,6 +6,7 @@ add_executable(tpj_sim_tests
     fp_environment_test.cpp
     medium/carry_over_test.cpp
     medium/field_test.cpp
+    medium/flow_test.cpp
     medium/network_test.cpp
     medium/stepped_field_test.cpp
     save_test.cpp
