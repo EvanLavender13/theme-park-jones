@@ -1,6 +1,7 @@
 # The tools' tests link tpj_tools alone, which links the sim alone, so they drive the tools with
 # synthetic input and no window (principle 10).
 add_executable(tpj_tools_tests
+    path_tool_test.cpp
     picking_test.cpp
     tools_test.cpp)
 target_link_libraries(tpj_tools_tests PRIVATE tpj_tools Catch2::Catch2WithMain)

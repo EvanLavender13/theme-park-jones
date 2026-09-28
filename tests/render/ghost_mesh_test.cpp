@@ -259,6 +259,44 @@ TEST_CASE("An accepted AddBox or MoveBox's ghost has, in order, the positions an
   }
 }
 
+// Principle 8: an accepted path's ghost is the ribbon its commit draws. The new park holds no box,
+// so buildParkMesh draws the added path, which takes the highest key, last, after all it drew
+// before.
+void checkGhostIsCommittedPath(const AddPath &edit) {
+  World world = makeNewPark(1);
+  resolveWorld(world);
+  REQUIRE(isAccepted(world, edit));
+  const ParkMesh ghost = buildGhostMesh(world, edit);
+  REQUIRE_FALSE(ghost.Vertices.empty());
+  CommandQueue queue;
+  queueEdit(queue, edit);
+  const World candidate = makeCandidate(world, queue);
+
+  const ParkMesh before = buildParkMesh(world);
+  const ParkMesh after = buildParkMesh(candidate);
+  REQUIRE(after.Vertices.size() >= before.Vertices.size());
+  const auto added =
+      std::next(after.Vertices.begin(), static_cast<std::ptrdiff_t>(before.Vertices.size()));
+  REQUIRE(std::ranges::equal(after.Vertices.begin(), added, before.Vertices.begin(),
+                             before.Vertices.end(), sameVertex));
+  CHECK(std::ranges::equal(ghost.Vertices.begin(), ghost.Vertices.end(), added,
+                           after.Vertices.end(), sameShape));
+}
+
+TEST_CASE("An accepted AddPath's ghost has, in order, the positions and normals buildParkMesh "
+          "draws for the path it adds in the candidate world the edit gives") {
+  SECTION("a guest path that bends") {
+    checkGhostIsCommittedPath(AddPath{PathKind::Guest, {{20.0, 20.0}, {40.0, 30.0}, {50.0, 60.0}}});
+  }
+  // The path keeps its points without the repeat and the one within MIN_POINT_SPACING, so its
+  // points differ from the edit's while its ground line does not.
+  SECTION("a backstage path whose points are not all kept") {
+    checkGhostIsCommittedPath(AddPath{
+        PathKind::Backstage,
+        {{-20.0, -20.0}, {-20.0, -20.0}, {-40.0, -30.0}, {-40.005, -30.0}, {-50.0, -60.0}}});
+  }
+}
+
 // Principle 1: ghosts are derived, and building them leaves nothing behind in what is saved.
 TEST_CASE("Building a ghost or appending an entity leaves the world's save and hash unchanged") {
   const World world = ghostPark();

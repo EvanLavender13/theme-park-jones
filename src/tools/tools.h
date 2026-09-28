@@ -8,13 +8,26 @@
 
 #include <optional>
 #include <stdint.h>
+#include <vector>
 
 namespace tpj {
 
-enum class ToolKind : uint8_t { None, PlaceShop, PlaceDepot, MoveBox, Delete };
+enum class ToolKind : uint8_t {
+  None,
+  GuestPath,
+  BackstagePath,
+  PlaceShop,
+  PlaceDepot,
+  MoveBox,
+  Delete
+};
 
 // A place drag nearer than this to where the box lands keeps the facing it had, in meters.
 inline constexpr double MIN_FACING_DRAG = 1.0;
+// A path tool snaps the pointer onto a same-kind path's ground line this near it, in meters.
+inline constexpr double SNAP_REACH = 2.0;
+// A path tool's press this near its last drawn point finishes the path, in meters.
+inline constexpr double FINISH_REACH = 1.0;
 
 // One tool and what it holds. Change it only through selectTool, movePointer, pressPointer, and
 // releasePointer. See tools/SPEC.md.
@@ -34,6 +47,8 @@ struct ToolState {
   Pose HeldFrom;
   ParkPoint GrabOffset;
   Pose Target;
+  // A path tool's points drawn so far.
+  std::vector<ParkPoint> Drawn;
 };
 
 // Sets the tool, dropping any hold without committing.
@@ -55,6 +70,9 @@ std::optional<EntityKey> highlightedEntity(const ToolState &tool, const World &w
 std::optional<EntityKey> boxAt(const World &world, ParkPoint point);
 // The first path in key order whose ground line passes within half its width of the point.
 std::optional<EntityKey> pathAt(const World &world, ParkPoint point);
+// The nearest point to the given one on the ground line of a path of the kind, when one lies within
+// SNAP_REACH, and the point itself otherwise.
+ParkPoint snapToPath(const World &world, PathKind kind, ParkPoint point);
 
 } // namespace tpj
 
