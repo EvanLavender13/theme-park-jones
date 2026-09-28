@@ -9,6 +9,9 @@ add_executable(tpj_sim_tests
     medium/flow_test.cpp
     medium/network_test.cpp
     medium/stepped_field_test.cpp
+    park/geometry_test.cpp
+    park/intent_test.cpp
+    park/new_park_test.cpp
     save_test.cpp
     schema_test.cpp
     sim_math_test.cpp
@@ -17,6 +20,11 @@ add_executable(tpj_sim_tests
 target_link_libraries(tpj_sim_tests PRIVATE tpj_sim Catch2::Catch2WithMain)
 # So that tests in subdirectories, such as medium/, include the shared fixtures as support/....
 target_include_directories(tpj_sim_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+# The park tests compare the checked-in new park with the template's save.
+target_compile_definitions(tpj_sim_tests PRIVATE TPJ_PARKS_DIR="${CMAKE_SOURCE_DIR}/tests/parks")
+# Some tests restate an arithmetic law of the simulation and compare bits, so they must round each
+# operation as tpj_sim does, never fusing a multiply and an add.
+target_compile_options(tpj_sim_tests PRIVATE -ffp-contract=off)
 tpj_configure_target(tpj_sim_tests)
 catch_discover_tests(tpj_sim_tests)
 
