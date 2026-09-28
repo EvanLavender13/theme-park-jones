@@ -109,10 +109,10 @@ TEST_CASE("GHOST_ALPHA is 0.5, and the tints are translucent and distinct in col
     CHECK(tints[i].A > 0.0f);
     CHECK(tints[i].A < 1.0f);
     for (std::size_t j = i + 1; j < tints.size(); ++j) {
-      CHECK(!sameHue(tints[i], tints[j]));
+      CHECK_FALSE(sameHue(tints[i], tints[j]));
     }
     for (const Rgba &kind : kinds) {
-      CHECK(!sameHue(tints[i], kind));
+      CHECK_FALSE(sameHue(tints[i], kind));
     }
   }
 }
@@ -122,7 +122,7 @@ TEST_CASE("appendPath given a color draws the ribbon appendPath draws, in that c
   ParkMesh plain;
   appendPath(plain, PathKind::Backstage, points);
   const ParkMesh colored = pathOf(PathKind::Backstage, points, MARK);
-  REQUIRE(!plain.Vertices.empty());
+  REQUIRE_FALSE(plain.Vertices.empty());
   CHECK(std::ranges::equal(colored.Vertices, plain.Vertices, sameShape));
   CHECK(colored.Indices == plain.Indices);
   CHECK(std::ranges::all_of(colored.Vertices,
@@ -135,14 +135,14 @@ TEST_CASE("appendEntity draws the box or path a key holds as buildParkMesh draws
 
   SECTION("a box") {
     const ParkMesh expected = boxOf(BoxKind::Depot, Pose{-80.0, -80.0, 1.0, 0.0}, MARK);
-    REQUIRE(!expected.Vertices.empty());
+    REQUIRE_FALSE(expected.Vertices.empty());
     CHECK(sameMesh(entityOf(world, DEPOT, MARK), expected));
   }
   SECTION("a path") {
     const std::vector<ParkPoint> points{{-40.0, -50.0}, {-40.0, 50.0}};
     ParkMesh drawn;
     appendPath(drawn, PathKind::Backstage, points);
-    REQUIRE(!drawn.Vertices.empty());
+    REQUIRE_FALSE(drawn.Vertices.empty());
     const ParkMesh mesh = entityOf(world, BACKSTAGE, MARK);
     CHECK(std::ranges::equal(mesh.Vertices, drawn.Vertices, sameShape));
     CHECK(mesh.Indices == drawn.Indices);
@@ -168,7 +168,7 @@ TEST_CASE("An AddBox's ghost is its box in its kind's color at GHOST_ALPHA when 
   // Over the shop.
   const AddBox refused{BoxKind::Shop, Pose{42.0, 0.0, 0.0, -1.0}};
   REQUIRE(isAccepted(world, accepted));
-  REQUIRE(!isAccepted(world, refused));
+  REQUIRE_FALSE(isAccepted(world, refused));
 
   CHECK(sameMesh(buildGhostMesh(world, accepted),
                  boxOf(BoxKind::Depot, accepted.At, ghostOf(boxColor(BoxKind::Depot)))));
@@ -183,7 +183,7 @@ TEST_CASE("A MoveBox's ghost is the box its key holds at the new pose, in the bo
   // The depot onto the shop, so the ghost's size and height must be the depot's.
   const MoveBox refused{DEPOT, Pose{40.0, 0.0, 1.0, 0.0}};
   REQUIRE(isAccepted(world, accepted));
-  REQUIRE(!isAccepted(world, refused));
+  REQUIRE_FALSE(isAccepted(world, refused));
 
   CHECK(sameMesh(buildGhostMesh(world, accepted),
                  boxOf(BoxKind::Shop, accepted.At, ghostOf(boxColor(BoxKind::Shop)))));
@@ -199,13 +199,13 @@ TEST_CASE("An AddPath's ghost is its ribbon in its kind's color at GHOST_ALPHA w
   // Through the shop.
   const AddPath refused{PathKind::Guest, {{40.0, -20.0}, {40.0, 20.0}}};
   REQUIRE(isAccepted(world, accepted));
-  REQUIRE(!isAccepted(world, refused));
+  REQUIRE_FALSE(isAccepted(world, refused));
 
   const ParkMesh acceptedRibbon =
       pathOf(PathKind::Backstage, accepted.Points, ghostOf(pathColor(PathKind::Backstage)));
   const ParkMesh refusedRibbon = pathOf(PathKind::Guest, refused.Points, INVALID_TINT);
-  REQUIRE(!acceptedRibbon.Vertices.empty());
-  REQUIRE(!refusedRibbon.Vertices.empty());
+  REQUIRE_FALSE(acceptedRibbon.Vertices.empty());
+  REQUIRE_FALSE(refusedRibbon.Vertices.empty());
 
   CHECK(sameMesh(buildGhostMesh(world, accepted), acceptedRibbon));
   CHECK(sameMesh(buildGhostMesh(world, refused), refusedRibbon));
@@ -216,8 +216,8 @@ TEST_CASE("A deletion's ghost is the entity it deletes in DELETE_TINT when accep
   const World world = ghostPark();
   const ParkMesh deletedBox = entityOf(world, SHOP, DELETE_TINT);
   const ParkMesh deletedPath = entityOf(world, BACKSTAGE, DELETE_TINT);
-  REQUIRE(!deletedBox.Vertices.empty());
-  REQUIRE(!deletedPath.Vertices.empty());
+  REQUIRE_FALSE(deletedBox.Vertices.empty());
+  REQUIRE_FALSE(deletedPath.Vertices.empty());
 
   CHECK(sameMesh(buildGhostMesh(world, DeleteBox{SHOP}), deletedBox));
   CHECK(sameMesh(buildGhostMesh(world, DeletePath{BACKSTAGE}), deletedPath));
@@ -237,7 +237,7 @@ std::vector<ParkVertex> lastBoxOf(const ParkMesh &mesh, std::size_t count) {
 void checkGhostIsCommittedBox(const World &resolved, const ParkEdit &edit) {
   REQUIRE(isAccepted(resolved, edit));
   const ParkMesh ghost = buildGhostMesh(resolved, edit);
-  REQUIRE(!ghost.Vertices.empty());
+  REQUIRE_FALSE(ghost.Vertices.empty());
   CommandQueue queue;
   queueEdit(queue, edit);
   const World candidate = makeCandidate(resolved, queue);

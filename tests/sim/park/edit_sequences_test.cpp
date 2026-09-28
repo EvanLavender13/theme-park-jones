@@ -23,9 +23,7 @@ namespace {
 constexpr double NOT_A_NUMBER = std::numeric_limits<double>::quiet_NaN();
 constexpr double INFINITE = std::numeric_limits<double>::infinity();
 // Kinds with no enumerator, which a command can still hold.
-// NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
 constexpr auto NO_PATH_KIND = static_cast<PathKind>(2);
-// NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
 constexpr auto NO_BOX_KIND = static_cast<BoxKind>(2);
 
 // Keyed draws, so a failing sequence is the same on every build and in every run.

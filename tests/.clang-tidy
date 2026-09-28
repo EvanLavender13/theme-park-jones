@@ -1,0 +1,7 @@
+# Test code runs the parent configuration without the static analyzer. Catch2's CHECK_FALSE and
+# REQUIRE_FALSE expand to enum casts the analyzer misreports, tests cast to out-of-range enums on
+# purpose, and the sanitizers already run every test; the analyzer also quadruples a test file's
+# lint time.
+---
+InheritParentConfig: true
+Checks: '-clang-analyzer-*'

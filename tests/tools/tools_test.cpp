@@ -50,8 +50,8 @@ TEST_CASE("The None tool gives no edit and no highlight") {
   for (const ParkPoint over : {ParkPoint{47.0, 0.0}, ParkPoint{-50.0, 1.0}}) {
     INFO("pointer at " << over.X << ", " << over.Z);
     movePointer(tool, over);
-    CHECK(!tentativeEdit(tool, world).has_value());
-    CHECK(!highlightedEntity(tool, world).has_value());
+    CHECK_FALSE(tentativeEdit(tool, world).has_value());
+    CHECK_FALSE(highlightedEntity(tool, world).has_value());
   }
 }
 
@@ -109,7 +109,7 @@ TEST_CASE("A release gives none when no press before it took hold, even while a 
     ToolState tool = toolOf(ToolKind::None);
     movePointer(tool, ParkPoint{47.0, 0.0});
     pressPointer(tool, world);
-    CHECK(!releasePointer(tool, world).has_value());
+    CHECK_FALSE(releasePointer(tool, world).has_value());
   }
   SECTION("PlaceShop, pressed with no ground position") {
     ToolState tool = toolOf(ToolKind::PlaceShop);
@@ -117,20 +117,20 @@ TEST_CASE("A release gives none when no press before it took hold, even while a 
     pressPointer(tool, world);
     movePointer(tool, ParkPoint{80.0, 80.0});
     REQUIRE(tentativeEdit(tool, world).has_value());
-    CHECK(!releasePointer(tool, world).has_value());
+    CHECK_FALSE(releasePointer(tool, world).has_value());
   }
   SECTION("MoveBox, pressed over no box") {
     ToolState tool = toolOf(ToolKind::MoveBox);
     movePointer(tool, ParkPoint{80.0, 80.0});
     pressPointer(tool, world);
     movePointer(tool, ParkPoint{47.0, 0.0});
-    CHECK(!releasePointer(tool, world).has_value());
+    CHECK_FALSE(releasePointer(tool, world).has_value());
   }
   SECTION("PlaceShop, never pressed") {
     ToolState tool = toolOf(ToolKind::PlaceShop);
     movePointer(tool, ParkPoint{80.0, 80.0});
     REQUIRE(tentativeEdit(tool, world).has_value());
-    CHECK(!releasePointer(tool, world).has_value());
+    CHECK_FALSE(releasePointer(tool, world).has_value());
   }
 }
 
@@ -143,7 +143,7 @@ TEST_CASE("After a release the tool holds nothing, so a second release gives non
     pressPointer(tool, world);
     REQUIRE(releasePointer(tool, world).has_value());
     REQUIRE(tentativeEdit(tool, world).has_value());
-    CHECK(!releasePointer(tool, world).has_value());
+    CHECK_FALSE(releasePointer(tool, world).has_value());
   }
   SECTION("Delete, whose ghost still shows over the box") {
     ToolState tool = toolOf(ToolKind::Delete);
@@ -151,7 +151,7 @@ TEST_CASE("After a release the tool holds nothing, so a second release gives non
     pressPointer(tool, world);
     REQUIRE(releasePointer(tool, world).has_value());
     REQUIRE(tentativeEdit(tool, world).has_value());
-    CHECK(!releasePointer(tool, world).has_value());
+    CHECK_FALSE(releasePointer(tool, world).has_value());
   }
 }
 
@@ -194,7 +194,7 @@ TEST_CASE("selectTool drops a hold without committing, and keeps the pointer and
     REQUIRE(tentativeEdit(tool, world) == addBox(BoxKind::Shop, Pose{80.0, 80.0, 0.0, 5.0}));
     selectTool(tool, ToolKind::PlaceDepot);
     CHECK(tentativeEdit(tool, world) == addBox(BoxKind::Depot, Pose{80.0, 85.0, 0.0, -1.0}));
-    CHECK(!releasePointer(tool, world).has_value());
+    CHECK_FALSE(releasePointer(tool, world).has_value());
   }
   SECTION("a committed facing survives other tools") {
     ToolState tool = toolOf(ToolKind::PlaceShop);
@@ -220,7 +220,7 @@ TEST_CASE("A place tool not holding shows an AddBox of its kind at the pointer w
   CHECK(tentativeEdit(tool, world) == addBox(BoxKind::Depot, Pose{-70.25, 12.5, 0.0, -1.0}));
 
   movePointer(tool, NO_GROUND);
-  CHECK(!tentativeEdit(tool, world).has_value());
+  CHECK_FALSE(tentativeEdit(tool, world).has_value());
 }
 
 TEST_CASE("A place tool's press lands the box at the pointer, and while it holds the landing "
@@ -266,7 +266,7 @@ TEST_CASE("The move tool not holding highlights the box under the pointer and sh
   const auto checkHover = [&](std::optional<ParkPoint> pointer, std::optional<EntityKey> box) {
     movePointer(tool, pointer);
     CHECK(highlightedEntity(tool, world) == box);
-    CHECK(!tentativeEdit(tool, world).has_value());
+    CHECK_FALSE(tentativeEdit(tool, world).has_value());
   };
   checkHover(ParkPoint{47.0, 0.0}, OVERLAPPING_SHOP);
   // A box standing over a path, which the move tool marks rather than the path.
@@ -283,7 +283,7 @@ TEST_CASE("The move tool carries the box it pressed on by its grab point, keepin
   // Inside the turned shop alone, 2 m and -2 m from its position at (40, 0).
   movePointer(tool, ParkPoint{38.0, 2.0});
   pressPointer(tool, world);
-  CHECK(!tentativeEdit(tool, world).has_value());
+  CHECK_FALSE(tentativeEdit(tool, world).has_value());
 
   // The pointer plus the offset (2, -2), with the shop's facing (2, 0) as it was given.
   const Edit moved = ParkEdit{MoveBox{TURNED_SHOP, Pose{64.0, 10.0, 2.0, 0.0}}};
@@ -292,7 +292,7 @@ TEST_CASE("The move tool carries the box it pressed on by its grab point, keepin
   movePointer(tool, NO_GROUND);
   CHECK(tentativeEdit(tool, world) == moved);
   movePointer(tool, ParkPoint{38.0, 2.0});
-  CHECK(!tentativeEdit(tool, world).has_value());
+  CHECK_FALSE(tentativeEdit(tool, world).has_value());
 }
 
 TEST_CASE("The move tool highlights nothing while it holds") {
@@ -301,11 +301,11 @@ TEST_CASE("The move tool highlights nothing while it holds") {
   // Over a box at the press, and over another where the carried box would land.
   movePointer(tool, ParkPoint{47.0, 0.0});
   pressPointer(tool, world);
-  CHECK(!highlightedEntity(tool, world).has_value());
+  CHECK_FALSE(highlightedEntity(tool, world).has_value());
   movePointer(tool, ParkPoint{-37.0, 20.0});
   // The edit shows only while the tool holds the box.
   REQUIRE(tentativeEdit(tool, world).has_value());
-  CHECK(!highlightedEntity(tool, world).has_value());
+  CHECK_FALSE(highlightedEntity(tool, world).has_value());
 }
 
 TEST_CASE("The delete tool shows DeleteBox for the box under the pointer, else DeletePath for the "
@@ -315,7 +315,7 @@ TEST_CASE("The delete tool shows DeleteBox for the box under the pointer, else D
   const auto checkShows = [&](std::optional<ParkPoint> pointer, Edit expected) {
     movePointer(tool, pointer);
     CHECK(tentativeEdit(tool, world) == expected);
-    CHECK(!highlightedEntity(tool, world).has_value());
+    CHECK_FALSE(highlightedEntity(tool, world).has_value());
   };
   const auto checkAll = [&] {
     // A box standing over a path.

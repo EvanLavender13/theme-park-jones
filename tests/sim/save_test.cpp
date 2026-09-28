@@ -603,7 +603,6 @@ TEST_CASE("a number std::from_chars reads in full loads as its value, and saves 
 TEST_CASE("saveWorld refuses an enum value its type gives no name, naming the field") {
   World world = buildFormWorld(makeSaveSchema());
   // A value outside the enumerators is the case under test.
-  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   componentOf<Probe>(world, SECOND).Feeling = static_cast<Mood>(2);
   std::optional<std::string> message;
   try {
