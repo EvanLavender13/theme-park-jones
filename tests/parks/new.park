@@ -1,0 +1,10 @@
+tpj-park 1
+seed 1
+tick 0
+next-key 3
+
+[entrance]
+1 x=0 z=126.5 facing-x=0 facing-z=-1
+
+[path]
+2 kind=guest points=[{x=0 z=123} {x=0 z=103}]

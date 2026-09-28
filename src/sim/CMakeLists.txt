@@ -7,6 +7,8 @@ add_library(tpj_sim STATIC
     medium/network.cpp
     musl_exp.cpp
     musl_log.cpp
+    park/geometry.cpp
+    park/intent.cpp
     park_schema.cpp
     save.cpp
     schema.cpp

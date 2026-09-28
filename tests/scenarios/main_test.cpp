@@ -116,8 +116,8 @@ std::vector<std::string> linesOf(const std::string &text) {
   return lines;
 }
 
-// Saves makeParkSchema loads while it registers only the network type, which is derived and never
-// saved: a header alone, and one listing entities.
+// Saves holding no intent or state, which makeParkSchema loads: a header alone, and one listing
+// entities.
 constexpr std::string_view EMPTY_PARK = "tpj-park 1\nseed 7\ntick 0\nnext-key 1\n";
 constexpr std::string_view ENTITIES_PARK =
     "tpj-park 1\nseed 8\ntick 20\nnext-key 3\n\n[entities]\n1\n2\n";

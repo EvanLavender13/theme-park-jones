@@ -12,7 +12,7 @@ park-intent gives the park its first content. It adds the module src/sim/park to
 4. A non-empty ground line holds every kept point, bit for bit and in order, the first at distance 0 and the last as the line's final point. Between two consecutive kept points it holds max(8, ceil(c / 1 m)) points counting the first and not the last, where c is the chord between them, and every point it holds strictly between them lies on the centripetal Catmull-Rom curve with reflected phantom ends, within 1e-9 m, at the parameter the spec gives.
 5. Each distance of a ground line after the first is the previous distance plus sqrt(dx * dx + dz * dz) of the step from the previous point, computed in that order, so distances strictly increase.
 6. footprintOf gives no footprint exactly when the pose has a coordinate or facing component that is not finite, or a facing of zero length. Otherwise its forward is a unit vector in the facing's direction, within 1e-12. For a position inside the park's square, its corners are the rectangle the spec gives, within 1e-9 m, and a pose whose facing is scaled by a positive factor that leaves its components finite and each nonzero one nonzero gives the same footprint, within 1e-12 m per coordinate.
-7. makeNewPark gives exactly the template the spec gives, with the seed given and resolution pending. The template's entrance footprint and its path's ground line, widened by half the path's width, lie inside the park's square, and the ground line comes no nearer than half the path's width to the footprint. tests/parks/new.park is saveWorld's text for makeNewPark(1).
+7. makeNewPark gives exactly the template the spec gives, with the seed given, tick 0, next key 3, and resolution pending. The template's entrance footprint and its path's ground line, widened by half the path's width, lie inside the park's square, and the ground line comes no nearer than half the path's width to the footprint. tests/parks/new.park is saveWorld's text for makeNewPark(1).
 
 ## Medium
 
@@ -72,7 +72,7 @@ footprintOf gives a pose's footprint for a size: the rectangle the box or entran
 
 ## The new park
 
-makeNewPark(seed) gives a world with makeParkSchema's schema, the seed, and resolution pending, holding exactly two entities. Entity 1 is an entrance at (0, 126.5) facing (0, -1), so its back lies on the park's edge at z = 128 and its front faces into the park. Entity 2 is a guest path through (0, 123) and (0, 103), which starts 2 m in front of the entrance and runs 20 m into the park. tests/parks/new.park is its save with seed 1.
+makeNewPark(seed) gives a world with makeParkSchema's schema, the seed, tick 0, next key 3, and resolution pending, holding exactly two entities. Entity 1 is an entrance at (0, 126.5) facing (0, -1), so its back lies on the park's edge at z = 128 and its front faces into the park. Entity 2 is a guest path through (0, 123) and (0, 103), which starts 2 m in front of the entrance and runs 20 m into the park. tests/parks/new.park is its save with seed 1.
 ```
 
 ## Files affected
@@ -95,8 +95,9 @@ deterministic-simulation's world-as-value (registration, saves, the walk) and sh
 - Commands that change intent, and the physical-validity check: park-edits.
 - Drawing ground lines and footprints: park-view.
 - Carriers, networks, and connections built from the ground lines: navigable-networks.
+- Checking the template with the physical-validity check, whose tests in park-edits cover it. Here the template is checked on its ground line's points, which is exact for its straight path.
 - Adding a ground line or footprint line to tpj_scenarios' output. The first resolver that calls the geometry, navigable-networks', puts it under the cross-build check.
 
 ## Open questions
 
-None.
+- Criterion 4's curve property is checked at every point of straight paths and at hand-worked points of a bent one. A generated table of reference points, like tests/sim/support/expected_draws.py, would check every interior point of curved paths. Resolved by adding it if a curve bug ever gets past the hand-worked points.
