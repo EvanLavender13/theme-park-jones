@@ -1004,6 +1004,10 @@ Step 8: After `tpj::drawDebugPanel(stats);`, add:
 Run: `cmake --build --preset linux-debug 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; build/linux-debug/ThemeParkJones --park tests/parks/sketch.park --capture build/linux-debug/sketch.bmp; echo $?`
 Expected: no warnings, and `0`, with the capture showing the Tools panel below the Debug panel.
 
+Deviation, fixed inline: clang-tidy refused runLoop's size and an exception escaping main through the std::variant the loop now holds. The press, release, and pointer calls moved into useTool, the two panels into drawPanels, and main calls runLoopLogged, which runs runLoop and logs a std::exception it throws before the window and GPU are released.
+
+Review fix: the press and release moved into useButtons, called before the tick loop, so a release is judged against the world the displayed ghost was built from; movePointer stays after the camera update.
+
 ### Task 18: Verify
 
 Step 1: Run: `git ls-files -m -o --exclude-standard -- '*.h' '*.cpp' | xargs -r clang-format -i`

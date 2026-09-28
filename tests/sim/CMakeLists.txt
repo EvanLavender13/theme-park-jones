@@ -14,6 +14,7 @@ add_executable(tpj_sim_tests
     park/geometry_test.cpp
     park/intent_test.cpp
     park/new_park_test.cpp
+    park/park_edit_test.cpp
     park/sketch_park_test.cpp
     park/validity_test.cpp
     save_test.cpp

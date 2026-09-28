@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace tpj {
@@ -324,6 +325,14 @@ bool isPhysicallyValid(const World &world) {
     }
   }
   return std::ranges::all_of(lines, [&solids](const Line &line) { return fits(line, solids); });
+}
+
+bool isAccepted(const World &world, const ParkEdit &edit) {
+  return std::visit([&world](const auto &command) { return isAccepted(world, command); }, edit);
+}
+
+void queueEdit(CommandQueue &queue, const ParkEdit &edit) {
+  std::visit([&queue](const auto &command) { queue.push(command); }, edit);
 }
 
 } // namespace tpj

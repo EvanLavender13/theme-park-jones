@@ -8,6 +8,10 @@ layout(location = 0) out vec3 outNormal;
 layout(location = 1) out vec4 outColor;
 layout(location = 2) out float outViewDistance;
 
+// The ghost pipeline shares this shader and tests depth greater-or-equal against what the park
+// pipeline wrote, so both must compute the same position for the same vertex.
+invariant gl_Position;
+
 // SDL_GPU binds vertex-stage uniform buffers at set 1. The same block as terrain.vert.
 layout(set = 1, binding = 0) uniform Camera {
     mat4 viewProjection;

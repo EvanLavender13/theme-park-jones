@@ -1,13 +1,18 @@
 #include "app/debug_panel.h"
 #include "app/orbit_camera.h"
+#include "app/tool_panel.h"
 #include "core/profile.h"
 #include "render/park_mesh.h"
+#include "render/picking.h"
 #include "render/renderer.h"
+#include "sim/command_queue.h"
 #include "sim/field_text.h"
+#include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
 #include "sim/save.h"
 #include "sim/world.h"
+#include "tools/tools.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -15,6 +20,7 @@
 #include <imgui_impl_sdl3.h>
 
 #include <charconv>
+#include <exception>
 #include <optional>
 #include <stdint.h>
 #include <stdio.h>
@@ -121,10 +127,26 @@ struct DrawnIntent {
   bool operator==(const DrawnIntent &) const = default;
 };
 
+// The left button's presses and releases over one frame.
+struct PointerButtons {
+  bool Pressed = false;
+  bool Released = false;
+};
+
+// The edit and highlight a ghost mesh was built from.
+struct DrawnGhost {
+  std::optional<tpj::ParkEdit> Edit;
+  std::optional<tpj::EntityKey> Highlight;
+
+  bool operator==(const DrawnGhost &) const = default;
+};
+
 // Rebuilds the park mesh when the world's intent differs from what was last drawn, framing the
-// camera on the first one. Returns false if the upload failed.
+// camera on the first one. Returns false if the upload failed, and sets rebuilt when it built a
+// mesh.
 bool updateParkMesh(tpj::Renderer &renderer, const tpj::World &world,
-                    std::optional<DrawnIntent> &drawn, tpj::OrbitCamera &camera) {
+                    std::optional<DrawnIntent> &drawn, tpj::OrbitCamera &camera, bool &rebuilt) {
+  rebuilt = false;
   DrawnIntent current{tpj::parkEntrances(world), tpj::parkPaths(world), tpj::parkBoxes(world)};
   if (drawn && *drawn == current) {
     return true;
@@ -136,7 +158,46 @@ bool updateParkMesh(tpj::Renderer &renderer, const tpj::World &world,
     }
   }
   drawn = std::move(current);
+  rebuilt = true;
   return tpj::setParkMesh(renderer, mesh);
+}
+
+// Rebuilds the ghost mesh when the tool's edit or highlight differs from what was last drawn, or
+// the park mesh was rebuilt. Returns false if the upload failed.
+bool updateGhostMesh(tpj::Renderer &renderer, const tpj::World &world, const tpj::ToolState &tool,
+                     std::optional<DrawnGhost> &drawn, bool parkRebuilt) {
+  DrawnGhost current{tpj::tentativeEdit(tool, world), tpj::highlightedEntity(tool, world)};
+  if (drawn && *drawn == current && !parkRebuilt) {
+    return true;
+  }
+  tpj::ParkMesh mesh;
+  if (current.Edit) {
+    mesh = tpj::buildGhostMesh(world, *current.Edit);
+  }
+  if (current.Highlight) {
+    tpj::appendEntity(mesh, world, *current.Highlight, tpj::HIGHLIGHT_TINT);
+  }
+  drawn = std::move(current);
+  return tpj::setGhostMesh(renderer, mesh);
+}
+
+// The ground under the cursor, or none while ImGui wants the mouse or the cursor meets no ground.
+std::optional<tpj::ParkPoint> groundUnderCursor(SDL_Window *window, const tpj::CameraView &view) {
+  if (ImGui::GetIO().WantCaptureMouse) {
+    return std::nullopt;
+  }
+  int width = 0;
+  int height = 0;
+  if (!SDL_GetWindowSize(window, &width, &height) || width <= 0 || height <= 0) {
+    return std::nullopt;
+  }
+  float x = 0.0f;
+  float y = 0.0f;
+  SDL_GetMouseState(&x, &y);
+  const float ndcX = 2.0f * x / static_cast<float>(width) - 1.0f;
+  const float ndcY = 1.0f - 2.0f * y / static_cast<float>(height);
+  return tpj::groundAtCursor(view, static_cast<float>(width) / static_cast<float>(height), ndcX,
+                             ndcY);
 }
 
 float keyAxis(const bool *keys, SDL_Scancode positive, SDL_Scancode negative) {
@@ -157,9 +218,10 @@ void addMouseInput(const SDL_Event &event, tpj::CameraInput &input) {
   }
 }
 
-// Drains pending events into ImGui and one frame of camera input. Input ImGui is using does
-// not reach the camera. Returns false when the app should quit.
-bool gatherInput(tpj::CameraInput &input) {
+// Drains pending events into ImGui, one frame of camera input, and the left button. Input ImGui is
+// using does not reach the camera, nor a press the tool; a release always reaches it. Returns false
+// when the app should quit.
+bool gatherInput(tpj::CameraInput &input, PointerButtons &buttons) {
   bool keepRunning = true;
   const ImGuiIO &io = ImGui::GetIO();
   SDL_Event event;
@@ -167,7 +229,12 @@ bool gatherInput(tpj::CameraInput &input) {
     ImGui_ImplSDL3_ProcessEvent(&event);
     if (event.type == SDL_EVENT_QUIT) {
       keepRunning = false;
+    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+      buttons.Released = true;
     } else if (!io.WantCaptureMouse) {
+      if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
+        buttons.Pressed = true;
+      }
       addMouseInput(event, input);
     }
   }
@@ -181,16 +248,48 @@ bool gatherInput(tpj::CameraInput &input) {
   return keepRunning;
 }
 
+// Gives the tool the frame's press and release, and queues what a release commits. Called before
+// the frame's ticks and pointer move, so the buttons act on the world and pointer the ghost on
+// screen was built from.
+void useButtons(tpj::ToolState &tool, const tpj::World &world, tpj::CommandQueue &commands,
+                const PointerButtons &buttons) {
+  if (buttons.Pressed) {
+    tpj::pressPointer(tool, world);
+  }
+  if (buttons.Released) {
+    if (const std::optional<tpj::ParkEdit> edit = tpj::releasePointer(tool, world)) {
+      tpj::queueEdit(commands, *edit);
+    }
+  }
+}
+
+// Builds the Debug and Tools panels, selecting the tool the player chose.
+void drawPanels(const tpj::World &world, const tpj::OrbitCamera &camera, tpj::ToolState &tool) {
+  tpj::DebugStats stats;
+  stats.SimTick = world.Tick;
+  stats.Focus = camera.Focus;
+  stats.Distance = camera.Distance;
+  tpj::drawDebugPanel(stats);
+  tpj::ToolKind kind = tool.Kind;
+  if (tpj::drawToolPanel(kind)) {
+    tpj::selectTool(tool, kind);
+  }
+}
+
 // Runs the main loop until quit or the frame limit. Returns false if rendering failed.
 bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world) {
   tpj::OrbitCamera camera;
   std::optional<DrawnIntent> drawn;
+  std::optional<DrawnGhost> drawnGhost;
+  tpj::ToolState tool;
+  tpj::CommandQueue commands;
   uint64_t lastCounter = SDL_GetPerformanceCounter();
   double simAccumulator = 0.0;
 
   for (int frame = 1;; ++frame) {
     tpj::CameraInput input;
-    if (!gatherInput(input)) {
+    PointerButtons buttons;
+    if (!gatherInput(input, buttons)) {
       return true;
     }
 
@@ -202,13 +301,17 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
       dt = MAX_FRAME_SECONDS;
     }
 
-    // The simulation advances in fixed ticks regardless of frame rate (principle 10).
+    useButtons(tool, world, commands, buttons);
+
+    // The simulation advances in fixed ticks regardless of frame rate, and queued edits apply at
+    // the next (principle 10).
     simAccumulator += dt;
     while (simAccumulator >= tpj::SIM_TICK_SECONDS) {
-      tpj::stepWorld(world);
+      tpj::stepWorld(world, commands);
       simAccumulator -= tpj::SIM_TICK_SECONDS;
     }
-    if (!updateParkMesh(renderer, world, drawn, camera)) {
+    bool parkRebuilt = false;
+    if (!updateParkMesh(renderer, world, drawn, camera, parkRebuilt)) {
       return false;
     }
 
@@ -216,15 +319,15 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
     tpj::CameraView view;
     view.Eye = tpj::orbitCameraEye(camera);
     view.Target = camera.Focus;
+    tpj::movePointer(tool, groundUnderCursor(renderer.Window, view));
+    if (!updateGhostMesh(renderer, world, tool, drawnGhost, parkRebuilt)) {
+      return false;
+    }
 
     tpj::beginUiFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
-    tpj::DebugStats stats;
-    stats.SimTick = world.Tick;
-    stats.Focus = camera.Focus;
-    stats.Distance = camera.Distance;
-    tpj::drawDebugPanel(stats);
+    drawPanels(world, camera, tool);
     ImGui::Render();
 
     const bool lastFrame = options.FrameLimit > 0 && frame >= options.FrameLimit;
@@ -236,6 +339,17 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
     if (lastFrame) {
       return true;
     }
+  }
+}
+
+// Runs the main loop, logging anything it throws, such as a world invariant the simulation
+// checks, so the window and GPU are still released. Returns false if the loop failed or threw.
+bool runLoopLogged(tpj::Renderer &renderer, const Options &options, tpj::World &world) {
+  try {
+    return runLoop(renderer, options, world);
+  } catch (const std::exception &error) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Main loop: %s", error.what());
+    return false;
   }
 }
 
@@ -275,8 +389,8 @@ int main(int argc, char **argv) {
   ImGui_ImplSDL3_InitForSDLGPU(window);
 
   tpj::Renderer renderer;
-  const bool ok =
-      tpj::createRenderer(renderer, window, PARK_SIZE_METERS) && runLoop(renderer, options, *world);
+  const bool ok = tpj::createRenderer(renderer, window, PARK_SIZE_METERS) &&
+                  runLoopLogged(renderer, options, *world);
 
   tpj::destroyRenderer(renderer);
   ImGui_ImplSDL3_Shutdown();

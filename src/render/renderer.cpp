@@ -70,11 +70,12 @@ SDL_GPUTextureFormat chooseDepthFormat(SDL_GPUDevice *device) {
   return SDL_GPU_TEXTUREFORMAT_D16_UNORM;
 }
 
-// A lit, depth-tested pipeline with back faces culled. Depth is reversed: nearer is greater.
+// A lit, depth-tested pipeline with back faces culled. Depth is reversed: nearer is greater. A
+// translucent one blends by alpha, passes equal depths, and writes no depth.
 SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *vertexFile,
                                         const char *fragmentFile,
                                         const SDL_GPUVertexAttribute *attributes,
-                                        uint32_t attributeCount, uint32_t pitch) {
+                                        uint32_t attributeCount, uint32_t pitch, bool translucent) {
   SDL_GPUShader *vertexShader =
       loadShader(renderer.Device, vertexFile, SDL_GPU_SHADERSTAGE_VERTEX, 1);
   SDL_GPUShader *fragmentShader =
@@ -92,6 +93,15 @@ SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *ve
 
   SDL_GPUColorTargetDescription colorTarget = {};
   colorTarget.format = COLOR_FORMAT;
+  if (translucent) {
+    colorTarget.blend_state.enable_blend = true;
+    colorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    colorTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    colorTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    colorTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    colorTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    colorTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+  }
 
   SDL_GPUGraphicsPipelineCreateInfo info = {};
   info.vertex_shader = vertexShader;
@@ -105,8 +115,9 @@ SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *ve
   info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
   info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
   info.depth_stencil_state.enable_depth_test = true;
-  info.depth_stencil_state.enable_depth_write = true;
-  info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_GREATER;
+  info.depth_stencil_state.enable_depth_write = !translucent;
+  info.depth_stencil_state.compare_op =
+      translucent ? SDL_GPU_COMPAREOP_GREATER_OR_EQUAL : SDL_GPU_COMPAREOP_GREATER;
   info.target_info.color_target_descriptions = &colorTarget;
   info.target_info.num_color_targets = 1;
   info.target_info.depth_stencil_format = static_cast<SDL_GPUTextureFormat>(renderer.DepthFormat);
@@ -133,7 +144,7 @@ bool createTerrainPipeline(Renderer &renderer) {
   attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
   attributes[1].offset = offsetof(TerrainVertex, Normal);
   renderer.TerrainPipeline = createPipeline(renderer, "terrain.vert.spv", "terrain.frag.spv",
-                                            attributes, 2, sizeof(TerrainVertex));
+                                            attributes, 2, sizeof(TerrainVertex), false);
   return renderer.TerrainPipeline != nullptr;
 }
 
@@ -154,9 +165,11 @@ bool createParkPipeline(Renderer &renderer) {
   attributes[2].buffer_slot = 0;
   attributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
   attributes[2].offset = offsetof(ParkVertex, Color);
-  renderer.ParkPipeline =
-      createPipeline(renderer, "park.vert.spv", "park.frag.spv", attributes, 3, sizeof(ParkVertex));
-  return renderer.ParkPipeline != nullptr;
+  renderer.ParkPipeline = createPipeline(renderer, "park.vert.spv", "park.frag.spv", attributes, 3,
+                                         sizeof(ParkVertex), false);
+  renderer.GhostPipeline = createPipeline(renderer, "park.vert.spv", "park.frag.spv", attributes, 3,
+                                          sizeof(ParkVertex), true);
+  return renderer.ParkPipeline != nullptr && renderer.GhostPipeline != nullptr;
 }
 
 constexpr uint32_t TERRAIN_VERTICES_PER_SIDE = TERRAIN_CELLS_PER_SIDE + 1;
@@ -406,6 +419,9 @@ void destroyRenderer(Renderer &renderer) {
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkVertices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkIndices);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.ParkPipeline);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.GhostVertices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.GhostIndices);
+  SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.GhostPipeline);
   if (renderer.Window != nullptr) {
     SDL_ReleaseWindowFromGPUDevice(renderer.Device, renderer.Window);
   }
@@ -413,24 +429,40 @@ void destroyRenderer(Renderer &renderer) {
   renderer = Renderer{};
 }
 
-bool setParkMesh(Renderer &renderer, const ParkMesh &mesh) {
+namespace {
+
+// Replaces a mesh's buffers with the mesh's, or with none when it is empty.
+bool replaceMesh(Renderer &renderer, const ParkMesh &mesh, SDL_GPUBuffer *&vertices,
+                 SDL_GPUBuffer *&indices, uint32_t &indexCount) {
   // SDL_GPU defers the release until the GPU no longer uses the buffers.
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkVertices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkIndices);
-  renderer.ParkVertices = nullptr;
-  renderer.ParkIndices = nullptr;
-  renderer.ParkIndexCount = 0;
+  SDL_ReleaseGPUBuffer(renderer.Device, vertices);
+  SDL_ReleaseGPUBuffer(renderer.Device, indices);
+  vertices = nullptr;
+  indices = nullptr;
+  indexCount = 0;
   if (mesh.Indices.empty()) {
     return true;
   }
   const auto vertexBytes = static_cast<uint32_t>(mesh.Vertices.size() * sizeof(ParkVertex));
   const auto indexBytes = static_cast<uint32_t>(mesh.Indices.size() * sizeof(uint32_t));
   if (!uploadMesh(renderer.Device, mesh.Vertices.data(), vertexBytes, mesh.Indices.data(),
-                  indexBytes, renderer.ParkVertices, renderer.ParkIndices)) {
+                  indexBytes, vertices, indices)) {
     return false;
   }
-  renderer.ParkIndexCount = static_cast<uint32_t>(mesh.Indices.size());
+  indexCount = static_cast<uint32_t>(mesh.Indices.size());
   return true;
+}
+
+} // namespace
+
+bool setParkMesh(Renderer &renderer, const ParkMesh &mesh) {
+  return replaceMesh(renderer, mesh, renderer.ParkVertices, renderer.ParkIndices,
+                     renderer.ParkIndexCount);
+}
+
+bool setGhostMesh(Renderer &renderer, const ParkMesh &mesh) {
+  return replaceMesh(renderer, mesh, renderer.GhostVertices, renderer.GhostIndices,
+                     renderer.GhostIndexCount);
 }
 
 void beginUiFrame() { ImGui_ImplSDLGPU3_NewFrame(); }
@@ -481,6 +513,15 @@ void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const C
     const SDL_GPUBufferBinding parkIndexBinding = {renderer.ParkIndices, 0};
     SDL_BindGPUIndexBuffer(pass, &parkIndexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
     SDL_DrawGPUIndexedPrimitives(pass, renderer.ParkIndexCount, 1, 0, 0, 0);
+  }
+  // Ghosts and highlights come after everything opaque, so they blend over it.
+  if (renderer.GhostIndexCount > 0) {
+    SDL_BindGPUGraphicsPipeline(pass, renderer.GhostPipeline);
+    const SDL_GPUBufferBinding ghostVertexBinding = {renderer.GhostVertices, 0};
+    SDL_BindGPUVertexBuffers(pass, 0, &ghostVertexBinding, 1);
+    const SDL_GPUBufferBinding ghostIndexBinding = {renderer.GhostIndices, 0};
+    SDL_BindGPUIndexBuffer(pass, &ghostIndexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    SDL_DrawGPUIndexedPrimitives(pass, renderer.GhostIndexCount, 1, 0, 0, 0);
   }
   SDL_EndGPURenderPass(pass);
 }

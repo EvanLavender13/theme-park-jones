@@ -4,6 +4,7 @@
 #include <array>
 #include <math.h>
 #include <optional>
+#include <variant>
 
 namespace tpj {
 namespace {
@@ -60,6 +61,11 @@ void addQuad(ParkMesh &mesh, const std::array<ParkPoint, 4> &ground,
                       {first, first + 1, first + 2, first, first + 2, first + 3});
 }
 
+// An edit's ghost color for a kind's color: translucent when accepted, the invalid tint when not.
+Rgba ghostColor(const World &world, const ParkEdit &edit, Rgba color) {
+  return isAccepted(world, edit) ? Rgba{color.R, color.G, color.B, GHOST_ALPHA} : INVALID_TINT;
+}
+
 } // namespace
 
 Rgba lightened(Rgba color) {
@@ -68,13 +74,16 @@ Rgba lightened(Rgba color) {
 }
 
 void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &points) {
+  appendPath(mesh, kind, points, pathColor(kind));
+}
+
+void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &points, Rgba color) {
   const std::vector<CarrierPoint> line = groundLine(points);
   if (line.empty()) {
     return;
   }
   const auto first = static_cast<uint32_t>(mesh.Vertices.size());
   const double half = 0.5 * pathWidth(kind);
-  const Rgba color = pathColor(kind);
   for (size_t i = 0; i < line.size(); ++i) {
     const ParkPoint tangent = tangentAt(line, i);
     const ParkPoint right{-tangent.Z, tangent.X};
@@ -141,6 +150,43 @@ std::optional<GroundBounds> meshBounds(const ParkMesh &mesh) {
     bounds.MaxZ = std::max(bounds.MaxZ, vertex.Position[2]);
   }
   return bounds;
+}
+
+void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color) {
+  for (const ParkBox &box : parkBoxes(world)) {
+    if (box.Key == key) {
+      appendBox(mesh, box.At, boxSize(box.Kind), boxHeight(box.Kind), color);
+      return;
+    }
+  }
+  for (const ParkPath &path : parkPaths(world)) {
+    if (path.Key == key) {
+      appendPath(mesh, path.Kind, path.Points, color);
+      return;
+    }
+  }
+}
+
+ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit) {
+  ParkMesh mesh;
+  if (const auto *add = std::get_if<AddBox>(&edit)) {
+    appendBox(mesh, add->At, boxSize(add->Kind), boxHeight(add->Kind),
+              ghostColor(world, edit, boxColor(add->Kind)));
+  } else if (const auto *move = std::get_if<MoveBox>(&edit)) {
+    for (const ParkBox &box : parkBoxes(world)) {
+      if (box.Key == move->Box) {
+        appendBox(mesh, move->At, boxSize(box.Kind), boxHeight(box.Kind),
+                  ghostColor(world, edit, boxColor(box.Kind)));
+      }
+    }
+  } else if (const auto *path = std::get_if<AddPath>(&edit)) {
+    appendPath(mesh, path->Kind, path->Points, ghostColor(world, edit, pathColor(path->Kind)));
+  } else if (isAccepted(world, edit)) {
+    const EntityKey key = std::holds_alternative<DeletePath>(edit) ? std::get<DeletePath>(edit).Path
+                                                                   : std::get<DeleteBox>(edit).Box;
+    appendEntity(mesh, world, key, DELETE_TINT);
+  }
+  return mesh;
 }
 
 } // namespace tpj

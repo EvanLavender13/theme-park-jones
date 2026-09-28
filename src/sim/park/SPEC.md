@@ -61,6 +61,8 @@ isAccepted gives whether a command would be applied to a world. applyCommand cal
 
 An AddPath or AddBox whose kind is not a value of its enum describes nothing, and is refused. A box or entrance with no footprint, or a path with an empty ground line, which only a hand-written save can hold, is no solid or line, so it blocks nothing. For a physically valid world, a command is therefore accepted exactly when it names what it acts on and the world it describes is physically valid.
 
+Commands compare equal when their fields do. A ParkEdit is any one of the five commands, the value a tool shows as a ghost and commits. isAccepted on a ParkEdit is isAccepted on the command it holds, and queueEdit pushes that command to a CommandQueue as its own type, so a cycle applies it exactly as if it had been pushed directly.
+
 ## The new park
 
 makeNewPark(seed) gives a world with makeParkSchema's schema, the seed, tick 0, next key 3, and resolution pending, holding exactly two entities. It is physically valid. Entity 1 is an entrance at (0, 126.5) facing (0, -1), so its back lies on the park's edge at z = 128 and its front faces into the park. Entity 2 is a guest path through (0, 123) and (0, 103), which starts 2 m in front of the entrance and runs 20 m into the park. tests/parks/new.park is its save with seed 1.

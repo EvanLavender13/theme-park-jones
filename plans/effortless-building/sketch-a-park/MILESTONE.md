@@ -66,6 +66,7 @@ The capability leaves these to this milestone. Playing adjusts them.
 - Facing inferred from the nearest path: a box set down near a path turns its front to it unless the player drags a facing. Gated on: navigable-networks' connections by face, so the inference serves a real connection.
 - Snapping preferences: an endpoint near another path's end joins it end to end rather than landing beside it.
 - Keyboard shortcuts for tools and for finishing or cancelling a path.
+- Turning a placed box, in place or while moving it. box-tools' move keeps a box's facing, so turning one means deleting and placing it again.
 - Undo and redo, and reshaping paths, from the capability's pool.
 - A refusal's reason given with isAccepted, such as which box a ghost overlaps, so the ghost can say why it is invalid.
 - Ground lines cached as derived data, so the physical-validity check stops recomputing every path's line on each query, if box-tools' ghosts show the cost.
@@ -82,5 +83,6 @@ The capability leaves these to this milestone. Playing adjusts them.
 - Open paths reflect their end neighbors as phantom points, and repeated points are dropped, since centripetal spacing divides by chord lengths.
 - SDL3's asynchronous file dialogs open and save park files, and their callback only hands the path to the main loop.
 - Tool logic lives in a library driven by ground positions, so the ghost-equals-commit property is tested.
+- A highlight lies exactly on what it marks, so the translucent pass tests depth greater-or-equal, and park.vert's position is invariant so both pipelines agree on depth.
 
 Depth is in RESEARCH.md.
