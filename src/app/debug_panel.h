@@ -13,9 +13,9 @@ struct DebugStats {
   float Distance = 0.0f;
 };
 
-// Draws the tooling panel with frame rate, simulation tick, and camera state. Call between
-// ImGui::NewFrame and ImGui::Render.
-void drawDebugPanel(const DebugStats &stats);
+// Draws the tooling panel with frame rate, simulation tick, camera state, and the Graph checkbox,
+// which sets showGraph. Call between ImGui::NewFrame and ImGui::Render.
+void drawDebugPanel(const DebugStats &stats, bool &showGraph);
 
 } // namespace tpj
 

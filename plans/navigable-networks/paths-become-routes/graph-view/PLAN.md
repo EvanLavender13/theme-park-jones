@@ -211,10 +211,13 @@ Step 1: Add these includes after `#include "render/math.h"`:
 Step 2: Add to the anonymous namespace, after viewDepth:
 
 ```cpp
-// The point of the segment from a to b at view depth nearZ, where a lies below it and b does not.
-GroundPoint pointAtDepth(GroundPoint a, GroundPoint b, float depthA, float depthB, float nearZ) {
-  const double t = static_cast<double>(nearZ - depthA) / static_cast<double>(depthB - depthA);
-  return {a.X + (t * (b.X - a.X)), a.Z + (t * (b.Z - a.Z))};
+// The point of a segment at view depth nearZ, between its end behind that depth and its end at or
+// past it.
+GroundPoint pointAtDepth(GroundPoint behind, GroundPoint ahead, float behindDepth, float aheadDepth,
+                         float nearZ) {
+  const double t =
+      static_cast<double>(nearZ - behindDepth) / static_cast<double>(aheadDepth - behindDepth);
+  return {behind.X + (t * (ahead.X - behind.X)), behind.Z + (t * (ahead.Z - behind.Z))};
 }
 
 // Adds a line for each segment of the network's carriers with a part in front of the near plane.

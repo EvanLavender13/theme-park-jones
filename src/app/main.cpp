@@ -3,6 +3,7 @@
 #include "app/park_file.h"
 #include "app/tool_panel.h"
 #include "core/profile.h"
+#include "render/graph_overlay.h"
 #include "render/park_mesh.h"
 #include "render/picking.h"
 #include "render/renderer.h"
@@ -45,6 +46,7 @@ struct Options {
   const char *ParkPath = nullptr;
   uint64_t Ticks = 0;
   bool PrintHash = false;
+  bool ShowGraph = false;
 };
 
 bool parseCount(const char *text, uint64_t &count) {
@@ -55,7 +57,8 @@ bool parseCount(const char *text, uint64_t &count) {
 }
 
 // --park PATH starts from a park file, --ticks N steps it N ticks before the first frame, and
-// --hash prints the state hash after them and exits. --frames N exits after N frames.
+// --hash prints the state hash after them and exits. --frames N exits after N frames. --graph
+// starts with the graph view on.
 // --capture PATH writes the last frame to PATH as a BMP and implies a short frame limit, which
 // makes the app usable for automated visual checks.
 bool parseOptions(int argc, char **argv, Options &options) {
@@ -73,15 +76,19 @@ bool parseOptions(int argc, char **argv, Options &options) {
       valid = parseCount(argv[++i], options.Ticks);
     } else if (strcmp(argv[i], "--hash") == 0) {
       options.PrintHash = true;
+    } else if (strcmp(argv[i], "--graph") == 0) {
+      options.ShowGraph = true;
     } else {
       valid = false;
     }
   }
-  if (options.PrintHash && (options.FramesGiven || options.CapturePath != nullptr)) {
+  if (options.PrintHash &&
+      (options.FramesGiven || options.CapturePath != nullptr || options.ShowGraph)) {
     valid = false;
   }
   if (!valid) {
-    SDL_Log("Usage: %s [--park PATH] [--ticks N] [--hash] [--frames N] [--capture PATH]", argv[0]);
+    SDL_Log("Usage: %s [--park PATH] [--ticks N] [--hash] [--frames N] [--capture PATH] [--graph]",
+            argv[0]);
     return false;
   }
   if (options.CapturePath != nullptr && options.FrameLimit <= 0) {
@@ -409,21 +416,55 @@ void useButtons(tpj::ToolState &tool, const tpj::World &world, tpj::CommandQueue
   }
 }
 
-// Builds the Debug and Tools panels, selecting the tool the player chose and starting the park
-// action they pressed.
+ImU32 imColor(tpj::Rgba color) {
+  return ImGui::ColorConvertFloat4ToU32(ImVec4(color.R, color.G, color.B, color.A));
+}
+
+// Draws the networks over the scene and behind every panel: lines in their kind's graph color,
+// then nodes.
+void drawGraph(const tpj::World &world, const tpj::CameraView &view) {
+  const ImVec2 size = ImGui::GetIO().DisplaySize;
+  const tpj::GraphOverlay overlay = tpj::buildGraphOverlay(world, view, size.x, size.y);
+  ImDrawList *drawList = ImGui::GetBackgroundDrawList();
+  for (const tpj::GraphLine &line : overlay.Lines) {
+    drawList->AddLine(ImVec2(line.From.X, line.From.Y), ImVec2(line.To.X, line.To.Y),
+                      imColor(tpj::graphColor(line.Kind)), tpj::GRAPH_LINE_THICKNESS);
+  }
+  for (const tpj::GraphNode &node : overlay.Nodes) {
+    drawList->AddCircleFilled(ImVec2(node.At.X, node.At.Y), tpj::GRAPH_NODE_RADIUS,
+                              imColor(tpj::GRAPH_NODE_COLOR));
+  }
+}
+
+// Builds the Debug and Tools panels, setting showGraph from the Graph checkbox, selecting the tool
+// the player chose and starting the park action they pressed.
 void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
-                tpj::ToolState &tool) {
+                bool &showGraph, tpj::ToolState &tool) {
   tpj::DebugStats stats;
   stats.SimTick = world.Tick;
   stats.Focus = camera.Focus;
   stats.Distance = camera.Distance;
-  tpj::drawDebugPanel(stats);
+  tpj::drawDebugPanel(stats, showGraph);
   const tpj::ToolPanelChoice choice =
       tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty(), dialogShowing());
   if (choice.Tool) {
     tpj::selectTool(tool, *choice.Tool);
   }
   startParkAction(choice.Park, window);
+}
+
+// Builds the frame's ImGui draw data: the panels, and the graph over the scene while showGraph is
+// set.
+void buildUi(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
+             const tpj::CameraView &view, bool &showGraph, tpj::ToolState &tool) {
+  tpj::beginUiFrame();
+  ImGui_ImplSDL3_NewFrame();
+  ImGui::NewFrame();
+  drawPanels(window, world, camera, showGraph, tool);
+  if (showGraph) {
+    drawGraph(world, view);
+  }
+  ImGui::Render();
 }
 
 // Runs the main loop until quit or the frame limit. Returns false if rendering failed.
@@ -433,6 +474,7 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
   std::optional<DrawnGhost> drawnGhost;
   tpj::ToolState tool;
   tpj::CommandQueue commands;
+  bool showGraph = options.ShowGraph;
   uint64_t lastCounter = SDL_GetPerformanceCounter();
   double simAccumulator = 0.0;
 
@@ -479,11 +521,7 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
       return false;
     }
 
-    tpj::beginUiFrame();
-    ImGui_ImplSDL3_NewFrame();
-    ImGui::NewFrame();
-    drawPanels(renderer.Window, world, camera, tool);
-    ImGui::Render();
+    buildUi(renderer.Window, world, camera, view, showGraph, tool);
 
     const bool lastFrame = options.FrameLimit > 0 && frame >= options.FrameLimit;
     if (!tpj::drawFrame(renderer, view, ImGui::GetDrawData(),

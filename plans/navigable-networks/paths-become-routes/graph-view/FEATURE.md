@@ -73,6 +73,7 @@ and in its last paragraph, "or --hash given with --frames or --capture, whatever
 - Route distances in the view, a milestone deepening candidate.
 - Drawing the graph with depth, so boxes hide it. The view is tooling, and seeing a line through a box is the point.
 - Clipping against the sides of the window or the far plane. ImGui clips to the display, and the park lies well inside the far plane.
+- A test that --graph is accepted without --hash. Running the app with it opens a window, so criterion 8's capture checks it, and criterion 7's test cannot tell a refusal of the pair from a refusal of an unknown option.
 - Caching the overlay between frames. It is rebuilt each frame the checkbox is on, since the camera moves.
 
 ## Open questions
