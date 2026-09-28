@@ -50,7 +50,7 @@ Dependencies that are not fields or flows, ruled outside principle 3 by decision
 
 - Park intent: the drawn paths and placed boxes, which with the simulation state are the saved park (principle 1). Authored by EB. NN, PO, and BG derive their parts of the world from it.
 - Candidate resolution: for a preview, EB supplies tentative intent, DS provides a candidate copy of the world, and NN and PO resolve it through the same derivation they use for committed intent. LS samples the candidate world's fields through the normal field interface and never calls another capability's derivation directly.
-- Inspection records: what a guest or shop publishes about itself for display, such as a guest's hunger and last choice with its factors, or a shop's limiting factor. Produced by BG and PO, read only by LS and by tests.
+- Inspection records: what a guest or shop publishes about itself for display, such as a guest's hunger and last choice with its factors, or a shop's limiting factor. Produced by BG and PO, read only by LS, by tests, and by the app's box rendering, which marks a starved shop (EB draws the box, PO supplies the state).
 
 ## Members
 

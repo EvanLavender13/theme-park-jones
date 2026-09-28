@@ -73,7 +73,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 ## Open questions
 
 - The player-facing UI for the tools (docs/open-questions.md). Evan decides. The foundation uses ImGui buttons.
-- Snapping reach and the box footprint size are tuning values. They are settled while planning sketch-a-park, and adjusted by playing.
+- Snapping reach and the box footprint size are tuning values. sketch-a-park's MILESTONE.md sets them, and playing adjusts them.
 
 ## Research notes
 
