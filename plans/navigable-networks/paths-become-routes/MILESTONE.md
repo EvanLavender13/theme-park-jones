@@ -59,6 +59,7 @@ Keeping the previous networks available until holders carry their places over is
 - A connector from the nearest point of a face rather than its door, so a path passing a corner still connects.
 - Several connectors per face, one per nearby path.
 - A sweep-line search for meetings, if parks grow large enough for the pairwise test to cost.
+- The graph view marking a line as a connector when its carrier's first stop is anchored, as walkways find connectors, rather than when no path of either kind holds its key.
 
 ## Open questions
 

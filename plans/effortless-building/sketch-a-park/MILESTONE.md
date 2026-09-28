@@ -75,6 +75,7 @@ The capability leaves these to this milestone. Playing adjusts them.
 - Undo and redo, and reshaping paths, from the capability's pool.
 - A refusal's reason given with isAccepted, such as which box a ghost overlaps, so the ghost can say why it is invalid.
 - Ground lines cached as derived data, so the physical-validity check stops recomputing every path's line on each query, if box-tools' ghosts show the cost.
+- Walkways an edit removes, such as a deleted box's or a moved box's old one, marked in DELETE_TINT in the ghost.
 - Crossings and junctions drawn cleanly: where ribbons meet or cross they overlap, and ribbons of different kinds tie in depth where they cross.
 
 ## Open questions
