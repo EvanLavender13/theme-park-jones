@@ -19,6 +19,7 @@ add_executable(tpj_sim_tests
     park/validity_test.cpp
     routes/connections_test.cpp
     routes/network_edits_test.cpp
+    routes/route_distance_test.cpp
     routes/networks_test.cpp
     routes/routes_park_test.cpp
     save_test.cpp
