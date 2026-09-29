@@ -1,7 +1,9 @@
 #include "render/park_mesh.h"
 
+#include "render/graph_overlay.h"
 #include "sim/command_queue.h"
 #include "sim/entity_key.h"
+#include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
@@ -13,7 +15,11 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <fstream>
+#include <ios>
 #include <iterator>
+#include <optional>
+#include <sstream>
 #include <stdint.h>
 #include <string>
 #include <string_view>
@@ -49,6 +55,26 @@ World ghostPark() {
   resolveWorld(world);
   return world;
 }
+
+std::string routesText() {
+  std::ifstream file(TPJ_PARKS_DIR "/routes.park", std::ios::binary);
+  REQUIRE(file.is_open());
+  std::stringstream text;
+  text << file.rdbuf();
+  return text.str();
+}
+
+// tests/parks/routes.park, resolved: its one shop is supplied by its one depot over one backstage
+// path.
+World routesPark() {
+  World world = loadWorld(makeParkSchema(), routesText());
+  resolveWorld(world);
+  return world;
+}
+
+// routes.park's backstage path, shop, and depot.
+constexpr EntityKey ROUTES_BACKSTAGE{6};
+constexpr EntityKey ROUTES_SHOP{7};
 
 // A shop facing -x whose front door, at (3, 110), lies 3 m from the guest path along x = 0.
 constexpr Pose SHOP_IN_REACH{6.0, 110.0, -1.0, 0.0};
@@ -107,8 +133,18 @@ World candidateOf(const World &world, const ParkEdit &edit) {
   return makeCandidate(world, queue);
 }
 
-ParkMesh withWalkways(ParkMesh own, const World &candidate) {
+// The starved marks of the world at the alpha.
+ParkMesh marksOf(const World &world, float alpha) {
+  ParkMesh mesh;
+  appendStarvedMarks(mesh, world, alpha);
+  return mesh;
+}
+
+// What an accepted edit's ghost adds after its own ghost: the candidate's walkways and then its
+// starved marks, both at GHOST_ALPHA.
+ParkMesh withCandidate(ParkMesh own, const World &candidate) {
   appendWalkways(own, candidate, GHOST_ALPHA);
+  appendStarvedMarks(own, candidate, GHOST_ALPHA);
   return own;
 }
 
@@ -128,21 +164,24 @@ ParkMesh entrancesAndPaths(const World &world) {
 }
 
 // The vertices buildParkMesh draws for the world's walkways: after its entrances and paths, and
-// before its boxes.
+// before its boxes and starved marks.
 std::vector<ParkVertex> walkwaysDrawn(const World &world) {
   const ParkMesh drawn = buildParkMesh(world);
   const std::size_t before = entrancesAndPaths(world).Vertices.size();
-  const std::size_t after = BOX_VERTICES * parkBoxes(world).size();
+  const std::size_t after =
+      (BOX_VERTICES * parkBoxes(world).size()) + marksOf(world, 1.0f).Vertices.size();
   REQUIRE(drawn.Vertices.size() >= before + after);
   return {std::next(drawn.Vertices.begin(), static_cast<std::ptrdiff_t>(before)),
           std::prev(drawn.Vertices.end(), static_cast<std::ptrdiff_t>(after))};
 }
 
-// The ghost's vertices after its own ghost's.
-std::vector<ParkVertex> ghostWalkways(const ParkMesh &ghost, std::size_t own) {
-  REQUIRE(ghost.Vertices.size() >= own);
+// The ghost's vertices after its own ghost's and before its candidate's starved marks.
+std::vector<ParkVertex> ghostWalkways(const ParkMesh &ghost, std::size_t own,
+                                      const World &candidate) {
+  const std::size_t marks = marksOf(candidate, GHOST_ALPHA).Vertices.size();
+  REQUIRE(ghost.Vertices.size() >= own + marks);
   return {std::next(ghost.Vertices.begin(), static_cast<std::ptrdiff_t>(own)),
-          ghost.Vertices.end()};
+          std::prev(ghost.Vertices.end(), static_cast<std::ptrdiff_t>(marks))};
 }
 
 // A mesh already holding a triangle, so appending nothing must leave it as it was.
@@ -294,10 +333,14 @@ TEST_CASE("A deletion's own ghost is the entity it deletes in DELETE_TINT when a
   CHECK(isEmpty(buildGhostMesh(world, DeleteBox{MISSING})));
 }
 
-// The vertices buildParkMesh draws for the highest-keyed box, which it draws last.
-std::vector<ParkVertex> lastBoxOf(const ParkMesh &mesh, std::size_t count) {
-  REQUIRE(mesh.Vertices.size() >= count);
-  return {std::prev(mesh.Vertices.end(), static_cast<std::ptrdiff_t>(count)), mesh.Vertices.end()};
+// The vertices buildParkMesh draws for the world's highest-keyed box, which it draws last of its
+// boxes, before the starved marks.
+std::vector<ParkVertex> lastBoxOf(const World &world) {
+  const ParkMesh mesh = buildParkMesh(world);
+  const std::size_t marks = marksOf(world, 1.0f).Vertices.size();
+  REQUIRE(mesh.Vertices.size() >= BOX_VERTICES + marks);
+  const auto end = std::prev(mesh.Vertices.end(), static_cast<std::ptrdiff_t>(marks));
+  return {std::prev(end, static_cast<std::ptrdiff_t>(BOX_VERTICES)), end};
 }
 
 // Principle 8: an accepted ghost's own ghost, its first vertices, is the box its commit draws.
@@ -305,8 +348,7 @@ void checkGhostIsCommittedBox(const World &resolved, const ParkEdit &edit) {
   REQUIRE(isAccepted(resolved, edit));
   const ParkMesh ghost = buildGhostMesh(resolved, edit);
   REQUIRE(ghost.Vertices.size() >= BOX_VERTICES);
-  const std::vector<ParkVertex> committed =
-      lastBoxOf(buildParkMesh(candidateOf(resolved, edit)), BOX_VERTICES);
+  const std::vector<ParkVertex> committed = lastBoxOf(candidateOf(resolved, edit));
 
   CHECK(std::ranges::equal(
       ghost.Vertices.begin(),
@@ -368,8 +410,8 @@ TEST_CASE(
 }
 
 TEST_CASE("An accepted edit's ghost is its own ghost followed by the walkways of its candidate "
-          "world at GHOST_ALPHA") {
-  const World world = ghostPark();
+          "world and then that world's starved marks, both at GHOST_ALPHA") {
+  World world = ghostPark();
   ParkMesh own;
   ParkEdit edit;
 
@@ -389,11 +431,19 @@ TEST_CASE("An accepted edit's ghost is its own ghost followed by the walkways of
     own = entityOf(world, GUEST_PATH, DELETE_TINT);
     edit = DeletePath{GUEST_PATH};
   }
+  SECTION("a DeletePath that cuts a shop's supply route") {
+    world = routesPark();
+    REQUIRE(marksOf(world, GHOST_ALPHA).Vertices.empty());
+    own = entityOf(world, ROUTES_BACKSTAGE, DELETE_TINT);
+    edit = DeletePath{ROUTES_BACKSTAGE};
+  }
 
   REQUIRE(isAccepted(world, edit));
   REQUIRE_FALSE(own.Vertices.empty());
   const World candidate = candidateOf(world, edit);
-  CHECK(sameMesh(buildGhostMesh(world, edit), withWalkways(own, candidate)));
+  // Every section's candidate holds a starved shop, so the marks' place in the ghost shows.
+  REQUIRE_FALSE(marksOf(candidate, GHOST_ALPHA).Vertices.empty());
+  CHECK(sameMesh(buildGhostMesh(world, edit), withCandidate(own, candidate)));
 }
 
 // Principle 8: the walkways a ghost shows are the ones its commit draws.
@@ -405,16 +455,18 @@ TEST_CASE("An accepted edit's ghost walkways have, in order, the positions and n
     REQUIRE(isAccepted(world, edit));
     const std::vector<ParkVertex> expected = walkwaysDrawn(candidateOf(world, edit));
     REQUIRE(expected.size() > walkwaysDrawn(world).size());
-    CHECK(std::ranges::equal(ghostWalkways(buildGhostMesh(world, edit), BOX_VERTICES), expected,
-                             sameShape));
+    CHECK(std::ranges::equal(
+        ghostWalkways(buildGhostMesh(world, edit), BOX_VERTICES, candidateOf(world, edit)),
+        expected, sameShape));
   }
   SECTION("a MoveBox taking a shop's door out of reach") {
     const World committed = candidateOf(world, AddBox{BoxKind::Shop, SHOP_IN_REACH});
     const MoveBox edit{parkBoxes(committed).back().Key, OUT_OF_REACH};
     REQUIRE(isAccepted(committed, edit));
     const std::vector<ParkVertex> expected = walkwaysDrawn(candidateOf(committed, edit));
-    CHECK(std::ranges::equal(ghostWalkways(buildGhostMesh(committed, edit), BOX_VERTICES), expected,
-                             sameShape));
+    CHECK(std::ranges::equal(
+        ghostWalkways(buildGhostMesh(committed, edit), BOX_VERTICES, candidateOf(committed, edit)),
+        expected, sameShape));
   }
 }
 
@@ -427,8 +479,64 @@ TEST_CASE("An accepted edit that leaves a door out of reach shows no walkway for
   REQUIRE(isAccepted(with, edit));
   REQUIRE(walkwaysDrawn(with).size() > walkwaysDrawn(without).size());
 
-  const ParkMesh own = boxOf(BoxKind::Shop, OUT_OF_REACH, ghostOf(boxColor(BoxKind::Shop)));
-  CHECK(sameMesh(buildGhostMesh(with, edit), withWalkways(own, without)));
+  ParkMesh expected = boxOf(BoxKind::Shop, OUT_OF_REACH, ghostOf(boxColor(BoxKind::Shop)));
+  appendWalkways(expected, without, GHOST_ALPHA);
+  appendStarvedMarks(expected, candidateOf(with, edit), GHOST_ALPHA);
+  CHECK(sameMesh(buildGhostMesh(with, edit), expected));
+}
+
+// A starved mark is a cube of five faces like a box's and a bottom face, four vertices each.
+constexpr std::size_t MARK_VERTICES = 24;
+
+// Principle 8: the marks a ghost shows are the ones its commit draws, so hovering a backstage path
+// with the delete tool shows the shops its deletion starves.
+TEST_CASE("An accepted edit's ghost marks have, in order, the positions and normals of the "
+          "starved marks buildParkMesh draws in the candidate world the edit gives") {
+  const World world = routesPark();
+  const DeletePath edit{ROUTES_BACKSTAGE};
+  REQUIRE(isAccepted(world, edit));
+  const World candidate = candidateOf(world, edit);
+  const std::optional<ShopRecord> before = shopRecord(world, ROUTES_SHOP);
+  const std::optional<ShopRecord> after = shopRecord(candidate, ROUTES_SHOP);
+  REQUIRE(before.has_value());
+  REQUIRE(after.has_value());
+  REQUIRE_FALSE(before.value_or(ShopRecord{}).Starved);
+  REQUIRE(after.value_or(ShopRecord{}).Starved);
+  REQUIRE(marksOf(candidate, 1.0f).Vertices.size() == MARK_VERTICES);
+
+  const ParkMesh ghost = buildGhostMesh(world, edit);
+  const ParkMesh drawn = buildParkMesh(candidate);
+  REQUIRE(ghost.Vertices.size() >= MARK_VERTICES);
+  REQUIRE(drawn.Vertices.size() >= MARK_VERTICES);
+  CHECK(std::ranges::equal(
+      std::prev(ghost.Vertices.end(), static_cast<std::ptrdiff_t>(MARK_VERTICES)),
+      ghost.Vertices.end(),
+      std::prev(drawn.Vertices.end(), static_cast<std::ptrdiff_t>(MARK_VERTICES)),
+      drawn.Vertices.end(), sameShape));
+}
+
+TEST_CASE("STARVED_COLOR is opaque and differs in red, green, or blue from every other color the "
+          "park mesh and the graph overlay declare") {
+  CHECK(STARVED_COLOR.A == 1.0f);
+  const std::array<Rgba, 13> others = {pathColor(PathKind::Guest),
+                                       pathColor(PathKind::Backstage),
+                                       boxColor(BoxKind::Shop),
+                                       boxColor(BoxKind::Depot),
+                                       ENTRANCE_COLOR,
+                                       INVALID_TINT,
+                                       DELETE_TINT,
+                                       HIGHLIGHT_TINT,
+                                       GRAPH_NODE_COLOR,
+                                       GRAPH_CONNECTOR_COLOR,
+                                       GRAPH_ANCHOR_COLOR,
+                                       graphColor(PathKind::Guest),
+                                       graphColor(PathKind::Backstage)};
+  for (std::size_t i = 0; i < others.size(); ++i) {
+    INFO("color " << i);
+    const Rgba &other = others.at(i);
+    CHECK_FALSE(
+        (STARVED_COLOR.R == other.R && STARVED_COLOR.G == other.G && STARVED_COLOR.B == other.B));
+  }
 }
 
 // Principle 1: ghosts are derived, and building them leaves nothing behind in what is saved.

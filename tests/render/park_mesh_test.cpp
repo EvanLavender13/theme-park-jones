@@ -2,6 +2,7 @@
 
 #include "sim/entity_key.h"
 #include "sim/medium/network.h"
+#include "sim/operations/operations.h"
 #include "sim/park/geometry.h"
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
@@ -1031,7 +1032,7 @@ TEST_CASE("meshBounds gives none for a mesh with no vertices") {
 }
 
 TEST_CASE("buildParkMesh appends each entrance, then each path, then the walkways at alpha 1, then "
-          "each box, in key order") {
+          "each box, in key order, and then the starved marks at alpha 1") {
   const World world = mixedPark();
   REQUIRE(parkEntrances(world).size() == 2);
   REQUIRE(parkPaths(world).size() == 2);
@@ -1050,7 +1051,10 @@ TEST_CASE("buildParkMesh appends each entrance, then each path, then the walkway
   for (const ParkBox &box : parkBoxes(world)) {
     appendBox(expected, box.At, boxSize(box.Kind), boxHeight(box.Kind), boxColor(box.Kind));
   }
-  REQUIRE_FALSE(expected.Vertices.empty());
+  // Neither shop reaches the depot, so both are marked.
+  const size_t beforeMarks = expected.Vertices.size();
+  appendStarvedMarks(expected, world, 1.0f);
+  REQUIRE(expected.Vertices.size() > beforeMarks);
   CHECK(sameMesh(buildParkMesh(world), expected));
 }
 
@@ -1101,6 +1105,215 @@ TEST_CASE("Guest paths, backstage paths, shops, depots, and the entrance have di
       CHECK_FALSE(colors[i] == colors[j]);
     }
   }
+}
+
+// Starved marks.
+
+// A mark's size as a footprint: a square STARVED_MARK_SIZE on a side.
+constexpr FootprintSize MARK_SIZE{STARVED_MARK_SIZE, STARVED_MARK_SIZE};
+// A box's five faces and the mark's bottom, four vertices and two triangles each.
+constexpr size_t BOX_FACES_VERTICES = 20;
+constexpr size_t BOX_FACES_INDICES = 30;
+constexpr size_t MARK_VERTICES = 24;
+constexpr size_t MARK_INDICES = 36;
+
+struct MarkCase {
+  std::string_view Name;
+  Pose At;
+  Rgba Color;
+};
+
+// A facing not of unit length and along no axis, in a translucent color whose channels lie at
+// neither end, so the rotation, the lightened front, and the kept alpha all show; and a mark as the
+// park draws it.
+const MarkCase MARK_TURNED{"a mark facing (3, 4) in a translucent color",
+                           Pose{10.0, -20.0, 3.0, 4.0}, Rgba{0.2f, 0.5f, 0.9f, 0.75f}};
+const MarkCase MARK_WEST{"a mark facing -x in STARVED_COLOR", Pose{-30.0, 12.5, -1.0, 0.0},
+                         STARVED_COLOR};
+
+TEST_CASE("A starved mark is a 1.5 m cube whose bottom floats at 5 m, a meter over a shop's "
+          "roof") {
+  CHECK(STARVED_MARK_SIZE == 1.5f);
+  CHECK(STARVED_MARK_BASE == 5.0f);
+  CHECK(STARVED_MARK_BASE - boxHeight(BoxKind::Shop) == 1.0f);
+}
+
+TEST_CASE("appendStarvedMark first adds the faces appendBox adds for a STARVED_MARK_SIZE cube over "
+          "the pose, in the same order with the same normals and colors, each vertex "
+          "STARVED_MARK_BASE higher") {
+  for (const MarkCase &mark : {MARK_TURNED, MARK_WEST}) {
+    INFO(mark.Name);
+    // Appended to a mesh already holding vertices, so the indices must match past them too.
+    ParkMesh box = heldMesh();
+    appendBox(box, mark.At, MARK_SIZE, STARVED_MARK_SIZE, mark.Color);
+    const size_t held = heldMesh().Vertices.size();
+    REQUIRE(box.Vertices.size() == held + BOX_FACES_VERTICES);
+    ParkMesh mesh = heldMesh();
+    appendStarvedMark(mesh, mark.At, mark.Color);
+    REQUIRE(mesh.Vertices.size() >= box.Vertices.size());
+    REQUIRE(mesh.Indices.size() >= box.Indices.size());
+
+    for (size_t index = 0; index < box.Vertices.size(); ++index) {
+      INFO("vertex " << index);
+      const ParkVertex &expected = box.Vertices[index];
+      const ParkVertex &vertex = mesh.Vertices[index];
+      const double lift = index < held ? 0.0 : STARVED_MARK_BASE;
+      const Triple position = positionOf(expected);
+      CHECK(near(positionOf(vertex), {position.X, position.Y + lift, position.Z},
+                 POSITION_TOLERANCE));
+      CHECK(std::ranges::equal(vertex.Normal, expected.Normal));
+      CHECK(vertex.Color == expected.Color);
+    }
+    CHECK(std::ranges::equal(
+        box.Indices, std::vector<uint32_t>(mesh.Indices.begin(),
+                                           mesh.Indices.begin() +
+                                               static_cast<std::ptrdiff_t>(box.Indices.size()))));
+  }
+}
+
+TEST_CASE("appendStarvedMark then adds a bottom face: four vertices at STARVED_MARK_BASE over the "
+          "footprint's corners, facing down in the color, and two triangles wound "
+          "counter-clockwise seen from below") {
+  constexpr Triple DOWN{0.0, -1.0, 0.0};
+  for (const MarkCase &mark : {MARK_TURNED, MARK_WEST}) {
+    INFO(mark.Name);
+    const Footprint footprint = requireFootprint(mark.At, MARK_SIZE);
+    ParkMesh mesh;
+    appendStarvedMark(mesh, mark.At, mark.Color);
+    REQUIRE(mesh.Vertices.size() == MARK_VERTICES);
+    REQUIRE(mesh.Indices.size() == MARK_INDICES);
+
+    std::array<Triple, 4> corners{};
+    std::ranges::transform(footprint.Corners, corners.begin(),
+                           [](const ParkPoint &corner) { return at(corner, STARVED_MARK_BASE); });
+    for (size_t index = BOX_FACES_VERTICES; index < MARK_VERTICES; ++index) {
+      INFO("vertex " << index);
+      const ParkVertex &vertex = mesh.Vertices[index];
+      CHECK(near(normalOf(vertex), DOWN, UNIT_TOLERANCE));
+      CHECK(vertex.Color == mark.Color);
+      CHECK(std::ranges::any_of(corners, [&](const Triple &corner) {
+        return near(positionOf(vertex), corner, POSITION_TOLERANCE);
+      }));
+    }
+    for (const Triple &corner : corners) {
+      CHECK(std::ranges::any_of(mesh.Vertices.begin() +
+                                    static_cast<std::ptrdiff_t>(BOX_FACES_VERTICES),
+                                mesh.Vertices.end(), [&](const ParkVertex &vertex) {
+                                  return near(positionOf(vertex), corner, POSITION_TOLERANCE);
+                                }));
+    }
+
+    std::vector<std::set<uint32_t>> triangles;
+    for (size_t triangle = BOX_FACES_INDICES / 3; triangle < MARK_INDICES / 3; ++triangle) {
+      INFO("triangle " << triangle);
+      const std::array<uint32_t, 3> triangleCorners = triangleAt(mesh, triangle);
+      for (const uint32_t index : triangleCorners) {
+        CHECK(index >= BOX_FACES_VERTICES);
+      }
+      CHECK(windingOf(mesh, triangle).Y < 0.0);
+      triangles.emplace_back(triangleCorners.begin(), triangleCorners.end());
+    }
+    REQUIRE(triangles.size() == 2);
+    std::set<uint32_t> both = triangles[0];
+    both.insert(triangles[1].begin(), triangles[1].end());
+    CHECK(both.size() == 4);
+    // Two triangles cover the face only when the edge they share is one of its diagonals, the
+    // longest distance between two of its corners.
+    std::vector<uint32_t> shared;
+    std::ranges::set_intersection(triangles[0], triangles[1], std::back_inserter(shared));
+    REQUIRE(shared.size() == 2);
+    const double diagonal = length(corners[0] - corners[2]);
+    const double sharedEdge =
+        length(positionOf(mesh.Vertices[shared[0]]) - positionOf(mesh.Vertices[shared[1]]));
+    CHECK(std::abs(sharedEdge - diagonal) <= POSITION_TOLERANCE);
+  }
+}
+
+TEST_CASE("appendStarvedMark adds nothing for a pose with no footprint") {
+  const std::vector<Pose> noFootprint = {
+      Pose{5.0, 5.0, 0.0, 0.0}, Pose{std::numeric_limits<double>::infinity(), 0.0, 0.0, -1.0}};
+  for (const Pose &pose : noFootprint) {
+    INFO("pose at x " << pose.X << " facing (" << pose.FacingX << ", " << pose.FacingZ << ")");
+    REQUIRE_FALSE(footprintOf(pose, MARK_SIZE).has_value());
+    ParkMesh mesh = heldMesh();
+    appendStarvedMark(mesh, pose, STARVED_COLOR);
+    CHECK(sameMesh(mesh, heldMesh()));
+  }
+}
+
+// A backstage line along z = 0 with a depot beside it at x = 32 and three shops: key 3 beside the
+// line, whose back door reaches it, and keys 2 and 5 far from it, with no backstage connector.
+constexpr std::string_view STARVED_PARK = "tpj-park 1\nseed 1\ntick 0\nnext-key 6\n"
+                                          "\n[path]\n"
+                                          "1 kind=backstage points=[{x=-64 z=0} {x=64 z=0}]\n"
+                                          "\n[box]\n"
+                                          "2 kind=shop x=-30 z=-60 facing-x=0 facing-z=-1\n"
+                                          "3 kind=shop x=0 z=-6 facing-x=0 facing-z=-1\n"
+                                          "4 kind=depot x=32 z=7 facing-x=0 facing-z=-1\n"
+                                          "5 kind=shop x=30 z=-60 facing-x=3 facing-z=4\n";
+
+bool isStarved(const World &world, EntityKey shop) {
+  const std::optional<ShopRecord> record = shopRecord(world, shop);
+  REQUIRE(record.has_value());
+  return record.value_or(ShopRecord{}).Starved;
+}
+
+TEST_CASE("appendStarvedMarks adds appendStarvedMark over each starved shop box, in key order, in "
+          "STARVED_COLOR with the alpha given, and nothing for a supplied shop or a depot") {
+  World world = loadWorld(makeParkSchema(), STARVED_PARK);
+  resolveWorld(world);
+  const std::vector<ParkBox> boxes = parkBoxes(world);
+  REQUIRE(boxes.size() == 4);
+  // The starved shops lie on either side of the supplied one, so their order shows.
+  REQUIRE(isStarved(world, boxes[0].Key));
+  REQUIRE_FALSE(isStarved(world, boxes[1].Key));
+  REQUIRE(boxes[2].Kind == BoxKind::Depot);
+  REQUIRE(isStarved(world, boxes[3].Key));
+  // An alpha neither opaque nor GHOST_ALPHA, so it must come from the argument.
+  constexpr float ALPHA = 0.25f;
+  Rgba color = STARVED_COLOR;
+  color.A = ALPHA;
+
+  ParkMesh expected = heldMesh();
+  appendStarvedMark(expected, boxes[0].At, color);
+  appendStarvedMark(expected, boxes[3].At, color);
+  ParkMesh mesh = heldMesh();
+  appendStarvedMarks(mesh, world, ALPHA);
+  CHECK(sameMesh(mesh, expected));
+}
+
+std::string supplyText() {
+  std::ifstream file(TPJ_PARKS_DIR "/supply.park", std::ios::binary);
+  REQUIRE(file.is_open());
+  std::stringstream text;
+  text << file.rdbuf();
+  return text.str();
+}
+
+TEST_CASE("buildParkMesh draws tests/parks/supply.park with exactly one starved mark, over its "
+          "starved shop") {
+  World world = loadWorld(makeParkSchema(), supplyText());
+  resolveWorld(world);
+  std::vector<ParkBox> starved;
+  for (const ParkBox &box : parkBoxes(world)) {
+    if (box.Kind == BoxKind::Shop && isStarved(world, box.Key)) {
+      starved.push_back(box);
+    }
+  }
+  REQUIRE(starved.size() == 1);
+
+  const ParkMesh mesh = buildParkMesh(world);
+  // No other part of the park is drawn in STARVED_COLOR or its lightened front.
+  const auto marked = std::ranges::count_if(mesh.Vertices, [](const ParkVertex &vertex) {
+    return vertex.Color == STARVED_COLOR || vertex.Color == lightened(STARVED_COLOR);
+  });
+  CHECK(std::cmp_equal(marked, MARK_VERTICES));
+  ParkMesh mark;
+  appendStarvedMark(mark, starved.front().At, STARVED_COLOR);
+  REQUIRE(mesh.Vertices.size() >= MARK_VERTICES);
+  CHECK(std::ranges::equal(
+      std::prev(mesh.Vertices.end(), static_cast<std::ptrdiff_t>(MARK_VERTICES)),
+      mesh.Vertices.end(), mark.Vertices.begin(), mark.Vertices.end(), sameVertex));
 }
 
 // The mesh is derived, so building it must leave nothing behind in what is saved or hashed.

@@ -9,6 +9,7 @@
 #include "render/renderer.h"
 #include "sim/command_queue.h"
 #include "sim/field_text.h"
+#include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
@@ -448,6 +449,11 @@ void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCam
   stats.SimTick = world.Tick;
   stats.Focus = camera.Focus;
   stats.Distance = camera.Distance;
+  for (const tpj::ParkBox &box : tpj::parkBoxes(world)) {
+    if (const std::optional<tpj::ShopRecord> record = tpj::shopRecord(world, box.Key)) {
+      stats.Shops.push_back({box.Key, *record});
+    }
+  }
   tpj::drawDebugPanel(stats, showGraph);
   const tpj::ToolPanelChoice choice =
       tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty(), dialogShowing());

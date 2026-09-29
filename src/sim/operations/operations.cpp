@@ -377,6 +377,46 @@ int64_t inventoryPosition(const World &world, EntityKey shop) {
   return position;
 }
 
+std::optional<ShopRecord> shopRecord(const World &world, EntityKey shop) {
+  const std::vector<EntityKey> shops = boxKeys(world, BoxKind::Shop);
+  if (std::ranges::find(shops, shop) == shops.end()) {
+    return std::nullopt;
+  }
+  ShopRecord record;
+  record.Stock = unitsHeld<Supplies>(world, shop, shop);
+  for (const FlowHolding &held : stockOf<GuestVisits>(world, shop)) {
+    if (isLive(world, held.Handle)) {
+      record.Queue += held.Units;
+    }
+  }
+  record.OnOrder = inventoryPosition(world, shop) - record.Stock;
+  record.Starved = !nearestDepot(world, shop).has_value();
+  if (record.Starved) {
+    record.Limit = LimitingFactor::NoSupplyRoute;
+  } else if (record.Queue == 0) {
+    record.Limit = LimitingFactor::Demand;
+  } else if (record.Stock < record.Queue) {
+    record.Limit = LimitingFactor::Supply;
+  } else {
+    record.Limit = LimitingFactor::ServiceRate;
+  }
+  return record;
+}
+
+std::string_view limitingFactorName(LimitingFactor factor) {
+  switch (factor) {
+  case LimitingFactor::Demand:
+    return "demand";
+  case LimitingFactor::Supply:
+    return "supply";
+  case LimitingFactor::ServiceRate:
+    return "service rate";
+  case LimitingFactor::NoSupplyRoute:
+    return "no supply route";
+  }
+  return "";
+}
+
 void addOperations(WorldSchema &schema) {
   addFlow<SupplyOrders>(schema);
   addFlow<Supplies>(schema);

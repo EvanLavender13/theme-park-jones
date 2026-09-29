@@ -80,6 +80,23 @@ inline constexpr std::string_view RETURNED_CAUSE = "returned";
 inline constexpr std::string_view SERVED_CAUSE = "served";
 inline constexpr std::string_view ABANDONED_CAUSE = "abandoned";
 
+// What limits a shop's service now: no guests queued, fewer supplies than guests, the service
+// rate, or no route to a depot.
+enum class LimitingFactor : uint8_t { Demand, Supply, ServiceRate, NoSupplyRoute };
+
+// What a shop publishes about itself for display and tests (decision 0025): the supplies it
+// holds, the guests queued, the supplies on order, whether it has no route to a depot, and what
+// limits its service. Nothing in the park reads it.
+struct ShopRecord {
+  int64_t Stock = 0;
+  int64_t Queue = 0;
+  int64_t OnOrder = 0;
+  bool Starved = false;
+  LimitingFactor Limit = LimitingFactor::Demand;
+
+  bool operator==(const ShopRecord &) const = default;
+};
+
 // A shop's nearest depot and the backstage route length to it.
 struct DepotRoute {
   EntityKey Depot = NULL_KEY;
@@ -97,6 +114,11 @@ std::optional<DepotRoute> nearestDepot(const World &world, EntityKey shop);
 uint32_t shipmentDelay(double distance);
 // The supplies the shop holds or has coming, and the orders on their way to or held by a depot.
 int64_t inventoryPosition(const World &world, EntityKey shop);
+// The shop box's inspection record in the world as it stands, or none when the key is not a shop
+// box.
+std::optional<ShopRecord> shopRecord(const World &world, EntityKey shop);
+// The factor's name for display: "demand", "supply", "service rate", or "no supply route".
+std::string_view limitingFactorName(LimitingFactor factor);
 // Registers the flow kinds supply-orders, supplies, guest-visits, and meals, the shop-service
 // state, the food-offer field and its resolver, then the systems that step shops and then depots.
 // The routes module's registrations must come first.
