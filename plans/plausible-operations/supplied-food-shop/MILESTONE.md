@@ -71,10 +71,10 @@ The capability leaves these to this milestone. Playing adjusts them. RESEARCH.md
 Unordered pool this milestone draws later features from.
 
 - A depot's inspection record: orders held and units shipped, with its own mark when no shop can reach it.
+- A ghost mark for a starved shop that an edit would supply again, so adding a backstage path previews the recovery as deleting one previews the starving.
 - An order's delay from route distance, like a shipment's, instead of the fixed ORDER_DELAY.
 - A queue limit, with arrivals beyond it returned unserved, as a visible sign of an overloaded shop.
 - Shipments that combine the order units a depot holds for one shop into one packet per tick. Gated on: packet counts mattering for cost.
-- A Debug panel list of each shop's inspection record, before legible-simulation's inspector lands.
 - An offer's wait that counts orders on their way to or held by a depot as supply units, each arriving after its shipment's delay, instead of treating every unit beyond stock and shipments as coming from an order placed now.
 
 ## Open questions
