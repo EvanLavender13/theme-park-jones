@@ -3,6 +3,7 @@
 # clock. It reads the generated draw and math tables in tests/sim/support.
 add_library(tpj_scenarios_lib STATIC
     beacons.cpp
+    food_shop.cpp
     park_edits.cpp
     runner.cpp
     scenarios.cpp
