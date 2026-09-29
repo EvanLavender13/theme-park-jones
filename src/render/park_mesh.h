@@ -67,11 +67,30 @@ void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &poi
 // The same ribbon in the color given.
 void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &points, Rgba color);
 
+// A walkway's round joint beyond its end is a half disc of this many segments.
+inline constexpr uint32_t WALKWAY_JOINT_SEGMENTS = 16;
+
+// Adds a connector's walkway: the ribbon along the points, pathWidth(kind) wide, in the color, and
+// a round half disc of half that width beyond the last point. The points are each distinct from the
+// next, as a connector's are. Nothing for fewer than two.
+void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
+                   Rgba color);
+// The same walkway, starting flush with the face whose unit normal is given: its first two
+// vertices slide along the walkway onto the face's line. It starts square without a normal, or
+// where sliding would fold the ribbon.
+void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
+                   std::optional<ParkPoint> faceNormal, Rgba color);
+
+// Adds a walkway for each connector of the world's guest network and then its backstage network,
+// in the kind's path color with the alpha given. A connector is a carrier whose first stop's node
+// is anchored.
+void appendWalkways(ParkMesh &mesh, const World &world, float alpha);
+
 // Adds an open-bottomed box of the height over the pose's footprint, or nothing when the pose has
 // no footprint.
 void appendBox(ParkMesh &mesh, const Pose &pose, FootprintSize size, float height, Rgba color);
 
-// The world's entrances, paths, and boxes, in that order and each in key order.
+// The world's entrances, paths, walkways, and boxes, in that order and each in key order.
 ParkMesh buildParkMesh(const World &world);
 
 // Adds the box or path the key holds as buildParkMesh draws it, in the color. Nothing when the key
@@ -79,7 +98,8 @@ ParkMesh buildParkMesh(const World &world);
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
 
 // The ghost of an edit on a world: translucent in its kind's color when accepted, INVALID_TINT when
-// not, and DELETE_TINT for a deletion. See render/SPEC.md.
+// not, and DELETE_TINT for a deletion, followed for an accepted edit by its candidate's walkways.
+// See render/SPEC.md.
 ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit);
 
 // A rectangle on the ground.

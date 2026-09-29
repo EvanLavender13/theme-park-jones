@@ -5,5 +5,7 @@ add_executable(tpj_render_tests
     park_mesh_test.cpp
     picking_test.cpp)
 target_link_libraries(tpj_render_tests PRIVATE tpj_render Catch2::Catch2WithMain)
+# The walkway tests draw tests/parks/routes.park, whose doors connect to both networks.
+target_compile_definitions(tpj_render_tests PRIVATE TPJ_PARKS_DIR="${CMAKE_SOURCE_DIR}/tests/parks")
 tpj_configure_target(tpj_render_tests)
 catch_discover_tests(tpj_render_tests)
