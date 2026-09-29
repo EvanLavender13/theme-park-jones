@@ -9,6 +9,7 @@ add_executable(tpj_sim_tests
     medium/flow_test.cpp
     medium/network_test.cpp
     medium/stepped_field_test.cpp
+    operations/food_offer_test.cpp
     operations/operations_edits_test.cpp
     operations/operations_test.cpp
     operations/service_test.cpp

@@ -2,6 +2,7 @@
 #define TPJ_SIM_OPERATIONS_OPERATIONS_H
 
 #include "sim/entity_key.h"
+#include "sim/medium/field.h"
 
 #include <optional>
 #include <stdint.h>
@@ -32,6 +33,30 @@ struct Meals {
   static constexpr std::string_view Name = "meals";
 };
 
+// A shop's food offer: the hunger a meal relieves, on a scale from 0 to 1, the ticks the next
+// guest to arrive waits to be taken, and whether the shop is supplied. A starved shop's offer is
+// OfferEntry{}, which says no meals.
+struct OfferEntry {
+  double Relief = 0.0;
+  uint64_t Wait = 0;
+  bool Supplied = false;
+
+  bool operator==(const OfferEntry &) const = default;
+};
+
+template <typename Visitor> void visitFields(Visitor &visitor, OfferEntry &entry) {
+  visitor.field("relief", entry.Relief);
+  visitor.field("wait", entry.Wait);
+  visitor.field("supplied", entry.Supplied);
+}
+
+// The food offer field: each shop box's offer, at its guest anchor.
+struct FoodOffer {
+  using Entry = OfferEntry;
+  static constexpr std::string_view Name = "food-offer";
+  static constexpr FieldKind Kind = FieldKind::Entry;
+};
+
 // A shop orders when its inventory position falls to the reorder point, up to the order-up-to
 // level.
 inline constexpr int64_t REORDER_POINT = 8;
@@ -45,6 +70,8 @@ inline constexpr double SUPPLY_SPEED = 2.0;
 inline constexpr uint32_t SERVICE_INTERVAL = 90;
 // Ticks an unserved visit takes to go back to its guest.
 inline constexpr uint32_t RETURN_DELAY = 1;
+// The hunger a meal relieves, on a scale from 0 to 1.
+inline constexpr double MEAL_RELIEF = 0.5;
 
 inline constexpr std::string_view FULFILLED_CAUSE = "fulfilled";
 inline constexpr std::string_view UNFILLED_CAUSE = "unfilled";
@@ -71,7 +98,8 @@ uint32_t shipmentDelay(double distance);
 // The supplies the shop holds or has coming, and the orders on their way to or held by a depot.
 int64_t inventoryPosition(const World &world, EntityKey shop);
 // Registers the flow kinds supply-orders, supplies, guest-visits, and meals, the shop-service
-// state, then the systems that step shops and then depots.
+// state, the food-offer field and its resolver, then the systems that step shops and then depots.
+// The routes module's registrations must come first.
 void addOperations(WorldSchema &schema);
 
 } // namespace tpj

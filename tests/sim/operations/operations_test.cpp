@@ -7,6 +7,7 @@
 #include "sim/medium/flow.h"
 #include "sim/medium/network.h"
 #include "sim/operations/operations.h"
+#include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
 #include "sim/routes/networks.h"
@@ -18,9 +19,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <iterator>
 #include <limits>
 #include <optional>
+#include <stdexcept>
 #include <stdint.h>
 #include <string>
 #include <tuple>
@@ -105,18 +108,61 @@ TEST_CASE("Resolving a world made with makeParkSchema gives it a ledger for each
   }
 }
 
-TEST_CASE("addOperations registers the four kinds' ledgers and then shop-service, a state "
-          "component type") {
+// A schema holding what addPark registers before the operations module.
+WorldSchema schemaBeforeOperations() {
   WorldSchema schema;
+  addNetworkComponent(schema);
+  addParkIntent(schema);
+  addParkEdits(schema);
+  addRoutes(schema);
+  return schema;
+}
+
+TEST_CASE("addOperations registers the four kinds, then shop-service, then the field food-offer, "
+          "then the resolver food-offer depending on path-networks, route-distance, and "
+          "food-offer-field, then its two systems") {
+  WorldSchema schema = schemaBeforeOperations();
+  const std::size_t components = schema.components().size();
+  const std::size_t resolvers = schema.resolvers().size();
+  const std::size_t systems = schema.systems().size();
+
   addOperations(schema);
+
   std::vector<std::string> names;
-  for (const ComponentType &type : schema.components()) {
-    names.push_back(type.Name);
+  std::vector<DataKind> kinds;
+  for (auto type = schema.components().begin() + static_cast<std::ptrdiff_t>(components);
+       type != schema.components().end(); ++type) {
+    names.push_back(type->Name);
+    kinds.push_back(type->Kind);
   }
   CHECK(names == std::vector<std::string>{"supply-orders-ledger", "supplies-ledger",
-                                          "guest-visits-ledger", "meals-ledger", "shop-service"});
-  REQUIRE_FALSE(schema.components().empty());
-  CHECK(schema.components().back().Kind == DataKind::State);
+                                          "guest-visits-ledger", "meals-ledger", "shop-service",
+                                          "food-offer-resolved", "food-offer-stepped"});
+  CHECK(kinds == std::vector<DataKind>{DataKind::State, DataKind::State, DataKind::State,
+                                       DataKind::State, DataKind::State, DataKind::Derived,
+                                       DataKind::State});
+
+  std::vector<std::string> resolverNames;
+  for (auto resolver = schema.resolvers().begin() + static_cast<std::ptrdiff_t>(resolvers);
+       resolver != schema.resolvers().end(); ++resolver) {
+    resolverNames.push_back(resolver->Name);
+  }
+  CHECK(resolverNames == std::vector<std::string>{"supply-orders-flow", "supplies-flow",
+                                                  "guest-visits-flow", "meals-flow",
+                                                  "food-offer-field", "food-offer"});
+  REQUIRE_FALSE(schema.resolvers().empty());
+  std::vector<std::string> dependencies = schema.resolvers().back().Dependencies;
+  std::ranges::sort(dependencies);
+  CHECK(dependencies ==
+        std::vector<std::string>{"food-offer-field", "path-networks", "route-distance"});
+
+  CHECK(schema.systems().size() == systems + 2);
+}
+
+TEST_CASE("addOperations throws std::invalid_argument into a schema without the routes module's "
+          "registrations") {
+  WorldSchema schema;
+  CHECK_THROWS_AS(addOperations(schema), std::invalid_argument);
 }
 
 // Supply routes.

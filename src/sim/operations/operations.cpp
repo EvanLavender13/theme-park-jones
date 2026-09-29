@@ -32,18 +32,54 @@ std::vector<EntityKey> boxKeys(const World &world, BoxKind kind) {
   return keys;
 }
 
-// Each backstage route distance entry sampled at the nodes anchored to the entity, as its source
-// and distance, in node order and then source order.
-std::vector<std::pair<EntityKey, double>> routeLengthsAt(const World &world, EntityKey at) {
+// Which of a field's layers a sample reads: both, by the layer rule, or the resolved alone, as a
+// resolver must.
+enum class Layers : uint8_t { Both, Resolved };
+
+// Each backstage route distance entry sampled from the layers at the nodes anchored to the entity,
+// as its source and distance, in node order and then source order.
+std::vector<std::pair<EntityKey, double>> routeLengthsAt(const World &world, EntityKey at,
+                                                         Layers layers) {
+  using Field = RouteDistance<PathKind::Backstage>;
   const Network &network = parkNetwork(world, PathKind::Backstage);
   std::vector<std::pair<EntityKey, double>> lengths;
   for (const uint32_t node : network.anchoredNodes(at)) {
+    const Place place = network.nodePlace(node);
     for (const SampledEntry<RouteEntry> &entry :
-         sampleField<RouteDistance<PathKind::Backstage>>(world, network, network.nodePlace(node))) {
+         layers == Layers::Both ? sampleField<Field>(world, network, place)
+                                : sampleResolvedField<Field>(world, network, place)) {
       lengths.emplace_back(entry.Source, entry.Value.Distance);
     }
   }
   return lengths;
+}
+
+// The least route length from the nodes anchored to at to the source, sampled from the layers.
+std::optional<double> routeLengthBy(const World &world, EntityKey at, EntityKey source,
+                                    Layers layers) {
+  std::optional<double> least;
+  for (const auto &[from, distance] : routeLengthsAt(world, at, layers)) {
+    if (from == source && (!least || distance < *least)) {
+      least = distance;
+    }
+  }
+  return least;
+}
+
+// The shop's nearest depot, sampled from the layers.
+std::optional<DepotRoute> depotRouteBy(const World &world, EntityKey shop, Layers layers) {
+  const std::vector<EntityKey> depots = boxKeys(world, BoxKind::Depot);
+  std::optional<DepotRoute> nearest;
+  for (const auto &[source, distance] : routeLengthsAt(world, shop, layers)) {
+    if (!std::ranges::binary_search(depots, source)) {
+      continue;
+    }
+    if (!nearest || distance < nearest->Distance ||
+        (distance == nearest->Distance && source < nearest->Depot)) {
+      nearest = DepotRoute{source, distance};
+    }
+  }
+  return nearest;
 }
 
 // The shop takes back the orders returned to it, and when it has a nearest depot and its
@@ -149,8 +185,9 @@ void serveFront(World &world, EntityKey shop, ShopService &service) {
 }
 
 // The shop abandons what gone guests left, queues the visits it holds in arrival order, returns
-// what a starved shop cannot cover, and serves the guest at the front when it can.
-void serveGuests(World &world, EntityKey shop, bool supplied) {
+// what a starved shop cannot cover, and serves the guest at the front when it can, giving its
+// service after.
+ShopService serveGuests(World &world, EntityKey shop, bool supplied) {
   abandonGone(world, shop);
   const entt::entity entity = world.findEntity(shop);
   const ShopService *stored = world.Registry.try_get<ShopService>(entity);
@@ -161,16 +198,106 @@ void serveGuests(World &world, EntityKey shop, bool supplied) {
   }
   serveFront(world, shop, service);
   if (stored != nullptr || !service.Queue.empty() || service.FreeAt != 0) {
-    world.Registry.emplace_or_replace<ShopService>(entity, std::move(service));
+    world.Registry.emplace_or_replace<ShopService>(entity, service);
+  }
+  return service;
+}
+
+// The ticks a shipment from the route's depot takes to the shop: by the depot's own supply route
+// length, the one it ships by, or by the shop's when the depot has none.
+uint64_t deliveryDelay(const World &world, const DepotRoute &route, EntityKey shop, Layers layers) {
+  return shipmentDelay(routeLengthBy(world, route.Depot, shop, layers).value_or(route.Distance));
+}
+
+// The shop's entries: the offer at each node anchored to it on the guest network.
+std::vector<PlacedEntry<OfferEntry>> offerEntries(const World &world, EntityKey shop,
+                                                  const OfferEntry &offer) {
+  const Network &network = parkNetwork(world, PathKind::Guest);
+  std::vector<PlacedEntry<OfferEntry>> entries;
+  for (const uint32_t node : network.anchoredNodes(shop)) {
+    entries.push_back({network.nodePlace(node), offer});
+  }
+  return entries;
+}
+
+// Publishes each shop box's offer as for a shop that has not stepped: with nothing queued, held,
+// or shipped, its first guest waits for the order it places in its first cycle.
+void resolveFoodOffers(World &world) {
+  for (const EntityKey shop : boxKeys(world, BoxKind::Shop)) {
+    OfferEntry offer;
+    if (const std::optional<DepotRoute> route = depotRouteBy(world, shop, Layers::Resolved)) {
+      offer = OfferEntry{.Relief = MEAL_RELIEF,
+                         .Wait = ORDER_DELAY + deliveryDelay(world, *route, shop, Layers::Resolved),
+                         .Supplied = true};
+    }
+    publishResolved<FoodOffer>(world, shop, offerEntries(world, shop, offer));
   }
 }
 
-// Each shop, in ascending key order, orders supplies and then serves its guests.
+// A shipment's units and the tick they arrive.
+struct Arriving {
+  uint64_t Tick = 0;
+  int64_t Units = 0;
+};
+
+// The ticks the next visit waits, from the cycle stepping from, in which the shop first holds it,
+// to the one that takes its guest, behind the queued guests. Supply units come from the stock at
+// from, then from the shipments in the order given, then from an order arriving at ordered, and
+// each guest is taken at the later of its unit's tick and the previous guest's take plus
+// SERVICE_INTERVAL, the first no earlier than from or freeAt.
+uint64_t nextWait(uint64_t from, uint64_t freeAt, size_t queued, int64_t stock,
+                  const std::vector<Arriving> &shipments, uint64_t ordered) {
+  auto shipment = shipments.begin();
+  int64_t left = stock;
+  uint64_t unitAt = from;
+  uint64_t ready = std::max(from, freeAt);
+  uint64_t taken = ready;
+  for (size_t guest = 0; guest <= queued; ++guest) {
+    while (left == 0 && shipment != shipments.end()) {
+      unitAt = shipment->Tick;
+      left = shipment->Units;
+      ++shipment;
+    }
+    if (left > 0) {
+      --left;
+    } else {
+      unitAt = ordered;
+    }
+    taken = std::max(ready, unitAt);
+    ready = taken + SERVICE_INTERVAL;
+  }
+  return taken - from;
+}
+
+// Publishes the shop's offer for the next visit to arrive, from its service, stock, and shipments
+// after serving, and the order it would place in this cycle.
+void publishOffer(World &world, EntityKey shop, const std::optional<DepotRoute> &route,
+                  const ShopService &service) {
+  OfferEntry offer;
+  if (route) {
+    std::vector<Arriving> shipments;
+    for (const FlowPacket &packet : addressedTo<Supplies>(world, shop).Packets) {
+      if (packet.To == shop) {
+        shipments.push_back({packet.Arrival, packet.Units});
+      }
+    }
+    const uint64_t ordered =
+        world.Tick + ORDER_DELAY + deliveryDelay(world, *route, shop, Layers::Both);
+    offer = OfferEntry{.Relief = MEAL_RELIEF,
+                       .Wait = nextWait(world.Tick + 1, service.FreeAt, service.Queue.size(),
+                                        unitsHeld<Supplies>(world, shop, shop), shipments, ordered),
+                       .Supplied = true};
+  }
+  publishStepped<FoodOffer>(world, shop, offerEntries(world, shop, offer));
+}
+
+// Each shop, in ascending key order, orders supplies, serves its guests, and publishes its offer.
 void stepShops(World &world) {
   for (const EntityKey shop : boxKeys(world, BoxKind::Shop)) {
     const std::optional<DepotRoute> route = nearestDepot(world, shop);
     orderSupplies(world, shop, route);
-    serveGuests(world, shop, route.has_value());
+    const ShopService service = serveGuests(world, shop, route.has_value());
+    publishOffer(world, shop, route, service);
   }
 }
 
@@ -204,28 +331,11 @@ void stepDepots(World &world) {
 } // namespace
 
 std::optional<double> supplyRouteLength(const World &world, EntityKey at, EntityKey source) {
-  std::optional<double> least;
-  for (const auto &[from, distance] : routeLengthsAt(world, at)) {
-    if (from == source && (!least || distance < *least)) {
-      least = distance;
-    }
-  }
-  return least;
+  return routeLengthBy(world, at, source, Layers::Both);
 }
 
 std::optional<DepotRoute> nearestDepot(const World &world, EntityKey shop) {
-  const std::vector<EntityKey> depots = boxKeys(world, BoxKind::Depot);
-  std::optional<DepotRoute> nearest;
-  for (const auto &[source, distance] : routeLengthsAt(world, shop)) {
-    if (!std::ranges::binary_search(depots, source)) {
-      continue;
-    }
-    if (!nearest || distance < nearest->Distance ||
-        (distance == nearest->Distance && source < nearest->Depot)) {
-      nearest = DepotRoute{source, distance};
-    }
-  }
-  return nearest;
+  return depotRouteBy(world, shop, Layers::Both);
 }
 
 uint32_t shipmentDelay(double distance) {
@@ -273,6 +383,9 @@ void addOperations(WorldSchema &schema) {
   addFlow<GuestVisits>(schema);
   addFlow<Meals>(schema);
   schema.addComponent<ShopService>("shop-service", DataKind::State);
+  addField<FoodOffer>(schema);
+  schema.addResolver("food-offer", &resolveFoodOffers,
+                     {"path-networks", "route-distance", "food-offer-field"});
   schema.addSystem(&stepShops);
   schema.addSystem(&stepDepots);
 }

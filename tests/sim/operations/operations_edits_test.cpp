@@ -3,11 +3,14 @@
 
 #include "sim/command_queue.h"
 #include "sim/entity_key.h"
+#include "sim/medium/field.h"
 #include "sim/medium/flow.h"
+#include "sim/medium/network.h"
 #include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
+#include "sim/routes/networks.h"
 #include "sim/save.h"
 #include "sim/world.h"
 
@@ -295,6 +298,34 @@ TEST_CASE("No step or edit of a randomized park edit sequence with synthetic gue
   CHECK(sawSupplied);
   CHECK(sawStarved);
   CHECK(sawQueue);
+}
+
+TEST_CASE("In every tick of randomized park edits with synthetic guests, sampling food-offer at a "
+          "shop's guest anchor gives one entry, from that shop, supplied exactly when the shop has "
+          "a nearest depot") {
+  bool sawSupplied = false;
+  bool sawStarved = false;
+  runServiceSequence(60, [&](const World &world, bool /*edited*/) {
+    const Network &network = parkNetwork(world, PathKind::Guest);
+    for (const ParkBox &box : parkBoxes(world)) {
+      if (box.Kind != BoxKind::Shop) {
+        continue;
+      }
+      for (const uint32_t node : network.anchoredNodes(box.Key)) {
+        const std::vector<SampledEntry<OfferEntry>> sampled =
+            sampleField<FoodOffer>(world, network, network.nodePlace(node));
+        const bool supplied = nearestDepot(world, box.Key).has_value();
+        CAPTURE(box.Key, supplied);
+        REQUIRE(sampled.size() == 1);
+        CHECK(sampled.front().Source == box.Key);
+        CHECK(sampled.front().Value.Supplied == supplied);
+        sawSupplied = sawSupplied || supplied;
+        sawStarved = sawStarved || !supplied;
+      }
+    }
+  });
+  CHECK(sawSupplied);
+  CHECK(sawStarved);
 }
 
 TEST_CASE("Every world a randomized park edit sequence with synthetic guests reaches equals its "

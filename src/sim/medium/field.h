@@ -270,8 +270,6 @@ void publishStepped(World &world, EntityKey source,
   slots.insert(at, Slot{source, std::move(entries)});
 }
 
-// The field's entries at the place on the network, each with its source, sources in ascending key
-// order, by the default rule or the field's sampleEdge.
 // Appends the source's entries whose places resolve to the node.
 template <typename Entry>
 void sampleSlotAtNode(const Network &network, const FieldSlot<Entry> &slot, uint32_t node,
@@ -361,16 +359,18 @@ std::vector<const FieldSlot<typename F::Entry> *> layeredSlots(const World &worl
   return slots;
 }
 
+// The entries of the slots at the place on the network, in the slots' order, by the default rule
+// or the field's sampleEdge.
 template <FieldDefinition F>
-std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world, const Network &network,
-                                                         const Place &place) {
+std::vector<SampledEntry<typename F::Entry>>
+sampleSlots(const Network &network, const Place &place,
+            const std::vector<const FieldSlot<typename F::Entry> *> &slots) {
   std::vector<SampledEntry<typename F::Entry>> sampled;
   const std::optional<NetworkPosition> position = network.resolve(place);
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  if (!position || entity == entt::null) {
+  if (!position) {
     return sampled;
   }
-  for (const FieldSlot<typename F::Entry> *slot : layeredSlots<F>(world, entity)) {
+  for (const FieldSlot<typename F::Entry> *slot : slots) {
     if (const auto *node = std::get_if<NodePosition>(&*position)) {
       sampleSlotAtNode(network, *slot, node->Node, sampled);
     } else {
@@ -378,6 +378,37 @@ std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world, con
     }
   }
   return sampled;
+}
+
+// The field's entries at the place on the network, each with its source, sources in ascending key
+// order, by the default rule or the field's sampleEdge.
+template <FieldDefinition F>
+std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world, const Network &network,
+                                                         const Place &place) {
+  const entt::entity entity = world.findEntity(fieldKey(F::Name));
+  if (entity == entt::null) {
+    return {};
+  }
+  return sampleSlots<F>(network, place, layeredSlots<F>(world, entity));
+}
+
+// The field's entries at the place, as sampleField gives them, but choosing each source's resolved
+// entries whatever its stepped ones. Resolvers sample with it, since stepped entries are state.
+template <FieldDefinition F>
+std::vector<SampledEntry<typename F::Entry>>
+sampleResolvedField(const World &world, const Network &network, const Place &place) {
+  const entt::entity entity = world.findEntity(fieldKey(F::Name));
+  const auto *resolved =
+      entity == entt::null ? nullptr : world.Registry.try_get<ResolvedEntries<F>>(entity);
+  if (resolved == nullptr) {
+    return {};
+  }
+  std::vector<const FieldSlot<typename F::Entry> *> slots;
+  slots.reserve(resolved->Slots.size());
+  for (const FieldSlot<typename F::Entry> &slot : resolved->Slots) {
+    slots.push_back(&slot);
+  }
+  return sampleSlots<F>(network, place, slots);
 }
 
 // A scalar field's value at the place: 0.0 with each sampled entry added in turn.

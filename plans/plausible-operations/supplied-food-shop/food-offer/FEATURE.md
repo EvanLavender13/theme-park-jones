@@ -95,6 +95,12 @@ std::vector<SampledEntry<typename F::Entry>> sampleResolvedField(const World &wo
 - Counting orders on their way to or held by a depot as supply units in the wait (MILESTONE.md's deepening candidates).
 - Guests sampling offers to choose a shop (believable-guests).
 
+## Test pass decisions
+
+- D's fallback, the nearest depot's Distance when supplyRouteLength(depot, shop) is none, is untested. Route distance on a derived network is symmetric, so only stepped route distance entries could stage it, which criterion 3's resolved reading excludes. It keeps a hand-written save from throwing (principle 2).
+- Criteria 3 and 5 read the food-offer field's ResolvedEntries and SteppedEntries, public medium types in field.h, since sampling cannot tell an empty list from no list.
+- Principles 3 and 6, what the offer reads, are checked by review, and principle 10 by the cross-build check, which runs the food-shop scenario.
+
 ## Open questions
 
 None.
