@@ -1,0 +1,25 @@
+# Research: clean-junctions
+
+## How should ribbons close the gap where two path ends meet at an angle?
+
+Stroking libraries name two separate treatments. A join closes the corner where two segments of one stroke meet, and a cap finishes a stroke's free end. The usual joins are miter, bevel, and round. A miter extends the outer edges to their intersection and grows without bound at acute angles, so SVG and canvas fall back to a bevel past a miter limit. A round join is a circle of half the width at the shared vertex, which closes any angle with no special case.
+
+Two paths meeting at a node are two strokes, not one, so there is no single join to compute: each ribbon only knows its own end. A round cap on each end solves this locally. A ribbon covers every point within half its width of its end on the side it came from, and a half disc beyond the end covers the rest of the circle, so each end alone covers the full disc of half its width around its end point. Any number of ribbons of the same width ending at the same point then meet with no notch, at any angle, without knowing about each other. The walkways already end this way (connector-walkways), so the same half disc serves both.
+
+A cap makes a path's free end round too. That matches the walkways and the round joins players see in most path-drawing games, and Evan chose it over capping only the ends another path shares.
+
+Rejected: miters or bevels computed per node — they need every ribbon meeting at a node together, so the mesh would have to read the network's nodes and their incident carriers, and miters still need a limit at acute angles. Capping only ends shared with another path — it needs the same network reading to tell shared ends from free ones, for the one visible difference of square dead ends. A full disc at each end — it overlaps the ribbon's own end, so a translucent ghost path would blend twice there.
+
+Sources: https://mattdesl.svbtle.com/drawing-lines-is-hard — join and cap kinds, miter blow-up at acute angles; https://jvernay.fr/blog/polyline-triangulation/ — triangulating joins and caps, bevel and round geometry; https://artgrammer.blogspot.com/2011/07/drawing-polylines-by-tessellation.html — round join as a circle of half the width at the vertex; https://arxiv.org/pdf/2007.00308 — caps as the stroked region beyond an unjoined end.
+
+## How should crossing ribbons of different kinds stop tying in depth?
+
+Every ribbon lies exactly PATH_LIFT above the ground, so where a guest and a backstage ribbon cross, two coplanar triangles of different colors compete in the depth test. Their interpolated depths differ only by rounding from different vertices, so the winner changes from pixel to pixel: z-fighting. Same-kind overlaps tie too but are invisible, since the colors match.
+
+The standard remedies are a real separation in space, a depth bias (polygon offset) on one layer, or a fixed draw order with depth testing relaxed or a stencil. A real separation is the only one that is a property of the mesh: it is testable on the CPU like the rest of park_mesh, needs no pipeline change, and the translucent pass keeps working, since a ghost or highlight uses the same lift as what it marks and still passes the greater-or-equal test. Draw order alone does not fix coplanar triangles, because the depth test still decides per pixel. Depth bias depends on the device's depth format and on slope, so its effect cannot be stated in the render spec or tested without a GPU.
+
+The renderer uses reversed depth in D32_FLOAT where the device has it, falling back to D24 and D16. The render spec already relies on a 2 cm lift to keep ribbons from flickering through the terrain across the camera's range, NearZ 0.1 m out to 400 m of orbit distance. A gap between kinds equal to that lift inherits the same guarantee on every depth format: whatever keeps a backstage ribbon off the grass keeps a guest ribbon off the backstage ribbon. So backstage stays at 2 cm and guest lies at 4 cm, a height difference invisible at any camera distance the orbit allows. Evan chose guest over backstage.
+
+Rejected: polygon offset or depth bias per kind — device- and slope-dependent, not testable on the CPU, and the translucent pipeline would need the same bias to keep highlights on their ribbons. Draw order with a relaxed depth test — does not settle coplanar ties, and would let later ribbons draw over boxes. A stencil layer per kind — a pipeline change for what a height difference solves. A 1 cm gap — safe on a float depth buffer but thinner than the terrain gap the spec already trusts on the D24 fallback.
+
+Sources: https://www.reedbeta.com/blog/depth-precision-visualized/ — reversed float depth precision across the range; https://developer.nvidia.com/blog/visualizing-depth-precision/ — reversed-Z with float depth nearly removes precision loss; https://gamedev.net/forums/topic/679302-how-to-solve-z-fighting/ — offset versus depth bias for coplanar layers; https://bugnet.io/blog/how-to-fix-z-fighting-and-flickering-surfaces — separating layers by a small offset as the common fix.
