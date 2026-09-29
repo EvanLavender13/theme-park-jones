@@ -152,6 +152,16 @@ std::vector<CarrierPoint> requireLine(const PathCase &path) {
   return line;
 }
 
+// A path's or walkway's ribbon along n points: its first 2n vertices and its first two triangles
+// per pair of consecutive points, its round joints following both.
+ParkMesh ribbonOf(const ParkMesh &mesh, size_t points) {
+  REQUIRE(mesh.Vertices.size() >= 2 * points);
+  REQUIRE(mesh.Indices.size() >= 6 * (points - 1));
+  return {
+      {mesh.Vertices.begin(), mesh.Vertices.begin() + static_cast<std::ptrdiff_t>(2 * points)},
+      {mesh.Indices.begin(), mesh.Indices.begin() + static_cast<std::ptrdiff_t>(6 * (points - 1))}};
+}
+
 Footprint requireFootprint(const Pose &pose, FootprintSize size) {
   const std::optional<Footprint> footprint = footprintOf(pose, size);
   REQUIRE(footprint.has_value());
@@ -250,28 +260,36 @@ World mixedPark() {
   return world;
 }
 
-TEST_CASE("appendPath lays two vertices per ground line point, pathWidth apart across the "
-          "tangent and centered on the point at PATH_LIFT") {
+TEST_CASE(
+    "A guest path lies 4 cm above the ground and a backstage path 2 cm, so a guest ribbon lies "
+    "above a backstage one by at least as much as a backstage one lies above the terrain") {
+  CHECK(pathLift(PathKind::Guest) == 0.04f);
+  CHECK(pathLift(PathKind::Backstage) == 0.02f);
+  CHECK(pathLift(PathKind::Guest) - pathLift(PathKind::Backstage) >= pathLift(PathKind::Backstage));
+}
+
+TEST_CASE("appendPath begins with two vertices per ground line point, left edge then right, "
+          "pathWidth apart across the tangent and centered on the point at pathLift(kind)") {
   for (const PathCase &path : {GUEST_CURVE, BACKSTAGE_LINE, GUEST_REVERSAL}) {
     INFO(path.Name);
     const std::vector<CarrierPoint> line = requireLine(path);
     if (path.Name == GUEST_REVERSAL.Name) {
       REQUIRE(hasReversal(line));
     }
-    ParkMesh mesh;
-    appendPath(mesh, path.Kind, path.Points);
+    ParkMesh whole;
+    appendPath(whole, path.Kind, path.Points);
     const size_t n = line.size();
-    REQUIRE(mesh.Vertices.size() == 2 * n);
-    CHECK(mesh.Indices.size() == 6 * (n - 1));
+    const ParkMesh mesh = ribbonOf(whole, n);
 
     const double width = pathWidth(path.Kind);
+    const double lift = pathLift(path.Kind);
     for (size_t i = 0; i < n; ++i) {
       INFO("point " << i);
       const Triple left = positionOf(mesh.Vertices[2 * i]);
       const Triple right = positionOf(mesh.Vertices[2 * i + 1]);
       const Triple middle{(left.X + right.X) / 2.0, (left.Y + right.Y) / 2.0,
                           (left.Z + right.Z) / 2.0};
-      CHECK(near(middle, {line[i].X, PATH_LIFT, line[i].Z}, POSITION_TOLERANCE));
+      CHECK(near(middle, {line[i].X, lift, line[i].Z}, POSITION_TOLERANCE));
       const ParkPoint tangent = tangentAt(line, i);
       const Triple across{-tangent.Z * width, 0.0, tangent.X * width};
       CHECK(near(right - left, across, POSITION_TOLERANCE));
@@ -279,7 +297,8 @@ TEST_CASE("appendPath lays two vertices per ground line point, pathWidth apart a
   }
 }
 
-TEST_CASE("appendPath's vertices have upward normals and the kind's path color") {
+TEST_CASE("appendPath's vertices, ribbon and joints, have upward normals and the kind's path "
+          "color") {
   for (const PathCase &path : {GUEST_CURVE, BACKSTAGE_LINE}) {
     INFO(path.Name);
     ParkMesh mesh;
@@ -334,12 +353,203 @@ void checkRibbonQuads(const ParkMesh &mesh, size_t pairs) {
   }
 }
 
-TEST_CASE("appendPath covers the quad between each pair of consecutive points with two "
-          "triangles wound to face up") {
+TEST_CASE("appendPath's first triangles cover the quad between each pair of consecutive points "
+          "with two triangles wound to face up") {
   const std::vector<CarrierPoint> line = requireLine(GUEST_CURVE);
   ParkMesh mesh;
   appendPath(mesh, GUEST_CURVE.Kind, GUEST_CURVE.Points);
-  checkRibbonQuads(mesh, line.size() - 1);
+  checkRibbonQuads(ribbonOf(mesh, line.size()), line.size() - 1);
+}
+
+// A round joint's rim has one more vertex than its segments, since a half circle is open.
+constexpr size_t JOINT_RIM = JOINT_SEGMENTS + 1;
+constexpr size_t JOINT_VERTICES = 1 + JOINT_RIM;
+
+// Where a joint lies in a mesh: the index of its center vertex, followed by its rim, and of its
+// first triangle, followed by the rest of its triangles.
+struct JointAt {
+  size_t Center = 0;
+  size_t FirstTriangle = 0;
+};
+
+// A joint's triangles, one per segment.
+constexpr size_t JOINT_TRIANGLES = JOINT_SEGMENTS;
+
+// Checks the vertices of the round joint closing a ribbon of a width at a lift at the end point p,
+// with t the unit direction pointing away from the ribbon there: its center at p, then its k-th rim
+// vertex at p + h * (cos(πk/16) * r + sin(πk/16) * t), with h half the width and r = (-t.z, t.x).
+void checkJointVertices(const ParkMesh &mesh, size_t center, const CarrierPoint &p, ParkPoint t,
+                        double width, double lift) {
+  REQUIRE(JOINT_SEGMENTS == 16);
+  REQUIRE(mesh.Vertices.size() >= center + JOINT_VERTICES);
+  CHECK(near(positionOf(mesh.Vertices[center]), {p.X, lift, p.Z}, POSITION_TOLERANCE));
+  const double half = width / 2.0;
+  const ParkPoint r{-t.Z, t.X};
+  for (size_t k = 0; k < JOINT_RIM; ++k) {
+    INFO("rim vertex " << k);
+    const double angle = std::numbers::pi * static_cast<double>(k) / JOINT_SEGMENTS;
+    const double across = half * std::cos(angle);
+    const double beyond = half * std::sin(angle);
+    const Triple expected{p.X + across * r.X + beyond * t.X, lift,
+                          p.Z + across * r.Z + beyond * t.Z};
+    CHECK(near(positionOf(mesh.Vertices[center + 1 + k]), expected, POSITION_TOLERANCE));
+  }
+}
+
+// Checks that a joint's triangles are one facing up from its center to each rim vertex and the
+// next. A half circle is open, so none joins its last rim vertex back to its first.
+void checkJointTriangles(const ParkMesh &mesh, JointAt at) {
+  REQUIRE(mesh.Indices.size() >= 3 * (at.FirstTriangle + JOINT_TRIANGLES));
+  const auto center = static_cast<uint32_t>(at.Center);
+  std::set<std::set<uint32_t>> expected;
+  for (uint32_t k = 0; k < JOINT_SEGMENTS; ++k) {
+    expected.insert({center, center + 1 + k, center + 2 + k});
+  }
+  std::set<std::set<uint32_t>> found;
+  for (size_t triangle = at.FirstTriangle; triangle < at.FirstTriangle + JOINT_TRIANGLES;
+       ++triangle) {
+    INFO("triangle " << triangle);
+    const std::array<uint32_t, 3> corners = triangleAt(mesh, triangle);
+    CHECK(windingOf(mesh, triangle).Y > 0.0);
+    found.emplace(corners.begin(), corners.end());
+  }
+  CHECK(found == expected);
+}
+
+// Checks the round joint a mesh holds at a place, closing a ribbon of a width at a lift at the end
+// point p, with t the unit direction pointing away from the ribbon there.
+void checkJoint(const ParkMesh &mesh, JointAt at, const CarrierPoint &p, ParkPoint t, double width,
+                double lift) {
+  checkJointVertices(mesh, at.Center, p, t, width, lift);
+  checkJointTriangles(mesh, at);
+}
+
+ParkPoint reversed(ParkPoint direction) { return {-direction.X, -direction.Z}; }
+
+// The two cases differ in kind, so in width and lift, and in direction, and each ground line's
+// first and last segments run different ways, so each joint must be turned to its own end.
+TEST_CASE("appendPath follows its ribbon with a round joint beyond its first point and then one "
+          "beyond its last, each of JOINT_SEGMENTS + 1, 17, rim vertices at pathLift(kind)") {
+  for (const PathCase &path : {GUEST_CURVE, BACKSTAGE_LINE}) {
+    INFO(path.Name);
+    const std::vector<CarrierPoint> line = requireLine(path);
+    const size_t n = line.size();
+    ParkMesh mesh;
+    appendPath(mesh, path.Kind, path.Points);
+    REQUIRE(mesh.Vertices.size() == 2 * n + 2 * JOINT_VERTICES);
+    REQUIRE(mesh.Indices.size() == 3 * (2 * (n - 1) + 2 * JOINT_TRIANGLES));
+
+    const JointAt first{2 * n, 2 * (n - 1)};
+    const JointAt last{first.Center + JOINT_VERTICES, first.FirstTriangle + JOINT_TRIANGLES};
+    {
+      INFO("the joint beyond the first point");
+      checkJoint(mesh, first, line.front(), reversed(unitStep(line[0], line[1])),
+                 pathWidth(path.Kind), pathLift(path.Kind));
+    }
+    {
+      INFO("the joint beyond the last point");
+      checkJoint(mesh, last, line.back(), unitStep(line[n - 2], line[n - 1]), pathWidth(path.Kind),
+                 pathLift(path.Kind));
+    }
+  }
+}
+
+// Whether a ground point lies inside, or on an edge of, a triangle of the mesh wound to face up.
+bool coveredFromAbove(const ParkMesh &mesh, double x, double z) {
+  // Points on the edge two triangles share must count for one of them despite rounding.
+  constexpr double EDGE_TOLERANCE = 1e-4;
+  for (size_t triangle = 0; triangle < mesh.Indices.size() / 3; ++triangle) {
+    if (windingOf(mesh, triangle).Y <= 0.0) {
+      continue;
+    }
+    const auto [a, b, c] = triangleAt(mesh, triangle);
+    const std::array<Triple, 3> corners = {positionOf(mesh.Vertices.at(a)),
+                                           positionOf(mesh.Vertices.at(b)),
+                                           positionOf(mesh.Vertices.at(c))};
+    bool inside = true;
+    for (size_t edge = 0; edge < 3; ++edge) {
+      const Triple &from = corners.at(edge);
+      const Triple &to = corners.at((edge + 1) % 3);
+      // The y of cross(to - from, point - from), positive when the point lies on the side an
+      // upward-facing triangle's interior does.
+      const double side = (to.Z - from.Z) * (x - from.X) - (to.X - from.X) * (z - from.Z);
+      inside = inside && side >= -EDGE_TOLERANCE;
+    }
+    if (inside) {
+      return true;
+    }
+  }
+  return false;
+}
+
+struct MeetingCase {
+  std::string_view Name;
+  PathKind Kind;
+  // The angle between the two paths at the end point they share.
+  double Angle;
+};
+
+// A right angle, where square ends leave the plainest notch, a sharp angle, where the outer corner
+// is widest, and a shallow one, where the notch is a thin wedge; the last in the other kind, so the
+// width differs.
+const std::array<MeetingCase, 3> MEETINGS = {
+    {{"guest paths at a right angle", PathKind::Guest, std::numbers::pi / 2.0},
+     {"guest paths at 30 degrees", PathKind::Guest, std::numbers::pi / 6.0},
+     {"backstage paths at 150 degrees", PathKind::Backstage, 5.0 * std::numbers::pi / 6.0}}};
+
+TEST_CASE("Two straight paths of one kind whose ends meet at a point, at any angle, cover every "
+          "ground point within h * cos(pi/32) of it with an upward-facing triangle") {
+  // The paths meet at a point off the axes, one ending there and the other starting there, so both
+  // joints serve, and each runs 10 m straight into it, more than half its width.
+  const ParkPoint end{10.0, 20.0};
+  const ParkPoint along{0.6, 0.8};
+  constexpr double LENGTH = 10.0;
+  for (const MeetingCase &meeting : MEETINGS) {
+    INFO(meeting.Name);
+    const double cosine = std::cos(meeting.Angle);
+    const double sine = std::sin(meeting.Angle);
+    // Unit directions from the end point back along each path.
+    const ParkPoint towardFirst = along;
+    const ParkPoint towardSecond{cosine * along.X - sine * along.Z,
+                                 sine * along.X + cosine * along.Z};
+    const std::vector<ParkPoint> first{
+        {end.X + LENGTH * towardFirst.X, end.Z + LENGTH * towardFirst.Z}, end};
+    const std::vector<ParkPoint> second{
+        end, {end.X + LENGTH * towardSecond.X, end.Z + LENGTH * towardSecond.Z}};
+    const std::vector<CarrierPoint> firstLine = groundLine(first);
+    const std::vector<CarrierPoint> secondLine = groundLine(second);
+    REQUIRE(firstLine.size() >= 2);
+    REQUIRE(secondLine.size() >= 2);
+    REQUIRE(near({firstLine.back().X, 0.0, firstLine.back().Z}, {end.X, 0.0, end.Z},
+                 POSITION_TOLERANCE));
+    REQUIRE(near({secondLine.front().X, 0.0, secondLine.front().Z}, {end.X, 0.0, end.Z},
+                 POSITION_TOLERANCE));
+
+    ParkMesh mesh;
+    appendPath(mesh, meeting.Kind, first);
+    appendPath(mesh, meeting.Kind, second);
+
+    // Just inside the distance from a joint's center to its nearest rim edge.
+    const double reach =
+        pathWidth(meeting.Kind) / 2.0 * std::cos(std::numbers::pi / 32.0) - POSITION_TOLERANCE;
+    const double sumX = towardFirst.X + towardSecond.X;
+    const double sumZ = towardFirst.Z + towardSecond.Z;
+    const double sumLength = std::sqrt(sumX * sumX + sumZ * sumZ);
+    // The outer bisector, away from both paths, is where square ends leave their notch; straight
+    // beyond each path's end, and across it at its corners, where its ribbon and joint meet.
+    std::vector<std::pair<std::string_view, ParkPoint>> directions = {
+        {"the outer bisector", {-sumX / sumLength, -sumZ / sumLength}}};
+    for (const ParkPoint &back : {towardFirst, towardSecond}) {
+      directions.emplace_back("beyond a path's end", reversed(back));
+      directions.emplace_back("a path's left corner", ParkPoint{-back.Z, back.X});
+      directions.emplace_back("a path's right corner", ParkPoint{back.Z, -back.X});
+    }
+    CHECK(coveredFromAbove(mesh, end.X, end.Z));
+    for (const auto &[name, direction] : directions) {
+      INFO(name << " (" << direction.X << ", " << direction.Z << ")");
+      CHECK(coveredFromAbove(mesh, end.X + reach * direction.X, end.Z + reach * direction.Z));
+    }
+  }
 }
 
 TEST_CASE("appendPath adds nothing for a path whose ground line is empty") {
@@ -408,19 +618,8 @@ bool isConnector(const Network &network, const Carrier &carrier) {
   return network.nodeAnchor(carrier.Stops.front().Node) != NULL_KEY;
 }
 
-// A walkway's ribbon: its first 2n vertices and its first two triangles per pair of consecutive
-// points, the round joint following both.
-ParkMesh ribbonOf(const ParkMesh &walkway, size_t points) {
-  REQUIRE(walkway.Vertices.size() >= 2 * points);
-  REQUIRE(walkway.Indices.size() >= 6 * (points - 1));
-  return {{walkway.Vertices.begin(),
-           walkway.Vertices.begin() + static_cast<std::ptrdiff_t>(2 * points)},
-          {walkway.Indices.begin(),
-           walkway.Indices.begin() + static_cast<std::ptrdiff_t>(6 * (points - 1))}};
-}
-
 TEST_CASE("appendWalkway begins with two vertices per point, left edge then right, pathWidth "
-          "apart across the tangent and centered on the point at PATH_LIFT") {
+          "apart across the tangent and centered on the point at pathLift(kind)") {
   for (const WalkwayCase &walkway : {BACKSTAGE_CONNECTOR, SHORT_CONNECTOR, GUEST_BEND}) {
     INFO(walkway.Name);
     const std::vector<CarrierPoint> &line = walkway.Points;
@@ -434,7 +633,7 @@ TEST_CASE("appendWalkway begins with two vertices per point, left edge then righ
       const Triple right = positionOf(mesh.Vertices[2 * i + 1]);
       const Triple middle{(left.X + right.X) / 2.0, (left.Y + right.Y) / 2.0,
                           (left.Z + right.Z) / 2.0};
-      CHECK(near(middle, {line[i].X, PATH_LIFT, line[i].Z}, POSITION_TOLERANCE));
+      CHECK(near(middle, {line[i].X, pathLift(walkway.Kind), line[i].Z}, POSITION_TOLERANCE));
       const ParkPoint tangent = tangentAt(line, i);
       const Triple across{-tangent.Z * width, 0.0, tangent.X * width};
       CHECK(near(right - left, across, POSITION_TOLERANCE));
@@ -463,63 +662,20 @@ TEST_CASE("appendWalkway's first triangles cover the quad between each pair of c
   }
 }
 
-// The two cases end at different points in different widths along different directions, and the
-// bend's last point is not its second, so the joint must be placed at the last point and turned to
-// the last segment.
-TEST_CASE("appendWalkway ends with the joint's center at the last point and then "
-          "WALKWAY_JOINT_SEGMENTS + 1, 17, vertices on the half circle of half the width beyond "
-          "the ribbon's end at PATH_LIFT") {
-  REQUIRE(WALKWAY_JOINT_SEGMENTS == 16);
-  constexpr size_t RIM = WALKWAY_JOINT_SEGMENTS + 1;
+// The two cases end at different points in different widths and lifts along different
+// directions, and the bend's last point is not its second, so the joint must be placed at the last
+// point and turned to the last segment.
+TEST_CASE("appendWalkway follows its ribbon with a round joint beyond its last point, of "
+          "JOINT_SEGMENTS + 1, 17, rim vertices at pathLift(kind)") {
   for (const WalkwayCase &walkway : {BACKSTAGE_CONNECTOR, GUEST_BEND}) {
     INFO(walkway.Name);
     const ParkMesh mesh = walkwayMesh(walkway);
-    const size_t n = walkway.Points.size();
-    const size_t center = 2 * n;
-    REQUIRE(mesh.Vertices.size() == center + 1 + RIM);
-
-    const CarrierPoint &last = walkway.Points.back();
-    CHECK(near(positionOf(mesh.Vertices[center]), {last.X, PATH_LIFT, last.Z}, POSITION_TOLERANCE));
-    const double half = pathWidth(walkway.Kind) / 2.0;
-    const ParkPoint t = unitStep(walkway.Points[n - 2], last);
-    const ParkPoint r{-t.Z, t.X};
-    for (size_t k = 0; k < RIM; ++k) {
-      INFO("rim vertex " << k);
-      const double angle = std::numbers::pi * static_cast<double>(k) / WALKWAY_JOINT_SEGMENTS;
-      const double across = half * std::cos(angle);
-      const double beyond = half * std::sin(angle);
-      const Triple expected{last.X + across * r.X + beyond * t.X, PATH_LIFT,
-                            last.Z + across * r.Z + beyond * t.Z};
-      CHECK(near(positionOf(mesh.Vertices[center + 1 + k]), expected, POSITION_TOLERANCE));
-    }
-  }
-}
-
-TEST_CASE("appendWalkway's triangles after the ribbon's join the joint's center to each rim "
-          "vertex and the next, each wound to face up") {
-  constexpr size_t RIM = WALKWAY_JOINT_SEGMENTS + 1;
-  for (const WalkwayCase &walkway : {BACKSTAGE_CONNECTOR, GUEST_BEND}) {
-    INFO(walkway.Name);
-    const ParkMesh mesh = walkwayMesh(walkway);
-    const size_t n = walkway.Points.size();
-    const size_t ribbonTriangles = 2 * (n - 1);
-    REQUIRE(mesh.Vertices.size() == 2 * n + 1 + RIM);
-    REQUIRE(mesh.Indices.size() == 3 * (ribbonTriangles + WALKWAY_JOINT_SEGMENTS));
-
-    // A half circle is open, so no triangle joins its last rim vertex back to its first.
-    const auto center = static_cast<uint32_t>(2 * n);
-    std::set<std::set<uint32_t>> expected;
-    for (uint32_t k = 0; k < WALKWAY_JOINT_SEGMENTS; ++k) {
-      expected.insert({center, center + 1 + k, center + 2 + k});
-    }
-    std::set<std::set<uint32_t>> found;
-    for (size_t triangle = ribbonTriangles; triangle < mesh.Indices.size() / 3; ++triangle) {
-      INFO("triangle " << triangle);
-      const std::array<uint32_t, 3> corners = triangleAt(mesh, triangle);
-      CHECK(windingOf(mesh, triangle).Y > 0.0);
-      found.emplace(corners.begin(), corners.end());
-    }
-    CHECK(found == expected);
+    const std::vector<CarrierPoint> &line = walkway.Points;
+    const size_t n = line.size();
+    REQUIRE(mesh.Vertices.size() == 2 * n + JOINT_VERTICES);
+    REQUIRE(mesh.Indices.size() == 3 * (2 * (n - 1) + JOINT_TRIANGLES));
+    checkJoint(mesh, JointAt{2 * n, 2 * (n - 1)}, line.back(), unitStep(line[n - 2], line[n - 1]),
+               pathWidth(walkway.Kind), pathLift(walkway.Kind));
   }
 }
 
@@ -542,9 +698,9 @@ TEST_CASE("appendWalkway given a face's normal moves its first left and right ve
     const double half = pathWidth(walkway.Kind) / 2.0;
     const double move =
         half * (r.X * normal.X + r.Z * normal.Z) / (t.X * normal.X + t.Z * normal.Z);
-    const Triple left{first.X - half * r.X + move * t.X, PATH_LIFT,
+    const Triple left{first.X - half * r.X + move * t.X, pathLift(walkway.Kind),
                       first.Z - half * r.Z + move * t.Z};
-    const Triple right{first.X + half * r.X - move * t.X, PATH_LIFT,
+    const Triple right{first.X + half * r.X - move * t.X, pathLift(walkway.Kind),
                        first.Z + half * r.Z - move * t.Z};
     CHECK(near(positionOf(mesh.Vertices[0]), left, POSITION_TOLERANCE));
     CHECK(near(positionOf(mesh.Vertices[1]), right, POSITION_TOLERANCE));
@@ -896,6 +1052,35 @@ TEST_CASE("buildParkMesh appends each entrance, then each path, then the walkway
   }
   REQUIRE_FALSE(expected.Vertices.empty());
   CHECK(sameMesh(buildParkMesh(world), expected));
+}
+
+TEST_CASE("buildParkMesh lays every vertex in a path kind's color at that kind's lift, paths and "
+          "walkways alike") {
+  // Guest and backstage paths cross there, and doors connect to both networks.
+  const World world = routesPark();
+  ParkMesh walkways;
+  appendWalkways(walkways, world, 1.0f);
+  for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
+    INFO("kind " << static_cast<int>(kind));
+    REQUIRE(std::ranges::any_of(parkPaths(world),
+                                [kind](const ParkPath &path) { return path.Kind == kind; }));
+    REQUIRE(std::ranges::any_of(walkways.Vertices, [kind](const ParkVertex &vertex) {
+      return vertex.Color == pathColor(kind);
+    }));
+  }
+
+  const ParkMesh mesh = buildParkMesh(world);
+  for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
+    INFO("kind " << static_cast<int>(kind));
+    size_t count = 0;
+    for (const ParkVertex &vertex : mesh.Vertices) {
+      if (vertex.Color == pathColor(kind)) {
+        ++count;
+        CHECK(std::abs(vertex.Position[1] - pathLift(kind)) <= POSITION_TOLERANCE);
+      }
+    }
+    CHECK(count > 0);
+  }
 }
 
 TEST_CASE("An entrance is 5 m tall, a shop 4 m, and a depot 6 m") {
