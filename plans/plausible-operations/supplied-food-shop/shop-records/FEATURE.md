@@ -97,6 +97,12 @@ void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha);
 - A depot's inspection record (MILESTONE.md's deepening candidates).
 - Clicking a shop to inspect it: legible-simulation's shop inspector.
 
+## Test pass decisions
+
+- Criterion 8's capture and the Debug panel's shop lines are checked by a --capture run of supply.park, since debug_panel.h draws through ImGui and has no testable output, and the cross-build check with supply.park runs in scripts/cross-build-check.sh.
+- tests/parks/supply.park is a feature file, written by the implementation, so the tests that read it fail until it exists.
+- The supply.park mesh test counts mark vertices by STARVED_COLOR and lightened(STARVED_COLOR), since a mark's front face is lightened as a box's is. The lightened violet is far from every declared color, so no path, walkway, or box vertex is counted.
+
 ## Open questions
 
 None.

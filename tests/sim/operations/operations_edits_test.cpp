@@ -1,4 +1,5 @@
 #include "support/ledger_writes.h"
+#include "support/park_worlds.h"
 #include "support/route_edits.h"
 
 #include "sim/command_queue.h"
@@ -322,6 +323,37 @@ TEST_CASE("In every tick of randomized park edits with synthetic guests, samplin
         sawSupplied = sawSupplied || supplied;
         sawStarved = sawStarved || !supplied;
       }
+    }
+  });
+  CHECK(sawSupplied);
+  CHECK(sawStarved);
+}
+
+// A starved mark drawn from intent alone is right only if Starved depends on nothing else.
+TEST_CASE("In every tick of randomized park edits with synthetic guests, every shop box has a "
+          "record, whose Starved equals Starved for its key in a new world with the same intent, "
+          "once resolved") {
+  // The new world depends on intent alone, so it is rebuilt only when an edit may have changed it.
+  std::optional<World> fresh;
+  bool sawSupplied = false;
+  bool sawStarved = false;
+  runServiceSequence(61, [&](const World &world, bool edited) {
+    if (edited || !fresh.has_value()) {
+      fresh.emplace(test::worldOf(test::intentOf(world)));
+      resolveWorld(fresh.value());
+    }
+    for (const ParkBox &box : parkBoxes(world)) {
+      if (box.Kind != BoxKind::Shop) {
+        continue;
+      }
+      CAPTURE(box.Key);
+      const std::optional<ShopRecord> record = shopRecord(world, box.Key);
+      const std::optional<ShopRecord> expected = shopRecord(fresh.value(), box.Key);
+      REQUIRE(record.has_value());
+      REQUIRE(expected.has_value());
+      CHECK(record.value_or(ShopRecord{}).Starved == expected.value_or(ShopRecord{}).Starved);
+      sawSupplied = sawSupplied || !record.value_or(ShopRecord{}).Starved;
+      sawStarved = sawStarved || record.value_or(ShopRecord{}).Starved;
     }
   });
   CHECK(sawSupplied);

@@ -2,6 +2,7 @@
 
 #include "sim/command_queue.h"
 #include "sim/medium/network.h"
+#include "sim/operations/operations.h"
 #include "sim/routes/networks.h"
 
 #include <algorithm>
@@ -65,6 +66,32 @@ void addQuad(ParkMesh &mesh, const std::array<ParkPoint, 4> &ground,
   }
   mesh.Indices.insert(mesh.Indices.end(),
                       {first, first + 1, first + 2, first, first + 2, first + 3});
+}
+
+// Adds a block over the footprint from the base up to the top: its top, then its four sides, the
+// front one lightened, and, when closed, its bottom.
+void appendBlock(ParkMesh &mesh, const Footprint &footprint, float base, float top, bool closed,
+                 Rgba color) {
+  const auto &[frontLeft, frontRight, backRight, backLeft] = footprint.Corners;
+  const ParkPoint forward = footprint.Forward;
+  const ParkPoint right = footprint.Right;
+  const std::array<float, 4> sideHeights{base, base, top, top};
+
+  addQuad(mesh, {frontLeft, backLeft, backRight, frontRight}, {top, top, top, top}, {}, 1.0f,
+          color);
+  // Each side runs along its edge counter-clockwise seen from above, then rises back over it.
+  addQuad(mesh, {frontLeft, backLeft, backLeft, frontLeft}, sideHeights, {-right.X, -right.Z}, 0.0f,
+          color);
+  addQuad(mesh, {backLeft, backRight, backRight, backLeft}, sideHeights, {-forward.X, -forward.Z},
+          0.0f, color);
+  addQuad(mesh, {backRight, frontRight, frontRight, backRight}, sideHeights, right, 0.0f, color);
+  addQuad(mesh, {frontRight, frontLeft, frontLeft, frontRight}, sideHeights, forward, 0.0f,
+          lightened(color));
+  if (closed) {
+    // The top's corners in reverse, counter-clockwise seen from below.
+    addQuad(mesh, {frontLeft, frontRight, backRight, backLeft}, {base, base, base, base}, {}, -1.0f,
+            color);
+  }
 }
 
 // An edit's ghost color for a kind's color: translucent when accepted, the invalid tint when not.
@@ -222,25 +249,27 @@ void appendWalkways(ParkMesh &mesh, const World &world, float alpha) {
 }
 
 void appendBox(ParkMesh &mesh, const Pose &pose, FootprintSize size, float height, Rgba color) {
-  const std::optional<Footprint> footprint = footprintOf(pose, size);
-  if (!footprint) {
-    return;
+  if (const std::optional<Footprint> footprint = footprintOf(pose, size)) {
+    appendBlock(mesh, *footprint, 0.0f, height, false, color);
   }
-  const auto &[frontLeft, frontRight, backRight, backLeft] = footprint->Corners;
-  const ParkPoint forward = footprint->Forward;
-  const ParkPoint right = footprint->Right;
-  const float h = height;
-  const std::array<float, 4> sideHeights{0.0f, 0.0f, h, h};
+}
 
-  addQuad(mesh, {frontLeft, backLeft, backRight, frontRight}, {h, h, h, h}, {}, 1.0f, color);
-  // Each side runs along its edge counter-clockwise seen from above, then rises back over it.
-  addQuad(mesh, {frontLeft, backLeft, backLeft, frontLeft}, sideHeights, {-right.X, -right.Z}, 0.0f,
-          color);
-  addQuad(mesh, {backLeft, backRight, backRight, backLeft}, sideHeights, {-forward.X, -forward.Z},
-          0.0f, color);
-  addQuad(mesh, {backRight, frontRight, frontRight, backRight}, sideHeights, right, 0.0f, color);
-  addQuad(mesh, {frontRight, frontLeft, frontLeft, frontRight}, sideHeights, forward, 0.0f,
-          lightened(color));
+void appendStarvedMark(ParkMesh &mesh, const Pose &pose, Rgba color) {
+  if (const std::optional<Footprint> footprint =
+          footprintOf(pose, FootprintSize{STARVED_MARK_SIZE, STARVED_MARK_SIZE})) {
+    appendBlock(mesh, *footprint, STARVED_MARK_BASE, STARVED_MARK_BASE + STARVED_MARK_SIZE, true,
+                color);
+  }
+}
+
+void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha) {
+  for (const ParkBox &box : parkBoxes(world)) {
+    const std::optional<ShopRecord> record = shopRecord(world, box.Key);
+    if (record && record->Starved) {
+      appendStarvedMark(mesh, box.At,
+                        Rgba{STARVED_COLOR.R, STARVED_COLOR.G, STARVED_COLOR.B, alpha});
+    }
+  }
 }
 
 ParkMesh buildParkMesh(const World &world) {
@@ -255,6 +284,7 @@ ParkMesh buildParkMesh(const World &world) {
   for (const ParkBox &box : parkBoxes(world)) {
     appendBox(mesh, box.At, boxSize(box.Kind), boxHeight(box.Kind), boxColor(box.Kind));
   }
+  appendStarvedMarks(mesh, world, 1.0f);
   return mesh;
 }
 
@@ -310,7 +340,9 @@ ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit) {
   if (isAccepted(world, edit)) {
     CommandQueue queue;
     queueEdit(queue, edit);
-    appendWalkways(mesh, makeCandidate(world, queue), GHOST_ALPHA);
+    const World candidate = makeCandidate(world, queue);
+    appendWalkways(mesh, candidate, GHOST_ALPHA);
+    appendStarvedMarks(mesh, candidate, GHOST_ALPHA);
   }
   return mesh;
 }

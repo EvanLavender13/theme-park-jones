@@ -92,7 +92,21 @@ void appendWalkways(ParkMesh &mesh, const World &world, float alpha);
 // no footprint.
 void appendBox(ParkMesh &mesh, const Pose &pose, FootprintSize size, float height, Rgba color);
 
-// The world's entrances, paths, walkways, and boxes, in that order and each in key order.
+// A starved shop's mark: a cube of this size whose bottom floats this high, a meter over the
+// shop's roof, in a violet no other part of the park is drawn in.
+inline constexpr float STARVED_MARK_SIZE = 1.5f;
+inline constexpr float STARVED_MARK_BASE = 5.0f;
+inline constexpr Rgba STARVED_COLOR{0.56f, 0.24f, 0.86f, 1.0f};
+
+// Adds a closed cube of STARVED_MARK_SIZE over the pose, its bottom at STARVED_MARK_BASE, or
+// nothing when the pose has no footprint.
+void appendStarvedMark(ParkMesh &mesh, const Pose &pose, Rgba color);
+// Adds a mark over each shop box whose inspection record says it is starved, in key order, in
+// STARVED_COLOR with the alpha given.
+void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha);
+
+// The world's entrances, paths, walkways, and boxes, in that order and each in key order, then a
+// starved mark over each starved shop.
 ParkMesh buildParkMesh(const World &world);
 
 // Adds the box or path the key holds as buildParkMesh draws it, in the color. Nothing when the key
@@ -100,7 +114,8 @@ ParkMesh buildParkMesh(const World &world);
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
 
 // The ghost of an edit on a world: translucent in its kind's color when accepted, INVALID_TINT when
-// not, and DELETE_TINT for a deletion, followed for an accepted edit by its candidate's walkways.
+// not, and DELETE_TINT for a deletion, followed for an accepted edit by its candidate's walkways
+// and starved marks.
 ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit);
 
 // A rectangle on the ground.

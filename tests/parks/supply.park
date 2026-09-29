@@ -1,0 +1,19 @@
+tpj-park 1
+seed 1
+tick 0
+next-key 10
+
+[entrance]
+1 x=0 z=126.5 facing-x=0 facing-z=-1
+
+[path]
+2 kind=guest points=[{x=0 z=123} {x=0 z=100}]
+3 kind=guest points=[{x=0 z=110} {x=-30 z=110}]
+4 kind=guest points=[{x=-15 z=120} {x=-15 z=95}]
+5 kind=guest points=[{x=0 z=100} {x=20 z=100} {x=30 z=80}]
+6 kind=backstage points=[{x=12 z=122} {x=12 z=87}]
+
+[box]
+7 kind=shop x=6.5 z=115 facing-x=-1 facing-z=0
+8 kind=depot x=12 z=80 facing-x=0 facing-z=1
+9 kind=shop x=-25 z=116 facing-x=0 facing-z=-1
