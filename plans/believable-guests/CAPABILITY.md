@@ -41,11 +41,11 @@ Its value is that the park's layout matters to someone. A shop's reach, its wait
 
 ## Dependencies
 
-- deterministic-simulation (world-as-value): keyed draws, exp, the cycle, and state registration. Unmet; planned.
-- shared-medium (first-field-and-flow): fields, flows, and place carry-over. Unmet; planned.
-- navigable-networks (paths-become-routes): the guest network, the entrance anchor, and route distance. Unmet; planned.
-- plausible-operations (supplied-food-shop): food offers, and serving visits and meals. Unmet; planned. The foundation can be tested against synthetic offers before it lands.
-- effortless-building (sketch-a-park): the entrance, and rendering of the park the guests are drawn in. Unmet; planned.
+- deterministic-simulation (world-as-value): keyed draws, exp, the cycle, and state registration. Met.
+- shared-medium (first-field-and-flow): fields, flows, and place carry-over. Met.
+- navigable-networks (paths-become-routes): the guest network, the entrance anchor, and route distance. Met.
+- plausible-operations (supplied-food-shop): food offers, and serving visits and meals. Met.
+- effortless-building (sketch-a-park): the entrance, and rendering of the park the guests are drawn in. Met.
 
 ## Foundation
 

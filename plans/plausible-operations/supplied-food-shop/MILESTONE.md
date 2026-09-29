@@ -64,7 +64,7 @@ The capability leaves these to this milestone. Playing adjusts them. RESEARCH.md
 - REORDER_POINT: 8. ORDER_UP_TO: 24.
 - ORDER_DELAY: 30 ticks (1 s) for an order to reach its depot.
 - SUPPLY_SPEED: 2 m/s along the backstage route.
-- MEAL_RELIEF: 0.5, on a hunger scale from 0 to 1, which hungry-guests adopts or re-tunes.
+- MEAL_RELIEF: 0.5, on the hunger scale from 0 to 1 that hungry-guests defines.
 
 ## Deepening candidates
 
@@ -79,7 +79,7 @@ Unordered pool this milestone draws later features from.
 
 ## Open questions
 
-- Whether MEAL_RELIEF's 0 to 1 hunger scale holds. Resolved when hungry-guests defines hunger.
+None.
 
 ## Research notes
 
