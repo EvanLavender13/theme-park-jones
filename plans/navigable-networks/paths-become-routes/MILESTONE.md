@@ -19,7 +19,7 @@ paths-become-routes turns the park's intent into the park's networks. Resolution
 ## Medium
 
 - Networks (produced by path-networks, extended by box-connections): the guest and backstage networks in shared-medium's Network type, with carriers, stops, and anchors. route-distance reads them to compute distances, and graph-view reads them through the Network type's public queries to draw them. Later in the slice, plausible-operations finds its shops' and depots' anchored nodes, believable-guests moves guests along the guest network, and every field is sampled at their places.
-- Route distance (route-distance): an entry field over both networks, one resolved entry per source per node, with sampleEdge giving the entry at a place between nodes. It is produced here, and later sampled by plausible-operations for a supply route's length and delay, by believable-guests to choose and move, and by legible-simulation for the overlay and preview context. Nothing in this milestone consumes it except its tests.
+- Route distance (route-distance): two entry fields, guest-route-distance and backstage-route-distance, one per network kind, each with one resolved entry per source per node, with sampleEdge giving the entry at a place between nodes. It is produced here, and later sampled by plausible-operations for a supply route's length and delay, by believable-guests to choose and move, and by legible-simulation for the overlay and preview context. Nothing in this milestone consumes it except its tests.
 - Park intent (decision 0025): path-networks and box-connections read it through parkPaths, parkBoxes, parkEntrances, groundLine, and footprintOf, committed or in a candidate. Connections are derived, never saved.
 
 graph-view reads only the networks' public queries and draws nothing into the simulation. route-distance reads the networks it samples, never how they were derived.
@@ -70,7 +70,7 @@ None.
 - Edge lengths are ground-line distances, not quadrature arc lengths, since the ground line is what the medium interpolates along.
 - Same-kind lines, and a line with itself, meet where two segments come within the junction tolerance, found pairwise with a bounding-box reject. Collinear overlaps get a node at each end.
 - Connectors reuse the medium's nearestPlace, the only straight-line measure.
-- A route distance entry's next step is a carrier and a direction, which survives edges being split. Ties break by carrier key, then direction.
+- A route distance entry's next step is a carrier and two of its stop distances, which survives edges being split and names which stop to leave from where a carrier meets a node twice. Ties break by carrier key, then direction, then the stop left from.
 - The graph view draws on ImGui's background draw list, clipping segments behind the camera.
 
 Depth is in RESEARCH.md.

@@ -59,6 +59,7 @@ networks-and-places is the core. Fields are sampled at places, carry-over moves 
 
 - Per-field relocation policies: a field or holder that keeps its distance along an edited carrier rather than its ground position, as linear referencing systems allow per kind of event. Gated on: a holder that needs it.
 - Resolved entries from state: letting a resolver read a source's state, with a rule that keeps a loaded world equal to the one saved, so a moved shop's offer is exact in the tick it moves. Gated on: the one-tick intent-only offer being visible in play.
+- Resolved-only fields: a field that is only ever resolved, such as route distance, registers no stepped layer, so a resolved park's save holds nothing for it.
 - Packet split and merge: dividing a shipment between destinations, or combining packets on the same route, preserving the count. Gated on: a flow that needs it.
 - The capability's deepening candidates (ground-domain fields, on-demand fields, change-driven resolution, edge capacity, agent-backed flows, generic field enumeration) stay in CAPABILITY.md.
 
