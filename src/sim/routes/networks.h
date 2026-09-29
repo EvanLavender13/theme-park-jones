@@ -40,7 +40,7 @@ constexpr EntityKey connectorKey(EntityKey entity, Face face) {
 // none, as before its first resolution.
 const Network &parkNetwork(const World &world, PathKind kind);
 
-// Registers the resolver path-networks.
+// Registers the resolver path-networks, and then route distance's fields and resolver.
 void addRoutes(WorldSchema &schema);
 
 } // namespace tpj

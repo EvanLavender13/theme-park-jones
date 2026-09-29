@@ -1,6 +1,7 @@
 #include "sim/routes/networks.h"
 
 #include "sim/park/geometry.h"
+#include "sim/routes/route_distance.h"
 #include "sim/schema.h"
 #include "sim/world.h"
 
@@ -426,6 +427,9 @@ const Network &parkNetwork(const World &world, PathKind kind) {
   return network != nullptr ? *network : EMPTY;
 }
 
-void addRoutes(WorldSchema &schema) { schema.addResolver("path-networks", &resolvePathNetworks); }
+void addRoutes(WorldSchema &schema) {
+  schema.addResolver("path-networks", &resolvePathNetworks);
+  addRouteDistance(schema);
+}
 
 } // namespace tpj
