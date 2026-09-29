@@ -113,8 +113,10 @@ using NetworkPosition = std::variant<NodePosition, EdgePosition>;
 class Network {
 public:
   Network() = default;
-  // Sorts carriers by key and anchors by node. Throws std::invalid_argument for the malformed
-  // inputs sim/medium/SPEC.md lists.
+  // Sorts carriers by key and anchors by node. Throws std::invalid_argument for a repeated or null
+  // carrier key, a carrier's points or stops out of order, missing, or not finite, a stop's node
+  // not below nodeCount, a node no carrier stops at, or an anchor on a missing, null, or already
+  // anchored node.
   Network(std::vector<Carrier> carriers, uint32_t nodeCount, std::vector<NodeAnchor> anchors);
 
   // In ascending key order.

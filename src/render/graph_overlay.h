@@ -60,12 +60,13 @@ struct GraphOverlay {
 };
 
 // Where drawFrame's projection puts the ground point in a window of the width and height. None
-// when the point's view depth is not positive, or the width or height is not. See render/SPEC.md.
+// when the point's view depth is not positive, or the width or height is not.
 std::optional<WindowPoint> windowPoint(const CameraView &view, float width, float height,
                                        GroundPoint point);
 
 // Both networks' segments and nodes in a window of the width and height, with segments clipped to
-// the near plane. See render/SPEC.md.
+// the near plane. A line is marked as a connector when its carrier is not a path's, and a node
+// holds its anchor.
 GraphOverlay buildGraphOverlay(const World &world, const CameraView &view, float width,
                                float height);
 

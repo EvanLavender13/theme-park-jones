@@ -37,7 +37,7 @@ constexpr EntityKey connectorKey(EntityKey entity, Face face) {
 }
 
 // The kind's network as the last resolution derived it, or an empty network when the world holds
-// none. See sim/routes/SPEC.md.
+// none, as before its first resolution.
 const Network &parkNetwork(const World &world, PathKind kind);
 
 // Registers the resolver path-networks.

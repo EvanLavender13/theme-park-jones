@@ -21,8 +21,7 @@ inline constexpr int MIN_SEGMENT_SAMPLES = 8;
 std::vector<ParkPoint> keptPoints(const std::vector<ParkPoint> &points);
 
 // The path's centripetal Catmull-Rom curve through its points as a line with distances, or an empty
-// line when a point is not finite or outside the park, or fewer than two points are kept. See
-// sim/park/SPEC.md.
+// line when a point is not finite or outside the park, or fewer than two points are kept.
 std::vector<CarrierPoint> groundLine(const std::vector<ParkPoint> &points);
 
 // The rectangle a box or entrance covers. Forward and Right are unit directions.

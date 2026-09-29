@@ -134,8 +134,9 @@ void ledgerSend(const World &world, Ledger &ledger, std::string_view kind, Entit
                 EntityKey to, EntityKey handle, int64_t units, uint32_t delay);
 void ledgerConsume(const World &world, Ledger &ledger, std::string_view kind, EntityKey endpoint,
                    EntityKey handle, int64_t units, std::string_view cause);
-// Delivers due packets, returns those whose destination is gone, and settles the stocks of
-// endpoints that are gone, as sim/medium/SPEC.md says. World::Tick is the tick just reached.
+// Delivers due packets, returns those whose destination is gone, and consumes as undeliverable
+// those whose sender is gone too. Then moves each gone endpoint's units to its handle's entity, or
+// consumes them as discarded when that is gone as well. World::Tick is the tick just reached.
 void ledgerSwap(const World &world, Ledger &ledger);
 [[nodiscard]] int64_t ledgerHeld(const Ledger &ledger, EntityKey endpoint, EntityKey handle);
 
@@ -184,8 +185,10 @@ template <FlowDefinition K> void addFlow(WorldSchema &schema) {
   schema.addSwap(&swapLedger<K>);
 }
 
-// Adds units under the handle to the endpoint's stock. Systems only. Throws as
-// sim/medium/SPEC.md's Flows section says, changing nothing.
+// Adds units under the handle to the endpoint's stock. Systems only. Throws std::logic_error when
+// the world is not stepping or holds no ledger for the kind, and std::invalid_argument when the
+// endpoint is not a live entity, the units are below 1, or the count would overflow; a throw
+// changes nothing.
 template <FlowDefinition K>
 void createUnits(World &world, EntityKey endpoint, EntityKey handle, int64_t units) {
   ledgerCreate(world, steppingLedger<K>(world), K::Name, endpoint, handle, units);

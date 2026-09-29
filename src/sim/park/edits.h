@@ -58,7 +58,8 @@ void addParkEdits(WorldSchema &schema);
 using ParkEdit = std::variant<AddPath, AddBox, MoveBox, DeletePath, DeleteBox>;
 
 // Whether the command would be applied to the world: it describes a physical object, names what it
-// acts on, and conflicts with nothing. See sim/park/SPEC.md.
+// acts on, and conflicts with nothing: no footprints overlap, no path comes within half its width
+// of a footprint, and nothing leaves the park's square.
 bool isAccepted(const World &world, const AddPath &command);
 bool isAccepted(const World &world, const AddBox &command);
 bool isAccepted(const World &world, const MoveBox &command);

@@ -99,7 +99,6 @@ void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color)
 
 // The ghost of an edit on a world: translucent in its kind's color when accepted, INVALID_TINT when
 // not, and DELETE_TINT for a deletion, followed for an accepted edit by its candidate's walkways.
-// See render/SPEC.md.
 ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit);
 
 // A rectangle on the ground.

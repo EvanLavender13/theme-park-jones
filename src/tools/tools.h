@@ -30,7 +30,7 @@ inline constexpr double SNAP_REACH = 2.0;
 inline constexpr double FINISH_REACH = 1.0;
 
 // One tool and what it holds. Change it only through selectTool, movePointer, pressPointer, and
-// releasePointer. See tools/SPEC.md.
+// releasePointer.
 struct ToolState {
   ToolKind Kind = ToolKind::None;
   // Where the pointer meets the ground, if it does.

@@ -148,7 +148,9 @@ private:
 template <typename T>
 concept HasTextFields = requires(FieldWriter &writer, T &value) { visitFields(writer, value); };
 
-// The field types emitField takes, written as the save format in src/sim/SPEC.md spells them.
+// Writes a value of a type emitField takes: a bool as true or false, a number or key in decimal,
+// an enum as its name, a vector as its elements in brackets separated by spaces, and a type with
+// fields as name=value pairs in braces.
 template <typename Field> void writeValue(std::string &out, std::string_view name, Field &value) {
   if constexpr (std::is_same_v<Field, bool>) {
     out += value ? "true" : "false";

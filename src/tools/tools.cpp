@@ -48,7 +48,7 @@ PathKind drawnKind(ToolKind kind) {
 }
 
 // The point a path tool's press would append: the snapped pointer, unless it lies within
-// FINISH_REACH of the last drawn point. See tools/SPEC.md.
+// FINISH_REACH of the last drawn point, where a press finishes the path instead.
 std::optional<ParkPoint> nextPoint(const ToolState &tool, const World &world) {
   if (!tool.Pointer) {
     return std::nullopt;

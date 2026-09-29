@@ -17,7 +17,7 @@ namespace tpj {
 std::string saveWorld(const World &world);
 
 // A world read from saveWorld's text, with resolution pending. Throws LoadError, naming the line,
-// for text that is not a save in the form src/sim/SPEC.md defines.
+// for text that saveWorld could not have written for the schema.
 World loadWorld(std::shared_ptr<const WorldSchema> schema, std::string_view text);
 
 } // namespace tpj

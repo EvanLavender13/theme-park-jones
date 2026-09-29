@@ -17,7 +17,8 @@ struct OpenedPark {
   std::string Error;
 };
 
-// Reads the park file at the path, loads it, and resolves it. See app/SPEC.md.
+// Reads the park file at the path, loads it, and resolves it. On failure, no world and a message
+// naming the path: why it cannot be read, or the LoadError's message.
 OpenedPark openParkFile(const char *path);
 // Writes the world's save to the path, replacing any file there. Returns an empty message, or why
 // it could not.
