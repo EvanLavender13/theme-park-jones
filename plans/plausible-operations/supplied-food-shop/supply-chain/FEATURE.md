@@ -107,6 +107,13 @@ template <FlowDefinition K> FlowAddressed addressedTo(const World &world, Entity
 - The inspection record and the starved mark (shop-records).
 - The deepening candidates in MILESTONE.md, such as an order delay from route distance and shipments combining orders.
 
+## Test pass decisions
+
+- The least over several anchored backstage nodes in criterion 3 is not reached through park intent, since a shop anchors only its back door and a depot only its front door. The single-node cases test it, and review checks the rule.
+- The randomized runs of criterion 7 need to reach orders created and fulfilled. The cancelled, returned, unfilled, undeliverable, and discarded paths are each checked directly by criteria 5 and 6 and by the medium's own ledger tests, so the laws do not require the runs to reach them.
+- Registration order, with operations after routes and shops before depots, is observable only through criteria 5 and 6, which compute each decision from the world between cycles. It is not tested separately.
+- Principle 6's check stays a review item, and principle 10's cross-build comparison stays with scripts/cross-build-check.sh.
+
 ## Open questions
 
 None.

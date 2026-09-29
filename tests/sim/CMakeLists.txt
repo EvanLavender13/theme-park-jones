@@ -9,6 +9,8 @@ add_executable(tpj_sim_tests
     medium/flow_test.cpp
     medium/network_test.cpp
     medium/stepped_field_test.cpp
+    operations/operations_edits_test.cpp
+    operations/operations_test.cpp
     park/edit_sequences_test.cpp
     park/edits_test.cpp
     park/geometry_test.cpp
