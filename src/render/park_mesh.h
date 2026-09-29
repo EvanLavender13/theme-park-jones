@@ -37,8 +37,9 @@ struct ParkMesh {
   std::vector<uint32_t> Indices;
 };
 
-// A path's ribbon lies this far above the ground.
-inline constexpr float PATH_LIFT = 0.02f;
+// A path's ribbon lies this far above the ground: guest paths above backstage ones, by as much as
+// backstage ones lie above the terrain, so crossing ribbons of the two kinds never tie in depth.
+constexpr float pathLift(PathKind kind) { return kind == PathKind::Guest ? 0.04f : 0.02f; }
 inline constexpr float ENTRANCE_HEIGHT = 5.0f;
 inline constexpr Rgba ENTRANCE_COLOR{0.92f, 0.80f, 0.28f, 1.0f};
 
@@ -62,17 +63,18 @@ inline constexpr Rgba INVALID_TINT{0.95f, 0.15f, 0.15f, 0.5f};
 inline constexpr Rgba DELETE_TINT{1.0f, 0.55f, 0.1f, 0.6f};
 inline constexpr Rgba HIGHLIGHT_TINT{1.0f, 1.0f, 1.0f, 0.35f};
 
-// Adds the path's flat ribbon along its ground line, or nothing when the line is empty.
+// Adds the path's flat ribbon along its ground line at pathLift(kind), with a round joint beyond
+// each end, or nothing when the line is empty.
 void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &points);
-// The same ribbon in the color given.
+// The same path in the color given.
 void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &points, Rgba color);
 
-// A walkway's round joint beyond its end is a half disc of this many segments.
-inline constexpr uint32_t WALKWAY_JOINT_SEGMENTS = 16;
+// A round joint beyond a ribbon's end is a half disc of this many segments.
+inline constexpr uint32_t JOINT_SEGMENTS = 16;
 
-// Adds a connector's walkway: the ribbon along the points, pathWidth(kind) wide, in the color, and
-// a round half disc of half that width beyond the last point. The points are each distinct from the
-// next, as a connector's are. Nothing for fewer than two.
+// Adds a connector's walkway: the ribbon along the points, pathWidth(kind) wide at pathLift(kind),
+// in the color, and a round half disc of half that width beyond the last point. The points are each
+// distinct from the next, as a connector's are. Nothing for fewer than two.
 void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
                    Rgba color);
 // The same walkway, starting flush with the face whose unit normal is given: its first two

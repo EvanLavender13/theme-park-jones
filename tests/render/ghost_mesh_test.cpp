@@ -182,7 +182,8 @@ TEST_CASE("GHOST_ALPHA is 0.5, and the tints are translucent and distinct in col
   }
 }
 
-TEST_CASE("appendPath given a color draws the ribbon appendPath draws, in that color") {
+TEST_CASE("appendPath given a color draws, vertex for vertex, the ribbon and joints appendPath "
+          "draws, in that color") {
   const std::vector<ParkPoint> points{{0.0, 0.0}, {30.0, 0.0}, {50.0, 20.0}};
   ParkMesh plain;
   appendPath(plain, PathKind::Backstage, points);
@@ -258,8 +259,8 @@ TEST_CASE(
   CHECK(isEmpty(buildGhostMesh(world, MoveBox{MISSING, Pose{60.0, 60.0, 0.0, -1.0}})));
 }
 
-TEST_CASE("An AddPath's own ghost is its ribbon in its kind's color at GHOST_ALPHA when accepted, "
-          "and its whole ghost is its ribbon in INVALID_TINT when refused") {
+TEST_CASE("An AddPath's own ghost is its ribbon and joints in its kind's color at GHOST_ALPHA when "
+          "accepted, and its whole ghost is them in INVALID_TINT when refused") {
   const World world = ghostPark();
   const AddPath accepted{PathKind::Backstage, {{60.0, 60.0}, {60.0, 80.0}, {70.0, 90.0}}};
   // Through the shop.
@@ -325,7 +326,8 @@ TEST_CASE("An accepted AddBox or MoveBox's own ghost has, in order, the position
   }
 }
 
-// Principle 8: an accepted path's own ghost, its first vertices, is the ribbon its commit draws.
+// Principle 8: an accepted path's own ghost, its first vertices, is the ribbon and joints its
+// commit draws.
 // The added path takes the highest key, so buildParkMesh draws it after every path it drew before
 // and ahead of the walkways.
 void checkGhostIsCommittedPath(const AddPath &edit) {
@@ -350,8 +352,9 @@ void checkGhostIsCommittedPath(const AddPath &edit) {
                            added, std::next(added, static_cast<std::ptrdiff_t>(own)), sameShape));
 }
 
-TEST_CASE("An accepted AddPath's own ghost has, in order, the positions and normals buildParkMesh "
-          "draws for the path it adds in the candidate world the edit gives") {
+TEST_CASE(
+    "An accepted AddPath's own ghost, joints included, has, in order, the positions and "
+    "normals buildParkMesh draws for the path it adds in the candidate world the edit gives") {
   SECTION("a guest path that bends") {
     checkGhostIsCommittedPath(AddPath{PathKind::Guest, {{20.0, 20.0}, {40.0, 30.0}, {50.0, 60.0}}});
   }

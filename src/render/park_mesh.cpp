@@ -72,18 +72,17 @@ Rgba ghostColor(const World &world, const ParkEdit &edit, Rgba color) {
   return isAccepted(world, edit) ? Rgba{color.R, color.G, color.B, GHOST_ALPHA} : INVALID_TINT;
 }
 
-// Adds the flat ribbon of the width along the line, PATH_LIFT above the ground. The line has at
+// Adds the flat ribbon of the width along the line, the lift above the ground. The line has at
 // least two points, each distinct from the next.
-void appendRibbon(ParkMesh &mesh, const std::vector<CarrierPoint> &line, double width, Rgba color) {
+void appendRibbon(ParkMesh &mesh, const std::vector<CarrierPoint> &line, double width, float lift,
+                  Rgba color) {
   const auto first = static_cast<uint32_t>(mesh.Vertices.size());
   const double half = 0.5 * width;
   for (size_t i = 0; i < line.size(); ++i) {
     const ParkPoint tangent = tangentAt(line, i);
     const ParkPoint right{-tangent.Z, tangent.X};
-    addVertex(mesh, line[i].X - right.X * half, PATH_LIFT, line[i].Z - right.Z * half, {}, 1.0f,
-              color);
-    addVertex(mesh, line[i].X + right.X * half, PATH_LIFT, line[i].Z + right.Z * half, {}, 1.0f,
-              color);
+    addVertex(mesh, line[i].X - right.X * half, lift, line[i].Z - right.Z * half, {}, 1.0f, color);
+    addVertex(mesh, line[i].X + right.X * half, lift, line[i].Z + right.Z * half, {}, 1.0f, color);
   }
   for (uint32_t i = 0; i + 1 < line.size(); ++i) {
     const uint32_t left0 = first + 2 * i;
@@ -94,23 +93,23 @@ void appendRibbon(ParkMesh &mesh, const std::vector<CarrierPoint> &line, double 
   }
 }
 
-// Adds a flat half disc of the radius beyond a ribbon's end at the point, PATH_LIFT above the
-// ground, for the ribbon's unit direction there: its center, then WALKWAY_JOINT_SEGMENTS + 1
-// vertices on its rim from the ribbon's right end corner around to its left, and a triangle facing
-// up from the center to each rim vertex and the next.
+// Adds a flat half disc of the radius beyond a ribbon's end at the point, the lift above the
+// ground, for the unit direction pointing away from the ribbon there: its center, then
+// JOINT_SEGMENTS + 1 vertices on its rim, from the ribbon's corner on the direction's right around
+// to the one on its left, and a triangle facing up from the center to each rim vertex and the next.
 void appendJoint(ParkMesh &mesh, const CarrierPoint &point, ParkPoint direction, double radius,
-                 Rgba color) {
+                 float lift, Rgba color) {
   const ParkPoint right{-direction.Z, direction.X};
   const auto center = static_cast<uint32_t>(mesh.Vertices.size());
-  addVertex(mesh, point.X, PATH_LIFT, point.Z, {}, 1.0f, color);
-  for (uint32_t k = 0; k <= WALKWAY_JOINT_SEGMENTS; ++k) {
-    const double angle = std::numbers::pi * static_cast<double>(k) / WALKWAY_JOINT_SEGMENTS;
+  addVertex(mesh, point.X, lift, point.Z, {}, 1.0f, color);
+  for (uint32_t k = 0; k <= JOINT_SEGMENTS; ++k) {
+    const double angle = std::numbers::pi * static_cast<double>(k) / JOINT_SEGMENTS;
     const double across = radius * cos(angle);
     const double along = radius * sin(angle);
-    addVertex(mesh, point.X + across * right.X + along * direction.X, PATH_LIFT,
+    addVertex(mesh, point.X + across * right.X + along * direction.X, lift,
               point.Z + across * right.Z + along * direction.Z, {}, 1.0f, color);
   }
-  for (uint32_t k = 0; k < WALKWAY_JOINT_SEGMENTS; ++k) {
+  for (uint32_t k = 0; k < JOINT_SEGMENTS; ++k) {
     mesh.Indices.insert(mesh.Indices.end(), {center, center + 1 + k, center + 2 + k});
   }
 }
@@ -177,7 +176,12 @@ void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &poi
   if (line.empty()) {
     return;
   }
-  appendRibbon(mesh, line, pathWidth(kind), color);
+  const double width = pathWidth(kind);
+  const float lift = pathLift(kind);
+  appendRibbon(mesh, line, width, lift, color);
+  appendJoint(mesh, line.front(), unitStep(line[1], line[0]), 0.5 * width, lift, color);
+  appendJoint(mesh, line.back(), unitStep(line[line.size() - 2], line.back()), 0.5 * width, lift,
+              color);
 }
 
 void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
@@ -191,12 +195,12 @@ void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint
     return;
   }
   const auto first = mesh.Vertices.size();
-  appendRibbon(mesh, points, pathWidth(kind), color);
+  appendRibbon(mesh, points, pathWidth(kind), pathLift(kind), color);
   if (faceNormal) {
     startFlush(mesh, first, points, 0.5 * pathWidth(kind), *faceNormal);
   }
   appendJoint(mesh, points.back(), unitStep(points[points.size() - 2], points.back()),
-              0.5 * pathWidth(kind), color);
+              0.5 * pathWidth(kind), pathLift(kind), color);
 }
 
 void appendWalkways(ParkMesh &mesh, const World &world, float alpha) {
