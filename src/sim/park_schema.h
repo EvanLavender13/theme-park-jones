@@ -7,9 +7,13 @@
 
 namespace tpj {
 
-// The park's schema: every capability's component types, systems, swap functions, resolvers, and
-// commands, registered here in a written order. Park files are loaded with it.
+// The park's schema: exactly what addPark registers. Park files are loaded with it.
 std::shared_ptr<const WorldSchema> makeParkSchema();
+
+// Registers every capability's component types, systems, swap functions, resolvers, and commands
+// for the park, in a written order. A scenario that adds synthetic entities to the park registers
+// them after these.
+void addPark(WorldSchema &schema);
 
 } // namespace tpj
 

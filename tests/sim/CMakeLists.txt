@@ -11,6 +11,7 @@ add_executable(tpj_sim_tests
     medium/stepped_field_test.cpp
     operations/operations_edits_test.cpp
     operations/operations_test.cpp
+    operations/service_test.cpp
     park/edit_sequences_test.cpp
     park/edits_test.cpp
     park/geometry_test.cpp
@@ -19,6 +20,7 @@ add_executable(tpj_sim_tests
     park/park_edit_test.cpp
     park/sketch_park_test.cpp
     park/validity_test.cpp
+    park_schema_test.cpp
     routes/connections_test.cpp
     routes/network_edits_test.cpp
     routes/route_distance_test.cpp

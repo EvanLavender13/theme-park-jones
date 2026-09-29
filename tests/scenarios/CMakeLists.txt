@@ -1,6 +1,7 @@
 # The scenario runner's tests link the runner's library alone. The executable's tests run
 # tpj_scenarios itself, so it is built first.
 add_executable(tpj_scenarios_tests
+    food_shop_test.cpp
     main_test.cpp
     park_edits_test.cpp
     runner_test.cpp

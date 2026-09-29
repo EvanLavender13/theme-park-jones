@@ -93,6 +93,14 @@ Scenario foodShopScenario();
 - A queue limit, and guests who give up waiting at the shop; both sit in MILESTONE.md's deepening candidates or belong to believable-guests.
 - Real guests, hunger, and what a meal does to a guest (believable-guests).
 
+## Test pass decisions
+
+- A starved shop's return is one packet per guest with the delay RETURN_DELAY, 1, so it arrives at the swap that ends the cycle that sent it and is never seen in transit. Tests check what is visible: after the cycle, the visit is in the guest's stock under the guest's handle, with no meal. Criterion 8's unserved returns are found the same way: a guest holding visits and no meals.
+- Criterion 7's candidate law reads as src/sim/SPEC.md states it. The candidate is made from the world once it has stepped a cycle, and it is compared with the world that queued the edit for that cycle.
+- Criterion 3 covers every meals unit a shop holds, including one under a live guest's handle, which only a hand-written ledger gives. The shop consumes it as abandoned all the same.
+- Principle 6's reads, ShopService's place under operations/internal, and the queue living on the box's entity are checked by review. The save round trip of criterion 7 covers the queue as state.
+- food-shop's arrival rate, patience, and route cuts are implementation details of the scenario. Criterion 8 asks only for what its run reaches.
+
 ## Open questions
 
 None.

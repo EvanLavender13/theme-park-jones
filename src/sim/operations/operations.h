@@ -40,11 +40,18 @@ inline constexpr int64_t ORDER_UP_TO = 24;
 inline constexpr uint32_t ORDER_DELAY = 30;
 // Meters per second supplies move along the backstage route.
 inline constexpr double SUPPLY_SPEED = 2.0;
+// Ticks service takes: a served guest's meal and visit arrive this long after the shop takes it,
+// and the shop takes no other guest until then.
+inline constexpr uint32_t SERVICE_INTERVAL = 90;
+// Ticks an unserved visit takes to go back to its guest.
+inline constexpr uint32_t RETURN_DELAY = 1;
 
 inline constexpr std::string_view FULFILLED_CAUSE = "fulfilled";
 inline constexpr std::string_view UNFILLED_CAUSE = "unfilled";
 inline constexpr std::string_view CANCELLED_CAUSE = "cancelled";
 inline constexpr std::string_view RETURNED_CAUSE = "returned";
+inline constexpr std::string_view SERVED_CAUSE = "served";
+inline constexpr std::string_view ABANDONED_CAUSE = "abandoned";
 
 // A shop's nearest depot and the backstage route length to it.
 struct DepotRoute {
@@ -63,8 +70,8 @@ std::optional<DepotRoute> nearestDepot(const World &world, EntityKey shop);
 uint32_t shipmentDelay(double distance);
 // The supplies the shop holds or has coming, and the orders on their way to or held by a depot.
 int64_t inventoryPosition(const World &world, EntityKey shop);
-// Registers the flow kinds supply-orders, supplies, guest-visits, and meals, then the systems that
-// step shops and then depots.
+// Registers the flow kinds supply-orders, supplies, guest-visits, and meals, the shop-service
+// state, then the systems that step shops and then depots.
 void addOperations(WorldSchema &schema);
 
 } // namespace tpj

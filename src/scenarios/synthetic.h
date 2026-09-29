@@ -9,6 +9,7 @@ Scenario walkersScenario();
 Scenario beaconsScenario();
 Scenario stallsScenario();
 Scenario parkEditsScenario();
+Scenario foodShopScenario();
 
 } // namespace tpj
 

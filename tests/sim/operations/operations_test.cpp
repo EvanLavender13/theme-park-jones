@@ -1,3 +1,5 @@
+#include "support/ledger_writes.h"
+#include "support/line_park.h"
 #include "support/park_worlds.h"
 
 #include "sim/entity_key.h"
@@ -28,59 +30,26 @@
 namespace tpj {
 namespace {
 
+using test::carry;
+using test::DEPOT;
+using test::depotAcross;
+using test::depotAt;
+using test::FAR_DEPOT;
+using test::GONE;
+using test::hold;
+using test::LINE;
+using test::lineWorld;
+using test::LOOSE_DEPOT;
+using test::LOOSE_SHOP;
+using test::looseDepot;
+using test::looseShop;
+using test::OTHER_SHOP;
+using test::packetsFrom;
 using test::ParkIntent;
+using test::SHOP;
+using test::shopAt;
+using test::TWIN_DEPOT;
 using test::worldOf;
-
-// The line park: one straight backstage path along z = 0 from x = -64 to x = 64, with boxes
-// beside it. A shop at x faces -z from z = -6, so its back door is at (x, -3), 3 m from the line.
-// A depot at x faces -z from z = 7, so its front door is at (x, 3), 3 m from the line, or, across
-// the line, faces +z from z = -7, with its front door at (x, -3). A supply route between boxes at x
-// and y is about 3 + |x - y| + 3, but the line's ground line is sampled, so exact lengths come
-// from sampling route distance.
-constexpr EntityKey LINE{1};
-constexpr EntityKey SHOP{2};
-constexpr EntityKey FAR_DEPOT{3};
-constexpr EntityKey DEPOT{4};
-constexpr EntityKey TWIN_DEPOT{5};
-constexpr EntityKey OTHER_SHOP{6};
-// A shop and a depot far from any line, with no backstage connector.
-constexpr EntityKey LOOSE_SHOP{7};
-constexpr EntityKey LOOSE_DEPOT{8};
-// A key no entity holds, as when a box has been deleted.
-constexpr EntityKey GONE{40};
-
-ParkBox shopAt(EntityKey key, double x) {
-  return ParkBox{.Key = key, .Kind = BoxKind::Shop, .At = Pose{x, -6.0, 0.0, -1.0}};
-}
-
-ParkBox depotAt(EntityKey key, double x) {
-  return ParkBox{.Key = key, .Kind = BoxKind::Depot, .At = Pose{x, 7.0, 0.0, -1.0}};
-}
-
-// A depot across the line from depotAt's, whose front door meets the line at the same place.
-ParkBox depotAcross(EntityKey key, double x) {
-  return ParkBox{.Key = key, .Kind = BoxKind::Depot, .At = Pose{x, -7.0, 0.0, 1.0}};
-}
-
-ParkBox looseShop() {
-  return ParkBox{.Key = LOOSE_SHOP, .Kind = BoxKind::Shop, .At = Pose{0.0, -60.0, 0.0, -1.0}};
-}
-
-ParkBox looseDepot() {
-  return ParkBox{.Key = LOOSE_DEPOT, .Kind = BoxKind::Depot, .At = Pose{0.0, 60.0, 0.0, -1.0}};
-}
-
-ParkPath linePath() {
-  return ParkPath{.Key = LINE, .Kind = PathKind::Backstage, .Points = {{-64.0, 0.0}, {64.0, 0.0}}};
-}
-
-// The line park with the boxes, resolved, at tick 0 with empty ledgers.
-World lineWorld(std::vector<ParkBox> boxes) {
-  World world =
-      worldOf(ParkIntent{.Entrances = {}, .Paths = {linePath()}, .Boxes = std::move(boxes)});
-  resolveWorld(world);
-  return world;
-}
 
 // The least Distance among the source's entries that sampling backstage-route-distance gives at
 // the nodePlace of each backstage node anchored to at, or none.
@@ -102,37 +71,6 @@ std::optional<double> sampledLength(const World &world, EntityKey at, EntityKey 
 // Stands in for a sampled length that a REQUIRE has already shown is present.
 constexpr double NO_LENGTH = std::numeric_limits<double>::quiet_NaN();
 
-// A world's ledgers are the medium's state, so a test states any world between cycles by writing
-// them. The kind's ledger, which resolution has created.
-template <FlowDefinition K> Ledger &ledgerIn(World &world) {
-  const entt::entity holder = world.findEntity(flowKey(K::Name));
-  auto *ledger = holder == entt::null ? nullptr : world.Registry.try_get<FlowLedger<K>>(holder);
-  REQUIRE(ledger != nullptr);
-  return *ledger;
-}
-
-// Puts units in the endpoint's stock under the handle, keeping the ledger's order and identity.
-template <FlowDefinition K>
-void hold(World &world, EntityKey endpoint, EntityKey handle, int64_t units) {
-  Ledger &ledger = ledgerIn<K>(world);
-  const auto at = std::ranges::find_if(ledger.Stocks, [&](const FlowStock &stock) {
-    return std::tie(stock.Endpoint, stock.Handle) >= std::tie(endpoint, handle);
-  });
-  if (at != ledger.Stocks.end() && at->Endpoint == endpoint && at->Handle == handle) {
-    at->Units += units;
-  } else {
-    ledger.Stocks.insert(at, FlowStock{.Endpoint = endpoint, .Handle = handle, .Units = units});
-  }
-  ledger.Created += units;
-}
-
-// Puts a packet in transit, keeping the ledger's order and identity.
-template <FlowDefinition K> void carry(World &world, const FlowPacket &packet) {
-  Ledger &ledger = ledgerIn<K>(world);
-  ledger.Packets.insert(std::ranges::upper_bound(ledger.Packets, packet), packet);
-  ledger.Created += packet.Units;
-}
-
 // A packet sent at tick 0 with a delay of 10, or a returning one.
 FlowPacket packetOf(EntityKey from, EntityKey to, EntityKey handle, int64_t units,
                     bool returning = false) {
@@ -143,17 +81,6 @@ FlowPacket packetOf(EntityKey from, EntityKey to, EntityKey handle, int64_t unit
                     .Units = units,
                     .Delay = 10,
                     .Returning = returning};
-}
-
-// The kind's packets in transit from the endpoint, in the ledger's order.
-template <FlowDefinition K>
-std::vector<FlowPacket> packetsFrom(const World &world, EntityKey from) {
-  std::vector<FlowPacket> packets;
-  const Ledger *ledger = ledgerOf<K>(world);
-  REQUIRE(ledger != nullptr);
-  std::ranges::copy_if(ledger->Packets, std::back_inserter(packets),
-                       [from](const FlowPacket &packet) { return packet.From == from; });
-  return packets;
 }
 
 // Registration.
@@ -178,7 +105,8 @@ TEST_CASE("Resolving a world made with makeParkSchema gives it a ledger for each
   }
 }
 
-TEST_CASE("addOperations registers the four kinds' ledgers and no component type of its own") {
+TEST_CASE("addOperations registers the four kinds' ledgers and then shop-service, a state "
+          "component type") {
   WorldSchema schema;
   addOperations(schema);
   std::vector<std::string> names;
@@ -186,7 +114,9 @@ TEST_CASE("addOperations registers the four kinds' ledgers and no component type
     names.push_back(type.Name);
   }
   CHECK(names == std::vector<std::string>{"supply-orders-ledger", "supplies-ledger",
-                                          "guest-visits-ledger", "meals-ledger"});
+                                          "guest-visits-ledger", "meals-ledger", "shop-service"});
+  REQUIRE_FALSE(schema.components().empty());
+  CHECK(schema.components().back().Kind == DataKind::State);
 }
 
 // Supply routes.
