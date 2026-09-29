@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -375,6 +376,83 @@ TEST_CASE("stockOf gives an endpoint's holdings with handles ascending and no em
 
   REQUIRE(holdingsOf<Meals>(world, ENDPOINT) == Holdings{{NULL_KEY, 4}, {HANDLE, 1}, {NOWHERE, 3}});
   REQUIRE(unitsHeld<Meals>(world, ENDPOINT, OTHER) == 0);
+}
+
+// A stock as its endpoint, handle, and units, since FlowStock has no comparison.
+using StockTuple = std::tuple<EntityKey, EntityKey, int64_t>;
+
+std::vector<StockTuple> stockTuples(const std::vector<FlowStock> &stocks) {
+  std::vector<StockTuple> tuples;
+  tuples.reserve(stocks.size());
+  for (const FlowStock &stock : stocks) {
+    tuples.emplace_back(stock.Endpoint, stock.Handle, stock.Units);
+  }
+  return tuples;
+}
+
+TEST_CASE("addressedTo gives exactly the kind's packets and stocks whose handle is the key, each "
+          "in the ledger's order") {
+  const ScriptScope scope;
+  World world = makeScriptedWorld(makeScriptedSchema());
+  at(0, [](World &stepping) {
+    createUnits<Meals>(stepping, ENDPOINT, HANDLE, 6);
+    createUnits<Meals>(stepping, ENDPOINT, NULL_KEY, 2);
+    createUnits<Meals>(stepping, OTHER, HANDLE, 4);
+    createUnits<Meals>(stepping, OTHER, OTHER, 3);
+    createUnits<Meals>(stepping, HANDLE, HANDLE, 1);
+    sendUnits<Meals>(stepping, ENDPOINT, OTHER, HANDLE, 2, 5);
+    sendUnits<Meals>(stepping, OTHER, ENDPOINT, HANDLE, 1, 3);
+    // DEAD is gone at its arrival, so it comes back as a returning packet, still addressed.
+    sendUnits<Meals>(stepping, ENDPOINT, DEAD, HANDLE, 1, 1);
+    sendUnits<Meals>(stepping, ENDPOINT, OTHER, NULL_KEY, 1, 2);
+    sendUnits<Meals>(stepping, OTHER, ENDPOINT, OTHER, 1, 4);
+  });
+  stepWorld(world);
+
+  const FlowAddressed addressed = addressedTo<Meals>(world, HANDLE);
+  CHECK(addressed.Packets == std::vector<FlowPacket>{{.Arrival = 2,
+                                                      .From = DEAD,
+                                                      .To = ENDPOINT,
+                                                      .Handle = HANDLE,
+                                                      .Units = 1,
+                                                      .Delay = 1,
+                                                      .Returning = true},
+                                                     {.Arrival = 3,
+                                                      .From = OTHER,
+                                                      .To = ENDPOINT,
+                                                      .Handle = HANDLE,
+                                                      .Units = 1,
+                                                      .Delay = 3,
+                                                      .Returning = false},
+                                                     {.Arrival = 5,
+                                                      .From = ENDPOINT,
+                                                      .To = OTHER,
+                                                      .Handle = HANDLE,
+                                                      .Units = 2,
+                                                      .Delay = 5,
+                                                      .Returning = false}});
+  CHECK(stockTuples(addressed.Stocks) ==
+        std::vector<StockTuple>{{ENDPOINT, HANDLE, 3}, {OTHER, HANDLE, 3}, {HANDLE, HANDLE, 1}});
+}
+
+TEST_CASE("addressedTo gives nothing for a world holding no ledger for the kind") {
+  SECTION("the kind is not registered, though another is") {
+    auto schema = std::make_shared<WorldSchema>();
+    addFlow<Supplies>(*schema);
+    World world(schema, 0);
+    world.createEntity();
+    resolveWorld(world);
+    const FlowAddressed addressed = addressedTo<Meals>(world, EntityKey{1});
+    CHECK(addressed.Packets.empty());
+    CHECK(addressed.Stocks.empty());
+  }
+  SECTION("the kind is registered, but its resolver has not yet run") {
+    World world(makeScriptedSchema(), 0);
+    world.createEntity();
+    const FlowAddressed addressed = addressedTo<Meals>(world, EntityKey{1});
+    CHECK(addressed.Packets.empty());
+    CHECK(addressed.Stocks.empty());
+  }
 }
 
 // Each operation, with every argument valid for a scripted world stocked up in tick 0.

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <compare>
 #include <concepts>
+#include <iterator>
 #include <stdexcept>
 #include <stdint.h>
 #include <string>
@@ -280,6 +281,26 @@ template <FlowDefinition K> int64_t unitsConsumed(const World &world, std::strin
   const uint64_t hashed = hashName(cause);
   const auto at = std::ranges::lower_bound(ledger->Consumed, hashed, {}, &FlowConsumption::Cause);
   return at != ledger->Consumed.end() && at->Cause == hashed ? at->Units : 0;
+}
+
+// The units of a kind addressed to an entity: the packets and stocks whose handle is its key.
+struct FlowAddressed {
+  std::vector<FlowPacket> Packets;
+  std::vector<FlowStock> Stocks;
+};
+
+// Packets and stocks each in the ledger's order.
+template <FlowDefinition K> FlowAddressed addressedTo(const World &world, EntityKey handle) {
+  FlowAddressed addressed;
+  const Ledger *ledger = ledgerOf<K>(world);
+  if (ledger == nullptr) {
+    return addressed;
+  }
+  std::ranges::copy_if(ledger->Packets, std::back_inserter(addressed.Packets),
+                       [handle](const FlowPacket &packet) { return packet.Handle == handle; });
+  std::ranges::copy_if(ledger->Stocks, std::back_inserter(addressed.Stocks),
+                       [handle](const FlowStock &stock) { return stock.Handle == handle; });
+  return addressed;
 }
 
 } // namespace tpj
