@@ -619,6 +619,64 @@ TEST_CASE("a candidate made with makeCandidate samples every field, both layers,
   }
 }
 
+SampledBits bitsOf(const std::vector<SampledEntry<double>> &entries) {
+  SampledBits result;
+  for (const SampledEntry<double> &entry : entries) {
+    result.emplace_back(entry.Source, std::bit_cast<uint64_t>(entry.Value));
+  }
+  return result;
+}
+
+// The copy of the world with every stepped entry of the field removed.
+template <typename F> World withoutStepped(const World &world) {
+  World removed = copyWorld(world);
+  const entt::entity holder = removed.findEntity(fieldKey(F::Name));
+  REQUIRE(holder != entt::null);
+  auto &stepped = removed.Registry.get<SteppedEntries<F>>(holder);
+  stepped.Readable.clear();
+  stepped.Pending.clear();
+  return removed;
+}
+
+TEST_CASE("sampleResolvedField gives, at any place on any network, what sampleField gives in the "
+          "same world with every stepped entry of the field removed") {
+  World world = makeFieldWorld(makeSteppedFieldSchema());
+  // Sources in both layers, in the resolved layer only, in the stepped layer only, and with an
+  // empty stepped list over resolved entries.
+  const EntityKey both = addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 1.0)});
+  setSteps<Footfall>(world, both, {entryAt(CARRIER_A, 4, 10.0), entryAt(CARRIER_A, 2, 11.0)});
+  addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 2.0), entryAt(CARRIER_A, 2, 2.5)});
+  addStepper<Footfall>(world, {entryAt(CARRIER_A, 4, 30.0)});
+  const EntityKey emptied = addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 4.0)});
+  setSteps<Footfall>(world, emptied, {});
+  // Reach reads places inside an edge by its own rule, from the entries at the edge's ends.
+  const EntityKey reach = addSource<Reach>(world, {entryAt(CARRIER_A, 4, 5.0)});
+  setSteps<Reach>(world, reach, {entryAt(CARRIER_A, 0, 50.0)});
+  addStepper<Reach>(world, {entryAt(CARRIER_A, 4, 60.0)});
+  resolveWorld(world);
+  stepWorld(world);
+
+  const World footfallRemoved = withoutStepped<Footfall>(world);
+  const World reachRemoved = withoutStepped<Reach>(world);
+  // The stepped layer changes what sampleField gives, so the comparison below is not vacuous.
+  REQUIRE(sampled<Footfall>(world, JUNCTION) != sampled<Footfall>(footfallRemoved, JUNCTION));
+  REQUIRE(sampled<Reach>(world, place(CARRIER_A, 2)) !=
+          sampled<Reach>(reachRemoved, place(CARRIER_A, 2)));
+
+  // A junction, an end node, places inside edges, and a place off the network.
+  for (const Place at : {JUNCTION, place(CARRIER_A, 0), place(CARRIER_A, 2), place(CARRIER_B, 3),
+                         place(EntityKey{99}, 0)}) {
+    CAPTURE(at.Carrier, at.Distance);
+    CHECK(bitsOf(sampleResolvedField<Footfall>(world, networkOf(world), at)) ==
+          sampledBits<Footfall>(footfallRemoved, at));
+    CHECK(bitsOf(sampleResolvedField<Reach>(world, networkOf(world), at)) ==
+          sampledBits<Reach>(reachRemoved, at));
+  }
+  // A network the world's entries are not on.
+  const Network other;
+  CHECK(sampleResolvedField<Footfall>(world, other, JUNCTION).empty());
+}
+
 // A field is sampled without being consumed.
 TEST_CASE("sampleField takes the world by const reference") {
   using Sampler =
