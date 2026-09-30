@@ -18,6 +18,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <stdint.h>
 #include <vector>
@@ -28,6 +29,9 @@ namespace {
 using test::recordOf;
 
 constexpr int EDITS = 40;
+// Sampling the footfall at every stretch each cycle is costly on the networks edits grow, so the
+// footfall test runs fewer edits.
+constexpr int FOOTFALL_EDITS = 12;
 // Each edit is followed by fewer cycles than this with no command.
 constexpr uint64_t IDLE_CYCLES = 10;
 // More cycles than the eating park takes to have a guest eat.
@@ -53,7 +57,8 @@ bool anyWaiting(const World &world) {
 // beforeCycle sees the world and the edit the cycle about to step it applies, if any, and
 // afterCycle the world after every cycle of the sequence, with whether that cycle applied an edit.
 template <typename BeforeCycle, typename AfterCycle>
-void runGuestEdits(uint64_t seed, BeforeCycle beforeCycle, AfterCycle afterCycle) {
+void runGuestEdits(uint64_t seed, BeforeCycle beforeCycle, AfterCycle afterCycle,
+                   int edits = EDITS) {
   test::RouteEditDraws draws(seed);
   World world = test::eatingWorld();
   while (unitsConsumed<Meals>(world, EATEN_CAUSE) == 0 || !anyWaiting(world)) {
@@ -72,7 +77,7 @@ void runGuestEdits(uint64_t seed, BeforeCycle beforeCycle, AfterCycle afterCycle
     REQUIRE_NOTHROW(stepWorld(world, queue));
     afterCycle(world, edited);
   };
-  for (int edit = 0; edit < EDITS; ++edit) {
+  for (int edit = 0; edit < edits; ++edit) {
     INFO("edit " << edit);
     runCycle(true);
     const uint64_t idle = draws.below(IDLE_CYCLES);
@@ -82,9 +87,11 @@ void runGuestEdits(uint64_t seed, BeforeCycle beforeCycle, AfterCycle afterCycle
   }
 }
 
-template <typename AfterCycle> void runGuestEdits(uint64_t seed, AfterCycle afterCycle) {
+template <typename AfterCycle>
+void runGuestEdits(uint64_t seed, AfterCycle afterCycle, int edits = EDITS) {
   runGuestEdits(
-      seed, [](const World & /*world*/, const std::optional<ParkEdit> & /*edit*/) {}, afterCycle);
+      seed, [](const World & /*world*/, const std::optional<ParkEdit> & /*edit*/) {}, afterCycle,
+      edits);
 }
 
 // Watches the edited cycles of a run for one that retires a guest's place, taking its path or
@@ -229,6 +236,24 @@ TEST_CASE("A candidate made with an edit from a world of randomized park edits w
       });
   CHECK(compared == EDITS);
   CHECK(sawGuests);
+}
+
+TEST_CASE("In every cycle of randomized park edits with guests walking, waiting, and eating, "
+          "hungry footfall inside every stretch is finite and not below 0") {
+  bool sawFootfall = false;
+  runGuestEdits(
+      77,
+      [&](const World &world, bool /*edited*/) {
+        for (const NetworkEdge &edge : test::guestNetwork(world).edges()) {
+          const double value = test::footfallAt(world, test::midpointOf(edge));
+          CAPTURE(edge.Carrier, edge.FromDistance, edge.ToDistance, value);
+          REQUIRE(std::isfinite(value));
+          REQUIRE(value >= 0.0);
+          sawFootfall = sawFootfall || value > 0.0;
+        }
+      },
+      FOOTFALL_EDITS);
+  CHECK(sawFootfall);
 }
 
 // The eating park stepped until a guest waits at a shop, with guests walking the spine behind it.
