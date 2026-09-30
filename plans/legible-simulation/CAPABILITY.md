@@ -23,7 +23,8 @@ This capability produces nothing the simulation consumes. It samples and reads:
 - Food offer from plausible-operations, route distance from navigable-networks, and hungry footfall from believable-guests, all through shared-medium's field interface, in committed or candidate worlds.
 - Candidate worlds from deterministic-simulation, resolved by navigable-networks and plausible-operations from tentative intent that effortless-building's ghost supplies (decision 0025). It never calls another capability's derivation directly.
 - Inspection records from believable-guests (including each guest's ground position, for picking) and plausible-operations (decision 0025).
-- Park intent from effortless-building: box poses, to pick shops, and the tentative edits (placements and deletions) that previews resolve.
+- Park intent from effortless-building: guest paths, to place the overlay's band, box kinds and poses, to pick shops and find depots, and the tentative edits (placements and deletions) that previews resolve.
+- Networks from navigable-networks, through shared-medium's Network queries, to find path places, anchors, and connectors.
 
 Food availability is a scalar field this capability computes for display, from the fields above. If a park entity ever needs it, it moves into the medium, and deterministic-simulation's walk then covers it.
 
@@ -37,12 +38,12 @@ Food availability is a scalar field this capability computes for display, from t
 
 ## Dependencies
 
-- deterministic-simulation (world-as-value): candidate copies. Unmet; planned.
-- shared-medium (first-field-and-flow): field sampling. Unmet; planned.
-- effortless-building (sketch-a-park): ghosts and tentative intent, and the rendering the overlay draws into. Unmet; planned.
-- navigable-networks (paths-become-routes): route distance and candidate resolution. Unmet; planned.
-- plausible-operations (supplied-food-shop): food offers, candidate resolution of shops, and shop inspection records. Unmet; planned.
-- believable-guests (hungry-guests): hungry footfall and guest inspection records. Unmet; planned.
+- deterministic-simulation (world-as-value): candidate copies. Met.
+- shared-medium (first-field-and-flow): field sampling. Met.
+- effortless-building (sketch-a-park): ghosts and tentative intent, and the rendering the overlay draws into. Met.
+- navigable-networks (paths-become-routes): route distance and candidate resolution. Met.
+- plausible-operations (supplied-food-shop): food offers, candidate resolution of shops, and shop inspection records. Met.
+- believable-guests (hungry-guests): hungry footfall and guest inspection records. Met.
 - The ImGui tooling UI: met. The player-facing UI question (docs/open-questions.md) stays open; ImGui stands in.
 
 ## Foundation
@@ -67,8 +68,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 
 ## Open questions
 
-- The reference walking speed, the discount curve, and the band width are tuning values. They are set while planning explained-food, and adjusted by looking at captures.
-- Whether copying and resolving a candidate on every ghost move stays interactive. Resolved by measurement once deterministic-simulation's copy exists; throttling or incremental resolution are the fallbacks.
+- Whether copying and resolving a candidate on every ghost move stays interactive. Resolved by measurement in explained-food's candidate-previews; throttling or incremental resolution are the fallbacks.
 - The player-facing UI (docs/open-questions.md). Evan decides.
 
 ## Research notes
