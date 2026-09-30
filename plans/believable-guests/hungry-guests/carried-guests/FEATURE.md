@@ -72,6 +72,12 @@ Two existing tests assert the interim rule this feature replaces, and the test p
 - tests/sim/guests/guest_edits_test.cpp, "A guest whose place stops resolving leaves the park in the next cycle, and guests whose places still resolve stay": with a guest path left, a guest on a deleted path is now carried to the nearest point (criterion 3), and a guest leaves only when no guest path is left (criterion 5).
 - tests/render/guest_mesh_test.cpp, partlyStrandedWorld and the tests using it: a guest record with no Position now arises only when every guest path is deleted, until the next cycle.
 
+## Test pass decisions
+
+- Criterion 7 is checked by scripts/cross-build-check.sh, which runs the park-edits scenario, not by a Catch2 test.
+- Principle 6, that guests read the networks only through previousNetwork, parkNetwork, and the Network type's queries and routes never reads a guest, is checked by review.
+- The finishers' registration order, carryGuests in addGuests and addDropPreviousNetworks last in addPark, is checked by behavior: criteria 1 and 3 through makeParkSchema fail if the previous networks were dropped before guests were carried.
+
 ## Open questions
 
 None.

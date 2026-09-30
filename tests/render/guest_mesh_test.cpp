@@ -67,36 +67,15 @@ TEST_CASE("appendGuest adds exactly what appendBox adds for an upright box of GU
   CHECK(sameMesh(guest, box));
 }
 
-// The new park with a second guest path running on from its path's far end, stepped until its
-// first guest walks the second path, and then through a cycle deleting that path. Guests on the
-// second path have no Position until the next cycle, and the guests behind them still have one.
-World partlyStrandedWorld() {
-  World world = makeNewPark(1);
-  CommandQueue extend;
-  extend.push(AddPath{PathKind::Guest, {{0.0, 103.0}, {0.0, 63.0}}});
-  const EntityKey farPath{world.nextKey()};
-  stepWorld(world, extend);
-  REQUIRE(parkPaths(world).size() == 2);
-  bool onFarPath = false;
-  for (int cycle = 0; cycle < 1000 && !onFarPath; ++cycle) {
-    stepWorld(world);
-    const std::vector<EntityKey> guests = parkGuests(world);
-    onFarPath = !guests.empty() &&
-                guestRecord(world, guests.front()).value_or(GuestRecord{}).At.Carrier == farPath;
-  }
-  REQUIRE(onFarPath);
-  CommandQueue cut;
-  cut.push(DeletePath{farPath});
-  stepWorld(world, cut);
-  return world;
-}
+// Whether the world's guests' records showed a Position, and a record without one.
+struct Placement {
+  bool Placed = false;
+  bool Unplaced = false;
+};
 
-TEST_CASE("buildGuestMesh adds appendGuest for each guest whose record has a Position, in key "
-          "order, at that Position with its Hunger, and nothing else") {
-  const World world = partlyStrandedWorld();
+// appendGuest for each guest whose record has a Position, in key order, noting what it saw.
+ParkMesh expectedGuestMesh(const World &world, Placement &seen) {
   ParkMesh expected;
-  bool sawPlaced = false;
-  bool sawUnplaced = false;
   for (const EntityKey guest : parkGuests(world)) {
     const std::optional<GuestRecord> record = guestRecord(world, guest);
     REQUIRE(record.has_value());
@@ -104,12 +83,38 @@ TEST_CASE("buildGuestMesh adds appendGuest for each guest whose record has a Pos
     if (const std::optional<GroundPoint> position = held.Position) {
       appendGuest(expected, *position, held.Hunger);
     }
-    sawPlaced = sawPlaced || held.Position.has_value();
-    sawUnplaced = sawUnplaced || !held.Position.has_value();
+    seen.Placed = seen.Placed || held.Position.has_value();
+    seen.Unplaced = seen.Unplaced || !held.Position.has_value();
   }
-  REQUIRE(sawPlaced);
-  REQUIRE(sawUnplaced);
-  CHECK(sameMesh(buildGuestMesh(world), expected));
+  return expected;
+}
+
+TEST_CASE("buildGuestMesh adds appendGuest for each guest whose record has a Position, in key "
+          "order, at that Position with its Hunger, and nothing else") {
+  // The new park after two arrivals, so key order matters, with every guest on its path.
+  World walking = makeNewPark(1);
+  while (walking.Tick < (2 * ARRIVAL_INTERVAL) + 1) {
+    stepWorld(walking);
+  }
+  Placement walkingSeen;
+  const ParkMesh walkingExpected = expectedGuestMesh(walking, walkingSeen);
+  REQUIRE(walkingSeen.Placed);
+  CHECK(sameMesh(buildGuestMesh(walking), walkingExpected));
+
+  // The same park through a cycle deleting every guest path: its guests have no Position until
+  // the next cycle, when they leave.
+  World stranded = copyWorld(walking);
+  CommandQueue cut;
+  for (const ParkPath &path : parkPaths(stranded)) {
+    if (path.Kind == PathKind::Guest) {
+      cut.push(DeletePath{path.Key});
+    }
+  }
+  stepWorld(stranded, cut);
+  Placement strandedSeen;
+  const ParkMesh strandedExpected = expectedGuestMesh(stranded, strandedSeen);
+  REQUIRE(strandedSeen.Unplaced);
+  CHECK(sameMesh(buildGuestMesh(stranded), strandedExpected));
 
   // A park no guest has entered yet draws none.
   World empty = makeNewPark(1);

@@ -40,8 +40,18 @@ constexpr EntityKey connectorKey(EntityKey entity, Face face) {
 // none, as before its first resolution.
 const Network &parkNetwork(const World &world, PathKind kind);
 
-// Registers the resolver path-networks, and then route distance's fields and resolver.
+// The kind's network as the resolution before the current one derived it, or none when the world
+// holds none: always outside a resolution, and in a world's first. Meant for finishers that carry
+// places held on it to parkNetwork with carryOver.
+const Network *previousNetwork(const World &world, PathKind kind);
+
+// Registers the derived type previous-network, the resolver path-networks, and then route
+// distance's fields and resolver.
 void addRoutes(WorldSchema &schema);
+
+// Registers the finisher that drops the previous networks. Register it after every finisher that
+// reads them.
+void addDropPreviousNetworks(WorldSchema &schema);
 
 } // namespace tpj
 
