@@ -7,6 +7,7 @@ tpj_configure_target(tpj_park_files)
 
 add_executable(tpj_app
     debug_panel.cpp
+    food_tooltip.cpp
     main.cpp
     orbit_camera.cpp
     tool_panel.cpp)

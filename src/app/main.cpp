@@ -1,4 +1,5 @@
 #include "app/debug_panel.h"
+#include "app/food_tooltip.h"
 #include "app/orbit_camera.h"
 #include "app/park_file.h"
 #include "app/tool_panel.h"
@@ -515,7 +516,8 @@ void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCam
 }
 
 // Builds the frame's ImGui draw data: the panels, which set the shown views from their
-// checkboxes, and the graph over the scene while it is shown.
+// checkboxes, the graph over the scene while it is shown, and the food tooltip at the cursor while
+// the overlay is.
 void buildUi(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
              const tpj::CameraView &view, ShownViews &shown, tpj::ToolState &tool) {
   tpj::beginUiFrame();
@@ -524,6 +526,9 @@ void buildUi(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera
   drawPanels(window, world, camera, shown, tool);
   if (shown.Graph) {
     drawGraph(world, view);
+  }
+  if (shown.FoodOverlay) {
+    tpj::drawFoodTooltip(world, groundUnderCursor(window, view));
   }
   ImGui::Render();
 }
