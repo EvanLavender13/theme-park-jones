@@ -2,6 +2,7 @@
 #include "sim/command_queue.h"
 #include "sim/draw.h"
 #include "sim/entity_key.h"
+#include "sim/guests/guests.h"
 #include "sim/medium/flow.h"
 #include "sim/mix.h"
 #include "sim/operations/operations.h"
@@ -14,7 +15,6 @@
 #include <memory>
 #include <stddef.h>
 #include <stdint.h>
-#include <string_view>
 #include <vector>
 
 namespace tpj {
@@ -39,8 +39,6 @@ constexpr double LEAST_PATIENCE = 100.0;
 constexpr double EXTRA_PATIENCE = 1500.0;
 // A visit takes 1 to 1 + LONGEST_WALK ticks to reach its shop.
 constexpr double LONGEST_WALK = 60.0;
-constexpr std::string_view FINISHED_CAUSE = "finished";
-constexpr std::string_view EATEN_CAUSE = "eaten";
 
 // Guests whose visit has come back consume it, with any meal, and leave, and guests out of
 // patience leave without it. Then a guest may appear and send a visit to a drawn shop.

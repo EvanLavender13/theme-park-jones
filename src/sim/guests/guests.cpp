@@ -3,17 +3,23 @@
 #include "sim/draw.h"
 #include "sim/guests/internal/guest.h"
 #include "sim/medium/field.h"
+#include "sim/medium/flow.h"
 #include "sim/medium/network.h"
 #include "sim/mix.h"
+#include "sim/operations/operations.h"
 #include "sim/park/intent.h"
 #include "sim/routes/networks.h"
 #include "sim/routes/route_distance.h"
 #include "sim/schema.h"
+#include "sim/sim_math.h"
 #include "sim/world.h"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <optional>
+#include <stdexcept>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -22,6 +28,7 @@ namespace tpj {
 namespace {
 
 using GuestRouteDistance = RouteDistance<PathKind::Guest>;
+using RouteSample = std::vector<SampledEntry<RouteEntry>>;
 
 // Meters a guest walks each tick.
 constexpr double WALK_STEP = WALK_SPEED * SIM_TICK_SECONDS;
@@ -35,24 +42,49 @@ std::vector<EntityKey> entranceKeys(const World &world) {
   return keys;
 }
 
-// The first step home from the place: the Next of the least entrance entry guest route distance
-// gives there, ties to the lower key, or none without one.
-std::optional<RouteStep> homeStep(const World &world, const Network &network, const Place &place,
-                                  const std::vector<EntityKey> &entrances) {
-  std::optional<RouteEntry> nearest;
-  // Sources come in ascending key order, so keeping only a strictly less distance breaks ties
-  // to the lower key.
-  for (const SampledEntry<RouteEntry> &entry :
-       sampleField<GuestRouteDistance>(world, network, place)) {
-    if (std::ranges::binary_search(entrances, entry.Source) &&
-        (!nearest || entry.Value.Distance < nearest->Distance)) {
-      nearest = entry.Value;
+// The source's entry in the sample, or none.
+const RouteEntry *entryOf(const RouteSample &routes, EntityKey source) {
+  for (const SampledEntry<RouteEntry> &entry : routes) {
+    if (entry.Source == source) {
+      return &entry.Value;
     }
   }
-  if (!nearest) {
+  return nullptr;
+}
+
+// The least entrance entry in the sample, ties to the lower key, or none.
+const RouteEntry *homeEntry(const RouteSample &routes, const std::vector<EntityKey> &entrances) {
+  const RouteEntry *nearest = nullptr;
+  // Sources come in ascending key order, so keeping only a strictly less distance breaks ties
+  // to the lower key.
+  for (const SampledEntry<RouteEntry> &entry : routes) {
+    if (std::ranges::binary_search(entrances, entry.Source) &&
+        (nearest == nullptr || entry.Value.Distance < nearest->Distance)) {
+      nearest = &entry.Value;
+    }
+  }
+  return nearest;
+}
+
+// The source's offer when it says meals are supplied: its first food-offer entry at the place of
+// its lowest anchored node, or none. With an entry in route distance at the guest's place, the
+// offer is reachable.
+std::optional<OfferEntry> suppliedOffer(const World &world, const Network &network,
+                                        EntityKey source) {
+  const std::vector<uint32_t> anchored = network.anchoredNodes(source);
+  if (anchored.empty()) {
     return std::nullopt;
   }
-  return nearest->Next;
+  for (const SampledEntry<OfferEntry> &entry :
+       sampleField<FoodOffer>(world, network, network.nodePlace(anchored.front()))) {
+    if (entry.Source == source) {
+      if (!entry.Value.Supplied) {
+        return std::nullopt;
+      }
+      return entry.Value;
+    }
+  }
+  return std::nullopt;
 }
 
 // The steps out of the node, in edge order: each edge starting at it walked forward, then each
@@ -102,44 +134,165 @@ RouteStep wanderStep(const World &world, EntityKey key, const Guest &guest, cons
   return onward[drawPick(drawKey(world, key, hashName("guest-wander"), picks++), weights)];
 }
 
-// Walks the guest WALK_STEP along the guest network, choosing a step at the start and at every
-// node it reaches. Returns false when the guest stands at its entrance heading home, and leaves.
-bool walk(const World &world, EntityKey key, Guest &guest, const Network &network,
+// Scores the guest's options where it stands, picks one by softmax, and takes it up, recording
+// the choice.
+void choose(const World &world, EntityKey key, Guest &guest, const Network &network,
+            const RouteSample &routes, const std::vector<EntityKey> &entrances, uint64_t &choices) {
+  GuestChoice choice;
+  choice.Tick = world.Tick;
+  choice.At = guest.At;
+  choice.Hunger = guest.Hunger;
+  const double curve = hungerCurve(guest.Hunger);
+  // Each offer's relief, by option index, for the meal it would give.
+  std::vector<double> reliefs;
+  for (const SampledEntry<RouteEntry> &entry : routes) {
+    const std::optional<OfferEntry> offer = suppliedOffer(world, network, entry.Source);
+    if (!offer) {
+      continue;
+    }
+    ChoiceOption option;
+    option.Kind = ChoiceKind::Offer;
+    option.Shop = entry.Source;
+    option.Relief = RELIEF_WEIGHT * curve * offer->Relief;
+    option.Distance = DISTANCE_WEIGHT * entry.Value.Distance;
+    option.Wait = WAIT_WEIGHT * (static_cast<double>(offer->Wait) * SIM_TICK_SECONDS);
+    option.Commitment = entry.Source == guest.Target ? COMMITMENT_BONUS : 0.0;
+    option.Score = option.Relief + option.Distance + option.Wait + option.Commitment;
+    choice.Options.push_back(option);
+    reliefs.push_back(offer->Relief);
+  }
+  ChoiceOption carryOn;
+  carryOn.Kind = ChoiceKind::CarryOn;
+  carryOn.Score = CARRY_ON_SCORE;
+  choice.Options.push_back(carryOn);
+  if (world.Tick >= guest.StayUntil && homeEntry(routes, entrances) != nullptr) {
+    ChoiceOption headHome;
+    headHome.Kind = ChoiceKind::HeadHome;
+    headHome.Score = HEAD_HOME_SCORE;
+    choice.Options.push_back(headHome);
+  }
+  const size_t picked =
+      softmaxPick(drawKey(world, key, hashName("guest-choice"), choices++), choice.Options);
+  choice.Picked = picked;
+  const ChoiceOption &option = choice.Options[picked];
+  guest.Target = NULL_KEY;
+  if (option.Kind == ChoiceKind::Offer) {
+    guest.Activity = GuestActivity::HeadingToShop;
+    guest.Target = option.Shop;
+    guest.MealRelief = reliefs[picked];
+  } else if (option.Kind == ChoiceKind::HeadHome) {
+    guest.Activity = GuestActivity::HeadingHome;
+  } else {
+    guest.Activity = GuestActivity::Wandering;
+  }
+  guest.LastChoice = std::move(choice);
+}
+
+// Sends the guest's visit to the shop: one unit created under its own key, arriving after
+// VISIT_DELAY.
+void sendVisit(World &world, EntityKey key, EntityKey shop) {
+  createUnits<GuestVisits>(world, key, key, 1);
+  sendUnits<GuestVisits>(world, key, shop, key, 1, VISIT_DELAY);
+}
+
+// Walks the guest along the step, by the lesser of the distance left and the gap to the step's
+// To, which it subtracts from the distance left. At a node it joins the step's carrier at From.
+void walkStep(Guest &guest, const RouteStep &step, bool atNode, double &left) {
+  if (atNode) {
+    guest.At = {step.Carrier, step.From};
+  }
+  guest.Forward = step.To > guest.At.Distance;
+  const double gap = std::abs(step.To - guest.At.Distance);
+  if (left < gap) {
+    // Rounding never carries the guest past the stop it walks toward.
+    const double walked = guest.Forward ? guest.At.Distance + left : guest.At.Distance - left;
+    guest.At.Distance = guest.Forward ? std::min(walked, step.To) : std::max(walked, step.To);
+    left = 0.0;
+  } else {
+    guest.At.Distance = step.To;
+    left -= gap;
+  }
+}
+
+// Where the guest's heading takes it from its place: its target shop's route entry or the least
+// entrance entry, whichever it heads for. A guest heading to a shop whose offer it can no longer
+// reach drops the target, and one heading home with no entrance entry stops, each becoming
+// wandering; Dropped says it must choose.
+struct Heading {
+  const RouteEntry *Target = nullptr;
+  const RouteEntry *Home = nullptr;
+  bool Dropped = false;
+};
+
+Heading headingOf(const World &world, Guest &guest, const Network &network,
+                  const RouteSample &routes, const std::vector<EntityKey> &entrances) {
+  Heading heading;
+  if (guest.Activity == GuestActivity::HeadingToShop) {
+    heading.Target = entryOf(routes, guest.Target);
+    if (heading.Target == nullptr || !suppliedOffer(world, network, guest.Target)) {
+      guest.Activity = GuestActivity::Wandering;
+      guest.Target = NULL_KEY;
+      heading.Target = nullptr;
+      heading.Dropped = true;
+    }
+  }
+  if (guest.Activity == GuestActivity::HeadingHome) {
+    heading.Home = homeEntry(routes, entrances);
+    if (heading.Home == nullptr) {
+      guest.Activity = GuestActivity::Wandering;
+      heading.Dropped = true;
+    }
+  }
+  return heading;
+}
+
+// Walks the guest WALK_STEP along the guest network. It drops a target it can no longer reach,
+// sends its visit at its target's anchor, and chooses when it must and at every node it leaves,
+// at most once between steps. Returns false when the guest reaches its entrance heading home,
+// and leaves.
+bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
           const std::vector<EntityKey> &entrances) {
   double left = WALK_STEP;
   uint64_t picks = 0;
+  uint64_t choices = 0;
+  bool chosen = false;
+  bool mustChoose = false;
   for (;;) {
     const std::optional<NetworkPosition> position = network.resolve(guest.At);
     if (!position) {
       return false;
     }
-    std::optional<RouteStep> step;
-    if (guest.Activity == GuestActivity::HeadingHome) {
-      step = homeStep(world, network, guest.At, entrances);
-      if (step && step->Carrier == NULL_KEY) {
-        return false;
-      }
+    const RouteSample routes = sampleField<GuestRouteDistance>(world, network, guest.At);
+    const Heading heading = headingOf(world, guest, network, routes, entrances);
+    mustChoose = mustChoose || heading.Dropped;
+    if (heading.Target != nullptr && heading.Target->Next.Carrier == NULL_KEY) {
+      sendVisit(world, key, guest.Target);
+      guest.Activity = GuestActivity::Waiting;
+      return true;
+    }
+    if (heading.Home != nullptr && heading.Home->Next.Carrier == NULL_KEY) {
+      return false;
+    }
+    const bool atNode = std::holds_alternative<NodePosition>(*position);
+    if (!chosen && (mustChoose || (atNode && left > 0.0))) {
+      choose(world, key, guest, network, routes, entrances, choices);
+      chosen = true;
+      mustChoose = false;
+      continue;
     }
     if (left <= 0.0) {
       return true;
     }
-    if (!step) {
+    RouteStep step;
+    if (heading.Target != nullptr) {
+      step = heading.Target->Next;
+    } else if (heading.Home != nullptr) {
+      step = heading.Home->Next;
+    } else {
       step = wanderStep(world, key, guest, network, *position, picks);
     }
-    if (std::holds_alternative<NodePosition>(*position)) {
-      guest.At = {step->Carrier, step->From};
-    }
-    guest.Forward = step->To > guest.At.Distance;
-    const double gap = std::abs(step->To - guest.At.Distance);
-    if (left < gap) {
-      // Rounding never carries the guest past the stop it walks toward.
-      const double walked = guest.Forward ? guest.At.Distance + left : guest.At.Distance - left;
-      guest.At.Distance = guest.Forward ? std::min(walked, step->To) : std::max(walked, step->To);
-      left = 0.0;
-    } else {
-      guest.At.Distance = step->To;
-      left -= gap;
-    }
+    walkStep(guest, step, atNode, left);
+    chosen = false;
   }
 }
 
@@ -170,9 +323,30 @@ void admitGuests(World &world, const Network &network) {
   }
 }
 
+// A waiting guest's visit has come back when it holds it: it finishes the visit, eats any meal
+// that came with it, and stops waiting. Returns whether it is still waiting.
+bool awaitVisit(World &world, EntityKey key, Guest &guest) {
+  const int64_t visits = unitsHeld<GuestVisits>(world, key, key);
+  if (visits == 0) {
+    return true;
+  }
+  consumeUnits<GuestVisits>(world, key, key, visits, FINISHED_CAUSE);
+  const int64_t meals = unitsHeld<Meals>(world, key, key);
+  if (meals > 0) {
+    consumeUnits<Meals>(world, key, key, meals, EATEN_CAUSE);
+    const double before = guest.Hunger;
+    guest.Hunger = std::max(0.0, before - guest.MealRelief);
+    ++guest.MealsEaten;
+    guest.LastMeal = {world.Tick, before, guest.Hunger};
+  }
+  guest.Activity = GuestActivity::Wandering;
+  guest.Target = NULL_KEY;
+  return false;
+}
+
 // Each guest, in ascending key order, leaves when its place no longer resolves, and otherwise
-// gets hungrier, starts home once its stay is over, and walks. Guests that leave go after all
-// have stepped, and then the entrances admit new ones.
+// gets hungrier, and unless it is still waiting for its visit to come back, walks. Guests that
+// leave go after all have stepped, and then the entrances admit new ones.
 void stepGuests(World &world) {
   const Network &network = parkNetwork(world, PathKind::Guest);
   const std::vector<EntityKey> entrances = entranceKeys(world);
@@ -184,8 +358,8 @@ void stepGuests(World &world) {
       continue;
     }
     guest.Hunger = std::min(1.0, guest.Hunger + guest.HungerRate);
-    if (world.Tick >= guest.StayUntil) {
-      guest.Activity = GuestActivity::HeadingHome;
+    if (guest.Activity == GuestActivity::Waiting && awaitVisit(world, key, guest)) {
+      continue;
     }
     if (!walk(world, key, guest, network, entrances)) {
       leaving.push_back(key);
@@ -218,9 +392,61 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
   if (state == nullptr) {
     return std::nullopt;
   }
-  return GuestRecord{state->Activity, state->At,
-                     parkNetwork(world, PathKind::Guest).groundPoint(state->At), state->Hunger,
-                     state->StayUntil};
+  GuestRecord record;
+  record.Activity = state->Activity;
+  record.At = state->At;
+  record.Position = parkNetwork(world, PathKind::Guest).groundPoint(state->At);
+  record.Hunger = state->Hunger;
+  record.StayUntil = state->StayUntil;
+  record.Target = state->Target;
+  record.MealsEaten = state->MealsEaten;
+  if (state->MealsEaten > 0) {
+    record.LastMeal = state->LastMeal;
+  }
+  if (!state->LastChoice.Options.empty()) {
+    record.LastChoice = state->LastChoice;
+  }
+  return record;
+}
+
+double hungerCurve(double hunger) {
+  const double h = std::clamp(hunger, HUNGER_CURVE.front().X, HUNGER_CURVE.back().X);
+  for (size_t i = 1; i < HUNGER_CURVE.size(); ++i) {
+    const CurvePoint &a = HUNGER_CURVE[i - 1];
+    const CurvePoint &b = HUNGER_CURVE[i];
+    if (h == a.X) {
+      return a.Y;
+    }
+    if (h < b.X) {
+      return a.Y + (h - a.X) * (b.Y - a.Y) / (b.X - a.X);
+    }
+  }
+  return HUNGER_CURVE.back().Y;
+}
+
+size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options) {
+  if (options.empty()) {
+    throw std::invalid_argument("a choice needs at least one option");
+  }
+  double greatest = -std::numeric_limits<double>::infinity();
+  for (const ChoiceOption &option : options) {
+    if (!std::isfinite(option.Score)) {
+      throw std::invalid_argument("a choice's score is not finite");
+    }
+    greatest = std::max(greatest, option.Score);
+  }
+  // Scores are shifted so the greatest weighs exactly 1: no weight overflows, and the total is at
+  // least 1.
+  std::vector<double> weights;
+  double total = 0.0;
+  for (const ChoiceOption &option : options) {
+    weights.push_back(simExp((option.Score - greatest) / CHOICE_TEMPERATURE));
+    total += weights.back();
+  }
+  for (size_t i = 0; i < options.size(); ++i) {
+    options[i].Probability = weights[i] / total;
+  }
+  return drawPick(key, std::span<const double>(weights));
 }
 
 void addGuests(WorldSchema &schema) {

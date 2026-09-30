@@ -35,6 +35,8 @@ void drawDebugPanel(const DebugStats &stats, bool &showGraph) {
       ImGui::Text("Guests %llu, mean hunger %.2f", static_cast<unsigned long long>(stats.Guests),
                   stats.MeanHunger);
     }
+    ImGui::Text("Waiting %llu, meals eaten %lld", static_cast<unsigned long long>(stats.Waiting),
+                static_cast<long long>(stats.MealsEaten));
   }
   ImGui::End();
 }

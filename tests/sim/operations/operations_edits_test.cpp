@@ -4,6 +4,7 @@
 
 #include "sim/command_queue.h"
 #include "sim/entity_key.h"
+#include "sim/guests/guests.h"
 #include "sim/medium/field.h"
 #include "sim/medium/flow.h"
 #include "sim/medium/network.h"
@@ -202,8 +203,9 @@ TEST_CASE("In every tick of randomized park edits with synthetic guests, supply-
 
 TEST_CASE("In every tick of randomized park edits with synthetic guests, consumed order units "
           "carry only the causes fulfilled, unfilled, cancelled, undeliverable, and discarded, "
-          "consumed supplies only returned, served, undeliverable, and discarded, and consumed "
-          "visits and meals only abandoned, undeliverable, and discarded") {
+          "consumed supplies only returned, served, undeliverable, and discarded, consumed "
+          "visits only abandoned, finished, undeliverable, and discarded, and consumed meals only "
+          "abandoned, eaten, undeliverable, and discarded") {
   bool sawConsumedOrders = false;
   bool sawServed = false;
   bool sawAbandoned = false;
@@ -221,9 +223,11 @@ TEST_CASE("In every tick of randomized park edits with synthetic guests, consume
               unitsConsumed<Supplies>(world, DISCARDED_CAUSE));
     CHECK(unitsConsumed<GuestVisits>(world) ==
           unitsConsumed<GuestVisits>(world, ABANDONED_CAUSE) +
+              unitsConsumed<GuestVisits>(world, FINISHED_CAUSE) +
               unitsConsumed<GuestVisits>(world, UNDELIVERABLE_CAUSE) +
               unitsConsumed<GuestVisits>(world, DISCARDED_CAUSE));
     CHECK(unitsConsumed<Meals>(world) == unitsConsumed<Meals>(world, ABANDONED_CAUSE) +
+                                             unitsConsumed<Meals>(world, EATEN_CAUSE) +
                                              unitsConsumed<Meals>(world, UNDELIVERABLE_CAUSE) +
                                              unitsConsumed<Meals>(world, DISCARDED_CAUSE));
     sawConsumedOrders = sawConsumedOrders || unitsConsumed<SupplyOrders>(world) > 0;

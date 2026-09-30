@@ -399,6 +399,8 @@ Expected: no build output; those tests pass.
 Files:
 - Modify: `src/sim/guests/guests.cpp` (guestRecord)
 
+Done in Task 3, since the aggregate initializer fails -Wmissing-field-initializers once GuestRecord gains fields.
+
 Step 1: Replace guestRecord's final `return GuestRecord{...};` with:
 
 ```cpp
