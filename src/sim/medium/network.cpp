@@ -138,28 +138,34 @@ Network::Network(std::vector<Carrier> carriers, uint32_t nodeCount, std::vector<
   }
   requireValidAnchors(Anchors, NodeCount);
 
-  std::vector<std::optional<Place>> places(NodeCount);
+  // Counts each node's stops into the start after it, while building the edges.
+  StopStarts.assign(static_cast<size_t>(NodeCount) + 1, 0);
   for (const Carrier &carrier : Carriers) {
     FirstEdges.push_back(static_cast<uint32_t>(Edges.size()));
     for (size_t i = 0; i < carrier.Stops.size(); ++i) {
       const CarrierStop &stop = carrier.Stops[i];
-      if (!places[stop.Node]) {
-        places[stop.Node] = Place{carrier.Key, stop.Distance};
-      }
+      ++StopStarts[static_cast<size_t>(stop.Node) + 1];
       if (i + 1 < carrier.Stops.size()) {
         const CarrierStop &next = carrier.Stops[i + 1];
         Edges.push_back({carrier.Key, stop.Node, next.Node, stop.Distance, next.Distance});
       }
     }
   }
-  NodePlaces.reserve(NodeCount);
-  for (uint32_t node = 0; node < NodeCount; ++node) {
-    const std::optional<Place> &place = places[node];
-    if (!place) {
+  for (size_t node = 0; node < NodeCount; ++node) {
+    if (StopStarts[node + 1] == 0) {
       throw std::invalid_argument("node " + std::to_string(node) +
                                   " has no carrier stopping at it");
     }
-    NodePlaces.push_back(*place);
+    StopStarts[node + 1] += StopStarts[node];
+  }
+  // Carriers in key order and stops in distance order leave each node's run in that order.
+  StopPlaces.resize(StopStarts.back());
+  std::vector<size_t> filled(StopStarts.begin(), StopStarts.end() - 1);
+  for (const Carrier &carrier : Carriers) {
+    for (const CarrierStop &stop : carrier.Stops) {
+      StopPlaces[filled[stop.Node]] = Place{carrier.Key, stop.Distance};
+      ++filled[stop.Node];
+    }
   }
 }
 
@@ -193,7 +199,15 @@ std::optional<NetworkPosition> Network::resolve(const Place &place) const {
                       Edges[edge].ToDistance - place.Distance};
 }
 
-Place Network::nodePlace(uint32_t node) const { return NodePlaces.at(node); }
+Place Network::nodePlace(uint32_t node) const { return stopPlaces(node).front(); }
+
+std::span<const Place> Network::stopPlaces(uint32_t node) const {
+  if (node >= NodeCount) {
+    throw std::out_of_range("node " + std::to_string(node) + " is not below the node count");
+  }
+  return std::span<const Place>(StopPlaces)
+      .subspan(StopStarts[node], StopStarts[node + 1] - StopStarts[node]);
+}
 
 EntityKey Network::nodeAnchor(uint32_t node) const {
   if (node >= NodeCount) {

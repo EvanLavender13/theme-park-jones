@@ -4,6 +4,7 @@
 #include "sim/entity_key.h"
 
 #include <optional>
+#include <span>
 #include <stddef.h>
 #include <stdint.h>
 #include <variant>
@@ -133,6 +134,9 @@ public:
   // The node's stop on its lowest-keyed carrier, at the lowest distance there. Throws
   // std::out_of_range for a node not below nodeCount().
   [[nodiscard]] Place nodePlace(uint32_t node) const;
+  // The place of each stop at the node, in ascending carrier key and then distance: exactly the
+  // places resolve gives the node for. Throws std::out_of_range as nodePlace does.
+  [[nodiscard]] std::span<const Place> stopPlaces(uint32_t node) const;
   // The node's anchored entity, or NULL_KEY. Throws std::out_of_range as nodePlace does.
   [[nodiscard]] EntityKey nodeAnchor(uint32_t node) const;
   // The nodes anchored to the entity, ascending.
@@ -147,7 +151,7 @@ public:
   // distance. None when the carrier is not in the network or the point is not finite.
   [[nodiscard]] std::optional<Place> nearestPlaceOn(EntityKey carrier, GroundPoint point) const;
 
-  // Lists the inputs. The edges and node places are rebuilt from them only by the constructor, so
+  // Lists the inputs. The edges and stop places are rebuilt from them only by the constructor, so
   // Network is never loaded: it is derived, and saves never hold it.
   template <typename Visitor> friend void visitFields(Visitor &visitor, Network &network) {
     visitor.field("carriers", network.Carriers);
@@ -167,7 +171,9 @@ private:
   std::vector<NetworkEdge> Edges;
   // Parallel to Carriers: the index in Edges of each carrier's first edge.
   std::vector<uint32_t> FirstEdges;
-  std::vector<Place> NodePlaces;
+  // Each node's stop places, node by node: node n's run from StopStarts[n] up to StopStarts[n + 1].
+  std::vector<Place> StopPlaces;
+  std::vector<size_t> StopStarts;
 };
 
 // Moves a place held across a re-derivation from the network before to the network after: kept

@@ -12,7 +12,7 @@ Throughout, a network is any Network the constructor accepts, including the rand
 2. For every node n of a network, nodePlace(n) equals the first of stopPlaces(n).
 3. For any network, field entries, and place, sampleField, sampleResolvedField, and fieldValue give exactly what src/sim/medium/SPEC.md's Fields section defines through resolve, for fields with and without sampleEdge, including entries at nodes, strictly inside edges, on carriers absent from the network, and at distances that resolve nowhere.
 4. Every existing test passes unchanged, and the cross-build check's linux-debug output, build/cross-build-check/linux-debug.txt, is identical, byte for byte, to its output before the feature.
-5. In a perf profile of tests/parks/supply.park stepped 3000 ticks on linux-debug, Network::resolve's inclusive share of the time is under 5%, and on windows-debug those ticks step at least 1.5 times as fast as before the feature, with the same final hash. The feature's report gives the windows-debug and linux-debug times before and after.
+5. Sampling resolves only sampled places, never their entries' places. In perf profiles of tests/parks/supply.park stepped 3000 ticks on linux-debug, Network::resolve's inclusive time, its share times the run's time, falls at least fivefold, and on windows-debug those ticks step at least 1.5 times as fast as before the feature, with the same final hash. The feature's report gives the windows-debug and linux-debug times and resolve's shares before and after.
 
 ## Medium
 
@@ -49,6 +49,14 @@ The exact text is in PLAN.md, Task 2.
 - Entries indexed by place, so a sample visits only the entries at its node or edge: the milestone's deepening candidate.
 - Listing shops and depots once per cycle instead of rebuilding the park's boxes for every shop: supplied-food-shop's deepening candidate.
 - A check that fails when stepping slows past a budget: deterministic-simulation's deepening candidate.
+
+## Test pass decisions
+
+- Criteria 4 and 5 are measurements, not Catch2 tests: criterion 4 by comparing the cross-build check's linux-debug output with the copy taken before the feature, and criterion 5 by the timings and perf profile the report gives. That a sample resolves only its own place is not observable through the public interface, so criterion 5's profile is its check.
+- Entries at a NaN distance are not tested. The debug walk refuses a NaN in any registered double, so no world holds such an entry.
+- An entry at -0.0 resolves to the node of its carrier's stop at 0, and is among that node's stop places. The spec's resolve compares distances as numbers, and -0.0 is neither below 0 nor different from it, as carry-over's rule on 0 and -0 also says.
+
+- Criterion 5 was amended during implementation, with Evan's agreement. It asked for resolve's share to fall under 5%, but the samples themselves still resolve their own places, once each, and guests resolve their places while walking. Those calls leave resolve at 6.75% of a run 1.4 times shorter, though its time fell about tenfold. The lasting property is that no entry is resolved, so the criterion now asks for that and a fivefold fall in resolve's time.
 
 ## Open questions
 

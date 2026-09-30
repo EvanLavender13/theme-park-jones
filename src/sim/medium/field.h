@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <concepts>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <stdint.h>
 #include <string>
@@ -270,14 +271,14 @@ void publishStepped(World &world, EntityKey source,
   slots.insert(at, Slot{source, std::move(entries)});
 }
 
-// Appends the source's entries whose places resolve to the node.
+// Appends the source's entries whose places resolve to the node: exactly those among its stop
+// places.
 template <typename Entry>
 void sampleSlotAtNode(const Network &network, const FieldSlot<Entry> &slot, uint32_t node,
                       std::vector<SampledEntry<Entry>> &sampled) {
+  const std::span<const Place> stops = network.stopPlaces(node);
   for (const PlacedEntry<Entry> &entry : slot.Entries) {
-    const std::optional<NetworkPosition> at = network.resolve(entry.At);
-    const auto *atNode = at ? std::get_if<NodePosition>(&*at) : nullptr;
-    if (atNode != nullptr && atNode->Node == node) {
+    if (std::ranges::find(stops, entry.At) != stops.end()) {
       sampled.push_back({slot.Source, entry.Value});
     }
   }
@@ -292,27 +293,29 @@ void sampleSlotInEdge(const Network &network, const FieldSlot<typename F::Entry>
                       std::vector<SampledEntry<typename F::Entry>> &sampled) {
   using Entry = typename F::Entry;
   if constexpr (HasEdgeRule<F>) {
+    const NetworkEdge &edge = network.edges()[position.Edge];
+    const std::span<const Place> fromStops = network.stopPlaces(edge.From);
+    const std::span<const Place> toStops = network.stopPlaces(edge.To);
     EdgeSample<Entry> sample;
-    sample.Edge = network.edges()[position.Edge];
+    sample.Edge = edge;
     sample.FromOffset = position.FromOffset;
     sample.ToOffset = position.ToOffset;
+    // An entry resolves strictly inside the edge exactly when it is on the edge's carrier strictly
+    // between its stops, and to one of its nodes exactly when it is among that node's stop places,
+    // so no entry is resolved. The offsets are resolve's own subtractions.
     for (const PlacedEntry<Entry> &entry : slot.Entries) {
-      const std::optional<NetworkPosition> at = network.resolve(entry.At);
-      if (!at) {
+      const Place &at = entry.At;
+      if (at.Carrier == edge.Carrier && at.Distance > edge.FromDistance &&
+          at.Distance < edge.ToDistance) {
+        sample.Along.push_back(
+            {at.Distance - edge.FromDistance, edge.ToDistance - at.Distance, entry.Value});
         continue;
       }
-      if (const auto *atNode = std::get_if<NodePosition>(&*at)) {
-        if (atNode->Node == sample.Edge.From) {
-          sample.AtFrom.push_back(entry.Value);
-        }
-        if (atNode->Node == sample.Edge.To) {
-          sample.AtTo.push_back(entry.Value);
-        }
-      } else {
-        const EdgePosition &inEdge = std::get<EdgePosition>(*at);
-        if (inEdge.Edge == position.Edge) {
-          sample.Along.push_back({inEdge.FromOffset, inEdge.ToOffset, entry.Value});
-        }
+      if (std::ranges::find(fromStops, at) != fromStops.end()) {
+        sample.AtFrom.push_back(entry.Value);
+      }
+      if (std::ranges::find(toStops, at) != toStops.end()) {
+        sample.AtTo.push_back(entry.Value);
       }
     }
     if (sample.AtFrom.empty() && sample.AtTo.empty() && sample.Along.empty()) {

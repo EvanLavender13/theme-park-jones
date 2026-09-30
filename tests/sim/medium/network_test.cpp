@@ -16,6 +16,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stddef.h>
 #include <stdexcept>
 #include <stdint.h>
@@ -438,6 +439,100 @@ TEST_CASE("nodePlace and nodeAnchor refuse a node not below the node count") {
   REQUIRE_THROWS_AS(network.nodeAnchor(5), std::out_of_range);
   REQUIRE_THROWS_AS(Network().nodePlace(0), std::out_of_range);
   REQUIRE_THROWS_AS(Network().nodeAnchor(0), std::out_of_range);
+}
+
+bool placeBefore(const Place &left, const Place &right) {
+  return left.Carrier < right.Carrier ||
+         (left.Carrier == right.Carrier && left.Distance < right.Distance);
+}
+
+std::vector<Place> stopPlacesOf(const Network &network, uint32_t node) {
+  const std::span<const Place> places = network.stopPlaces(node);
+  return {places.begin(), places.end()};
+}
+
+TEST_CASE("stopPlaces lists a node's stop places in ascending carrier key and then distance, with "
+          "no repeats") {
+  const Network network = sampleInputs().build();
+  // Node 2 is at BEND's 12 and SPUR's 0, so the key orders them, not the distance. LOOP stops at
+  // node 3 twice.
+  const std::vector<std::vector<Place>> expected = {
+      {{.Carrier = BEND, .Distance = 0}},
+      {{.Carrier = BEND, .Distance = 5}},
+      {{.Carrier = BEND, .Distance = 12}, {.Carrier = SPUR, .Distance = 0}},
+      {{.Carrier = LOOP, .Distance = 0},
+       {.Carrier = LOOP, .Distance = 12},
+       {.Carrier = SPUR, .Distance = 6}},
+      {{.Carrier = LOOP, .Distance = 7}}};
+  REQUIRE(network.nodeCount() == expected.size());
+  for (uint32_t node = 0; node < network.nodeCount(); ++node) {
+    CAPTURE(node);
+    REQUIRE(stopPlacesOf(network, node) == expected[node]);
+  }
+
+  for (const RandomCase &random : RANDOM_CASES) {
+    CAPTURE(random.Seed);
+    const Network synthetic = makeSyntheticNetwork(random.Seed, random.NodeCount).build();
+    for (uint32_t node = 0; node < synthetic.nodeCount(); ++node) {
+      CAPTURE(node);
+      const std::vector<Place> places = stopPlacesOf(synthetic, node);
+      for (size_t i = 1; i < places.size(); ++i) {
+        REQUIRE(placeBefore(places[i - 1], places[i]));
+      }
+    }
+  }
+}
+
+TEST_CASE("a place is among a node's stop places exactly when resolve gives that node for it") {
+  std::vector<SyntheticNetwork> cases = {sampleInputs()};
+  for (const RandomCase &random : RANDOM_CASES) {
+    cases.push_back(makeSyntheticNetwork(random.Seed, random.NodeCount));
+  }
+  for (size_t c = 0; c < cases.size(); ++c) {
+    CAPTURE(c);
+    const SyntheticNetwork &inputs = cases[c];
+    const Network network = inputs.build();
+
+    // Every stop place resolves to its node.
+    for (uint32_t node = 0; node < network.nodeCount(); ++node) {
+      for (const Place &place : network.stopPlaces(node)) {
+        requireNode(network, place, node);
+      }
+    }
+    // resolve gives a node only at a stop's distance, so every stop given is among its node's.
+    for (const Carrier &carrier : inputs.Carriers) {
+      for (const CarrierStop &stop : carrier.Stops) {
+        const Place place{.Carrier = carrier.Key, .Distance = stop.Distance};
+        CAPTURE(place.Carrier, place.Distance, stop.Node);
+        const std::vector<Place> places = stopPlacesOf(network, stop.Node);
+        REQUIRE(std::ranges::find(places, place) != places.end());
+      }
+    }
+  }
+}
+
+TEST_CASE("nodePlace is the first of a node's stop places") {
+  std::vector<Network> networks = {sampleInputs().build()};
+  for (const RandomCase &random : RANDOM_CASES) {
+    networks.push_back(makeSyntheticNetwork(random.Seed, random.NodeCount).build());
+  }
+  for (size_t c = 0; c < networks.size(); ++c) {
+    CAPTURE(c);
+    const Network &network = networks[c];
+    for (uint32_t node = 0; node < network.nodeCount(); ++node) {
+      CAPTURE(node);
+      const std::span<const Place> places = network.stopPlaces(node);
+      REQUIRE_FALSE(places.empty());
+      REQUIRE(network.nodePlace(node) == places.front());
+    }
+  }
+}
+
+TEST_CASE("stopPlaces refuses a node not below the node count") {
+  const Network network = sampleInputs().build();
+  REQUIRE_THROWS_AS(network.stopPlaces(5), std::out_of_range);
+  const Network empty;
+  REQUIRE_THROWS_AS(empty.stopPlaces(0), std::out_of_range);
 }
 
 TEST_CASE("groundPoint gives a carrier point's coordinates at its distance, and between points "
