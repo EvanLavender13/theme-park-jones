@@ -34,6 +34,14 @@ Similar to shops with a cycle-based internal simulation. Tall flats are mostly s
 
 Ground texture derived from fields rather than hand-painted: construction disturbance as a decaying stock, foot traffic wear producing desire paths that show where paths should go, grass length as a stock drained by groundskeepers, gravel under coasters derived from service access. Player paint is intent that overrides the derived look. Recovery should be fast by default or skippable for a cost, so building is not punished. Grounds are managed by per-area standards (manicured, tended, natural), and neglect can be a deliberate look.
 
+## Staff work
+
+Most staff work is a stock at a place that builds up and is drained by staff capacity drawn over route distance from a staff room: litter on a path segment, vomit, a full bin, a flower bed's thirst, a lawn's height, a ride's wear. Garbage leaving a bin is a conserved flow, like supplies. The logistical play is in the layout (where staff rooms sit, how far they are from what needs care, which routes they travel), not in who walks. Whether a pool or agents drains a stock stays inside the entity (decision 0018, principle 6), so a job that feels flat as a pool could become agents without changing anything that reads its work. Where staff pass between guest and backstage paths is an open question.
+
+## Figures
+
+Visible figures (janitors, gardeners, haulers with carts) are drawn where and when capacity is actually spent, walking the real route from their source in the real travel time, so a well-kept corner shows staff at work and a neglected one shows none. A figure's position is computed from current state each frame, such as when capacity set off for a place and how long the route is, never accumulated, so figures are drawn only for places in view and appear in a consistent state when the camera arrives. Only presentation may depend on the camera. The simulation is the same everywhere (principle 10), so any switch between individual and aggregate guests keys on something like crowd density, never on the view.
+
 ## Legibility
 
 Every field should be viewable as an overlay, and fields should be added only when a wanted mechanic needs them. Field values should be attributable to their sources. Placements should preview their consequences. Guests should explain decisions in terms of their actual decision factors. The known risk area is flows with nonlocal effects, such as a new transport line shifting demand across the park; previews and attribution are essential there.
