@@ -43,6 +43,7 @@ add_subdirectory(src/core)
 add_subdirectory(src/sim)
 add_subdirectory(src/scenarios)
 add_subdirectory(src/tools)
+add_subdirectory(src/legible)
 
 if(TPJ_BUILD_APP)
     CPMAddPackage(

@@ -6,7 +6,7 @@
 
 namespace tpj {
 
-void drawDebugPanel(const DebugStats &stats, bool &showGraph) {
+void drawDebugPanel(const DebugStats &stats, bool &showGraph, bool &showFoodOverlay) {
   // At the top right, so the shop lines never run under the Tools panel at the left.
   ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 12.0f, 12.0f),
                           ImGuiCond_FirstUseEver, ImVec2(1.0f, 0.0f));
@@ -17,6 +17,7 @@ void drawDebugPanel(const DebugStats &stats, bool &showGraph) {
     ImGui::Text("Focus %.1f, %.1f", stats.Focus.X, stats.Focus.Z);
     ImGui::Text("Distance %.1f m", stats.Distance);
     ImGui::Checkbox("Graph", &showGraph);
+    ImGui::Checkbox("Food overlay", &showFoodOverlay);
     if (!stats.Shops.empty()) {
       ImGui::Separator();
     }

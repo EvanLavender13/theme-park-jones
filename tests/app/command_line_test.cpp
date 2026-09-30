@@ -193,6 +193,31 @@ TEST_CASE("A command line the app does not accept exits with a nonzero status an
   }
 }
 
+TEST_CASE("A command line with --overlay naming no overlay but food, with no value, or with --hash "
+          "prints the usage and exits with a nonzero status") {
+  const auto directory = scratchDirectory("bad-overlay");
+  // Without --hash, each also asks for a single frame, so an app that accepted it would draw one
+  // and exit with status 0 rather than run on.
+  const std::vector<std::vector<std::string>> cases = {
+      // Only food names an overlay, as written.
+      {"--overlay", "Food", "--frames", "1"},
+      {"--frames", "1", "--overlay"},
+      // food is refused with --hash wherever each stands.
+      {"--hash", "--ticks", "0", "--overlay", "food"},
+      {"--overlay", "food", "--hash", "--ticks", "0"}};
+  for (const std::vector<std::string> &arguments : cases) {
+    std::string shown;
+    for (const std::string &argument : arguments) {
+      shown += " " + argument;
+    }
+    INFO("arguments" << shown);
+    const ProcessResult result = runApp(directory, arguments);
+    CHECK(result.Status != 0);
+    CHECK_FALSE(hasHashLine(result.Out));
+    CHECK_FALSE((result.Out + result.Err).empty());
+  }
+}
+
 TEST_CASE("A park file the app cannot read exits with a nonzero status and no hash line, naming "
           "the file") {
   const auto directory = scratchDirectory("unreadable-park");

@@ -11,7 +11,7 @@ add_executable(tpj_app
     orbit_camera.cpp
     tool_panel.cpp)
 set_target_properties(tpj_app PROPERTIES OUTPUT_NAME ThemeParkJones)
-target_link_libraries(tpj_app PRIVATE tpj_park_files tpj_render tpj_sim tpj_tools)
+target_link_libraries(tpj_app PRIVATE tpj_legible tpj_park_files tpj_render tpj_sim tpj_tools)
 tpj_configure_target(tpj_app)
 
 if(TPJ_SANITIZE)
