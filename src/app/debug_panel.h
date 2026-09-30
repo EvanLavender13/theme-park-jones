@@ -28,9 +28,10 @@ struct DebugStats {
 };
 
 // Draws the tooling panel with frame rate, simulation tick, camera state, the Graph checkbox,
-// which sets showGraph, a line for each shop's record, the guest count and mean hunger, and the
-// guests waiting and meals eaten. Call between ImGui::NewFrame and ImGui::Render.
-void drawDebugPanel(const DebugStats &stats, bool &showGraph);
+// which sets showGraph, the Food overlay checkbox, which sets showFoodOverlay, a line for each
+// shop's record, the guest count and mean hunger, and the guests waiting and meals eaten. Call
+// between ImGui::NewFrame and ImGui::Render.
+void drawDebugPanel(const DebugStats &stats, bool &showGraph, bool &showFoodOverlay);
 
 } // namespace tpj
 

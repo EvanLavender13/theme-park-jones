@@ -3,6 +3,8 @@
 #include "app/park_file.h"
 #include "app/tool_panel.h"
 #include "core/profile.h"
+#include "legible/food.h"
+#include "render/food_overlay.h"
 #include "render/graph_overlay.h"
 #include "render/guest_mesh.h"
 #include "render/park_mesh.h"
@@ -51,6 +53,7 @@ struct Options {
   uint64_t Ticks = 0;
   bool PrintHash = false;
   bool ShowGraph = false;
+  bool ShowFoodOverlay = false;
 };
 
 bool parseCount(const char *text, uint64_t &count) {
@@ -62,7 +65,7 @@ bool parseCount(const char *text, uint64_t &count) {
 
 // --park PATH starts from a park file, --ticks N steps it N ticks before the first frame, and
 // --hash prints the state hash after them and exits. --frames N exits after N frames. --graph
-// starts with the graph view on.
+// starts with the graph view on, and --overlay food with the food overlay on.
 // --capture PATH writes the last frame to PATH as a BMP and implies a short frame limit, which
 // makes the app usable for automated visual checks.
 bool parseOptions(int argc, char **argv, Options &options) {
@@ -82,16 +85,21 @@ bool parseOptions(int argc, char **argv, Options &options) {
       options.PrintHash = true;
     } else if (strcmp(argv[i], "--graph") == 0) {
       options.ShowGraph = true;
+    } else if (strcmp(argv[i], "--overlay") == 0 && hasValue) {
+      // food is the only overlay.
+      valid = strcmp(argv[++i], "food") == 0;
+      options.ShowFoodOverlay = valid;
     } else {
       valid = false;
     }
   }
-  if (options.PrintHash &&
-      (options.FramesGiven || options.CapturePath != nullptr || options.ShowGraph)) {
+  if (options.PrintHash && (options.FramesGiven || options.CapturePath != nullptr ||
+                            options.ShowGraph || options.ShowFoodOverlay)) {
     valid = false;
   }
   if (!valid) {
-    SDL_Log("Usage: %s [--park PATH] [--ticks N] [--hash] [--frames N] [--capture PATH] [--graph]",
+    SDL_Log("Usage: %s [--park PATH] [--ticks N] [--hash] [--frames N] [--capture PATH] [--graph] "
+            "[--overlay food]",
             argv[0]);
     return false;
   }
@@ -349,6 +357,17 @@ bool updateGuestMesh(tpj::Renderer &renderer, const tpj::World &world,
   return tpj::setGuestMesh(renderer, tpj::buildGuestMesh(world));
 }
 
+// The food overlay while it is shown, shaded by the food availability at each place, and an empty
+// mesh while it is not. It is built afresh each frame, so it keeps nothing to reset.
+tpj::ParkMesh foodOverlayMesh(const tpj::World &world, bool show) {
+  if (!show) {
+    return {};
+  }
+  return tpj::buildFoodOverlay(world, [&world](const tpj::Place &place) {
+    return tpj::foodAvailability(world, place).Value;
+  });
+}
+
 // The ground under the cursor, or none while ImGui wants the mouse or the cursor meets no ground.
 std::optional<tpj::ParkPoint> groundUnderCursor(SDL_Window *window, const tpj::CameraView &view) {
   if (ImGui::GetIO().WantCaptureMouse) {
@@ -455,10 +474,16 @@ void drawGraph(const tpj::World &world, const tpj::CameraView &view) {
   }
 }
 
-// Builds the Debug and Tools panels, setting showGraph from the Graph checkbox, selecting the tool
-// the player chose and starting the park action they pressed.
+// The views over the scene that the Debug panel's checkboxes show.
+struct ShownViews {
+  bool Graph = false;
+  bool FoodOverlay = false;
+};
+
+// Builds the Debug and Tools panels, setting the shown views from their checkboxes, selecting the
+// tool the player chose and starting the park action they pressed.
 void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
-                bool &showGraph, tpj::ToolState &tool) {
+                ShownViews &shown, tpj::ToolState &tool) {
   tpj::DebugStats stats;
   stats.SimTick = world.Tick;
   stats.Focus = camera.Focus;
@@ -480,7 +505,7 @@ void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCam
   }
   stats.MeanHunger = stats.Guests == 0 ? 0.0 : hunger / static_cast<double>(stats.Guests);
   stats.MealsEaten = tpj::unitsConsumed<tpj::Meals>(world, tpj::EATEN_CAUSE);
-  tpj::drawDebugPanel(stats, showGraph);
+  tpj::drawDebugPanel(stats, shown.Graph, shown.FoodOverlay);
   const tpj::ToolPanelChoice choice =
       tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty(), dialogShowing());
   if (choice.Tool) {
@@ -489,15 +514,15 @@ void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCam
   startParkAction(choice.Park, window);
 }
 
-// Builds the frame's ImGui draw data: the panels, and the graph over the scene while showGraph is
-// set.
+// Builds the frame's ImGui draw data: the panels, which set the shown views from their
+// checkboxes, and the graph over the scene while it is shown.
 void buildUi(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
-             const tpj::CameraView &view, bool &showGraph, tpj::ToolState &tool) {
+             const tpj::CameraView &view, ShownViews &shown, tpj::ToolState &tool) {
   tpj::beginUiFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
-  drawPanels(window, world, camera, showGraph, tool);
-  if (showGraph) {
+  drawPanels(window, world, camera, shown, tool);
+  if (shown.Graph) {
     drawGraph(world, view);
   }
   ImGui::Render();
@@ -511,7 +536,7 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
   std::optional<uint64_t> guestTick;
   tpj::ToolState tool;
   tpj::CommandQueue commands;
-  bool showGraph = options.ShowGraph;
+  ShownViews shown{options.ShowGraph, options.ShowFoodOverlay};
   uint64_t lastCounter = SDL_GetPerformanceCounter();
   double simAccumulator = 0.0;
 
@@ -562,10 +587,12 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
       return false;
     }
 
-    buildUi(renderer.Window, world, camera, view, showGraph, tool);
+    buildUi(renderer.Window, world, camera, view, shown, tool);
 
     const bool lastFrame = options.FrameLimit > 0 && frame >= options.FrameLimit;
-    if (!tpj::drawFrame(renderer, view, ImGui::GetDrawData(),
+    // The overlay is built after the panels, so a change of its checkbox shows in this frame.
+    if (!tpj::setOverlayMesh(renderer, foodOverlayMesh(world, shown.FoodOverlay)) ||
+        !tpj::drawFrame(renderer, view, ImGui::GetDrawData(),
                         lastFrame ? options.CapturePath : nullptr)) {
       return false;
     }

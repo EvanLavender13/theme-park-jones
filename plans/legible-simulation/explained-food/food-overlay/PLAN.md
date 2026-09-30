@@ -897,3 +897,7 @@ Step 1: Dispatch the reviewer on the diff, with FEATURE.md, src/legible/SPEC.md,
 Step 2: Stage exactly the feature's paths: `git add plans/legible-simulation/explained-food/food-overlay src/legible src/render src/app CMakeLists.txt tests/legible tests/render tests/app tests/integration tests/CMakeLists.txt`, then check `git status --short` shows nothing else staged and the untracked parks/routes.park and parks/sketch.park unstaged.
 
 Step 3: Commit through commit-hygiene with the subject `Legible: Add the food-availability overlay` and a body of at most 72-character lines saying that tpj_legible computes food availability with exact per-shop terms, that the renderer draws it as a tent-shaped band along guest paths through a viridis ramp, and that the Debug panel and --overlay food turn it on, ending with the trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+
+## Deviations
+
+- Tasks 10 and 13 left drawScene and runLoop over clang-tidy's readability-function-size limit of 60 statements, at 61 and 63. drawScene now draws each mesh through a drawMesh helper, and runLoop keeps the two view checkboxes in one ShownViews struct and uploads the overlay in the same check as drawFrame, after the panels as the plan requires.

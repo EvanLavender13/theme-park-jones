@@ -416,6 +416,8 @@ void destroyRenderer(Renderer &renderer) {
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.TerrainVertices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.TerrainIndices);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.TerrainPipeline);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayVertices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayIndices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkVertices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkIndices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.GuestVertices);
@@ -462,6 +464,11 @@ bool setParkMesh(Renderer &renderer, const ParkMesh &mesh) {
                      renderer.ParkIndexCount);
 }
 
+bool setOverlayMesh(Renderer &renderer, const ParkMesh &mesh) {
+  return replaceMesh(renderer, mesh, renderer.OverlayVertices, renderer.OverlayIndices,
+                     renderer.OverlayIndexCount);
+}
+
 bool setGhostMesh(Renderer &renderer, const ParkMesh &mesh) {
   return replaceMesh(renderer, mesh, renderer.GhostVertices, renderer.GhostIndices,
                      renderer.GhostIndexCount);
@@ -475,6 +482,20 @@ bool setGuestMesh(Renderer &renderer, const ParkMesh &mesh) {
 void beginUiFrame() { ImGui_ImplSDLGPU3_NewFrame(); }
 
 namespace {
+
+// Draws a mesh's triangles through a pipeline, or nothing for an empty mesh.
+void drawMesh(SDL_GPURenderPass *pass, SDL_GPUGraphicsPipeline *pipeline, SDL_GPUBuffer *vertices,
+              SDL_GPUBuffer *indices, uint32_t indexCount) {
+  if (indexCount == 0) {
+    return;
+  }
+  SDL_BindGPUGraphicsPipeline(pass, pipeline);
+  const SDL_GPUBufferBinding vertexBinding = {vertices, 0};
+  SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
+  const SDL_GPUBufferBinding indexBinding = {indices, 0};
+  SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+  SDL_DrawGPUIndexedPrimitives(pass, indexCount, 1, 0, 0, 0);
+}
 
 void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const CameraView &camera) {
   const float aspect =
@@ -512,33 +533,18 @@ void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const C
   SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
   SDL_DrawGPUIndexedPrimitives(pass, renderer.TerrainIndexCount, 1, 0, 0, 0);
 
-  // The camera uniforms pushed before the pass serve this pipeline too.
-  if (renderer.ParkIndexCount > 0) {
-    SDL_BindGPUGraphicsPipeline(pass, renderer.ParkPipeline);
-    const SDL_GPUBufferBinding parkVertexBinding = {renderer.ParkVertices, 0};
-    SDL_BindGPUVertexBuffers(pass, 0, &parkVertexBinding, 1);
-    const SDL_GPUBufferBinding parkIndexBinding = {renderer.ParkIndices, 0};
-    SDL_BindGPUIndexBuffer(pass, &parkIndexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-    SDL_DrawGPUIndexedPrimitives(pass, renderer.ParkIndexCount, 1, 0, 0, 0);
-  }
-  // Guests are opaque boxes, drawn as the park's are.
-  if (renderer.GuestIndexCount > 0) {
-    SDL_BindGPUGraphicsPipeline(pass, renderer.ParkPipeline);
-    const SDL_GPUBufferBinding guestVertexBinding = {renderer.GuestVertices, 0};
-    SDL_BindGPUVertexBuffers(pass, 0, &guestVertexBinding, 1);
-    const SDL_GPUBufferBinding guestIndexBinding = {renderer.GuestIndices, 0};
-    SDL_BindGPUIndexBuffer(pass, &guestIndexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-    SDL_DrawGPUIndexedPrimitives(pass, renderer.GuestIndexCount, 1, 0, 0, 0);
-  }
-  // Ghosts and highlights come after everything opaque, so they blend over it.
-  if (renderer.GhostIndexCount > 0) {
-    SDL_BindGPUGraphicsPipeline(pass, renderer.GhostPipeline);
-    const SDL_GPUBufferBinding ghostVertexBinding = {renderer.GhostVertices, 0};
-    SDL_BindGPUVertexBuffers(pass, 0, &ghostVertexBinding, 1);
-    const SDL_GPUBufferBinding ghostIndexBinding = {renderer.GhostIndices, 0};
-    SDL_BindGPUIndexBuffer(pass, &ghostIndexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-    SDL_DrawGPUIndexedPrimitives(pass, renderer.GhostIndexCount, 1, 0, 0, 0);
-  }
+  // The camera uniforms pushed before the pass serve these pipelines too. The overlay lies just
+  // over the terrain, and the park's paths, boxes, and guests over it. Guests are opaque boxes,
+  // drawn as the park's are. Ghosts and highlights come after everything opaque, so they blend over
+  // it.
+  drawMesh(pass, renderer.ParkPipeline, renderer.OverlayVertices, renderer.OverlayIndices,
+           renderer.OverlayIndexCount);
+  drawMesh(pass, renderer.ParkPipeline, renderer.ParkVertices, renderer.ParkIndices,
+           renderer.ParkIndexCount);
+  drawMesh(pass, renderer.ParkPipeline, renderer.GuestVertices, renderer.GuestIndices,
+           renderer.GuestIndexCount);
+  drawMesh(pass, renderer.GhostPipeline, renderer.GhostVertices, renderer.GhostIndices,
+           renderer.GhostIndexCount);
   SDL_EndGPURenderPass(pass);
 }
 

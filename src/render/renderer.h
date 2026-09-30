@@ -32,6 +32,9 @@ struct Renderer {
   SDL_GPUBuffer *TerrainVertices = nullptr;
   SDL_GPUBuffer *TerrainIndices = nullptr;
   uint32_t TerrainIndexCount = 0;
+  SDL_GPUBuffer *OverlayVertices = nullptr;
+  SDL_GPUBuffer *OverlayIndices = nullptr;
+  uint32_t OverlayIndexCount = 0;
   SDL_GPUGraphicsPipeline *ParkPipeline = nullptr;
   SDL_GPUBuffer *ParkVertices = nullptr;
   SDL_GPUBuffer *ParkIndices = nullptr;
@@ -60,6 +63,11 @@ void destroyRenderer(Renderer &renderer);
 // Uploads the park mesh drawn from now on, replacing the one before. An empty mesh draws
 // nothing. Returns false and logs through SDL on failure.
 bool setParkMesh(Renderer &renderer, const ParkMesh &mesh);
+
+// Uploads the food overlay's mesh drawn from now on, replacing the one before, drawn opaque over
+// the terrain and under the park. An empty mesh draws nothing. Returns false and logs through SDL
+// on failure.
+bool setOverlayMesh(Renderer &renderer, const ParkMesh &mesh);
 
 // Uploads the translucent mesh of ghosts and highlights drawn from now on, replacing the one
 // before. An empty mesh draws nothing. Returns false and logs through SDL on failure.

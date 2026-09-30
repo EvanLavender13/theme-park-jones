@@ -64,6 +64,15 @@ The exact text is in PLAN.md, Tasks 1 to 3.
 - Shading exact near a line's own bends, and a band along connectors.
 - An overlay for any other field: the capability's deepening candidate.
 
+## Test pass decisions
+
+- The usage text is not part of the contract, so criterion 7's usage is checked as output on standard output or standard error.
+- At and above OVERLAY_FULL, foodColor is render/SPEC.md's formula at f = 1, which in float arithmetic can differ from the last stop by rounding. Criterion 4's "the last stop" holds to within float rounding, and the test compares within 1e-6.
+- Criterion 7's refusals without --hash are checked with --frames 1, so an implementation that wrongly accepted them would open a window for a frame. That needs a machine that can open one, as every app test run does.
+- The --overlay food being accepted, the checkbox, rebuilding every frame, and the drawing order have no window-free test. Criterion 9's captures check them.
+- The render tests find rows and cones by the vertex order render/SPEC.md gives, and triangles by the vertices they use, not by the order of the index list.
+- The hash half of criterion 8 is checked on each park's opened world and after its last cycle, not in every cycle. Computing availability either changes the hash or does not, and hashing every cycle would make the test too slow.
+
 ## Open questions
 
 None.

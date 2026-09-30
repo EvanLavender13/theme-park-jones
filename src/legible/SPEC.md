@@ -1,0 +1,13 @@
+# legible
+
+Legible simulation (plans/legible-simulation): explanations of the simulation for display, computed from what the park publishes. The library tpj_legible links tpj_sim alone, so its values are computed and tested without a window (principle 10). It reads a world only through the medium's fields and networks, parkNetwork, and park intent (decision 0025), takes it by const reference, and changes nothing, so nothing it computes enters a world's state, hash, or save (principle 1).
+
+## Food availability
+
+Food availability at a place is how well fed a guest standing there could be: the sum, over the shops it can reach whose offers say meals are available, of each shop's relief discounted by the time it would take to get a meal there (decision 0020). Each shop's term is its contribution, so the value is attributed to its sources exactly (principle 8).
+
+foodAvailability(world, place) gives a FoodAvailability for a place on parkNetwork(world, PathKind::Guest), N. Let R be the entries sampleField of guest route distance on N gives at the place. For each source of R, in ascending key order, with E its first entry in R, the source's offer is the first of its own entries that sampleField of food-offer on N gives at the nodePlace of the source's lowest anchored node on N, or none when it anchors no node of N or has no entry there, as guests find offers (sim/guests/SPEC.md, Choice). A source contributes when its offer exists and has Supplied true. Its FoodContribution holds Shop, the source; Relief, the offer's Relief; Distance, E's Distance; Wait, the offer's Wait in seconds, the double of Wait times SIM_TICK_SECONDS; Time, the effective time, Distance / REFERENCE_SPEED + Wait, computed in that order; and Term, Relief times foodDiscount(Time). Contributions holds them in ascending source order, and Value is 0.0 with each Term added in that order. So the listed terms reconstruct the value exactly, bit for bit, and a place with no contributing source, including one that does not resolve on N, has no contributions and the value 0.0.
+
+Distance is measured along the paths, so a shop across a fence is as far as its route (principle 4). Every reachable supplied shop contributes, however far, and its term only falls as its effective time grows (principle 5).
+
+REFERENCE_SPEED is WALK_SPEED, 1.3 m/s, so an effective time is what a guest would feel. foodDiscount(t) is the authored piecewise-linear curve through the points of FOOD_DISCOUNT_CURVE, times in seconds: (0, 1), (60, 0.5), (120, 0.2), and (240, 0). A time below 0 counts as 0, and one above 240 as 240. At a point's X it is that point's Y, and strictly between consecutive points a and b it is a.Y + (t - a.X) * (b.Y - a.Y) / (b.X - a.X), computed in that order. A NaN gives 0.
