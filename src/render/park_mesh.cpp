@@ -318,7 +318,8 @@ void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color)
   }
 }
 
-ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit) {
+ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
+                        const std::optional<World> &candidate) {
   ParkMesh mesh;
   if (const auto *add = std::get_if<AddBox>(&edit)) {
     appendBox(mesh, add->At, boxSize(add->Kind), boxHeight(add->Kind),
@@ -337,14 +338,21 @@ ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit) {
                                                                    : std::get<DeleteBox>(edit).Box;
     appendEntity(mesh, world, key, DELETE_TINT);
   }
+  if (candidate) {
+    appendWalkways(mesh, *candidate, GHOST_ALPHA);
+    appendStarvedMarks(mesh, *candidate, GHOST_ALPHA);
+  }
+  return mesh;
+}
+
+ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit) {
+  std::optional<World> candidate;
   if (isAccepted(world, edit)) {
     CommandQueue queue;
     queueEdit(queue, edit);
-    const World candidate = makeCandidate(world, queue);
-    appendWalkways(mesh, candidate, GHOST_ALPHA);
-    appendStarvedMarks(mesh, candidate, GHOST_ALPHA);
+    candidate = makeCandidate(world, queue);
   }
-  return mesh;
+  return buildGhostMesh(world, edit, candidate);
 }
 
 } // namespace tpj
