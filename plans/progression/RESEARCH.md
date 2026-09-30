@@ -1,0 +1,40 @@
+# Research: progression
+
+## How do long-play management games grow depth as a game goes on, and which of their mechanisms fit this game?
+
+Games that stay interesting for a long time add new kinds of decisions as the player succeeds, rather than more of the same decision at a larger size. A critique of Timberborn's late game puts the failure plainly: every big project means more beavers, and more beavers mean building the same showers and theatres a third time. Its many needs are complicated rather than complex, all saying that more is better, and its late automation makes the earlier need systems redundant instead of interacting with them. The games below avoid that in five distinct ways.
+
+The first is demand that escalates from the population itself. In Anno 1800, residents advance through five tiers, from farmers to investors, when their basic needs are met. Each tier brings needs for goods the player has never produced, so a new tier opens new production chains, new buildings, and eventually new regions, and it supplies the workforce only that tier's buildings use, which ties the tiers together: engineers cannot be sustained without keeping workers and artisans supplied. Within a tier, buildings unlock gradually as its population rises. Basic needs gate the upgrade, while luxury needs are optional and add happiness, so part of the ladder is a gradient. The Timberborn critique names Anno as the counterexample for exactly this reason: each tier asks for something new.
+
+The second is pressure scaled to success. RimWorld's storytellers size raids from the colony's wealth and population, through a curve that turns wealth into raid points, multiplied by a difficulty scale and an adaptation factor that climbs while the colony prospers and drops when it takes losses. Dwarf Fortress does the same with created wealth, which draws larger migrant waves, thieves and then sieges and megabeasts, and nobles whose mandates add new demands. The effect is that a prosperous colony always meets a harder world. Its known cost is that players learn to game the measure: RimWorld's wealth management is a community strategy of deliberately not building valuable things, and Dwarf Fortress migrants can outstrip a fortress's capacity to house them. A director that scales threats from a hidden score is also hard to trace to a cause.
+
+The third is consequences that only matter at scale. In Oxygen Not Included, heat from machines, germs in water and air, and gas pressure are negligible in a small colony and dominant by the hundredth cycle, when heat cooks crops and stresses the colonists unless the base is insulated and cooled. No designer gate introduces them. They are the same physics the colony always had, grown large enough to bite, and solving them is the late game. Dwarf Fortress's tantrum spirals come from the same place, compounding needs that interact rather than stack.
+
+The fourth is unlocks. Factorio's research tree is paid in science packs the factory must produce, so each tier of research is itself a harder logistics problem, and its blue science step commits the player to oil processing and its whole intermediate chain. The tree works because unlocking is gameplay, not a timer. RollerCoaster Tycoon's research is the opposite: money buys a steady trickle of new rides from a scenario's hidden list, faster with more funding, and once the list is exhausted nothing new comes. Cities: Skylines gated services and zones on population milestones, which players found arbitrary; Cities: Skylines II replaced them with expansion points earned from building, so a city need not be huge to progress.
+
+The fifth is structure around the game. Frostpunk's scenario builds toward a final storm, but its endless builder mode shows the solved-state problem: once the city stabilizes, pressure collapses from too hard to serene. Against the Storm answers mid-game doldrums with short roguelite runs, each a fresh settlement, and meta-progression carried between them. RollerCoaster Tycoon and Parkitect frame progression as scenarios with goals and, in Parkitect's career, land that is bought to expand. Long play in theme park games otherwise tends to become a creative sandbox, since the management runs out once a park is stable.
+
+For this project, the mechanisms sort by how naturally they fit the principles. Consequences at scale are the most native: fields and flows such as crowding, litter, noise, wear, and smell can be negligible in a small park and dominant in a large one, with no gate at all, and every effect stays traceable to its sources (principle 8). The design notes already hold several (ride wear, ground wear, crowding as a deepening candidate). This asks that such fields be tuned to stay quiet at small scale. Demand from the audience is the next best fit and the closest to Anno: as a park's reputation and spectacle grow, new kinds of guest could arrive, such as families, thrill-seekers, or enthusiasts, each with needs the park does not yet serve, so success brings new decisions rather than more of the same ones. Their needs would be gradients like Anno's luxury needs, not gates, which fits principle 5 and decision 0004, and the design notes' shop whose identity emerges from what it is supplied with gives those needs something to pull on. Pressure scaled to success fits when it arrives through the medium, such as crowds that come because the park is good, rather than a hidden director. Unlocks are the one mechanism in tension with the principles: a locked ride is a hard constraint that is not physical validity, which principle 5 reserves hard constraints for, so any unlock system is a question for Evan to settle through a decision record before it is planned. Factorio shows the version least at odds with that tension, where unlocking is itself logistics.
+
+Rejected:
+
+- Hidden difficulty directors that scale threats from a wealth score, as RimWorld's adaptation factor does: they cannot be traced to a cause (principle 8), and players learn to avoid building valuable things to keep the score down.
+- Counter milestones such as population thresholds: players find them arbitrary, and Cities: Skylines II abandoned them.
+- Research as a funded timer over a fixed list, as in RollerCoaster Tycoon: it adds no decisions and runs out.
+- Scaling one system's demand without new kinds of demand, as Timberborn's late game does: it makes the late game repetition.
+- New late systems that make earlier ones redundant, as Timberborn's automation does to its need systems: depth comes from new systems interacting with the old ones.
+
+Sources:
+
+- https://unmappedworlds.com/posts/city-builders-should-stop-trying-to-do-everything/: Timberborn's late game against Anno's, and complicated versus complex with Dwarf Fortress as the complex case.
+- https://www.anno-union.com/devblog-residential-tiers/: Anno 1800's tiers, gradual unlocks within a tier, and tier-specific workforce.
+- https://anno1800.fandom.com/wiki/Needs: basic needs gate upgrades, luxury needs add happiness.
+- https://rimworldwiki.com/wiki/Raid_points: raid points from wealth, population, threat scale, and adaptation.
+- https://rimworldwiki.com/wiki/AI_Storytellers: storyteller pacing and the adaptation score.
+- https://rimworldwiki.com/wiki/Wealth_management: the strategy of keeping wealth down.
+- https://dwarffortresswiki.org/index.php/DF2014:Wealth: wealth drawing migrants, thieves, sieges, and megabeasts, and unlocking nobles.
+- https://www.thegamer.com/oxygen-not-included-guide-tips/: heat, germs, and pressure as problems that grow with the colony.
+- https://www.factorio.com/blog/post/fff-275: science pack cost and pacing as deliberate progression design.
+- https://www.paradoxinteractive.com/games/cities-skylines-ii/features/game-progression: expansion points replacing population milestones.
+- https://rct.fandom.com/wiki/Research: RollerCoaster Tycoon's funded research and exhausted research lists.
+- https://en.wikipedia.org/wiki/Against_the_Storm_(video_game): roguelite runs against mid-game doldrums.
