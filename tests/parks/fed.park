@@ -1,0 +1,42 @@
+tpj-park 1
+seed 1
+tick 0
+next-key 9
+
+[entrance]
+1 x=0 z=126.5 facing-x=0 facing-z=-1
+
+[path]
+2 kind=guest points=[{x=0 z=123} {x=0 z=100}]
+3 kind=guest points=[{x=0 z=110} {x=-30 z=110}]
+4 kind=guest points=[{x=-15 z=120} {x=-15 z=95}]
+5 kind=guest points=[{x=0 z=100} {x=20 z=100} {x=30 z=80}]
+6 kind=backstage points=[{x=12 z=122} {x=12 z=87}]
+
+[box]
+7 kind=shop x=6.5 z=115 facing-x=-1 facing-z=0
+8 kind=depot x=12 z=80 facing-x=0 facing-z=1
+
+[guest-route-distance-stepped]
+15522747434582363266 readable=[] pending=[]
+
+[backstage-route-distance-stepped]
+17417963796302803443 readable=[] pending=[]
+
+[supply-orders-ledger]
+10571414569661708045 packets=[] stocks=[] created=0 consumed=[]
+
+[supplies-ledger]
+9330130345797689738 packets=[] stocks=[] created=0 consumed=[]
+
+[guest-visits-ledger]
+9337894828722460918 packets=[] stocks=[] created=0 consumed=[]
+
+[meals-ledger]
+10950212800986056559 packets=[] stocks=[] created=0 consumed=[]
+
+[food-offer-stepped]
+12622604716256766672 readable=[] pending=[]
+
+[hungry-footfall-stepped]
+11741940842860801778 readable=[] pending=[]

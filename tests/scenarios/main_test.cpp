@@ -1,5 +1,6 @@
 #include "scenarios/runner.h"
 #include "scenarios/scenarios.h"
+#include "scenarios/slice_parks.h"
 #include "sim/field_text.h"
 #include "sim/park_schema.h"
 #include "sim/save.h"
@@ -365,6 +366,111 @@ TEST_CASE("tpj_scenarios --compare exits 2 when it cannot read a file") {
   std::filesystem::remove(missing);
   const ProcessResult result = runScenarios(directory, {"--compare", left, missing});
   CHECK(result.Status == 2);
+}
+
+TEST_CASE("tpj_scenarios --slice-parks writes makeSliceParks of the first file with WARM_TICKS to "
+          "the three files") {
+  const auto directory = scratchDirectory("slice-parks-writes");
+  const std::string fed = writeFile(directory / "fed.park", EMPTY_PARK);
+  const std::string warm = (directory / "warm.park").string();
+  const std::string cut = (directory / "cut.park").string();
+  std::filesystem::remove(warm);
+  std::filesystem::remove(cut);
+
+  const ProcessResult result = runScenarios(directory, {"--slice-parks", fed, warm, cut});
+  CHECK(result.Status == 0);
+  // Compared byte for byte, so a carriage return before any line feed fails.
+  const SliceParks parks = makeSliceParks(EMPTY_PARK, WARM_TICKS);
+  CHECK(readFile(fed) == parks.Fed);
+  CHECK(readFile(warm) == parks.Warm);
+  CHECK(readFile(cut) == parks.Cut);
+}
+
+TEST_CASE("tpj_scenarios --slice-parks fails, writing no file, when not given three files") {
+  const std::vector<size_t> counts = {2, 4};
+  for (const size_t count : counts) {
+    INFO("files " << count);
+    const auto directory = scratchDirectory("slice-parks-count");
+    const std::string fed = writeFile(directory / "fed.park", EMPTY_PARK);
+    std::vector<std::string> arguments = {"--slice-parks", fed};
+    std::vector<std::string> others;
+    for (size_t index = 1; index < count; ++index) {
+      others.push_back((directory / ("out" + std::to_string(index) + ".park")).string());
+      std::filesystem::remove(others.back());
+      arguments.push_back(others.back());
+    }
+    const ProcessResult result = runScenarios(directory, arguments);
+    CHECK(result.Status != 0);
+    CHECK_FALSE(result.Err.empty());
+    CHECK(readFile(fed) == EMPTY_PARK);
+    for (const std::string &other : others) {
+      CHECK_FALSE(std::filesystem::exists(other));
+    }
+  }
+}
+
+TEST_CASE(
+    "tpj_scenarios --slice-parks fails, writing no file, when it cannot read its first file") {
+  const auto directory = scratchDirectory("slice-parks-unreadable");
+  const std::string missing = (directory / "missing.park").string();
+  const std::string warm = (directory / "warm.park").string();
+  const std::string cut = (directory / "cut.park").string();
+  for (const std::string &path : {missing, warm, cut}) {
+    std::filesystem::remove(path);
+  }
+  const ProcessResult result = runScenarios(directory, {"--slice-parks", missing, warm, cut});
+  CHECK(result.Status != 0);
+  CHECK_FALSE(result.Err.empty());
+  CHECK_FALSE(std::filesystem::exists(missing));
+  CHECK_FALSE(std::filesystem::exists(warm));
+  CHECK_FALSE(std::filesystem::exists(cut));
+}
+
+TEST_CASE("tpj_scenarios --slice-parks fails, writing no file and naming the line, when it cannot "
+          "load its first file") {
+  const auto directory = scratchDirectory("slice-parks-unloadable");
+  // Key 5 is not below next-key 3, an error well past the header.
+  constexpr std::string_view BROKEN =
+      "tpj-park 1\nseed 1\ntick 0\nnext-key 3\n\n[entities]\n1\n5\n";
+  std::optional<size_t> errorLine;
+  try {
+    loadWorld(makeParkSchema(), BROKEN);
+  } catch (const LoadError &error) {
+    errorLine = error.line();
+  }
+  REQUIRE(errorLine.has_value());
+
+  const std::string fed = writeFile(directory / "fed.park", BROKEN);
+  const std::string warm = (directory / "warm.park").string();
+  const std::string cut = (directory / "cut.park").string();
+  std::filesystem::remove(warm);
+  std::filesystem::remove(cut);
+  const ProcessResult result = runScenarios(directory, {"--slice-parks", fed, warm, cut});
+  CHECK(result.Status != 0);
+  CHECK(readFile(fed) == BROKEN);
+  CHECK_FALSE(std::filesystem::exists(warm));
+  CHECK_FALSE(std::filesystem::exists(cut));
+  // The line number as a whole number, somewhere other than in the paths.
+  std::string rest = result.Err;
+  for (const std::string &path : {fed, warm, cut}) {
+    for (size_t at = rest.find(path); at != std::string::npos; at = rest.find(path)) {
+      rest.erase(at, path.size());
+    }
+  }
+  const std::regex lineNumber("(^|[^0-9])" + std::to_string(errorLine.value_or(0)) + "([^0-9]|$)");
+  CHECK(std::regex_search(rest, lineNumber));
+}
+
+TEST_CASE("tpj_scenarios --slice-parks fails, naming the file, when it cannot write one") {
+  const auto directory = scratchDirectory("slice-parks-unwritable");
+  const std::string fed = writeFile(directory / "fed.park", EMPTY_PARK);
+  // A file in a directory that does not exist cannot be opened for writing.
+  std::filesystem::remove_all(directory / "missing");
+  const std::string warm = (directory / "missing" / "warm.park").string();
+  const std::string cut = (directory / "cut.park").string();
+  const ProcessResult result = runScenarios(directory, {"--slice-parks", fed, warm, cut});
+  CHECK(result.Status != 0);
+  CHECK_THAT(result.Err, ContainsSubstring(warm));
 }
 
 } // namespace

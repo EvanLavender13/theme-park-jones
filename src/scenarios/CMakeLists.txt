@@ -6,6 +6,7 @@ add_library(tpj_scenarios_lib STATIC
     food_shop.cpp
     park_edits.cpp
     runner.cpp
+    slice_parks.cpp
     scenarios.cpp
     stalls.cpp
     walkers.cpp)

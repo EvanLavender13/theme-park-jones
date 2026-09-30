@@ -6,12 +6,15 @@ add_executable(tpj_scenarios_tests
     park_edits_test.cpp
     runner_test.cpp
     scenarios_test.cpp
+    slice_parks_test.cpp
     stalls_test.cpp)
 target_include_directories(tpj_scenarios_tests PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(tpj_scenarios_tests PRIVATE tpj_scenarios_lib Catch2::Catch2WithMain)
 target_compile_definitions(tpj_scenarios_tests PRIVATE
     TPJ_SCENARIOS_EXECUTABLE="$<TARGET_FILE:tpj_scenarios>"
-    TPJ_SCENARIOS_SCRATCH="${CMAKE_CURRENT_BINARY_DIR}/scratch")
+    TPJ_SCENARIOS_SCRATCH="${CMAKE_CURRENT_BINARY_DIR}/scratch"
+    # The slice parks' tests read the checked-in parks.
+    TPJ_PARKS_DIR="${CMAKE_SOURCE_DIR}/tests/parks")
 add_dependencies(tpj_scenarios_tests tpj_scenarios)
 tpj_configure_target(tpj_scenarios_tests)
 # Every test finishes within TIMEOUT seconds under the parallel ctest run; a slower one fails.

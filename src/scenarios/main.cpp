@@ -3,14 +3,17 @@
 //
 //   tpj_scenarios [--ticks N] [FILE...]
 //   tpj_scenarios --compare LEFT RIGHT
+//   tpj_scenarios --slice-parks FED WARM CUT
 //
 // Timings go to standard error, so they never enter the compared output.
 
 #include "scenarios/runner.h"
 #include "scenarios/scenarios.h"
+#include "scenarios/slice_parks.h"
 #include "sim/field_text.h"
 #include "sim/park_schema.h"
 
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <exception>
@@ -105,9 +108,50 @@ int runAll(uint64_t ticks, const std::vector<std::string> &paths) {
   return 0;
 }
 
+// Writes the text to the path in binary mode, so every line ends with a line feed on every build.
+bool writeFile(const std::string &path, const std::string &text) {
+  std::ofstream file(path, std::ios::binary);
+  file << text;
+  file.close();
+  return !file.fail();
+}
+
+// Makes the slice's parks from FED's text and writes them to FED, WARM, and CUT.
+int writeSliceParks(const std::vector<std::string> &arguments) {
+  if (arguments.size() != 4) {
+    std::cerr << "tpj_scenarios: --slice-parks takes three files\n";
+    return 1;
+  }
+  const std::string &fedPath = arguments[1];
+  const std::optional<std::string> fed = readFile(fedPath);
+  if (!fed) {
+    std::cerr << "tpj_scenarios: cannot read " << fedPath << '\n';
+    return 1;
+  }
+  tpj::SliceParks parks;
+  try {
+    parks = tpj::makeSliceParks(*fed, tpj::WARM_TICKS);
+  } catch (const tpj::LoadError &error) {
+    std::cerr << "tpj_scenarios: " << fedPath << ": " << error.what() << '\n';
+    return 1;
+  }
+  const std::array<const std::string *, 3> texts{&parks.Fed, &parks.Warm, &parks.Cut};
+  for (size_t i = 0; i < texts.size(); ++i) {
+    const std::string &path = arguments[i + 1];
+    if (!writeFile(path, *texts[i])) {
+      std::cerr << "tpj_scenarios: cannot write " << path << '\n';
+      return 1;
+    }
+  }
+  return 0;
+}
+
 int run(const std::vector<std::string> &arguments) {
   if (!arguments.empty() && arguments[0] == "--compare") {
     return compareOutputs(arguments);
+  }
+  if (!arguments.empty() && arguments[0] == "--slice-parks") {
+    return writeSliceParks(arguments);
   }
   uint64_t ticks = DEFAULT_TICKS;
   std::vector<std::string> paths;
