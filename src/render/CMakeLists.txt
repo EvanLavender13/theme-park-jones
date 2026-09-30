@@ -2,6 +2,7 @@
 # selects its Vulkan backend on every platform (decision 0009).
 add_library(tpj_render STATIC
     graph_overlay.cpp
+    guest_mesh.cpp
     math.cpp
     park_mesh.cpp
     picking.cpp

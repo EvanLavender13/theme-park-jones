@@ -93,6 +93,8 @@ template <typename Visitor> void visitFields(Visitor &visitor, Place &place) {
 struct GroundPoint {
   double X = 0.0;
   double Z = 0.0;
+
+  bool operator==(const GroundPoint &) const = default;
 };
 
 // A place at a node.

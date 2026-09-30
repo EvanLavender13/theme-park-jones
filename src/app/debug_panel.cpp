@@ -28,6 +28,13 @@ void drawDebugPanel(const DebugStats &stats, bool &showGraph) {
           static_cast<long long>(line.Record.Queue), static_cast<long long>(line.Record.OnOrder),
           static_cast<int>(limit.size()), limit.data());
     }
+    ImGui::Separator();
+    if (stats.Guests == 0) {
+      ImGui::Text("Guests 0");
+    } else {
+      ImGui::Text("Guests %llu, mean hunger %.2f", static_cast<unsigned long long>(stats.Guests),
+                  stats.MeanHunger);
+    }
   }
   ImGui::End();
 }

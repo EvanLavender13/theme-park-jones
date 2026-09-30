@@ -2,6 +2,7 @@
 add_executable(tpj_render_tests
     ghost_mesh_test.cpp
     graph_overlay_test.cpp
+    guest_mesh_test.cpp
     park_mesh_test.cpp
     picking_test.cpp)
 target_link_libraries(tpj_render_tests PRIVATE tpj_render Catch2::Catch2WithMain)

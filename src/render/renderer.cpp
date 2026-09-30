@@ -418,6 +418,8 @@ void destroyRenderer(Renderer &renderer) {
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.TerrainPipeline);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkVertices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkIndices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.GuestVertices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.GuestIndices);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.ParkPipeline);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.GhostVertices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.GhostIndices);
@@ -463,6 +465,11 @@ bool setParkMesh(Renderer &renderer, const ParkMesh &mesh) {
 bool setGhostMesh(Renderer &renderer, const ParkMesh &mesh) {
   return replaceMesh(renderer, mesh, renderer.GhostVertices, renderer.GhostIndices,
                      renderer.GhostIndexCount);
+}
+
+bool setGuestMesh(Renderer &renderer, const ParkMesh &mesh) {
+  return replaceMesh(renderer, mesh, renderer.GuestVertices, renderer.GuestIndices,
+                     renderer.GuestIndexCount);
 }
 
 void beginUiFrame() { ImGui_ImplSDLGPU3_NewFrame(); }
@@ -513,6 +520,15 @@ void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const C
     const SDL_GPUBufferBinding parkIndexBinding = {renderer.ParkIndices, 0};
     SDL_BindGPUIndexBuffer(pass, &parkIndexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
     SDL_DrawGPUIndexedPrimitives(pass, renderer.ParkIndexCount, 1, 0, 0, 0);
+  }
+  // Guests are opaque boxes, drawn as the park's are.
+  if (renderer.GuestIndexCount > 0) {
+    SDL_BindGPUGraphicsPipeline(pass, renderer.ParkPipeline);
+    const SDL_GPUBufferBinding guestVertexBinding = {renderer.GuestVertices, 0};
+    SDL_BindGPUVertexBuffers(pass, 0, &guestVertexBinding, 1);
+    const SDL_GPUBufferBinding guestIndexBinding = {renderer.GuestIndices, 0};
+    SDL_BindGPUIndexBuffer(pass, &guestIndexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    SDL_DrawGPUIndexedPrimitives(pass, renderer.GuestIndexCount, 1, 0, 0, 0);
   }
   // Ghosts and highlights come after everything opaque, so they blend over it.
   if (renderer.GhostIndexCount > 0) {

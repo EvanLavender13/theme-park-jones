@@ -130,6 +130,14 @@ src/render/renderer.h gains `bool setGuestMesh(Renderer &renderer, const ParkMes
 - Drawing guests in the ghost, facing guests the way they walk, and interpolating between ticks (MILESTONE.md's deepening candidates).
 - Clicking a guest to inspect it: legible-simulation's guest inspector.
 
+## Test pass decisions
+
+- A wandering pick is drawPick over integer weights of 1, the uint64_t overload, since the two overloads map a draw to an index differently. The guests spec says so.
+- Criterion 1's order is checked by the guest component and the guests' system coming last in makeParkSchema's lists, since no schema can be built from addPark without the guests.
+- Criterion 4's walk along carriers is measured by entrance route distance on tree networks, line and crossing parks, and networks with loops are covered by criterion 6's randomized runs.
+- The Debug panel's guest line, setGuestMesh and where drawFrame draws the guests, and criterion 8's capture are checked by a --capture run of supply.park, since they draw through ImGui and the GPU, and the cross-build check by scripts/cross-build-check.sh.
+- No existing test's expectations change with guests arriving. The full suite, run once guests are implemented, confirms it.
+
 ## Open questions
 
 None.
