@@ -4,6 +4,9 @@ add_executable(tpj_sim_tests
     draw_test.cpp
     entity_key_test.cpp
     fp_environment_test.cpp
+    guests/arrivals_test.cpp
+    guests/guest_edits_test.cpp
+    guests/walks_test.cpp
     medium/carry_over_test.cpp
     medium/field_test.cpp
     medium/flow_test.cpp

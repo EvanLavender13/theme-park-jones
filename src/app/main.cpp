@@ -4,11 +4,13 @@
 #include "app/tool_panel.h"
 #include "core/profile.h"
 #include "render/graph_overlay.h"
+#include "render/guest_mesh.h"
 #include "render/park_mesh.h"
 #include "render/picking.h"
 #include "render/renderer.h"
 #include "sim/command_queue.h"
 #include "sim/field_text.h"
+#include "sim/guests/guests.h"
 #include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
@@ -335,6 +337,17 @@ bool updateGhostMesh(tpj::Renderer &renderer, const tpj::World &world, const tpj
   return tpj::setGhostMesh(renderer, mesh);
 }
 
+// Rebuilds the guests' mesh when the world's tick differs from the one last drawn. Returns false
+// if the upload failed.
+bool updateGuestMesh(tpj::Renderer &renderer, const tpj::World &world,
+                     std::optional<uint64_t> &drawnTick) {
+  if (drawnTick && *drawnTick == world.Tick) {
+    return true;
+  }
+  drawnTick = world.Tick;
+  return tpj::setGuestMesh(renderer, tpj::buildGuestMesh(world));
+}
+
 // The ground under the cursor, or none while ImGui wants the mouse or the cursor meets no ground.
 std::optional<tpj::ParkPoint> groundUnderCursor(SDL_Window *window, const tpj::CameraView &view) {
   if (ImGui::GetIO().WantCaptureMouse) {
@@ -454,6 +467,14 @@ void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCam
       stats.Shops.push_back({box.Key, *record});
     }
   }
+  double hunger = 0.0;
+  for (const tpj::EntityKey guest : tpj::parkGuests(world)) {
+    if (const std::optional<tpj::GuestRecord> record = tpj::guestRecord(world, guest)) {
+      ++stats.Guests;
+      hunger += record->Hunger;
+    }
+  }
+  stats.MeanHunger = stats.Guests == 0 ? 0.0 : hunger / static_cast<double>(stats.Guests);
   tpj::drawDebugPanel(stats, showGraph);
   const tpj::ToolPanelChoice choice =
       tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty(), dialogShowing());
@@ -482,6 +503,7 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
   tpj::OrbitCamera camera;
   std::optional<DrawnIntent> drawn;
   std::optional<DrawnGhost> drawnGhost;
+  std::optional<uint64_t> guestTick;
   tpj::ToolState tool;
   tpj::CommandQueue commands;
   bool showGraph = options.ShowGraph;
@@ -498,6 +520,7 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
       commands.clear();
       tpj::selectTool(tool, tool.Kind);
       drawn.reset();
+      guestTick.reset();
     }
 
     const uint64_t counter = SDL_GetPerformanceCounter();
@@ -519,6 +542,9 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
     }
     bool parkRebuilt = false;
     if (!updateParkMesh(renderer, world, drawn, camera, parkRebuilt)) {
+      return false;
+    }
+    if (!updateGuestMesh(renderer, world, guestTick)) {
       return false;
     }
 

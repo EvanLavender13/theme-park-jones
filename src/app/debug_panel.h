@@ -21,11 +21,13 @@ struct DebugStats {
   Vec3 Focus;
   float Distance = 0.0f;
   std::vector<ShopLine> Shops;
+  uint64_t Guests = 0;
+  double MeanHunger = 0.0;
 };
 
 // Draws the tooling panel with frame rate, simulation tick, camera state, the Graph checkbox,
-// which sets showGraph, and a line for each shop's record. Call between ImGui::NewFrame and
-// ImGui::Render.
+// which sets showGraph, a line for each shop's record, and the guest count and mean hunger. Call
+// between ImGui::NewFrame and ImGui::Render.
 void drawDebugPanel(const DebugStats &stats, bool &showGraph);
 
 } // namespace tpj
