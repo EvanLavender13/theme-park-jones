@@ -171,6 +171,14 @@ with visitFields for ChoiceOption, GuestChoice, and GuestMeal, which the guest's
 - Clicking a guest to see its last choice: legible-simulation's guest inspector.
 - A general authored-curve type shared across modules. The hunger curve is the first, and its points stay in guests.h until a second curve needs them.
 
+## Test pass decisions
+
+- A guest that chooses more than once in a cycle is left to the spec and review. The record keeps only the last choice, and the draw index c is not visible, so choice tests use parks whose edges are longer than one cycle's walk, where an edit-free cycle has at most one choice, drawn with index 0.
+- Criterion 4's node reached with no distance left needs the distance left to equal the remaining gap to the bit, which no fixture sets up without repeating the walk's arithmetic. The test checks it where it happens, and the spec's step 3 defines it.
+- Criterion 5's delay is shown by the Target holding the visit at the end of the cycle that sends it, since a VISIT_DELAY of 1 delivers the packet at that cycle's swap, so no packet is ever in transit between cycles.
+- Criterion 8's Debug panel line, capture, and cross-build check are checked by a --capture run of supply.park and by scripts/cross-build-check.sh.
+- Principle 6, that guests read no shop's or depot's internals, is checked by review.
+
 ## Open questions
 
 None.

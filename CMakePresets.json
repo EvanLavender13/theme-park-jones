@@ -46,11 +46,10 @@
     },
     {
       "name": "linux-debug",
-      "displayName": "Linux Debug (ASan, UBSan, clang-tidy)",
+      "displayName": "Linux Debug (ASan, UBSan)",
       "inherits": "linux-base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "TPJ_CLANG_TIDY": "ON"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {

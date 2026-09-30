@@ -11,6 +11,7 @@
 #include "sim/command_queue.h"
 #include "sim/field_text.h"
 #include "sim/guests/guests.h"
+#include "sim/medium/flow.h"
 #include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
@@ -472,9 +473,13 @@ void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCam
     if (const std::optional<tpj::GuestRecord> record = tpj::guestRecord(world, guest)) {
       ++stats.Guests;
       hunger += record->Hunger;
+      if (record->Activity == tpj::GuestActivity::Waiting) {
+        ++stats.Waiting;
+      }
     }
   }
   stats.MeanHunger = stats.Guests == 0 ? 0.0 : hunger / static_cast<double>(stats.Guests);
+  stats.MealsEaten = tpj::unitsConsumed<tpj::Meals>(world, tpj::EATEN_CAUSE);
   tpj::drawDebugPanel(stats, showGraph);
   const tpj::ToolPanelChoice choice =
       tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty(), dialogShowing());

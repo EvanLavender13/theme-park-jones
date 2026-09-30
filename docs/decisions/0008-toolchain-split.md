@@ -1,6 +1,6 @@
 # 0008. Windows build for playing, Linux build for verification
 
-Status: Accepted, 2026-09-26
+Status: Accepted, 2026-09-26. Where work is built and tested while iterating, and clang-tidy in the linux-debug build, are superseded by 0026.
 
 ## Context
 

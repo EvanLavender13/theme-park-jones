@@ -1,11 +1,14 @@
 #include "support/guest_parks.h"
+#include "support/ledger_writes.h"
 #include "support/park_worlds.h"
 #include "support/route_edits.h"
 
 #include "sim/command_queue.h"
 #include "sim/entity_key.h"
 #include "sim/guests/guests.h"
+#include "sim/medium/flow.h"
 #include "sim/medium/network.h"
+#include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
@@ -53,32 +56,39 @@ TEST_CASE("A guest whose place stops resolving leaves the park in the next cycle
   }
 }
 
-// Two entrances, north and south, each with a guest path from its door to the middle of the park,
-// where random edits gather, so edits add paths joining the guests' network and delete paths under
-// walking guests.
-World twoGatesWorld() {
-  return test::resolvedWorld(test::ParkIntent{
-      .Entrances = {test::northGate(EntityKey{1}, 0.0),
-                    ParkEntrance{.Key = EntityKey{2}, .At = Pose{0.0, -126.5, 0.0, 1.0}}},
-      .Paths = {test::guestPath(EntityKey{3}, {{0.0, 123.0}, {0.0, 0.0}}),
-                test::guestPath(EntityKey{4}, {{0.0, -123.0}, {0.0, 0.0}})},
-      .Boxes = {}});
-}
-
 constexpr int EDITS = 40;
 // Each edit is followed by fewer cycles than this with no command.
-constexpr uint64_t IDLE_CYCLES = 20;
-// Five guests arrive at each entrance, and walk, before the first edit.
-constexpr uint64_t WARM_UP_CYCLES = 5 * ARRIVAL_INTERVAL;
+constexpr uint64_t IDLE_CYCLES = 10;
+// More cycles than the eating park takes to have a guest eat.
+constexpr uint64_t WARM_UP_LIMIT = 30 * ARRIVAL_INTERVAL;
 
-// Runs a random edit sequence from the two-gates park: warm-up cycles with no command, then each
-// edit applied by one cycle and followed by a drawn number of cycles with no command. beforeCycle
-// sees the world and the edit the cycle about to step it applies, if any. afterCycle sees the world
-// after every cycle, with whether that cycle applied an edit.
+bool allResolve(const World &world) {
+  const std::vector<EntityKey> guests = parkGuests(world);
+  return std::ranges::all_of(guests, [&](EntityKey guest) {
+    return test::guestNetwork(world).resolve(recordOf(world, guest).At).has_value();
+  });
+}
+
+bool anyWaiting(const World &world) {
+  const std::vector<EntityKey> guests = parkGuests(world);
+  return std::ranges::any_of(guests, [&](EntityKey guest) {
+    return recordOf(world, guest).Activity == GuestActivity::Waiting;
+  });
+}
+
+// Runs a random edit sequence from the eating park once guests are walking, waiting, and eating:
+// the park is stepped with no command until a guest has eaten and a guest waits, and then each
+// edit is applied by one cycle and followed by a drawn number of cycles with no command.
+// beforeCycle sees the world and the edit the cycle about to step it applies, if any, and
+// afterCycle the world after every cycle of the sequence, with whether that cycle applied an edit.
 template <typename BeforeCycle, typename AfterCycle>
 void runGuestEdits(uint64_t seed, BeforeCycle beforeCycle, AfterCycle afterCycle) {
   test::RouteEditDraws draws(seed);
-  World world = twoGatesWorld();
+  World world = test::eatingWorld();
+  while (unitsConsumed<Meals>(world, EATEN_CAUSE) == 0 || !anyWaiting(world)) {
+    REQUIRE(world.Tick < WARM_UP_LIMIT);
+    stepWorld(world);
+  }
   const auto runCycle = [&](bool edited) {
     INFO("tick " << world.Tick);
     CommandQueue queue;
@@ -91,9 +101,6 @@ void runGuestEdits(uint64_t seed, BeforeCycle beforeCycle, AfterCycle afterCycle
     REQUIRE_NOTHROW(stepWorld(world, queue));
     afterCycle(world, edited);
   };
-  for (uint64_t cycle = 0; cycle < WARM_UP_CYCLES; ++cycle) {
-    runCycle(false);
-  }
   for (int edit = 0; edit < EDITS; ++edit) {
     INFO("edit " << edit);
     runCycle(true);
@@ -109,29 +116,37 @@ template <typename AfterCycle> void runGuestEdits(uint64_t seed, AfterCycle afte
       seed, [](const World & /*world*/, const std::optional<ParkEdit> & /*edit*/) {}, afterCycle);
 }
 
-bool allResolve(const World &world) {
-  const std::vector<EntityKey> guests = parkGuests(world);
-  return std::ranges::all_of(guests, [&](EntityKey guest) {
-    return test::guestNetwork(world).resolve(recordOf(world, guest).At).has_value();
-  });
-}
-
-TEST_CASE("No cycle of randomized park edits with guests walking throws") {
+TEST_CASE("No cycle of randomized park edits with guests walking, waiting, and eating throws") {
   bool sawEditAmongGuests = false;
+  bool sawEditAmongWaiting = false;
   bool sawGuestCutOff = false;
   runGuestEdits(
       71,
       [&](const World &world, const std::optional<ParkEdit> &edit) {
         sawEditAmongGuests = sawEditAmongGuests || (edit.has_value() && !parkGuests(world).empty());
+        sawEditAmongWaiting = sawEditAmongWaiting || (edit.has_value() && anyWaiting(world));
       },
       [&](const World &world, bool edited) {
         sawGuestCutOff = sawGuestCutOff || (edited && !allResolve(world));
       });
   CHECK(sawEditAmongGuests);
+  CHECK(sawEditAmongWaiting);
   CHECK(sawGuestCutOff);
 }
 
-TEST_CASE("After every cycle of randomized park edits with guests walking that applies no edit, "
+TEST_CASE("In every cycle of randomized park edits with guests walking, waiting, and eating, "
+          "guest-visits and meals each conserve their units") {
+  bool sawEaten = false;
+  runGuestEdits(76, [&](const World &world, bool /*edited*/) {
+    CHECK(test::conserved<GuestVisits>(world));
+    CHECK(test::conserved<Meals>(world));
+    sawEaten = sawEaten || unitsConsumed<Meals>(world, EATEN_CAUSE) > 0;
+  });
+  CHECK(sawEaten);
+}
+
+TEST_CASE("After every cycle of randomized park edits with guests walking, waiting, and eating "
+          "that applies no edit, "
           "every guest's place resolves on the guest network") {
   bool sawGuests = false;
   runGuestEdits(72, [&](const World &world, bool edited) {
@@ -143,7 +158,8 @@ TEST_CASE("After every cycle of randomized park edits with guests walking that a
   CHECK(sawGuests);
 }
 
-TEST_CASE("Every world randomized park edits with guests walking reach equals its copy") {
+TEST_CASE("Every world randomized park edits with guests walking, waiting, and eating reach equals "
+          "its copy") {
   bool sawGuests = false;
   runGuestEdits(73, [&](const World &world, bool /*edited*/) {
     REQUIRE(worldsEqual(copyWorld(world), world));
@@ -152,7 +168,8 @@ TEST_CASE("Every world randomized park edits with guests walking reach equals it
   CHECK(sawGuests);
 }
 
-TEST_CASE("Every world randomized park edits with guests walking reach equals its save loaded and "
+TEST_CASE("Every world randomized park edits with guests walking, waiting, and eating reach equals "
+          "its save loaded and "
           "resolved") {
   bool sawGuests = false;
   runGuestEdits(74, [&](const World &world, bool /*edited*/) {
@@ -165,7 +182,8 @@ TEST_CASE("Every world randomized park edits with guests walking reach equals it
 }
 
 TEST_CASE("A candidate made with an edit from a world of randomized park edits with guests "
-          "walking, once it has stepped a cycle, equals the world that queues the edit for that "
+          "walking, waiting, and eating, once it has stepped a cycle, equals the world that queues "
+          "the edit for that "
           "cycle") {
   std::optional<World> candidate;
   int compared = 0;

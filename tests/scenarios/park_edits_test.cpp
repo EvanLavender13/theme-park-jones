@@ -21,8 +21,9 @@
 namespace tpj {
 namespace {
 
-// The runner's default run.
-constexpr int CYCLES = 3000;
+// A hundred commands, enough to draw every kind with values across their ranges, while the park's
+// guests are few enough that the run stays short.
+constexpr int CYCLES = 1000;
 constexpr double EDGE = PARK_SIZE / 2.0;
 
 const Scenario *findParkEdits() {

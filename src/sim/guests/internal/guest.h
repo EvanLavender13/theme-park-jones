@@ -1,6 +1,7 @@
 #ifndef TPJ_SIM_GUESTS_INTERNAL_GUEST_H
 #define TPJ_SIM_GUESTS_INTERNAL_GUEST_H
 
+#include "sim/entity_key.h"
 #include "sim/guests/guests.h"
 #include "sim/medium/network.h"
 
@@ -10,7 +11,9 @@ namespace tpj {
 
 // State, on a guest's entity: where it stands on the guest network, whether it walks toward
 // higher distances along that place's carrier, what it is doing, how hungry it is and how fast
-// that rises, and the tick its stay ends.
+// that rises, the tick its stay ends, the shop it is heading to or waiting at, the relief of the
+// offer it last picked, the meals it has eaten and the last of them, and its last choice, whose
+// options are empty until it first chooses.
 struct Guest {
   Place At;
   bool Forward = true;
@@ -18,6 +21,11 @@ struct Guest {
   double Hunger = 0.0;
   double HungerRate = 0.0;
   uint64_t StayUntil = 0;
+  EntityKey Target = NULL_KEY;
+  double MealRelief = 0.0;
+  uint64_t MealsEaten = 0;
+  GuestMeal LastMeal;
+  GuestChoice LastChoice;
 };
 
 template <typename Visitor> void visitFields(Visitor &visitor, Guest &guest) {
@@ -27,6 +35,11 @@ template <typename Visitor> void visitFields(Visitor &visitor, Guest &guest) {
   visitor.field("hunger", guest.Hunger);
   visitor.field("hunger-rate", guest.HungerRate);
   visitor.field("stay-until", guest.StayUntil);
+  visitor.field("target", guest.Target);
+  visitor.field("meal-relief", guest.MealRelief);
+  visitor.field("meals-eaten", guest.MealsEaten);
+  visitor.field("last-meal", guest.LastMeal);
+  visitor.field("last-choice", guest.LastChoice);
 }
 
 } // namespace tpj

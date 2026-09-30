@@ -4,19 +4,22 @@ A theme park game in C++20 on SDL3 and SDL_GPU. docs/vision.md says what it is f
 
 ## Build and test
 
-Commands run from WSL at the repository root. The Windows build is for playing: it uses cmake.exe and needs MSYS2 UCRT64 GCC and Ninja on the Windows PATH.
+Commands run from WSL at the repository root. Windows is the target, and work iterates on windows-debug: it uses cmake.exe and needs MSYS2 UCRT64 GCC and Ninja on the Windows PATH (decision 0026).
 
     cmake.exe --preset windows-debug
     cmake.exe --build --preset windows-debug
     build/windows-debug/ThemeParkJones.exe
 
-The Linux build is for verification. linux-debug runs AddressSanitizer, UBSan, and clang-tidy, and warnings are errors.
+While iterating, build one test executable with `--target` and run it directly with a Catch2 filter, such as `cmake.exe --build --preset windows-debug --target tpj_sim_tests` and `build/windows-debug/tpj_sim_tests.exe -# "[#edits_test]"` for one file's tests. Warnings are errors in both builds.
+
+The Linux build verifies once work is done. linux-debug runs AddressSanitizer and UBSan, and scripts/tidy.sh runs clang-tidy over the whole project, warnings as errors.
 
     cmake --preset linux-debug
     cmake --build --preset linux-debug
     ctest --preset linux-debug
+    scripts/tidy.sh
 
-While iterating, build one test executable with `--target` and run it directly with a Catch2 filter, such as `build/linux-debug/tpj_sim_tests -# "[#edits_test]"` for one file's tests. A change is finished when linux-debug builds without warnings and its tests pass. Git hooks format on commit, check commit messages, and gate pushes on linux-debug; activate them once per clone with `git config core.hooksPath .githooks`. scripts/cross-build-check.sh compares the Windows and Linux builds' simulation outputs (decision 0022), and pre-push runs it when the simulation's inputs change. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
+A change is finished when both builds build without warnings, scripts/tidy.sh is clean, and the tests pass on both (`ctest.exe --preset windows-debug` for Windows). Git hooks format on commit, check commit messages, and gate pushes on linux-debug and tidy; activate them once per clone with `git config core.hooksPath .githooks`. scripts/cross-build-check.sh compares the Windows and Linux builds' simulation outputs (decision 0022), and pre-push runs it when the simulation's inputs change. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
 
 ## Authority
 

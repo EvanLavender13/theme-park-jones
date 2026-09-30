@@ -40,7 +40,7 @@ Create a task for each item. Complete in order.
 When every member milestone has landed:
 
 1. Dispatch the `test-writer` agent in slice mode with SLICE.md, the member MILESTONE.md files, and the module specs, to write integration tests for the criteria checked by integration test.
-2. Run them with `ctest --preset linux-debug`. Run each scripted scenario on the Windows build with `--capture` and inspect the captures against their criteria. Ask Evan to check the manual criteria, and record his answer.
+2. Run them with `ctest.exe --preset windows-debug` and `ctest --preset linux-debug`. Run each scripted scenario on the Windows build with `--capture` and inspect the captures against their criteria. Ask Evan to check the manual criteria, and record his answer.
 3. Dispatch the `reviewer` via the `reviewing` skill on SLICE.md and the integration tests.
 4. If everything passes, set the slice's Status to complete and commit via `commit-hygiene`. If not, report the failing criteria to the user; the fix belongs to a member capability's next milestone or feature.
 

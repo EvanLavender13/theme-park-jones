@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <optional>
 #include <stdint.h>
 #include <vector>
@@ -140,45 +141,85 @@ TEST_CASE("A wandering guest walks WALK_STEP each cycle along the carriers, keep
   CHECK(turnedAtAnchor);
 }
 
-TEST_CASE("A guest's record shows it heading home from the cycle stepping its StayUntil, and "
-          "wandering before") {
-  const NewParkRun &run = newParkRun();
-  bool sawHeadingHome = false;
-  for (const GuestStep &step : run.Trace) {
-    if (!step.Record.has_value()) {
-      break;
-    }
-    CAPTURE(step.Stepped);
-    const GuestActivity expected = step.Stepped >= run.Arrived.StayUntil
-                                       ? GuestActivity::HeadingHome
-                                       : GuestActivity::Wandering;
-    REQUIRE(step.Record.value_or(GuestRecord{}).Activity == expected);
-    sawHeadingHome = sawHeadingHome || expected == GuestActivity::HeadingHome;
+// The homeward run: the legs park, stepped by step(world, commands), strands a guest on the far leg
+// past its stay, draws the near leg again, and steps on until that guest has gone home.
+template <typename Step> void runHomeward(Step step) {
+  World world = test::legsWorld();
+  const EntityKey stranded = test::strandPastStay(world, step);
+  for (int cycle = 0; cycle < 3000 && test::isLive(world, stranded); ++cycle) {
+    CommandQueue none;
+    step(world, none);
   }
+  CHECK_FALSE(test::isLive(world, stranded));
+}
+
+TEST_CASE("A guest wanders until its StayUntil, and heads home only by a choice made at or after "
+          "it that picks heading home") {
+  bool sawHeadingHome = false;
+  runHomeward([&](World &world, CommandQueue &commands) {
+    const uint64_t tick = world.Tick;
+    stepWorld(world, commands);
+    INFO("stepped " << tick);
+    for (const EntityKey guest : parkGuests(world)) {
+      const GuestRecord record = recordOf(world, guest);
+      CAPTURE(guest);
+      if (tick < record.StayUntil) {
+        CHECK(record.Activity == GuestActivity::Wandering);
+      }
+      if (record.Activity != GuestActivity::HeadingHome) {
+        continue;
+      }
+      REQUIRE(record.LastChoice.has_value());
+      const GuestChoice choice = record.LastChoice.value_or(GuestChoice{});
+      CHECK(choice.Tick >= record.StayUntil);
+      REQUIRE(choice.Picked < choice.Options.size());
+      CHECK(choice.Options.at(choice.Picked).Kind == ChoiceKind::HeadHome);
+      sawHeadingHome = true;
+    }
+  });
   CHECK(sawHeadingHome);
 }
 
 TEST_CASE(
     "A guest heading home with an entrance entry at its place comes WALK_STEP nearer the "
     "entrance each cycle, and leaves the park in the cycle it reaches the entrance's anchor") {
-  const NewParkRun &run = newParkRun();
-  double previous = run.ArrivedHome;
-  bool left = false;
-  for (const GuestStep &step : run.Trace) {
-    if (step.Stepped >= run.Arrived.StayUntil) {
-      CAPTURE(step.Stepped, previous);
-      if (previous > WALK_STEP) {
-        REQUIRE_THAT(homeOf(step), WithinAbs(previous - WALK_STEP, DISTANCE_TOLERANCE));
-      } else {
-        CHECK_FALSE(step.Record.has_value());
-        CHECK_FALSE(step.Live);
-        left = true;
-        break;
+  int approached = 0;
+  int left = 0;
+  runHomeward([&](World &world, CommandQueue &commands) {
+    // An edit changes route distance, so only a cycle with none compares distances across it.
+    const bool edited = !commands.empty();
+    std::map<EntityKey, double> homeBefore;
+    for (const EntityKey guest : parkGuests(world)) {
+      const GuestRecord record = recordOf(world, guest);
+      if (record.Activity == GuestActivity::HeadingHome) {
+        CAPTURE(guest);
+        const std::optional<double> home = test::homeDistance(world, record.At);
+        REQUIRE(home.has_value());
+        homeBefore.emplace(guest, home.value_or(NOT_A_DISTANCE));
       }
     }
-    previous = homeOf(step);
-  }
-  CHECK(left);
+    const uint64_t tick = world.Tick;
+    stepWorld(world, commands);
+    if (edited) {
+      return;
+    }
+    INFO("stepped " << tick);
+    for (const auto &[guest, previous] : homeBefore) {
+      CAPTURE(guest, previous);
+      if (previous > WALK_STEP) {
+        const GuestRecord now = recordOf(world, guest);
+        REQUIRE_THAT(test::homeDistance(world, now.At).value_or(NOT_A_DISTANCE),
+                     WithinAbs(previous - WALK_STEP, DISTANCE_TOLERANCE));
+        ++approached;
+      } else {
+        CHECK_FALSE(guestRecord(world, guest).has_value());
+        CHECK_FALSE(test::isLive(world, guest));
+        ++left;
+      }
+    }
+  });
+  CHECK(approached > 0);
+  CHECK(left > 0);
 }
 
 // The crossing park: a spine from the entrance's door, crossed halfway along by a second path, so
@@ -269,8 +310,8 @@ TEST_CASE("At a node, a wandering guest leaves by the step drawPick picks from a
   CHECK(approaching.empty());
 }
 
-TEST_CASE("A guest heading home with no entrance entry at its place wanders on, and heads for the "
-          "entrance once an entry appears") {
+TEST_CASE("A guest with no entrance entry at its place wanders on past its stay, and once an entry "
+          "appears heads for the entrance and leaves") {
   World world = test::legsWorld();
   const EntityKey guest = test::walkOntoFarLeg(world);
   CommandQueue cut;
@@ -288,11 +329,19 @@ TEST_CASE("A guest heading home with no entrance entry at its place wanders on, 
     REQUIRE(record.At != before);
     REQUIRE_FALSE(test::homeDistance(world, record.At).has_value());
   }
-  CHECK(recordOf(world, guest).Activity == GuestActivity::HeadingHome);
+  CHECK(recordOf(world, guest).Activity == GuestActivity::Wandering);
 
   CommandQueue rejoin;
   rejoin.push(AddPath{PathKind::Guest, test::nearLegPoints()});
   stepWorld(world, rejoin);
+  REQUIRE(test::homeDistance(world, recordOf(world, guest).At).has_value());
+  // It picks heading home at the next node it reaches.
+  bool headingHome = false;
+  for (int cycle = 0; cycle < 2000 && !headingHome; ++cycle) {
+    stepWorld(world);
+    headingHome = recordOf(world, guest).Activity == GuestActivity::HeadingHome;
+  }
+  REQUIRE(headingHome);
   std::optional<double> home = test::homeDistance(world, recordOf(world, guest).At);
   REQUIRE(home.has_value());
   bool left = false;

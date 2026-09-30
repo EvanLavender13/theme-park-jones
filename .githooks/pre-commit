@@ -1,6 +1,6 @@
 #!/bin/bash
 # pre-commit: clang-format staged C/C++ files (decision 0021).
-# clang-tidy runs in the linux-debug build, which the pre-push hook gates.
+# clang-tidy runs in scripts/tidy.sh, which the pre-push hook gates.
 # Activate once per clone: git config core.hooksPath .githooks
 #
 # A file with no unstaged changes is formatted in place and re-staged. A file with unstaged
