@@ -54,6 +54,13 @@ The exact text is in PLAN.md, Tasks 1 and 2.
 - Marking the ghost's own contribution in the tooltip: the milestone's deepening candidate.
 - A pinned attribution panel.
 
+## Test pass decisions
+
+- The tooltip's content has no automated check. It draws foodNear's result, whose value and terms food-overlay's tests and criterion 3 check, and criterion 5 is checked by hand.
+- A NaN or negative reach gives none, since no Distance is at most it. It follows from "at most the reach" and is not tested.
+- A hand-written save keying a backstage path like a guest carrier is not tested. The rule takes guest paths of parkPaths alone, so such a path is never one.
+- The tests were written against the implementation already in the tree, not the stubs. Those of criteria 1 and 3 require a place or contributions the stubs never give, so they would have failed against them. Criterion 2's two tests, which expect none, pass against the stubs, as PLAN.md's Task 4 expected.
+
 ## Open questions
 
 None.

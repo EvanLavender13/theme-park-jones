@@ -1,7 +1,8 @@
 # The legible module's tests link tpj_legible alone, which links the sim alone, so they compute
 # explanations of a world without a window (principle 10).
 add_executable(tpj_legible_tests
-    food_test.cpp)
+    food_test.cpp
+    path_place_test.cpp)
 target_link_libraries(tpj_legible_tests PRIVATE tpj_legible Catch2::Catch2WithMain)
 # The availability tests read tests/parks/warm.park, whose shop has guests queued.
 target_compile_definitions(tpj_legible_tests PRIVATE TPJ_PARKS_DIR="${CMAKE_SOURCE_DIR}/tests/parks")
