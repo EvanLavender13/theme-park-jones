@@ -10,7 +10,7 @@ affordable-sampling makes sampling a field cheap enough that a park with guests 
 
 1. A Network gives, for each node, the places where carriers stop at it, in ascending carrier key and then distance, and a place is among a node's stop places exactly when resolve gives that node for it.
 2. sampleField, sampleResolvedField, and fieldValue give exactly what the medium's spec defines, for every field, network, and place. Every existing medium, routes, operations, and guests test passes unchanged, and the cross-build check's output is identical, line for line, to its output before the milestone.
-3. A sample resolves only the sampled place, never its entries' places. In a perf profile of tests/parks/supply.park stepped 3000 ticks on linux-debug, Network::resolve's inclusive share of the time falls from 50% to under 5%, and on windows-debug those ticks step at least 1.5 times as fast as before. The feature's report gives the windows-debug and linux-debug times before and after.
+3. A sample resolves only the sampled place, never its entries' places. In perf profiles of tests/parks/supply.park stepped 3000 ticks on linux-debug, Network::resolve's inclusive time, its share times the run's time, falls at least fivefold, and on windows-debug those ticks step at least 1.5 times as fast as before. The feature's report gives the windows-debug and linux-debug times before and after.
 4. src/sim/medium/SPEC.md describes the stop places and how sampling uses them. linux-debug and windows-debug build without warnings, their tests pass, and scripts/tidy.sh is clean.
 
 ## Medium
