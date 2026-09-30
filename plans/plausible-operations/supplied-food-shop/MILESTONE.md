@@ -75,6 +75,7 @@ Unordered pool this milestone draws later features from.
 - An order's delay from route distance, like a shipment's, instead of the fixed ORDER_DELAY.
 - A queue limit, with arrivals beyond it returned unserved, as a visible sign of an overloaded shop.
 - Shipments that combine the order units a depot holds for one shop into one packet per tick. Gated on: packet counts mattering for cost.
+- Shops and depots listed once per cycle instead of rebuilding the list of park boxes for every shop and depot, which takes 10% of stepping supply.park. Gated on: stepping cost after affordable-sampling.
 - An offer's wait that counts orders on their way to or held by a depot as supply units, each arriving after its shipment's delay, instead of treating every unit beyond stock and shipments as coming from an order placed now.
 
 ## Open questions

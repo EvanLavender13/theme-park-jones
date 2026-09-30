@@ -52,6 +52,8 @@ A network type, the field interface with entry and scalar fields, and the flow l
 
 1. `first-field-and-flow`: the network type with carriers, places that survive re-derivation, entity anchors, and a nearest-point query, entry and scalar fields with per-source attribution, next-tick visibility while stepping, and immediate visibility during resolution, the flow ledger with integer packets, delays, endpoint stocks, and creation and consumption accounting, and the private-header check, tested on synthetic networks. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's first milestone.
 
+2. `affordable-sampling`: sampling a field by comparing each entry's place with the network's stop places and the sampled edge's bounds instead of resolving it, so a park with guests steps quickly. Depends on: first-field-and-flow.
+
 Later milestones are drawn from the deepening candidates once the slice has shown where the medium strains.
 
 ## Deepening candidates

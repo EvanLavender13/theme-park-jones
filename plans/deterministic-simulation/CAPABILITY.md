@@ -60,6 +60,7 @@ Later milestones are drawn from the deepening candidates once the slice shows wh
 ## Deepening candidates
 
 - Divergence diagnosis: when hashes differ, report which registered type and entity diverged first, and dump both worlds readably at that tick, as Factorio does.
+- A stepping budget: a check that fails when a slice park's ticks per second, as tpj_scenarios reports them, fall below a floor, so a slowdown is caught when it lands.
 - Replays: a seed, a starting save, and the log of intent changes reproduce a session, for bug reports and regression tests.
 - Save versioning and migration: older park files load after registered types change. Gated on: a save worth keeping across a format change.
 - Binary encoding: a compact encoding behind the same walk. Gated on: parks large enough for text saves to be slow.

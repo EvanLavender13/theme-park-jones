@@ -1,0 +1,19 @@
+# Research: affordable-sampling
+
+## Where does a stepped park spend its time?
+
+A perf profile of tests/parks/supply.park stepped 3000 ticks on linux-debug, 8608 samples, shows guests stepping at 77% of the time, and within that, sampling guest route distance at a guest's place at 67%. The medium's sampling inside an edge, sampleSlotInEdge, takes 58%, and Network::resolve, which it calls on every entry of every source, takes 50%, both inclusive of what they call. So removing every resolve would at best halve the time, and the rest of sampling, the loop over entries and building each EdgeSample, stays. stepShops takes 13%, of which rebuilding the list of park boxes for every shop takes 10%, and stepFootfall 4.6%. The same 3000 ticks take 2.6 s on windows-debug and 8.4 s on linux-debug, with no hashing between ticks.
+
+The cause is the shape of a sample, not any one field. Every walking guest samples route distance at its place every tick, and route distance publishes an entry at every node for every source. To answer a sample strictly inside an edge, the medium resolves every entry of every source on the network, only to keep those at the edge's two nodes and inside it. A tick therefore costs guests times sources times nodes resolves, and each resolve does two binary searches and builds an optional variant, which debug builds and the sanitizers make slow. Sampling at a node has the same shape.
+
+Sources: perf record and perf report on build/linux-debug/ThemeParkJones --park tests/parks/supply.park --ticks 3000 --hash; src/sim/medium/field.h, sampleSlotInEdge and sampleSlotAtNode; src/sim/medium/network.cpp, resolve.
+
+## How can a sample skip resolving every entry?
+
+Whether an entry lands at a node or inside an edge follows from its place alone. resolve gives a node exactly when the place's carrier is in the network and its distance equals one of that carrier's stop distances, so an entry resolves to node n exactly when its place equals one of the places where a carrier stops at n. It resolves strictly inside an edge exactly when its carrier is the edge's carrier and its distance lies strictly between the edge's two stop distances, and its offsets are then the distance's differences from those two. If the network keeps, for each node, the places where carriers stop at it, built once in its constructor, a sample compares each entry's place with a few stop places and the edge's bounds instead of resolving it. The work per entry becomes a handful of comparisons, and what a sample returns, and in what order, is unchanged, so every existing medium test still holds and every park's hashes stay the same.
+
+A sample still visits every entry of every source. That keeps it proportional to the field's size, which is small at slice scale: a few sources over a few dozen nodes. Removing that proportion needs an index from places to entries, which stepped entries, published every tick, would have to rebuild every tick, or holding entries sorted by place, which breaks the medium's rule that a source's entries keep the order it gave them.
+
+Rejected: an index of each field's entries by node, built per resolution. Resolved entries could carry one, but it would be keyed to one network while sampleField takes any network, and stepped entries would still need the plain scan. Rejected: sorting each source's entries by place. The spec promises a source's entries in the order it gave them. Rejected: guests sampling route distance less often. It changes when a guest notices a lost target, which believable-guests' spec fixes at every step, and every other sampler would keep the cost. Rejected, for now: change-driven resolution, the capability's candidate. It is a much larger change, and profiling points first at a constant factor, not at how often samples happen.
+
+Sources: src/sim/medium/SPEC.md, Networks and Fields; src/sim/medium/network.h; plans/shared-medium/CAPABILITY.md, deepening candidates.
