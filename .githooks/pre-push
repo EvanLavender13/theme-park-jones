@@ -1,6 +1,6 @@
 #!/bin/bash
-# pre-push: build linux-debug (ASan, UBSan, clang-tidy, warnings as errors) and run its tests
-# (decision 0021). Checks the working tree, so commit or stash unrelated changes first. Then, when
+# pre-push: build linux-debug (ASan, UBSan, warnings as errors), run clang-tidy over the project
+# (decision 0026), and run its tests (decision 0021). Checks the working tree, so commit or stash unrelated changes first. Then, when
 # the pushed commits touch the simulation's build inputs, runs scripts/cross-build-check.sh
 # (decision 0022).
 # Activate once per clone: git config core.hooksPath .githooks
@@ -21,18 +21,24 @@ if [ ! -f build/linux-debug/CMakeCache.txt ]; then
 fi
 
 # Build output streams to the terminal so progress is visible, and is saved for the warning check.
-echo "pre-push: building linux-debug (sanitizers, clang-tidy); this can take a while after big changes..."
+echo "pre-push: building linux-debug (sanitizers); this can take a while after big changes..."
 BUILD_LOG=$(mktemp)
 trap 'rm -f "$BUILD_LOG"' EXIT
 cmake --build --preset linux-debug 2>&1 | tee "$BUILD_LOG"
 BUILD_STATUS=${PIPESTATUS[0]}
 
-# Compiler and clang-tidy diagnostics only (file:line:column:), not make's own messages such
+# Compiler diagnostics only (file:line:column:), not make's own messages such
 # as clock-skew notices on the Windows drive, and not dependency code.
 WARNINGS=$(grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):" "$BUILD_LOG" | grep -v "/.cpm-cache/" || true)
 if [ $BUILD_STATUS -ne 0 ] || [ -n "$WARNINGS" ]; then
     echo "$WARNINGS"
     echo "pre-push: linux-debug build failed or has warnings; push aborted."
+    exit 1
+fi
+
+echo "pre-push: running clang-tidy..."
+if ! scripts/tidy.sh; then
+    echo "pre-push: clang-tidy found problems; push aborted."
     exit 1
 fi
 

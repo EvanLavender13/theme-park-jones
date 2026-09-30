@@ -15,6 +15,7 @@
 #include <iterator>
 #include <optional>
 #include <regex>
+#include <span>
 #include <sstream>
 #include <stddef.h>
 #include <stdint.h>
@@ -23,7 +24,18 @@
 #include <utility>
 #include <vector>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
+#include <array>
+#else
+#include <cstdio>
 #include <sys/wait.h>
 #endif
 
@@ -92,6 +104,81 @@ ProcessResult runScenarios(const std::filesystem::path &directory,
   return result;
 }
 
+// Runs tpj_scenarios with no arguments, reading what it writes to standard output, carriage returns
+// removed, until a line that does not start with the prefix, and then stops it. Gives the lines
+// read, that one included. Its standard error goes to the test's scratch directory.
+std::vector<std::string> linesWhilePrefixed(const std::filesystem::path &directory,
+                                            std::string_view prefix) {
+  std::vector<std::string> lines;
+  std::string line;
+  // Takes one character of output, and gives whether to read on.
+  const auto take = [&](char character) {
+    if (character == '\r') {
+      return true;
+    }
+    if (character != '\n') {
+      line += character;
+      return true;
+    }
+    lines.push_back(line);
+    line.clear();
+    return lines.back().starts_with(prefix);
+  };
+  const std::string errPath = (directory / "stderr.txt").string();
+#ifdef _WIN32
+  SECURITY_ATTRIBUTES inherited{.nLength = sizeof(SECURITY_ATTRIBUTES),
+                                .lpSecurityDescriptor = nullptr,
+                                .bInheritHandle = TRUE};
+  HANDLE readEnd = nullptr;
+  HANDLE writeEnd = nullptr;
+  REQUIRE(CreatePipe(&readEnd, &writeEnd, &inherited, 0));
+  SetHandleInformation(readEnd, HANDLE_FLAG_INHERIT, 0);
+  HANDLE errFile = CreateFileA(errPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, &inherited,
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  STARTUPINFOA startup{};
+  startup.cb = sizeof(startup);
+  startup.dwFlags = STARTF_USESTDHANDLES;
+  startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+  startup.hStdOutput = writeEnd;
+  startup.hStdError = errFile;
+  PROCESS_INFORMATION process{};
+  std::string commandLine = shellQuoted(TPJ_SCENARIOS_EXECUTABLE);
+  const BOOL started = CreateProcessA(nullptr, commandLine.data(), nullptr, nullptr, TRUE, 0,
+                                      nullptr, nullptr, &startup, &process);
+  CloseHandle(writeEnd);
+  CloseHandle(errFile);
+  REQUIRE(started);
+  std::array<char, 4096> buffer{};
+  bool reading = true;
+  DWORD got = 0;
+  while (reading &&
+         ReadFile(readEnd, buffer.data(), static_cast<DWORD>(buffer.size()), &got, nullptr) != 0 &&
+         got > 0) {
+    for (DWORD index = 0; index < got && reading; ++index) {
+      reading = take(buffer.at(index));
+    }
+  }
+  TerminateProcess(process.hProcess, 0);
+  WaitForSingleObject(process.hProcess, INFINITE);
+  CloseHandle(process.hProcess);
+  CloseHandle(process.hThread);
+  CloseHandle(readEnd);
+#else
+  const std::string command = shellQuoted(TPJ_SCENARIOS_EXECUTABLE) + " 2> " + shellQuoted(errPath);
+  // The test runs one child at a time, and its environment is not changed.
+  FILE *pipe = popen(command.c_str(), "r"); // NOLINT(cert-env33-c,concurrency-mt-unsafe)
+  REQUIRE(pipe != nullptr);
+  bool reading = true;
+  for (int character = std::fgetc(pipe); reading && character != EOF;
+       character = std::fgetc(pipe)) {
+    reading = take(static_cast<char>(character));
+  }
+  // The child's next write to the closed pipe stops it.
+  pclose(pipe);
+#endif
+  return lines;
+}
+
 // What the runner's library writes for the registered scenarios and the files, as (path, text).
 std::string libraryOutput(uint64_t ticks,
                           const std::vector<std::pair<std::string, std::string>> &files) {
@@ -137,10 +224,20 @@ TEST_CASE("tpj_scenarios writes the scenarios', files', math, and draw lines, in
 }
 
 TEST_CASE("tpj_scenarios runs 3000 ticks when --ticks is not given") {
+  // Every scenario runs the same count, so the first one's lines, ending where the second's begin,
+  // show it, and the run is stopped there.
+  const std::span<const Scenario> scenarios = registeredScenarios();
+  REQUIRE(scenarios.size() >= 2);
+  std::ostringstream first;
+  runScenario(scenarios[0], 3000, first);
+  const std::vector<std::string> expected = linesOf(first.str());
+
   const auto directory = scratchDirectory("default-ticks");
-  const ProcessResult result = runScenarios(directory, {});
-  CHECK(result.Status == 0);
-  CHECK(withoutCarriageReturns(result.Out) == libraryOutput(3000, {}));
+  const std::vector<std::string> lines =
+      linesWhilePrefixed(directory, "scenario " + std::string(scenarios[0].Name) + " ");
+  REQUIRE(lines.size() == expected.size() + 1);
+  CHECK(std::ranges::equal(std::span(lines).first(expected.size()), expected));
+  CHECK(lines.back().starts_with("scenario " + std::string(scenarios[1].Name) + " tick 0 hash "));
 }
 
 TEST_CASE(
