@@ -1,0 +1,25 @@
+# Research: slice-parks
+
+## How long can the slice's runs be in tests?
+
+The slice's criteria ran each park 3000 ticks, and left the run lengths to measurement once guests stepped real content. After affordable-sampling, tests/parks/routes.park, the layout fed.park takes, steps its first 1800 ticks in 0.56 s on windows-debug and 1.75 s on linux-debug, loading included, and its next 600 ticks, with about thirty guests in the park, in 0.39 s and 1.66 s: about 0.65 ms a tick on Windows and 2.8 ms on Linux once warm. A test running warm.park and cut.park 3000 ticks each would take about 4 s on Windows and 17 s on Linux, past ctest's 10 s timeout, and hosted CI runners are likely slower still.
+
+So each integration test runs the shortest length that shows its property, with headroom for slower machines, and the 3000-tick runs stay in the cross-build check, which steps every tests/parks/*.park file 3000 ticks on both builds and compares every tick's hash, with no time limit. Serving a meal needs guests to arrive, grow hungry, and be supplied, so fed.park runs 1800 ticks, the same as the warm-up. The cut's effects show within seconds of game time, so warm.park and cut.park run 600 ticks each, 20 s of game time, long enough for the cut shop's queue to empty and hunger to drift apart. Conservation holds at every tick or not at all, so 300 ticks of each park is enough, and determinism shows in any run with guests, so two 600-tick runs of fed.park do. Whether a CI runner steps as fast is deterministic-simulation's stepping budget candidate, not this feature's.
+
+Rejected: keeping 3000 ticks and raising the timeout. The tests would take seconds each on this machine and could time out on slower ones. Rejected: a ctest label excluded by default. The runs would stop being checked on every change, and the cross-build check already covers the long runs.
+
+Sources: build/windows-debug/ThemeParkJones.exe and build/linux-debug/ThemeParkJones with --park tests/parks/routes.park --ticks 1800 and 2400 --hash; plans/shared-medium/affordable-sampling/stop-matched-sampling/FEATURE.md; scripts/cross-build-check.sh.
+
+## How are warm.park and cut.park made?
+
+warm.park is fed.park after a warm-up, which only stepping can produce, so it is generated. cut.park is warm.park with the backstage path removed, and removing it by editing the text would be wrong: the shop's food offer is also published into the field's stepped layer, which a save holds, and a loaded world's first resolution clears no stepped entries. A hand-edited cut.park would therefore read the shop as supplied until the shop next steps, breaking the slice's criterion that its offer reports no meals from the first tick. Applying a real DeletePath in a cycle makes the resolution after it clear the shop's stepped offer, since its resolved offer changed, so the saved cut.park samples the unsupplied offer at once.
+
+The generator is a function in the scenarios library, makeSliceParks, and a mode of tpj_scenarios, --slice-parks, which already loads park files with makeParkSchema, reads files, and has one other mode, --compare. It loads fed.park, resolves it, and saves it, which puts fed.park in canonical form, then steps it WARM_TICKS cycles and saves warm.park, then steps one more cycle with a DeletePath queued for every backstage path and saves cut.park. Because loading a resolved world's save and resolving gives the world saved, running the generator on its own fed.park output gives the same three files, so all three regenerate from the one checked-in fed.park whenever the simulation's rules change. A test compares the checked-in files with a fresh generation, so a rule change that alters them fails until they are regenerated. The warm-up length is a parameter, so tests of the generator's laws step a few ticks, and only that comparison steps the full warm-up.
+
+WARM_TICKS starts at 1800, 60 s of game time, when about thirty guests have arrived, meals have been served, and none has reached the end of its stay. The cut is meaningful only when it strands something, so cut.park must hold a guest waiting at the shop and a shipment in transit. If it does not at 1800, the warm-up grows by one arrival interval, 60 ticks, until it does.
+
+fed.park takes tests/parks/routes.park's layout: an entrance, four guest paths with a junction and dead ends to wander, one shop, one depot, and the backstage path between them. That is the slice's fed park exactly, and supply.park, its two-shop sibling, already shows it supplies and serves.
+
+Rejected: a --save option on the app plus hand-editing cut.park. It leaves the stale stepped offer. Rejected: an app option that deletes a path by key. It is an option for one file's sake, and keys in warm.park depend on the warm-up. Rejected: a separate generator executable. tpj_scenarios already holds the loading and file handling and is built by every preset.
+
+Sources: src/sim/medium/SPEC.md, the layer rule and first resolutions; src/sim/SPEC.md, the cycle and saves; src/scenarios/SPEC.md and src/scenarios/main.cpp; plans/slices/boxes-and-tubes/SLICE.md, criteria 3 and 6.
