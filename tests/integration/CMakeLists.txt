@@ -1,6 +1,7 @@
 # The boxes-and-tubes slice's integration tests run the checked-in park files through the
 # simulation's public interface, and read them through tpj_legible, which links the sim alone.
 add_executable(tpj_integration_tests
+    candidate_preview_test.cpp
     food_availability_test.cpp
     slice_parks_test.cpp)
 target_link_libraries(tpj_integration_tests PRIVATE tpj_legible tpj_sim Catch2::Catch2WithMain)

@@ -15,7 +15,7 @@ Decision 0027 places each behavior this feature adds:
 - Making the candidate of an accepted edit and a shop ghost's context: legible, new component legible/preview.h. It reads intent, the networks, fields, and operations' nearestDepot, and makes the candidate with makeCandidate, with no window, so tests check it.
 - Drawing a ghost's walkways and marks from a given candidate: render, park_mesh.h's buildGhostMesh overload. Render still links no tpj_legible: it takes a World.
 - Drawing the shop context: app, new component app/shop_context_tooltip.h, the platform edge. It only renders a ShopContext.
-- Composing them: main.cpp makes the preview as a local of each frame and hands it on. The preview replaces the ghost cache main.cpp held (DrawnGhost and updateGhostMesh), so main.cpp loses a hand-reset cache and gains no state or concern of its own.
+- Composing them: main.cpp keeps the preview with legible's keepPreview, which alone decides when it is stale, and rebuilds the ghost and overlay meshes only when it is made again or the highlight or checkbox changes. This replaces the ghost cache main.cpp held (DrawnGhost and updateGhostMesh). The per-frame preview first planned cost about 60 fps in debug, so Evan chose the cache; RESEARCH.md has the timings.
 
 ## Tasks
 

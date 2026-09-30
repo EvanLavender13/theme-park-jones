@@ -2,13 +2,15 @@
 
 ## How should the candidate be kept current?
 
-makeCandidate copies the world, applies the queued commands, and resolves, with no stepping. A Linux perf profile of a 27 ms run on warm.park puts copying and resolving at about 11% each, which gives about 2 ms for one candidate on windows-debug. The app runs at a vsync cap of about 6 ms a frame, with or without the food overlay, so making the candidate every frame while a ghost is accepted fits inside the frame. A frame can hold several ticks, so once a frame is at least as often as after every cycle, and a changed edit shows in the frame it changes.
+Timed on warm.park on windows-debug, 40 runs each: making the candidate, a copy and a resolution, takes 1.73 ms; the ghost mesh from it 0.46 ms; the food overlay mesh 2.62 ms; and one tick 0.66 ms. The app runs at a vsync cap of about 6 ms a frame. Making the candidate and the ghost every frame, as first built, cost Evan about 60 fps while a shop ghost was shown, and the overlay, rebuilt every frame since food-overlay, was already the largest cost.
 
-Made every frame, the candidate is a local value of the frame, like the food overlay's mesh: nothing holds it between frames, so nothing has to notice a new tick, a new edit, or a replaced world to reset it (decision 0027). The ghost mesh, the overlay, the tooltip, and a shop ghost's context all read that one value. The ghost mesh is then also built every frame, and the app's cache of the edit and highlight it was last built from goes away, since the candidate its walkways and marks come from changes with every frame's world. Building a ghost mesh is small beside the candidate.
+The candidate, the ghost, and the overlay change only when the world ticks, the edit changes, the highlight changes, or the overlay is shown or hidden, and a world changes only as it ticks. So a preview kept with the tick and edit it was made from, and meshes rebuilt only when it is made again or the highlight or checkbox changes, give the same pictures as rebuilding every frame, while a frame between ticks with a still cursor rebuilds nothing. The kept preview is emptied when the app replaces the world, as the park and guest meshes' records are. This is a cache decision 0027 would rather avoid, and it is taken because the frame rate needs it: keepPreview's rule, headless and tested, is the one place that decides when it is stale.
 
-Rejected: a component caching the candidate by tick and edit. It saves the 2 ms on frames with no tick and an unchanged edit, but it is derived state held apart from the world, with a key that must name everything the candidate depends on, the kind of hand-reset cache decision 0027 retires. It stays available if the cost shows in the app. Rejected: making the candidate only after cycles. A changed edit would wait for the next tick, and a paused park would never update.
+A moving ghost changes the edit every frame, so each new pose still costs a candidate, as the ghost cache before this feature did. Making that cheaper needs incremental resolution, re-deriving only what an edit touches, or making candidates off the frame's thread, which world-as-value's copyable worlds allow.
 
-Sources: src/sim/SPEC.md, makeCandidate; a Linux perf profile of a run on warm.park; docs/decisions/0027-code-architecture.md.
+Rejected: making the candidate and meshes every frame. It costs about 3 ms a frame in debug while a ghost is shown. Rejected: making the candidate only after cycles. A changed edit would wait for the next tick, and a paused park would never update.
+
+Sources: src/sim/SPEC.md, makeCandidate; timings from a temporary Catch2 case in tpj_render_tests on windows-debug; docs/decisions/0027-code-architecture.md.
 
 ## Where does a shop ghost meet the guest path?
 

@@ -10,6 +10,7 @@ add_executable(tpj_app
     food_tooltip.cpp
     main.cpp
     orbit_camera.cpp
+    shop_context_tooltip.cpp
     tool_panel.cpp)
 set_target_properties(tpj_app PROPERTIES OUTPUT_NAME ThemeParkJones)
 target_link_libraries(tpj_app PRIVATE tpj_legible tpj_park_files tpj_render tpj_sim tpj_tools)

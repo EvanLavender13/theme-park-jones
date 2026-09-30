@@ -539,6 +539,55 @@ TEST_CASE("STARVED_COLOR is opaque and differs in red, green, or blue from every
   }
 }
 
+TEST_CASE("A ghost given a candidate world is the edit's own ghost followed by that world's "
+          "walkways and then its starved marks, both at GHOST_ALPHA") {
+  const World world = ghostPark();
+  const AddBox edit{BoxKind::Depot, OUT_OF_REACH};
+  REQUIRE(isAccepted(world, edit));
+  // A world the edit does not give, with walkways and a starved mark, so the ghost shows it draws
+  // the world it is given rather than one it makes.
+  const std::optional<World> given = candidateOf(routesPark(), DeletePath{ROUTES_BACKSTAGE});
+  REQUIRE(given.has_value());
+  if (given.has_value()) {
+    REQUIRE_FALSE(marksOf(*given, GHOST_ALPHA).Vertices.empty());
+    const ParkMesh own = boxOf(BoxKind::Depot, edit.At, ghostOf(boxColor(BoxKind::Depot)));
+    CHECK(sameMesh(buildGhostMesh(world, edit, given), withCandidate(own, *given)));
+  }
+}
+
+TEST_CASE("A ghost given no candidate world is the edit's own ghost alone") {
+  const World world = ghostPark();
+  // Its candidate has a walkway to the shop's door, which the ghost must not show.
+  const AddBox edit{BoxKind::Shop, SHOP_IN_REACH};
+  REQUIRE(isAccepted(world, edit));
+  CHECK(sameMesh(buildGhostMesh(world, edit, std::nullopt),
+                 boxOf(BoxKind::Shop, edit.At, ghostOf(boxColor(BoxKind::Shop)))));
+}
+
+TEST_CASE("A ghost built without a candidate is the ghost given the candidate of the edit when it "
+          "is accepted, and given none when it is refused") {
+  const World world = ghostPark();
+  SECTION("an accepted AddBox") {
+    const AddBox edit{BoxKind::Shop, SHOP_IN_REACH};
+    REQUIRE(isAccepted(world, edit));
+    CHECK(sameMesh(buildGhostMesh(world, edit),
+                   buildGhostMesh(world, edit, std::optional<World>{candidateOf(world, edit)})));
+  }
+  SECTION("an accepted DeletePath that starves a shop") {
+    const World routes = routesPark();
+    const DeletePath edit{ROUTES_BACKSTAGE};
+    REQUIRE(isAccepted(routes, edit));
+    CHECK(sameMesh(buildGhostMesh(routes, edit),
+                   buildGhostMesh(routes, edit, std::optional<World>{candidateOf(routes, edit)})));
+  }
+  SECTION("a refused AddBox") {
+    // Over the shop.
+    const AddBox edit{BoxKind::Shop, Pose{42.0, 0.0, 0.0, -1.0}};
+    REQUIRE_FALSE(isAccepted(world, edit));
+    CHECK(sameMesh(buildGhostMesh(world, edit), buildGhostMesh(world, edit, std::nullopt)));
+  }
+}
+
 // Principle 1: ghosts are derived, and building them leaves nothing behind in what is saved.
 TEST_CASE("Building a ghost, walkways included, or appending an entity leaves the world's save and "
           "hash unchanged") {

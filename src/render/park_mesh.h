@@ -114,8 +114,12 @@ ParkMesh buildParkMesh(const World &world);
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
 
 // The ghost of an edit on a world: translucent in its kind's color when accepted, INVALID_TINT when
-// not, and DELETE_TINT for a deletion, followed for an accepted edit by its candidate's walkways
-// and starved marks.
+// not, and DELETE_TINT for a deletion, followed by the candidate's walkways and starved marks when
+// a candidate is given.
+ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
+                        const std::optional<World> &candidate);
+// The same ghost with the candidate makeCandidate gives for the edit when it is accepted, and none
+// when it is not.
 ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit);
 
 // A rectangle on the ground.
