@@ -65,6 +65,13 @@ The exact text is in PLAN.md, Tasks 1 and 2.
 - Slice criteria 8 and 9, the captures with the food overlay: legible-simulation adds --overlay.
 - A check that CI steps as fast as this machine: deterministic-simulation's stepping budget candidate.
 
+## Test pass decisions
+
+- Criterion 8's cross-build half is checked by scripts/cross-build-check.sh, which runs every tests/parks/*.park file, not by a Catch2 test.
+- In criterion 6, a choice made after C's starting tick is one whose Tick is at or after the opened world's tick, since a choice's Tick is the tick its cycle stepped, so C's first cycle counts, as principle 8 requires.
+- Criterion 1's ascending key order cannot be observed with fed.park's one backstage path, and deleting paths in one cycle gives the same world in any order. The test checks the Cut save.
+- A failure to read FED is checked by its nonzero status, a message on standard error, and no file written. The message's wording is not part of the contract.
+
 ## Open questions
 
 None.

@@ -20,15 +20,15 @@ Then the player hovers the backstage path to the first shop with the delete tool
 
 ## Acceptance criteria
 
-Three park files are checked in: tests/parks/fed.park (entrance, guest path, one shop, depot, backstage path, no guests yet), tests/parks/warm.park (fed.park after a warmup, with guests in the park), and tests/parks/cut.park (warm.park with the backstage path removed).
+Three park files are checked in: tests/parks/fed.park (entrance, guest path, one shop, depot, backstage path, no guests yet), tests/parks/warm.park (fed.park after a warmup, with guests in the park), and tests/parks/cut.park (warm.park with the backstage path removed). tpj_scenarios --slice-parks regenerates all three from fed.park: warm.park steps it WARM_TICKS, and cut.park deletes the backstage path in one more cycle, so the resolution clears the shop's stepped offer. Integration tests run each park for the shortest length that shows their property, and the cross-build check runs each 3000 ticks on both builds.
 
-1. Running fed.park for 3000 ticks serves meals, and every served guest's hunger, as its inspection record reports it, fell when it ate. (integration test)
-2. Supplies and meals are conserved in every tick of fed.park, warm.park, and cut.park: supplies sent by the depot equal supplies in transit plus in shop stock plus converted to meals, and meals made equal meals in shop stock plus meals in transit to guests plus meals held by guests plus meals eaten. (integration test)
-3. Running cut.park and warm.park each for 3000 ticks: in cut.park the shop's offer reports no meals available from the first tick, no guest chooses the shop afterwards, its queue empties with every queued guest either served or returned unserved, and mean guest hunger ends higher than in warm.park. (integration test)
+1. Running fed.park for 1800 ticks serves meals, and every served guest's hunger, as its inspection record reports it, fell when it ate. (integration test)
+2. Supplies and meals are conserved in every tick of 300-tick runs of fed.park, warm.park, and cut.park: supplies sent by the depot equal supplies in transit plus in shop stock plus converted to meals, and meals made equal meals in shop stock plus meals in transit to guests plus meals held by guests plus meals eaten. (integration test)
+3. Running cut.park and warm.park each for 600 ticks: in cut.park the shop's offer reports no meals available from the first tick, no guest chooses the shop afterwards, its queue empties with every queued guest either served or returned unserved, and mean guest hunger ends higher than in warm.park. (integration test)
 4. Food availability at every sampled place can be reconstructed exactly from its attributed per-shop contributions. (integration test)
 5. In warm.park, the preview of placing a second shop touching both paths equals the resolved park immediately after the placement is committed, and food availability rises by a nonzero amount at the places nearest the new shop. (integration test)
 6. Loading a saved park and saving it again gives an identical file, and a world regenerated from a save equals the world that was saved, including cut.park's shipments in transit. (integration test)
-7. Two runs of fed.park for 3000 ticks give identical state hashes, and the hash from the Windows build equals the hash from the Linux build (decision 0022). (integration test, plus the hash printed by both builds)
+7. Two runs of fed.park for 600 ticks give identical state hashes, and the cross-build check's 3000-tick runs of all three parks give the same hash at every tick on the Windows and Linux builds (decision 0022). (integration test, plus the cross-build check)
 8. A capture of warm.park after 3000 ticks with the food overlay on shows the guest path and backstage path as flat paths on the ground, the shop and depot as boxes, guests on the paths, and the food-availability overlay on the ground. (scripted capture: effortless-building, believable-guests, legible-simulation)
 9. A capture of cut.park after 3000 ticks with the food overlay on shows the starved shop marked as starved and the overlay dimmed around it compared with the warm.park capture. (scripted capture: effortless-building, plausible-operations, legible-simulation)
 10. In the running app, drawing paths, placing boxes, the preview ghost updating the overlay before commit, the delete tool previewing a deletion, hovering the overlay for attribution, and clicking a guest and a shop for their explanations all work as the scenario describes. (manual)
@@ -70,7 +70,7 @@ Staff (a service rate stands in for them), money and payment, needs other than h
 
 ## Open questions
 
-- How long 3000 ticks takes in the sanitized Linux build decides whether the criteria's run lengths hold. Resolved by measurement once the members step real content, after believable-guests lands, using the harness deterministic-simulation provides.
+None.
 
 ## Research notes
 

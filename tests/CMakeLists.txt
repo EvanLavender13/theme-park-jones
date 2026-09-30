@@ -11,6 +11,7 @@ endif()
 
 add_subdirectory(sim)
 add_subdirectory(scenarios)
+add_subdirectory(integration)
 add_subdirectory(checks)
 add_subdirectory(tools)
 # The renderer and the app build only with the windowed application.
