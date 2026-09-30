@@ -403,6 +403,16 @@ Network deriveNetwork(const std::vector<ParkPath> &paths, const std::vector<Door
   return Network(std::move(carriers), nodeCount, std::move(anchors));
 }
 
+// Derived, on a network's entity from path-networks to the finisher that drops it: the network the
+// previous resolution derived.
+struct PreviousNetwork {
+  Network Held;
+};
+
+template <typename Visitor> void visitFields(Visitor &visitor, PreviousNetwork &previous) {
+  visitor.field("network", previous.Held);
+}
+
 void resolvePathNetworks(World &world) {
   const std::vector<ParkPath> paths = parkPaths(world);
   const std::vector<ParkEntrance> entrances = parkEntrances(world);
@@ -411,11 +421,34 @@ void resolvePathNetworks(World &world) {
     Network network = deriveNetwork(paths, doorsServing(entrances, boxes, kind), kind);
     const EntityKey key =
         world.createDerivedEntity(NULL_KEY, NETWORK_PURPOSE, static_cast<uint64_t>(kind));
-    world.Registry.emplace_or_replace<Network>(world.findEntity(key), std::move(network));
+    const entt::entity entity = world.findEntity(key);
+    if (Network *held = world.Registry.try_get<Network>(entity)) {
+      world.Registry.emplace_or_replace<PreviousNetwork>(entity, PreviousNetwork{std::move(*held)});
+    }
+    world.Registry.emplace_or_replace<Network>(entity, std::move(network));
+  }
+}
+
+// Removes both kinds' previous networks, so no resolution ends holding one.
+void dropPreviousNetworks(World &world) {
+  for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
+    const entt::entity entity = world.findEntity(networkKey(kind));
+    if (entity != entt::null) {
+      world.Registry.remove<PreviousNetwork>(entity);
+    }
   }
 }
 
 } // namespace
+
+const Network *previousNetwork(const World &world, PathKind kind) {
+  const entt::entity entity = world.findEntity(networkKey(kind));
+  if (entity == entt::null) {
+    return nullptr;
+  }
+  const PreviousNetwork *previous = world.Registry.try_get<PreviousNetwork>(entity);
+  return previous != nullptr ? &previous->Held : nullptr;
+}
 
 const Network &parkNetwork(const World &world, PathKind kind) {
   static const Network EMPTY;
@@ -428,8 +461,11 @@ const Network &parkNetwork(const World &world, PathKind kind) {
 }
 
 void addRoutes(WorldSchema &schema) {
+  schema.addComponent<PreviousNetwork>("previous-network", DataKind::Derived);
   schema.addResolver("path-networks", &resolvePathNetworks);
   addRouteDistance(schema);
 }
+
+void addDropPreviousNetworks(WorldSchema &schema) { schema.addFinisher(&dropPreviousNetworks); }
 
 } // namespace tpj

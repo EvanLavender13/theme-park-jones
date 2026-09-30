@@ -13,13 +13,15 @@ void addPark(WorldSchema &schema) {
   // The medium's types come first, since every capability builds on them. Capabilities register
   // their park types after them, in dependency order, starting with park intent and its commands,
   // then the routes that derive the park's networks, then the operations that run its shops and
-  // depots, then the guests who visit them.
+  // depots, then the guests who visit them. The previous networks are dropped last, once every
+  // finisher that carries places from them has run.
   addNetworkComponent(schema);
   addParkIntent(schema);
   addParkEdits(schema);
   addRoutes(schema);
   addOperations(schema);
   addGuests(schema);
+  addDropPreviousNetworks(schema);
 }
 
 std::shared_ptr<const WorldSchema> makeParkSchema() {

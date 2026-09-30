@@ -125,18 +125,20 @@ inline void stepUntil(World &world, uint64_t tick) {
 // The tick of the cycle that admits the first guests.
 inline constexpr uint64_t FIRST_ARRIVAL = ARRIVAL_INTERVAL - 1;
 
-// The legs park: an entrance whose door joins a near leg, a guest path 20 m long, whose far end
-// starts a far leg, a guest path 40 m long running on in line with it.
+// The legs park: an entrance whose door joins a near leg, a guest path 4 m long, whose far end
+// starts a far leg, a guest path 20 m long running on in line with it. The far leg starts 6 m from
+// the door, beyond CONNECTION_REACH, so deleting the near leg stops arrivals. The near leg is short
+// so that few guests are behind the first when it reaches the far leg.
 inline constexpr EntityKey LEGS_GATE{1};
 inline constexpr EntityKey NEAR_LEG{2};
 inline constexpr EntityKey FAR_LEG{3};
 
-inline std::vector<ParkPoint> nearLegPoints() { return {{0.0, 123.0}, {0.0, 103.0}}; }
+inline std::vector<ParkPoint> nearLegPoints() { return {{0.0, 123.0}, {0.0, 119.0}}; }
 
 inline World legsWorld() {
   return resolvedWorld(ParkIntent{.Entrances = {northGate(LEGS_GATE, 0.0)},
                                   .Paths = {guestPath(NEAR_LEG, nearLegPoints()),
-                                            guestPath(FAR_LEG, {{0.0, 103.0}, {0.0, 63.0}})},
+                                            guestPath(FAR_LEG, {{0.0, 119.0}, {0.0, 99.0}})},
                                   .Boxes = {}});
 }
 

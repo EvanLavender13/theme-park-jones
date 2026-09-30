@@ -32,6 +32,7 @@ add_executable(tpj_sim_tests
     routes/network_edits_test.cpp
     routes/route_distance_test.cpp
     routes/networks_test.cpp
+    routes/previous_networks_test.cpp
     routes/routes_park_test.cpp
     save_test.cpp
     schema_test.cpp

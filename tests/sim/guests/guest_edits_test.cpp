@@ -27,35 +27,6 @@ namespace {
 
 using test::recordOf;
 
-TEST_CASE("A guest whose place stops resolving leaves the park in the next cycle, and guests whose "
-          "places still resolve stay") {
-  World world = test::legsWorld();
-  const EntityKey farGuest = test::walkOntoFarLeg(world);
-  CommandQueue cut;
-  cut.push(DeletePath{test::FAR_LEG});
-  stepWorld(world, cut);
-
-  std::vector<EntityKey> stranded;
-  std::vector<EntityKey> kept;
-  for (const EntityKey guest : parkGuests(world)) {
-    const bool resolves = test::guestNetwork(world).resolve(recordOf(world, guest).At).has_value();
-    (resolves ? kept : stranded).push_back(guest);
-  }
-  REQUIRE(std::ranges::find(stranded, farGuest) != stranded.end());
-  REQUIRE_FALSE(kept.empty());
-
-  stepWorld(world);
-  for (const EntityKey guest : stranded) {
-    CAPTURE(guest);
-    CHECK_FALSE(guestRecord(world, guest).has_value());
-    CHECK_FALSE(test::isLive(world, guest));
-  }
-  for (const EntityKey guest : kept) {
-    CAPTURE(guest);
-    CHECK(guestRecord(world, guest).has_value());
-  }
-}
-
 constexpr int EDITS = 40;
 // Each edit is followed by fewer cycles than this with no command.
 constexpr uint64_t IDLE_CYCLES = 10;
@@ -116,22 +87,58 @@ template <typename AfterCycle> void runGuestEdits(uint64_t seed, AfterCycle afte
       seed, [](const World & /*world*/, const std::optional<ParkEdit> & /*edit*/) {}, afterCycle);
 }
 
+// Watches the edited cycles of a run for one that retires a guest's place, taking its path or
+// connector away, while the guest network keeps a carrier.
+struct RetireWatch {
+  Network Before;
+  std::vector<Place> Places;
+  bool Retired = false;
+
+  // The systems walk, admit, and remove guests before the cycle's commands apply, so the places
+  // the resolution carries are those of the world stepped a cycle with no commands.
+  void before(const World &world) {
+    Before = test::guestNetwork(world);
+    World stepped = copyWorld(world);
+    stepWorld(stepped);
+    Places.clear();
+    for (const EntityKey guest : parkGuests(stepped)) {
+      Places.push_back(recordOf(stepped, guest).At);
+    }
+  }
+
+  void after(const World &world) {
+    const Network &after = test::guestNetwork(world);
+    if (after.carriers().empty()) {
+      return;
+    }
+    Retired =
+        Retired || std::ranges::any_of(Places, [&](const Place &place) {
+          return Before.resolve(place).has_value() && !carryOver(place, Before, after).has_value();
+        });
+  }
+};
+
 TEST_CASE("No cycle of randomized park edits with guests walking, waiting, and eating throws") {
   bool sawEditAmongGuests = false;
   bool sawEditAmongWaiting = false;
-  bool sawGuestCutOff = false;
+  RetireWatch retire;
   runGuestEdits(
       71,
       [&](const World &world, const std::optional<ParkEdit> &edit) {
         sawEditAmongGuests = sawEditAmongGuests || (edit.has_value() && !parkGuests(world).empty());
         sawEditAmongWaiting = sawEditAmongWaiting || (edit.has_value() && anyWaiting(world));
+        if (edit.has_value()) {
+          retire.before(world);
+        }
       },
       [&](const World &world, bool edited) {
-        sawGuestCutOff = sawGuestCutOff || (edited && !allResolve(world));
+        if (edited) {
+          retire.after(world);
+        }
       });
   CHECK(sawEditAmongGuests);
   CHECK(sawEditAmongWaiting);
-  CHECK(sawGuestCutOff);
+  CHECK(retire.Retired);
 }
 
 TEST_CASE("In every cycle of randomized park edits with guests walking, waiting, and eating, "
@@ -146,16 +153,28 @@ TEST_CASE("In every cycle of randomized park edits with guests walking, waiting,
 }
 
 TEST_CASE("After every cycle of randomized park edits with guests walking, waiting, and eating "
-          "that applies no edit, "
-          "every guest's place resolves on the guest network") {
+          "that leaves the guest network a carrier, every guest's place resolves on it, including "
+          "cycles whose edit takes a guest's path away") {
   bool sawGuests = false;
-  runGuestEdits(72, [&](const World &world, bool edited) {
-    if (!edited) {
-      REQUIRE(allResolve(world));
-      sawGuests = sawGuests || !parkGuests(world).empty();
-    }
-  });
+  RetireWatch retire;
+  runGuestEdits(
+      72,
+      [&](const World &world, const std::optional<ParkEdit> &edit) {
+        if (edit.has_value()) {
+          retire.before(world);
+        }
+      },
+      [&](const World &world, bool edited) {
+        if (edited) {
+          retire.after(world);
+        }
+        if (!test::guestNetwork(world).carriers().empty()) {
+          REQUIRE(allResolve(world));
+          sawGuests = sawGuests || !parkGuests(world).empty();
+        }
+      });
   CHECK(sawGuests);
+  CHECK(retire.Retired);
 }
 
 TEST_CASE("Every world randomized park edits with guests walking, waiting, and eating reach equals "
@@ -210,6 +229,114 @@ TEST_CASE("A candidate made with an edit from a world of randomized park edits w
       });
   CHECK(compared == EDITS);
   CHECK(sawGuests);
+}
+
+// The eating park stepped until a guest waits at a shop, with guests walking the spine behind it.
+const World &waitingWorld() {
+  static const World world = [] {
+    World stepped = test::eatingWorld();
+    while (!anyWaiting(stepped)) {
+      REQUIRE(stepped.Tick < WARM_UP_LIMIT);
+      stepWorld(stepped);
+    }
+    return stepped;
+  }();
+  return world;
+}
+
+bool anyOn(const World &world, EntityKey carrier) {
+  const std::vector<EntityKey> guests = parkGuests(world);
+  return std::ranges::any_of(
+      guests, [&](EntityKey guest) { return recordOf(world, guest).At.Carrier == carrier; });
+}
+
+// Where the carrying rule puts a place held on the network before: carried over when that gives a
+// place, else the nearest place to where it stood, else where it was.
+Place carriedPlace(const Place &place, const Network &before, const Network &after) {
+  if (const std::optional<Place> carried = carryOver(place, before, after)) {
+    return *carried;
+  }
+  if (const std::optional<GroundPoint> ground = before.groundPoint(place)) {
+    if (const std::optional<Place> nearest = after.nearestPlace(*ground)) {
+      return *nearest;
+    }
+  }
+  return place;
+}
+
+// Checks every guest of the candidate made from the world with the commands against the carrying
+// rule, and that nothing else of its record but its Position changed.
+void checkCarried(const World &world, const CommandQueue &commands) {
+  const World candidate = makeCandidate(world, commands);
+  REQUIRE(parkGuests(candidate) == parkGuests(world));
+  const Network &before = test::guestNetwork(world);
+  const Network &after = test::guestNetwork(candidate);
+  for (const EntityKey guest : parkGuests(world)) {
+    CAPTURE(guest);
+    GuestRecord expected = recordOf(world, guest);
+    expected.At = carriedPlace(expected.At, before, after);
+    GuestRecord carried = recordOf(candidate, guest);
+    carried.Position = expected.Position;
+    CHECK(carried == expected);
+  }
+}
+
+TEST_CASE("A candidate holds exactly its world's guests, each carried over to the new guest "
+          "network, or else moved to its nearest place to where it stood, or else left where it "
+          "was, with nothing else of its record changed but its Position") {
+  const World &world = waitingWorld();
+  CommandQueue commands;
+
+  SECTION("a path crossing the spine splits edges guests walk, leaving every carrier's line") {
+    REQUIRE(anyOn(world, test::EATING_SPINE));
+    const AddPath crossing{PathKind::Guest, {{-10.0, 80.0}, {10.0, 80.0}}};
+    REQUIRE(isAccepted(world, crossing));
+    commands.push(crossing);
+  }
+  SECTION("deleting the spine retires the places of the guests on it, while other guest paths "
+          "are left") {
+    REQUIRE(anyOn(world, test::EATING_SPINE));
+    commands.push(DeletePath{test::EATING_SPINE});
+  }
+  SECTION("moving the shop a guest waits at moves its connector's line") {
+    const std::vector<EntityKey> guests = parkGuests(world);
+    const auto waiting = std::ranges::find_if(guests, [&](EntityKey guest) {
+      return recordOf(world, guest).Activity == GuestActivity::Waiting;
+    });
+    REQUIRE(waiting != guests.end());
+    const EntityKey shop = recordOf(world, *waiting).Target;
+    const std::vector<ParkBox> boxes = parkBoxes(world);
+    const auto box = std::ranges::find(boxes, shop, &ParkBox::Key);
+    REQUIRE(box != boxes.end());
+    const MoveBox move{shop, Pose{box->At.X, box->At.Z + 1.0, box->At.FacingX, box->At.FacingZ}};
+    REQUIRE(isAccepted(world, move));
+    commands.push(move);
+  }
+  SECTION("deleting every guest path leaves no place to move to") {
+    for (const ParkPath &path : parkPaths(world)) {
+      if (path.Kind == PathKind::Guest) {
+        commands.push(DeletePath{path.Key});
+      }
+    }
+    REQUIRE(test::guestNetwork(makeCandidate(world, commands)).carriers().empty());
+  }
+
+  checkCarried(world, commands);
+}
+
+TEST_CASE("A cycle stepped from a world whose guest network has no carrier leaves it holding no "
+          "guest") {
+  World world = test::legsWorld();
+  static_cast<void>(test::walkOntoFarLeg(world));
+  CommandQueue cut;
+  cut.push(DeletePath{test::NEAR_LEG});
+  cut.push(DeletePath{test::FAR_LEG});
+  stepWorld(world, cut);
+  REQUIRE(test::guestNetwork(world).carriers().empty());
+  REQUIRE_FALSE(parkGuests(world).empty());
+
+  stepWorld(world);
+  CHECK(parkGuests(world).empty());
 }
 
 } // namespace

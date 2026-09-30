@@ -344,9 +344,10 @@ bool awaitVisit(World &world, EntityKey key, Guest &guest) {
   return false;
 }
 
-// Each guest, in ascending key order, leaves when its place no longer resolves, and otherwise
-// gets hungrier, and unless it is still waiting for its visit to come back, walks. Guests that
-// leave go after all have stepped, and then the entrances admit new ones.
+// Each guest, in ascending key order, leaves when its place does not resolve, which carrying
+// leaves only when the guest network has no carrier, and otherwise gets hungrier, and unless it is
+// still waiting for its visit to come back, walks. Guests that leave go after all have stepped,
+// and then the entrances admit new ones.
 void stepGuests(World &world) {
   const Network &network = parkNetwork(world, PathKind::Guest);
   const std::vector<EntityKey> entrances = entranceKeys(world);
@@ -369,6 +370,32 @@ void stepGuests(World &world) {
     world.destroyEntity(key);
   }
   admitGuests(world, network);
+}
+
+// Carries each guest's place from the guest network before the resolution to the one it derived:
+// by carryOver, and for a retired place, to the new network's nearest place to where the guest
+// stood. A place with neither is left as it is, and its guest leaves when it next steps. Nothing
+// changes in a world's first resolution, which has no network before.
+void carryGuests(World &world) {
+  const Network *before = previousNetwork(world, PathKind::Guest);
+  if (before == nullptr) {
+    return;
+  }
+  const Network &after = parkNetwork(world, PathKind::Guest);
+  for (const EntityKey key : parkGuests(world)) {
+    Guest &guest = world.Registry.get<Guest>(world.findEntity(key));
+    if (const std::optional<Place> carried = carryOver(guest.At, *before, after)) {
+      guest.At = *carried;
+      continue;
+    }
+    const std::optional<GroundPoint> stood = before->groundPoint(guest.At);
+    if (!stood) {
+      continue;
+    }
+    if (const std::optional<Place> nearest = after.nearestPlace(*stood)) {
+      guest.At = *nearest;
+    }
+  }
 }
 
 } // namespace
@@ -452,6 +479,7 @@ size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options) {
 void addGuests(WorldSchema &schema) {
   schema.addComponent<Guest>("guest", DataKind::State);
   schema.addSystem(&stepGuests);
+  schema.addFinisher(&carryGuests);
 }
 
 } // namespace tpj
