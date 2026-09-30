@@ -53,7 +53,7 @@ Later milestones are drawn from the deepening candidates once the slice shows ho
 ## Deepening candidates
 
 - Incremental resolution: rebuild only the parts of the graphs and field an edit touches, proven equal to a full rebuild. Gated on: resolution time mattering at larger parks.
-- Crossing kinds at a cost: guests using backstage paths, or supplies crossing guest areas, only when there is no alternative and at a high cost, as in Parkitect.
+- Composed networks: a network built from several carrier kinds, joined only at deliberate places such as staff gates, buildings open on both sides, or ride stations, with a cost per kind and its own sources rather than every anchor. First uses are a staff network spanning guest and backstage paths, and guests or supplies crossing kinds at a high cost only when there is no alternative, as in Parkitect. Gated on: the first mover that needs one, likely plausible-operations' staff.
 - Transport rides as edges with travel time, wait, capacity, and price (docs/design-notes.md, "Networks").
 - One-way paths and queue lines as edge properties.
 - Crowding: edge cost rising with footfall, so busy routes become slower and guests spread out.
