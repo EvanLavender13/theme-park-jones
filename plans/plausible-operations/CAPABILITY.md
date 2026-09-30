@@ -74,5 +74,6 @@ Later milestones are drawn from the deepening candidates once the slice has been
 - Parkitect's depots and haulers show the structure (source, depot, network, shop), and that a stock-out must be visibly local.
 - The (s, S) policy with an inventory position that counts orders in transit avoids double-ordering.
 - Little's law justifies the wait estimate: queue ahead over service rate.
+- SimCity 4 shows aggregate trips assigned over a network, with cosmetic figures and a route query for tracing, carry a beloved simulation; its failures came from commute-only trips and greedy assignment, not from lacking agents.
 
 Depth is in RESEARCH.md.
