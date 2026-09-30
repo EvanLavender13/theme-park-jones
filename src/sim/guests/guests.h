@@ -160,8 +160,9 @@ double hungerCurve(double hunger);
 // Throws std::invalid_argument for no options or a score that is not finite.
 size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options);
 // Registers the guest state, the system that steps guests and admits new ones, and the finisher
-// that carries their places across each resolution. The routes and operations modules'
-// registrations come first, and addDropPreviousNetworks after.
+// that carries their places across each resolution, and then hungry footfall's field, state,
+// system, and finisher. The routes and operations modules' registrations come first, and
+// addDropPreviousNetworks after.
 void addGuests(WorldSchema &schema);
 
 } // namespace tpj

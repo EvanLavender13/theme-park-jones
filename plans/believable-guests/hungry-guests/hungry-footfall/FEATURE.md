@@ -68,6 +68,13 @@ One existing test asserts a registration this feature extends, and the test pass
 
 - tests/sim/guests/arrivals_test.cpp, "makeParkSchema registers the state type guest and the guests' system after everything else addPark registers": addGuests now registers four component types and two systems, and makeParkSchema's lists end with footfall's.
 
+## Test pass decisions
+
+- Criterion 5 is checked by scripts/cross-build-check.sh, which runs the park-edits scenario with makeParkSchema, not by a Catch2 test.
+- Principle 6, that no other module reads the footfall state, is checked by review and by the private header check on guests/internal/footfall.h.
+- Two randomized tests are slimmed to stay well under 1 s: operations_edits_test's save round-trip with synthetic guests runs 20 edits instead of 60, still saving the tick-0 world and comparing through every warm-up cycle, and guest_edits_test's footfall bounds test runs 12 edits.
+- Principles 1 and 8 need no new tests: the randomized guest edit tests of carried-guests' criterion 6 already compare saves and candidates of worlds made with makeParkSchema, which now hold footfall.
+
 ## Open questions
 
 None.

@@ -3,6 +3,7 @@
 add_library(tpj_sim STATIC
     cycle.cpp
     draw.cpp
+    guests/footfall.cpp
     guests/guests.cpp
     medium/flow.cpp
     medium/network.cpp

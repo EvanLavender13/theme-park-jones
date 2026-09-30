@@ -43,6 +43,9 @@ std::string routesText() {
 }
 
 constexpr int EDITS = 60;
+// Saving, loading, and stepping a second world every cycle is costly, so the save test runs fewer
+// edits.
+constexpr int SAVE_EDITS = 20;
 // Each edit is followed by fewer cycles than this with no command, so orders reach depots and
 // shipments reach shops between edits.
 constexpr uint64_t IDLE_CYCLES = 20;
@@ -119,9 +122,10 @@ std::vector<EntityKey> takeTurn(World &world, const GuestTurn &turn) {
 // applies each edit by one cycle, followed by a drawn number of cycles with no command.
 // beforeCycle sees the world after the guests' turn and the cycle about to step it. afterCycle
 // sees the resolved starting world and the world after every cycle, with whether that cycle
-// applied an edit.
+// applied an edit. A test whose check is costly runs fewer edits.
 template <typename BeforeCycle, typename AfterCycle>
-void runServiceSequence(uint64_t seed, BeforeCycle beforeCycle, AfterCycle afterCycle) {
+void runServiceSequence(uint64_t seed, BeforeCycle beforeCycle, AfterCycle afterCycle,
+                        int edits = EDITS) {
   test::RouteEditDraws draws(seed);
   // The guests draw apart from the edits, so the edit sequence is the one the seed gives without
   // them.
@@ -152,7 +156,7 @@ void runServiceSequence(uint64_t seed, BeforeCycle beforeCycle, AfterCycle after
   for (uint64_t cycle = 0; cycle < WARM_UP_CYCLES; ++cycle) {
     runCycle(false);
   }
-  for (int edit = 0; edit < EDITS; ++edit) {
+  for (int edit = 0; edit < edits; ++edit) {
     INFO("edit " << edit);
     runCycle(true);
     const uint64_t idle = draws.below(IDLE_CYCLES);
@@ -387,7 +391,8 @@ TEST_CASE("Every world a randomized park edit sequence with synthetic guests rea
           }
         }
         REQUIRE(worldsEqual(loaded.value(), world));
-      });
+      },
+      SAVE_EDITS);
   CHECK(sawQueueSaved);
 }
 

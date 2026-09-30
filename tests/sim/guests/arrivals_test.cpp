@@ -2,7 +2,9 @@
 #include "support/park_worlds.h"
 
 #include "sim/entity_key.h"
+#include "sim/guests/footfall.h"
 #include "sim/guests/guests.h"
+#include "sim/medium/field.h"
 #include "sim/medium/network.h"
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
@@ -12,6 +14,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cstddef>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <stdint.h>
@@ -40,22 +44,46 @@ World gatesWorld() {
 
 EntityKey keyAt(uint64_t value) { return EntityKey{value}; }
 
-TEST_CASE("makeParkSchema registers the state type guest and the guests' system after everything "
-          "else addPark registers") {
+TEST_CASE("addGuests registers guest, hungry footfall's field types, and footfall, then stepGuests "
+          "and the footfall system, then carryGuests, the field's finisher, and the footfall "
+          "finisher, and makeParkSchema's component types and systems end with them") {
   WorldSchema guestsAlone;
   addGuests(guestsAlone);
-  REQUIRE(guestsAlone.components().size() == 1);
-  REQUIRE(guestsAlone.systems().size() == 1);
-  CHECK(guestsAlone.components().front().Name == "guest");
-  CHECK(guestsAlone.components().front().Kind == DataKind::State);
+  CHECK(HungryFootfall::Name == "hungry-footfall");
+  WorldSchema fieldAlone;
+  addField<HungryFootfall>(fieldAlone);
+  REQUIRE(fieldAlone.components().size() == 2);
+  REQUIRE(fieldAlone.finishers().size() == 1);
+
+  const std::vector<ComponentType> &types = guestsAlone.components();
+  REQUIRE(types.size() == 4);
+  CHECK(types[0].Name == "guest");
+  CHECK(types[0].Kind == DataKind::State);
+  for (std::size_t index = 0; index < 2; ++index) {
+    CAPTURE(index);
+    CHECK(types[index + 1].Name == fieldAlone.components()[index].Name);
+    CHECK(types[index + 1].Kind == fieldAlone.components()[index].Kind);
+    CHECK(types[index + 1].TypeId == fieldAlone.components()[index].TypeId);
+  }
+  CHECK(types[3].Name == "footfall");
+  CHECK(types[3].Kind == DataKind::State);
+  CHECK(guestsAlone.systems().size() == 2);
+  REQUIRE(guestsAlone.finishers().size() == 3);
+  CHECK(guestsAlone.finishers()[1] == fieldAlone.finishers().front());
 
   const std::shared_ptr<const WorldSchema> park = makeParkSchema();
   REQUIRE(park != nullptr);
-  REQUIRE_FALSE(park->components().empty());
-  REQUIRE_FALSE(park->systems().empty());
-  CHECK(park->components().back().Name == "guest");
-  CHECK(park->components().back().TypeId == guestsAlone.components().front().TypeId);
-  CHECK(park->systems().back() == guestsAlone.systems().front());
+  const std::vector<ComponentType> &parkTypes = park->components();
+  REQUIRE(parkTypes.size() >= types.size());
+  const std::size_t typesFrom = parkTypes.size() - types.size();
+  for (std::size_t index = 0; index < types.size(); ++index) {
+    CAPTURE(index);
+    CHECK(parkTypes[typesFrom + index].Name == types[index].Name);
+    CHECK(parkTypes[typesFrom + index].TypeId == types[index].TypeId);
+  }
+  const std::vector<WorldFunction> &systems = guestsAlone.systems();
+  REQUIRE(park->systems().size() >= systems.size());
+  CHECK(std::equal(systems.begin(), systems.end(), park->systems().end() - std::ssize(systems)));
 }
 
 TEST_CASE("parkGuests gives the guests' keys ascending, and guestRecord gives a record exactly for "

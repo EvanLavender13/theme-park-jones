@@ -1,6 +1,7 @@
 #include "sim/guests/guests.h"
 
 #include "sim/draw.h"
+#include "sim/guests/internal/footfall.h"
 #include "sim/guests/internal/guest.h"
 #include "sim/medium/field.h"
 #include "sim/medium/flow.h"
@@ -480,6 +481,7 @@ void addGuests(WorldSchema &schema) {
   schema.addComponent<Guest>("guest", DataKind::State);
   schema.addSystem(&stepGuests);
   schema.addFinisher(&carryGuests);
+  addFootfall(schema);
 }
 
 } // namespace tpj

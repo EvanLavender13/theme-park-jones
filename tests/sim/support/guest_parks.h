@@ -6,6 +6,7 @@
 #include "sim/command_queue.h"
 #include "sim/draw.h"
 #include "sim/entity_key.h"
+#include "sim/guests/footfall.h"
 #include "sim/guests/guests.h"
 #include "sim/medium/field.h"
 #include "sim/medium/network.h"
@@ -365,6 +366,16 @@ inline std::optional<RouteEntry> homeEntry(const World &world,
 inline bool isAtNode(const World &world, const Place &place) {
   const std::optional<NetworkPosition> position = guestNetwork(world).resolve(place);
   return position.has_value() && std::holds_alternative<NodePosition>(position.value());
+}
+
+// The place of the edge's carrier halfway between its two stops.
+inline Place midpointOf(const NetworkEdge &edge) {
+  return Place{edge.Carrier, (edge.FromDistance + edge.ToDistance) / 2.0};
+}
+
+// Hungry footfall's value at the place on the guest network.
+inline double footfallAt(const World &world, const Place &place) {
+  return fieldValue<HungryFootfall>(world, guestNetwork(world), place);
 }
 
 // The tick of the guest's last choice, or none before its first.
