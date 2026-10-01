@@ -9,6 +9,7 @@
 #include "sim/mix.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
+#include "sim/park_schema.h"
 #include "sim/routes/networks.h"
 #include "sim/routes/route_distance.h"
 #include "sim/world.h"

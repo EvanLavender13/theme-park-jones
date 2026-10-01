@@ -32,11 +32,11 @@ layer-check makes decision 0027's layers a property of the build. cmake/layers.t
   - each pair of file and header reported once.
 
   A named file that is not under ROOT/src or ROOT/tests is not a dependency.
-- Each finding is one whole, unprefixed line on standard error, with paths relative to ROOT, in exactly one of these forms. A test of module m's unit is written tests/m, and a file under ROOT/tests/integration's is written tests/integration.
+- Each finding is one whole, unprefixed line on standard error, with paths relative to ROOT, in exactly one of these forms. Units are written relative to ROOT too: a unit of the table as src/<unit>, such as src/sim/park or src/sim/*, a test of module m's unit as tests/m, and a file under ROOT/tests/integration's as tests/integration.
   - `<file> in <unit> includes <header> in <unit>, which is not below it`
   - `<file> is in no layer`
   - `<unit> holds no file`
-  - `<unit> is listed more than once`
+  - `<unit> is listed more than once`, once however many times the unit is listed
 
   The check exits with status 0 exactly when it reports no finding. Run without ROOT or without LAYERS, it fails naming the missing variable. Given a LAYERS file it cannot read, it fails naming the file.
 - The table is read one layer per line, lowest first, with the units of a layer separated by blanks. Blank lines and lines whose first non-blank character is # are not layers.

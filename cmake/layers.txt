@@ -1,0 +1,16 @@
+# The layers of decision 0027, one per line, lowest first. A file may include headers of its own
+# unit and of units in lower layers, never of a sibling in its own layer or of a unit above it.
+# The units of a layer are separated by blanks. Each unit is a path under src: a directory, holding
+# every file beneath it; a directory followed by /*, holding only the files directly in it; or a
+# file named without its extension, holding the header and source of that name.
+# cmake/check_layers.cmake enforces the layers, and docs/conventions.md states the rule.
+core
+sim/*
+sim/medium
+sim/park
+sim/routes
+sim/operations
+sim/guests
+sim/park_schema
+tools render legible scenarios
+app

@@ -6,6 +6,7 @@
 #include "sim/world.h"
 
 #include <array>
+#include <memory>
 #include <stdint.h>
 #include <string_view>
 #include <vector>
@@ -96,8 +97,9 @@ std::vector<ParkEntrance> parkEntrances(const World &world);
 std::vector<ParkPath> parkPaths(const World &world);
 std::vector<ParkBox> parkBoxes(const World &world);
 
-// The new-park template with makeParkSchema's schema and the seed, resolution pending.
-World makeNewPark(uint64_t seed);
+// The new-park template with the schema and the seed, resolution pending: an entrance on the
+// park's edge facing in, and a guest path running into the park from in front of it.
+World makeNewPark(std::shared_ptr<const WorldSchema> schema, uint64_t seed);
 
 } // namespace tpj
 
