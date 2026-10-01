@@ -62,6 +62,12 @@ The exact text is in PLAN.md, Tasks 1 to 3.
 - Picking a shop by its starved mark.
 - More than one Inspector at a time.
 
+## Test pass decisions
+
+- The tie order between an entrance and a box, or two boxes, has no test: a physically valid park keeps solids apart, so a ray meets two of them at one entry only where they touch. The order is tested for an entrance or box before a guest, and between guests.
+- The head-home display name has no test of its own: warm.park records no head-home option, and it follows the rule carry-on's test checks.
+- Criterion 10 and the app's mark, close, and forgetting the subject on a replaced world are checked by hand.
+
 ## Open questions
 
 None.

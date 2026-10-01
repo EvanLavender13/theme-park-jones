@@ -15,11 +15,22 @@ Rgba guestColor(double hunger) {
           mix(GUEST_SATED_COLOR.B, GUEST_HUNGRY_COLOR.B), 1.0f};
 }
 
-void appendGuest(ParkMesh &mesh, GroundPoint point, double hunger) {
+Pose guestPose(GroundPoint point) {
   Pose pose;
   pose.X = point.X;
   pose.Z = point.Z;
-  appendBox(mesh, pose, GUEST_SIZE, GUEST_HEIGHT, guestColor(hunger));
+  return pose;
+}
+
+void appendGuest(ParkMesh &mesh, GroundPoint point, double hunger) {
+  appendBox(mesh, guestPose(point), GUEST_SIZE, GUEST_HEIGHT, guestColor(hunger));
+}
+
+void appendGuestEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color) {
+  const std::optional<GuestRecord> record = guestRecord(world, key);
+  if (record && record->Position) {
+    appendBox(mesh, guestPose(*record->Position), GUEST_SIZE, GUEST_HEIGHT, color);
+  }
 }
 
 ParkMesh buildGuestMesh(const World &world) {
