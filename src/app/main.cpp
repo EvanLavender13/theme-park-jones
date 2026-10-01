@@ -1,16 +1,17 @@
 #include "app/debug_panel.h"
 #include "app/food_tooltip.h"
 #include "app/inspector_window.h"
+#include "app/interaction.h"
 #include "app/orbit_camera.h"
 #include "app/park_dialogs.h"
 #include "app/park_session.h"
+#include "app/scene_sync.h"
+#include "app/scene_uploads.h"
 #include "app/shop_context_tooltip.h"
 #include "app/tool_panel.h"
 #include "core/profile.h"
-#include "legible/food.h"
 #include "legible/inspect.h"
 #include "legible/preview.h"
-#include "render/food_overlay.h"
 #include "render/graph_overlay.h"
 #include "render/guest_mesh.h"
 #include "render/park_mesh.h"
@@ -113,108 +114,6 @@ bool parseOptions(int argc, char **argv, Options &options) {
   return true;
 }
 
-// The intent a park mesh was built from, so the mesh is rebuilt only when intent changes.
-struct DrawnIntent {
-  std::vector<tpj::ParkEntrance> Entrances;
-  std::vector<tpj::ParkPath> Paths;
-  std::vector<tpj::ParkBox> Boxes;
-
-  bool operator==(const DrawnIntent &) const = default;
-};
-
-// The highlight, inspected subject, and overlay choice the ghost and overlay meshes were last
-// built with.
-struct DrawnPreview {
-  std::optional<tpj::EntityKey> Highlight;
-  std::optional<tpj::InspectorSubject> Inspected;
-  bool FoodOverlay = false;
-
-  bool operator==(const DrawnPreview &) const = default;
-};
-
-// The left button's presses and releases over one frame.
-struct PointerButtons {
-  bool Pressed = false;
-  bool Released = false;
-};
-
-// Rebuilds the park mesh when the world's intent differs from what was last drawn, framing the
-// camera on the first one. Returns false if the upload failed.
-bool updateParkMesh(tpj::Renderer &renderer, const tpj::World &world,
-                    std::optional<DrawnIntent> &drawn, tpj::OrbitCamera &camera) {
-  DrawnIntent current{tpj::parkEntrances(world), tpj::parkPaths(world), tpj::parkBoxes(world)};
-  if (drawn && *drawn == current) {
-    return true;
-  }
-  const tpj::ParkMesh mesh = tpj::buildParkMesh(world);
-  if (!drawn) {
-    if (const std::optional<tpj::GroundBounds> bounds = tpj::meshBounds(mesh)) {
-      tpj::frameOrbitCamera(camera, *bounds, tpj::CameraView{}.FovY);
-    }
-  }
-  drawn = std::move(current);
-  return tpj::setParkMesh(renderer, mesh);
-}
-
-// The frame's ghost: the preview's edit with its candidate's walkways and starved marks, then the
-// tool's highlight, then the inspected guest or shop's mark.
-tpj::ParkMesh ghostMesh(const tpj::World &world, const tpj::ToolState &tool,
-                        const tpj::Preview &preview,
-                        const std::optional<tpj::InspectorSubject> &inspected) {
-  tpj::ParkMesh mesh;
-  if (preview.Edit) {
-    mesh = tpj::buildGhostMesh(world, *preview.Edit, preview.Candidate);
-  }
-  if (const std::optional<tpj::EntityKey> highlight = tpj::highlightedEntity(tool, world)) {
-    tpj::appendEntity(mesh, world, *highlight, tpj::HIGHLIGHT_TINT);
-  }
-  // Each adds nothing for a key of the other's kind.
-  if (inspected) {
-    tpj::appendEntity(mesh, world, inspected->Key, tpj::HIGHLIGHT_TINT);
-    tpj::appendGuestEntity(mesh, world, inspected->Key, tpj::HIGHLIGHT_TINT);
-  }
-  return mesh;
-}
-
-// Rebuilds the guests' mesh when the world's tick differs from the one last drawn. Returns false
-// if the upload failed.
-bool updateGuestMesh(tpj::Renderer &renderer, const tpj::World &world,
-                     std::optional<uint64_t> &drawnTick) {
-  if (drawnTick && *drawnTick == world.Tick) {
-    return true;
-  }
-  drawnTick = world.Tick;
-  return tpj::setGuestMesh(renderer, tpj::buildGuestMesh(world));
-}
-
-// The food overlay while it is shown, shaded by the food availability at each place, and an empty
-// mesh while it is not.
-tpj::ParkMesh foodOverlayMesh(const tpj::World &world, bool show) {
-  if (!show) {
-    return {};
-  }
-  return tpj::buildFoodOverlay(world, [&world](const tpj::Place &place) {
-    return tpj::foodAvailability(world, place).Value;
-  });
-}
-
-// Rebuilds the ghost and food overlay meshes when the preview was made again, or the tool's
-// highlight, the inspected subject, or the overlay's checkbox differs from when they were last
-// built. Returns false if an upload failed.
-bool updatePreviewMeshes(tpj::Renderer &renderer, const tpj::World &world,
-                         const tpj::ToolState &tool, const tpj::Preview &preview, bool remade,
-                         const std::optional<tpj::InspectorSubject> &inspected, bool showOverlay,
-                         std::optional<DrawnPreview> &drawn) {
-  const DrawnPreview current{tpj::highlightedEntity(tool, world), inspected, showOverlay};
-  if (!remade && drawn && *drawn == current) {
-    return true;
-  }
-  drawn = current;
-  return tpj::setGhostMesh(renderer, ghostMesh(world, tool, preview, inspected)) &&
-         tpj::setOverlayMesh(renderer,
-                             foodOverlayMesh(tpj::previewedWorld(world, preview), showOverlay));
-}
-
 // Where the cursor lies in normalized device coordinates, and the window's aspect ratio.
 struct CursorNdc {
   float X = 0.0f;
@@ -288,7 +187,7 @@ void addMouseInput(const SDL_Event &event, tpj::CameraInput &input) {
 // Drains pending events into ImGui, one frame of camera input, and the left button. Input ImGui is
 // using does not reach the camera, nor a press the tool; a release always reaches it. Returns false
 // when the app should quit.
-bool gatherInput(tpj::CameraInput &input, PointerButtons &buttons) {
+bool gatherInput(tpj::CameraInput &input, tpj::PointerButtons &buttons) {
   bool keepRunning = true;
   const ImGuiIO &io = ImGui::GetIO();
   SDL_Event event;
@@ -313,31 +212,6 @@ bool gatherInput(tpj::CameraInput &input, PointerButtons &buttons) {
   input.MoveRight = keyAxis(keys, SDL_SCANCODE_D, SDL_SCANCODE_A);
   input.Rotate = keyAxis(keys, SDL_SCANCODE_Q, SDL_SCANCODE_E);
   return keepRunning;
-}
-
-// Gives the tool the frame's press and release, and queues what a release commits. Called before
-// the frame's ticks and pointer move, so the buttons act on the world and pointer the ghost on
-// screen was built from.
-void useButtons(tpj::ToolState &tool, const tpj::World &world, tpj::CommandQueue &commands,
-                const PointerButtons &buttons) {
-  if (buttons.Pressed) {
-    tpj::pressPointer(tool, world);
-  }
-  if (buttons.Released) {
-    if (const std::optional<tpj::ParkEdit> edit = tpj::releasePointer(tool, world)) {
-      tpj::queueEdit(commands, *edit);
-    }
-  }
-}
-
-// With the Look tool, a press inspects the guest or shop under the cursor. Called before the
-// camera moves this frame, so it picks from the view on screen.
-void pickOnLookPress(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
-                     const tpj::ToolState &tool, const PointerButtons &buttons,
-                     std::optional<tpj::InspectorSubject> &inspected) {
-  if (buttons.Pressed && tool.Kind == tpj::ToolKind::None) {
-    tpj::pickSubject(inspected, world, entityUnderCursor(window, world, cameraView(camera)));
-  }
 }
 
 ImU32 imColor(tpj::Rgba color) {
@@ -373,7 +247,7 @@ struct ShownViews {
 // Builds the Debug and Tools panels, setting the shown views from their checkboxes, selecting the
 // tool the player chose and starting the park action they pressed.
 void drawPanels(tpj::ParkDialogs &dialogs, const tpj::World &world, const tpj::OrbitCamera &camera,
-                ShownViews &shown, tpj::ToolState &tool) {
+                ShownViews &shown, tpj::Interaction &interaction) {
   tpj::DebugStats stats;
   stats.SimTick = world.Tick;
   stats.Focus = camera.Focus;
@@ -396,10 +270,10 @@ void drawPanels(tpj::ParkDialogs &dialogs, const tpj::World &world, const tpj::O
   stats.MeanHunger = stats.Guests == 0 ? 0.0 : hunger / static_cast<double>(stats.Guests);
   stats.MealsEaten = tpj::unitsConsumed<tpj::Meals>(world, tpj::EATEN_CAUSE);
   tpj::drawDebugPanel(stats, shown.Graph, shown.FoodOverlay);
-  const tpj::ToolPanelChoice choice =
-      tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty(), dialogs.dialogShowing());
+  const tpj::ToolPanelChoice choice = tpj::drawToolPanel(
+      interaction.tool().Kind, !interaction.tool().Drawn.empty(), dialogs.dialogShowing());
   if (choice.Tool) {
-    tpj::selectTool(tool, *choice.Tool);
+    interaction.selectTool(*choice.Tool);
   }
   dialogs.press(choice.Park);
 }
@@ -409,15 +283,16 @@ void drawPanels(tpj::ParkDialogs &dialogs, const tpj::World &world, const tpj::O
 // scene while it is shown, the food tooltip at the cursor while the overlay is, on the preview's
 // candidate when it has one, and a shop ghost's context.
 void buildUi(SDL_Window *window, tpj::ParkDialogs &dialogs, const tpj::World &world,
-             const tpj::OrbitCamera &camera, ShownViews &shown, tpj::ToolState &tool,
-             const tpj::Preview &preview, std::optional<tpj::InspectorSubject> &inspected) {
+             const tpj::OrbitCamera &camera, ShownViews &shown, tpj::Interaction &interaction,
+             const tpj::Preview &preview) {
   const tpj::CameraView view = cameraView(camera);
   tpj::beginUiFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
-  drawPanels(dialogs, world, camera, shown, tool);
-  if (inspected && !tpj::drawInspector(tpj::inspectSubject(world, *inspected))) {
-    inspected.reset();
+  drawPanels(dialogs, world, camera, shown, interaction);
+  if (const std::optional<tpj::InspectorSubject> &subject = interaction.subject();
+      subject && !tpj::drawInspector(tpj::inspectSubject(world, *subject))) {
+    interaction.forgetSubject();
   }
   if (shown.Graph) {
     drawGraph(world, view);
@@ -431,45 +306,24 @@ void buildUi(SDL_Window *window, tpj::ParkDialogs &dialogs, const tpj::World &wo
   ImGui::Render();
 }
 
-// A replaced world resets what was built from, or held for, the old one: the tool drops any hold
-// and drawn points, the meshes are rebuilt, the kept preview is emptied, and the Inspector forgets
-// its subject.
-void forgetOldWorld(tpj::ToolState &tool, std::optional<DrawnIntent> &drawn,
-                    std::optional<uint64_t> &guestTick, tpj::KeptPreview &kept,
-                    std::optional<tpj::InspectorSubject> &inspected) {
-  tpj::selectTool(tool, tool.Kind);
-  drawn.reset();
-  guestTick.reset();
-  kept = {};
-  inspected.reset();
-}
-
 // Runs the main loop until quit or the frame limit. Returns false if rendering failed.
 bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::ParkSession &session) {
   tpj::OrbitCamera camera;
-  std::optional<DrawnIntent> drawn;
-  std::optional<uint64_t> guestTick;
-  tpj::KeptPreview kept;
-  std::optional<DrawnPreview> drawnPreview;
-  std::optional<tpj::InspectorSubject> inspected;
-  tpj::ToolState tool;
+  tpj::SceneSync scene;
+  tpj::Interaction interaction(session.generation());
   ShownViews shown{options.ShowGraph, options.ShowFoodOverlay};
   uint64_t lastCounter = SDL_GetPerformanceCounter();
   double simAccumulator = 0.0;
   tpj::ParkDialogs dialogs(renderer.Window);
-  uint64_t generation = session.generation();
 
   for (int frame = 1;; ++frame) {
     tpj::CameraInput input;
-    PointerButtons buttons;
+    tpj::PointerButtons buttons;
     if (!gatherInput(input, buttons)) {
       return true;
     }
     session.useFileRequest(dialogs.take(), dialogs);
-    if (session.generation() != generation) {
-      generation = session.generation();
-      forgetOldWorld(tool, drawn, guestTick, kept, inspected);
-    }
+    interaction.follow(session.generation());
 
     const uint64_t counter = SDL_GetPerformanceCounter();
     double dt = static_cast<double>(counter - lastCounter) /
@@ -479,8 +333,13 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::ParkSession &
       dt = MAX_FRAME_SECONDS;
     }
 
-    useButtons(tool, session.world(), session.commands(), buttons);
-    pickOnLookPress(renderer.Window, session.world(), camera, tool, buttons, inspected);
+    // The buttons act on the world and pointer the ghost on screen was built from, and a Look
+    // press picks from the view on screen, before the camera moves.
+    interaction.useButtons(session.world(), session.commands(), buttons);
+    if (interaction.picks(buttons)) {
+      interaction.pick(session.world(),
+                       entityUnderCursor(renderer.Window, session.world(), cameraView(camera)));
+    }
 
     // The simulation advances in fixed ticks regardless of frame rate, and queued edits apply at
     // the next (principle 10).
@@ -489,27 +348,27 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::ParkSession &
       session.step();
       simAccumulator -= tpj::SIM_TICK_SECONDS;
     }
-    if (!updateParkMesh(renderer, session.world(), drawn, camera)) {
-      return false;
-    }
-    if (!updateGuestMesh(renderer, session.world(), guestTick)) {
+    if (!tpj::uploadWorldMeshes(renderer, session.world(),
+                                scene.syncWorld(session.world(), session.generation()), camera)) {
       return false;
     }
 
     tpj::updateOrbitCamera(camera, input, static_cast<float>(dt), 0.5f * PARK_SIZE_METERS);
     const tpj::CameraView view = cameraView(camera);
-    tpj::movePointer(tool, groundUnderCursor(renderer.Window, view));
+    interaction.movePointer(groundUnderCursor(renderer.Window, view));
     // Made again only when the world ticks or the edit changes, so the ghost, the overlay, and the
     // tooltips show one candidate, and frames between ticks rebuild nothing.
     const bool remade =
-        tpj::keepPreview(kept, session.world(), tpj::tentativeEdit(tool, session.world()));
+        scene.syncPreview(session.world(), interaction.tentativeEdit(session.world()));
 
-    buildUi(renderer.Window, dialogs, session.world(), camera, shown, tool, kept.Made, inspected);
+    buildUi(renderer.Window, dialogs, session.world(), camera, shown, interaction, scene.preview());
 
     const bool lastFrame = options.FrameLimit > 0 && frame >= options.FrameLimit;
     // The meshes are updated after the panels, so a change of the checkbox shows in this frame.
-    if (!updatePreviewMeshes(renderer, session.world(), tool, kept.Made, remade, inspected,
-                             shown.FoodOverlay, drawnPreview) ||
+    const tpj::PreviewLook look{interaction.highlighted(session.world()), interaction.subject(),
+                                shown.FoodOverlay};
+    if ((scene.syncLook(remade, look) &&
+         !tpj::uploadPreviewMeshes(renderer, session.world(), scene.preview(), look)) ||
         !tpj::drawFrame(renderer, view, ImGui::GetDrawData(),
                         lastFrame ? options.CapturePath : nullptr)) {
       return false;

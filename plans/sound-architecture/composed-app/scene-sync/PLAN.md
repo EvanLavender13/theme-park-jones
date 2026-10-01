@@ -202,7 +202,7 @@ Step 1: Dispatch the test-writer agent with FEATURE.md, src/app/SPEC.md, src/leg
 Step 2: Build and run them.
 
 Run: `cmake.exe --build --preset windows-debug --target tpj_app_tests && build/windows-debug/tpj_app_tests.exe -# "[#scene_sync_test],[#interaction_test]"`
-Expected: the build succeeds. Against the stubs, the scene sync's tests fail, except those whose property the stubs' fixed answers already meet, such as no camera framing for a generation already seen and syncLook false for an unchanged look with no remake, which pass. The interaction's tests of follow with another generation, useButtons, picks, pick, and the tools delegations fail. The interaction's tests of its start, follow with its own generation, buttons with neither press nor release, and forgetSubject pass.
+Expected: the build succeeds, and the tests that need the stubs' behavior, including those that set up through a stubbed member, fail.
 
 ### Task 6: Implement the scene sync
 
@@ -418,8 +418,8 @@ void buildUi(SDL_Window *window, tpj::ParkDialogs &dialogs, const tpj::World &wo
 pass `interaction` to drawPanels, and replace the Inspector's block with:
 
 ```cpp
-  if (interaction.subject() &&
-      !tpj::drawInspector(tpj::inspectSubject(world, *interaction.subject()))) {
+  if (const std::optional<tpj::InspectorSubject> &subject = interaction.subject();
+      subject && !tpj::drawInspector(tpj::inspectSubject(world, *subject))) {
     interaction.forgetSubject();
   }
 ```
