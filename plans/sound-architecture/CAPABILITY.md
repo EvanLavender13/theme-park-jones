@@ -10,7 +10,7 @@ Its value is that the next feature is as cheap to place and to test as the last 
 
 ## Foundation criteria
 
-- The layers are declared once in the repository: core; then sim; then tools, render, and scenarios, which do not depend on each other; then app. Within sim, the order is medium, then park, then routes, then operations, then guests, with the sim root's files placed in that order too. Under tests, a module's directory, its support/ included, shares that module's layer, and tests/integration may include any module. The check's planted fixtures in tests/checks are outside the tree it scans.
+- The layers are declared once in the repository: core; then sim; then tools, render, legible, and scenarios, which do not depend on each other; then app. Within sim, the order is medium, then park, then routes, then operations, then guests, with the sim root's files below them all except sim/park_schema, which sits above them. Under tests, a module's directory, its support/ included, counts as part of that module, and tests/integration may include any module. The check's planted trees are built outside the tree it scans.
 - A check in ctest fails when a file under src or tests includes a header from a layer its own layer does not depend on, and names the file, the header, and both layers. A planted violation in tests/checks proves it fails, as the private header check's does.
 - The whole tree passes the check, and the private header check still passes. park/intent.cpp no longer reaches up to makeParkSchema: makeNewPark stays in sim/park, since it places the park's private components, and the composition level hands it the schema.
 - Every PLAN.md written after the first milestone has a placement section naming the module and component that owns each behavior it adds. The reviewer cites 0027 when a plan or diff places a behavior in a component that does not own it.
@@ -45,7 +45,7 @@ The foundation is 0027 made enforceable and then applied to the worst case. The 
 ## Milestones
 
 1. `layered-dependencies`: the declared layers, the layer check in ctest with its planted violation, removing park/intent.cpp's upward include by having the composition level hand makeNewPark the park's schema, so the tree passes, the placement section in planning-features's PLAN.md format, and the reviewer's 0027 check. Depends on: 0027 accepted.
-2. `composed-app`: src/app restructured into components under 0027. The pieces are a composing entry point; a park session that owns the world, the command queue, and the park file flow, and is the one place the world is replaced; a scene sync that owns every cache derived from the world; and components for input, debug statistics, graph drawing, and the frame clock. Platform resources get single owners, and the logic that needs no window is tested through its headers. Depends on: milestone 1.
+2. `composed-app`: src/app restructured into components under 0027. The pieces are a composing entry point; a park session that owns the world, the command queue, and the park file flow, and is the one place the world is replaced; a scene sync that owns every cache derived from the world, the preview and food overlay meshes included; and components for input, picking under the cursor, debug statistics, graph drawing, and the frame clock. Platform resources get single owners, and the logic that needs no window is tested through its headers. Depends on: milestone 1.
 
 ## Deepening candidates
 
@@ -59,7 +59,6 @@ The foundation is 0027 made enforceable and then applied to the worst case. The 
 ## Open questions
 
 - Whether composed-app adopts SDL3's main callbacks (SDL_AppInit, SDL_AppIterate, SDL_AppEvent, SDL_AppQuit) or keeps its own loop around an application object. The callbacks give one state object and portability, but SDL_AppEvent can run concurrently with SDL_AppIterate for events pushed from other threads, and the file dialogs call back from other threads. Resolved when composed-app is planned.
-- Where the sim root's files sit among the sim's layers. Most, such as world.h and entity_key.h, are below every submodule, but park_schema.cpp registers them all and so sits above guests. Resolved when layered-dependencies is planned, by splitting the root into a base level and a composition level or by moving the composition into its own directory.
 - Whether debug statistics and graph drawing stay app components or move beside what they present, into tools or render. Resolved when composed-app is planned, by 0027's placement rule.
 
 ## Research notes
