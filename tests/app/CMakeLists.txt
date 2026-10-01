@@ -3,9 +3,11 @@
 # read the errors a park file's load gives and to call the app's window-free components.
 add_executable(tpj_app_tests
     command_line_test.cpp
+    interaction_test.cpp
     park_file_requests_test.cpp
     park_file_test.cpp
-    park_session_test.cpp)
+    park_session_test.cpp
+    scene_sync_test.cpp)
 target_link_libraries(tpj_app_tests PRIVATE tpj_app_core tpj_sim Catch2::Catch2WithMain)
 target_compile_definitions(tpj_app_tests PRIVATE
     TPJ_APP_EXECUTABLE="$<TARGET_FILE:tpj_app>"
