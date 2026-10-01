@@ -29,7 +29,7 @@ Create a task for each item. Complete in order.
 6. Map the medium: every field and flow the scenario needs, each with its producing capability and its consuming capabilities. Apply the principles gate from `planning-overview` across capabilities: any interaction the scenario needs that is not a field or flow is reworked, or raised with Evan as a possible exception.
 7. Name the members: for each capability involved, existing or to be planned, the one milestone it contributes and that milestone's share of the scenario in one sentence. A capability that contributes nothing observable does not belong.
 8. Order the members bottom-up, so producers of the medium land before consumers.
-9. Write acceptance criteria: observable end-to-end conditions in the running app, and properties that can be checked by an integration test over the simulation. Each criterion names how it is checked: an integration test, a capture of a scripted scenario (the member milestone that delivers the script is named in Members), or a manual check by Evan.
+9. Write acceptance criteria: observable end-to-end conditions in the running app, and properties that can be checked by an integration test over the simulation. An integration test criterion names behavior that needs two or more capabilities working together; a property one module's own tests establish is not a slice criterion. Each criterion names how it is checked: an integration test, a capture of a scripted scenario (the member milestone that delivers the script is named in Members), or a manual check by Evan.
 10. Write SLICE.md at plans/slices/<slug>/SLICE.md in the format below.
 11. Self-review for placeholders, contradictions, cross-capability interactions missing from the medium map, members out of order, and criteria that cannot be observed or tested. Fix inline.
 12. Review: stage SLICE.md and RESEARCH.md, then dispatch the reviewer via `reviewing`. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
@@ -40,7 +40,7 @@ Create a task for each item. Complete in order.
 When every member milestone has landed:
 
 1. Dispatch the `test-writer` agent in slice mode with SLICE.md, the member MILESTONE.md files, and the module specs, to write integration tests for the criteria checked by integration test.
-2. Run them with `ctest.exe --preset windows-debug` and `ctest --preset linux-debug`. Run each scripted scenario on the Windows build with `--capture` and inspect the captures against their criteria. Ask Evan to check the manual criteria, and record his answer.
+2. Run them with `ctest.exe --preset windows-debug` and `ctest --preset linux-debug`. For each cross-module bug the test-writer names, break that seam by hand once, such as skipping one consumption or leaving one component out of the save, confirm a test fails, and revert. Run each scripted scenario on the Windows build with `--capture` and inspect the captures against their criteria. Ask Evan to check the manual criteria, and record his answer.
 3. Dispatch the `reviewer` via the `reviewing` skill on SLICE.md and the integration tests.
 4. If everything passes, set the slice's Status to complete and commit via `commit-hygiene`. If not, report the failing criteria to the user; the fix belongs to a member capability's next milestone or feature.
 

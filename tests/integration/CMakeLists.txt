@@ -1,10 +1,14 @@
-# The boxes-and-tubes slice's integration tests run the checked-in park files through the
-# simulation's public interface, and read them through tpj_legible, which links the sim alone.
+# The integration tests run every capability together on the checked-in parks. They link
+# tpj_legible, which links the sim alone, so they read food availability and previews as the app
+# does, without a window (principle 10).
 add_executable(tpj_integration_tests
-    candidate_preview_test.cpp
-    food_availability_test.cpp
-    slice_parks_test.cpp)
-target_link_libraries(tpj_integration_tests PRIVATE tpj_legible tpj_sim Catch2::Catch2WithMain)
+    food_loop_test.cpp
+    park_laws_test.cpp
+    preview_test.cpp)
+# So that the tests include their shared fixtures as support/....
+target_include_directories(tpj_integration_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(tpj_integration_tests PRIVATE tpj_legible Catch2::Catch2WithMain)
+# The laws run over every park file in tests/parks/, and the other tests open parks by name.
 target_compile_definitions(tpj_integration_tests PRIVATE
     TPJ_PARKS_DIR="${CMAKE_SOURCE_DIR}/tests/parks")
 tpj_configure_target(tpj_integration_tests)

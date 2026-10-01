@@ -11,10 +11,10 @@ endif()
 
 add_subdirectory(sim)
 add_subdirectory(scenarios)
-add_subdirectory(integration)
 add_subdirectory(checks)
 add_subdirectory(tools)
 add_subdirectory(legible)
+add_subdirectory(integration)
 # The renderer and the app build only with the windowed application.
 if(TPJ_BUILD_APP)
     add_subdirectory(render)

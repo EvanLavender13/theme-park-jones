@@ -30,7 +30,7 @@ Only files under tests/: new test files and additions to the CMakeLists.txt file
 
 ## Slice mode
 
-When dispatched with a SLICE.md, you write integration tests over the simulation for the slice's acceptance criteria marked (integration test), and for the cross-capability fields and flows in its Medium section (for example, that a flow's quantity is conserved from producer to consumer). Apply the procedure below with SLICE.md in place of FEATURE.md and those sections as the source of behaviors. Criteria marked (scripted capture) or (manual) are not yours.
+When dispatched with a SLICE.md, you write integration tests over the simulation for the slice's acceptance criteria marked (integration test), following the integration test rules in the Tests section of docs/conventions.md. Read the existing integration tests first and extend them: a new park joins the laws checked over every park without a code change, and a new law or consequence is a case in an existing file unless none can hold it. A criterion one module's tests already show gets no integration test; name those tests in your report instead. For each test you write, name the cross-module bug it catches. Apply the procedure below with SLICE.md in place of FEATURE.md and those criteria as the source of behaviors. Criteria marked (scripted capture) or (manual) are not yours.
 
 ## Procedure
 
