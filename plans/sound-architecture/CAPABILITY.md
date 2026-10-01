@@ -45,7 +45,7 @@ The foundation is 0027 made enforceable and then applied to the worst case. The 
 ## Milestones
 
 1. `layered-dependencies`: the declared layers, the layer check in ctest with its planted violation, removing park/intent.cpp's upward include by having the composition level hand makeNewPark the park's schema, so the tree passes, the placement section in planning-features's PLAN.md format, and the reviewer's 0027 check. Depends on: 0027 accepted.
-2. `composed-app`: src/app restructured into components under 0027. The pieces are a composing entry point; a park session that owns the world, the command queue, and the park file flow, and is the one place the world is replaced; a scene sync that owns every cache derived from the world, the preview and food overlay meshes included; and components for input, picking under the cursor, debug statistics, graph drawing, and the frame clock. Platform resources get single owners, and the logic that needs no window is tested through its headers. Depends on: milestone 1.
+2. `composed-app`: src/app restructured into components under 0027. The pieces are a composing entry point; a park session that owns the world, the command queue, and the park file flow, and is the one place the world is replaced; a scene sync that owns every cache derived from the world, the preview and food overlay meshes included; and components for input, picking under the cursor, the tooling UI with the graph view, and the frame clock, with the Debug panel's park numbers from a park summary in legible. Platform resources get single owners, and the logic that needs no window is tested through its headers. Depends on: milestone 1.
 
 ## Deepening candidates
 
@@ -58,8 +58,7 @@ The foundation is 0027 made enforceable and then applied to the worst case. The 
 
 ## Open questions
 
-- Whether composed-app adopts SDL3's main callbacks (SDL_AppInit, SDL_AppIterate, SDL_AppEvent, SDL_AppQuit) or keeps its own loop around an application object. The callbacks give one state object and portability, but SDL_AppEvent can run concurrently with SDL_AppIterate for events pushed from other threads, and the file dialogs call back from other threads. Resolved when composed-app is planned.
-- Whether debug statistics and graph drawing stay app components or move beside what they present, into tools or render. Resolved when composed-app is planned, by 0027's placement rule.
+None. composed-app settled the two it held: the app keeps its own loop around an Application rather than SDL3's main callbacks, and the Debug panel's park numbers move to a park summary in legible while the graph view stays an app component (plans/sound-architecture/composed-app/RESEARCH.md).
 
 ## Research notes
 
