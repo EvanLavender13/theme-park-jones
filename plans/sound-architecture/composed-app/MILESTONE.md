@@ -27,7 +27,8 @@ composed-app restructures src/app under decision 0027, so main.cpp only composes
 - The Debug panel's numbers about the park come from a park summary in legible, tested in tpj_legible_tests. The graph view is an app component that draws render's buildGraphOverlay.
 - Every platform resource has one owner that releases it: SDL, the window, the ImGui context with its backend, and the renderer. They are released in the reverse of the order they were acquired, on every return and when the loop throws. A throw from the loop is caught inside the owners' lifetime, logged as `Main loop: <what>` as today, and turned into a failing exit, so the owners' destructors run as the stack unwinds.
 - Every app component that needs no window is in a library that tpj_app_tests links, and its rules are tested through its header: options parsing, the file flow, the session's replacement, the scene sync's rule, input mapping, the cursor's coordinates, and the frame clock.
-- The restructure changes no behavior. Every existing test passes with its source unchanged, though tests/app/CMakeLists.txt may link the new library in place of tpj_park_files, and a --capture of a park with --graph and --overlay food shows the same scene as before. src/app/SPEC.md changes only where it describes structure, and src/legible/SPEC.md gains the park summary. The layer check and the private header check pass.
+- src/app groups its components by concern into session/, input/, scene/, and ui/, with the Application, the platform owners, the options, and the frame clock at its top, and tests/app mirrors the grouping. cmake/layers.txt declares the four as layers inside app, session and input below scene and ui, below the top, so the layer check enforces their order.
+- The restructure changes no behavior. Every existing test passes with its source unchanged, apart from where its file lives, the paths of the app headers it includes, and the layer check's expected table, though tests/app/CMakeLists.txt may link the new library in place of tpj_park_files, and a --capture of a park with --graph and --overlay food shows the same scene as before. src/app/SPEC.md changes only where it describes structure, and src/legible/SPEC.md gains the park summary. The layer check and the private header check pass.
 
 ## Medium
 
@@ -50,6 +51,7 @@ park-session is the core. It makes the world's replacement one call in one compo
 3. `frame-input`: input mapping from SDL events to camera input and the left button, the cursor's coordinates and the ground and entity under it, and the frame clock with its clamp and tick accumulator, each tested without a window. Depends on: park-session, for the library.
 4. `tooling-ui`: the park summary in legible, the graph view, and the tooling UI component that builds the Debug, Tools, and Inspector panels and the tooltips. Depends on: park-session, for the library.
 5. `composed-entry`: the options component, the platform owners, and the Application stating the frame order, leaving main.cpp only composing. src/app/SPEC.md describes the components. Depends on: features 1 to 4.
+6. `grouped-app`: src/app and tests/app grouped by concern into session/, input/, scene/, and ui/, declared as layers inside app, so the components the restructure made do not sit in one flat directory. Depends on: feature 5.
 
 ## Deepening candidates
 
