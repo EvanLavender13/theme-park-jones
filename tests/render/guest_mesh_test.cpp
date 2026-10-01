@@ -7,14 +7,20 @@
 #include "sim/medium/network.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
+#include "sim/park_schema.h"
 #include "sim/routes/networks.h"
+#include "sim/save.h"
 #include "sim/world.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <fstream>
+#include <ios>
+#include <iterator>
 #include <optional>
 #include <stdint.h>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -122,6 +128,75 @@ TEST_CASE("buildGuestMesh adds appendGuest for each guest whose record has a Pos
   const ParkMesh none = buildGuestMesh(empty);
   CHECK(none.Vertices.empty());
   CHECK(none.Indices.empty());
+}
+
+TEST_CASE("guestPose is the pose at the point's x and z with the default facing") {
+  const GroundPoint point{3.5, -7.25};
+  Pose expected;
+  expected.X = point.X;
+  expected.Z = point.Z;
+  CHECK(guestPose(point) == expected);
+}
+
+// tests/parks/warm.park: shop 7, and guests 9 to 40 standing on its paths.
+constexpr EntityKey WARM_SHOP{7};
+constexpr EntityKey WARM_GUEST{10};
+constexpr EntityKey WARM_MISSING{99};
+
+World openWarm() {
+  std::ifstream file(TPJ_PARKS_DIR "/warm.park", std::ios::binary);
+  const std::string text{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+  REQUIRE_FALSE(text.empty());
+  World world = loadWorld(makeParkSchema(), text);
+  resolveWorld(world);
+  return world;
+}
+
+// A mesh already holding a box, so what is appended must leave it and name its own vertices.
+ParkMesh startedMesh() {
+  ParkMesh mesh;
+  appendBox(mesh, Pose{10.0, 4.0, 1.0, 0.0}, FootprintSize{2.0, 3.0}, 1.0f, ENTRANCE_COLOR);
+  return mesh;
+}
+
+TEST_CASE("appendGuestEntity adds exactly what appendBox adds at guestPose of the guest's "
+          "Position, with GUEST_SIZE, GUEST_HEIGHT, and the color") {
+  const World world = openWarm();
+  const std::optional<GroundPoint> position =
+      guestRecord(world, WARM_GUEST).value_or(GuestRecord{}).Position;
+  REQUIRE(position.has_value());
+  ParkMesh marked = startedMesh();
+  appendGuestEntity(marked, world, WARM_GUEST, HIGHLIGHT_TINT);
+  ParkMesh expected = startedMesh();
+  appendBox(expected, guestPose(position.value_or(GroundPoint{})), GUEST_SIZE, GUEST_HEIGHT,
+            HIGHLIGHT_TINT);
+  CHECK(sameMesh(marked, expected));
+}
+
+TEST_CASE("appendGuestEntity adds nothing for a key holding no guest or a guest with no Position") {
+  const World world = openWarm();
+  for (const EntityKey key : {WARM_SHOP, WARM_MISSING}) {
+    CAPTURE(key);
+    ParkMesh mesh = startedMesh();
+    appendGuestEntity(mesh, world, key, HIGHLIGHT_TINT);
+    CHECK(sameMesh(mesh, startedMesh()));
+  }
+
+  // After a cycle deleting every guest path, the guest remains with no place on the ground.
+  World cut = copyWorld(world);
+  CommandQueue edits;
+  for (const ParkPath &path : parkPaths(cut)) {
+    if (path.Kind == PathKind::Guest) {
+      edits.push(DeletePath{path.Key});
+    }
+  }
+  stepWorld(cut, edits);
+  const std::optional<GuestRecord> record = guestRecord(cut, WARM_GUEST);
+  REQUIRE(record.has_value());
+  REQUIRE_FALSE(record.value_or(GuestRecord{}).Position.has_value());
+  ParkMesh mesh = startedMesh();
+  appendGuestEntity(mesh, cut, WARM_GUEST, HIGHLIGHT_TINT);
+  CHECK(sameMesh(mesh, startedMesh()));
 }
 
 } // namespace

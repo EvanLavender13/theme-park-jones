@@ -1,11 +1,13 @@
 #include "app/debug_panel.h"
 #include "app/food_tooltip.h"
+#include "app/inspector_window.h"
 #include "app/orbit_camera.h"
 #include "app/park_file.h"
 #include "app/shop_context_tooltip.h"
 #include "app/tool_panel.h"
 #include "core/profile.h"
 #include "legible/food.h"
+#include "legible/inspect.h"
 #include "legible/preview.h"
 #include "render/food_overlay.h"
 #include "render/graph_overlay.h"
@@ -148,9 +150,11 @@ struct DrawnIntent {
   bool operator==(const DrawnIntent &) const = default;
 };
 
-// The highlight and overlay choice the ghost and overlay meshes were last built with.
+// The highlight, inspected subject, and overlay choice the ghost and overlay meshes were last
+// built with.
 struct DrawnPreview {
   std::optional<tpj::EntityKey> Highlight;
+  std::optional<tpj::InspectorSubject> Inspected;
   bool FoodOverlay = false;
 
   bool operator==(const DrawnPreview &) const = default;
@@ -328,15 +332,21 @@ bool updateParkMesh(tpj::Renderer &renderer, const tpj::World &world,
 }
 
 // The frame's ghost: the preview's edit with its candidate's walkways and starved marks, then the
-// tool's highlight.
+// tool's highlight, then the inspected guest or shop's mark.
 tpj::ParkMesh ghostMesh(const tpj::World &world, const tpj::ToolState &tool,
-                        const tpj::Preview &preview) {
+                        const tpj::Preview &preview,
+                        const std::optional<tpj::InspectorSubject> &inspected) {
   tpj::ParkMesh mesh;
   if (preview.Edit) {
     mesh = tpj::buildGhostMesh(world, *preview.Edit, preview.Candidate);
   }
   if (const std::optional<tpj::EntityKey> highlight = tpj::highlightedEntity(tool, world)) {
     tpj::appendEntity(mesh, world, *highlight, tpj::HIGHLIGHT_TINT);
+  }
+  // Each adds nothing for a key of the other's kind.
+  if (inspected) {
+    tpj::appendEntity(mesh, world, inspected->Key, tpj::HIGHLIGHT_TINT);
+    tpj::appendGuestEntity(mesh, world, inspected->Key, tpj::HIGHLIGHT_TINT);
   }
   return mesh;
 }
@@ -364,23 +374,31 @@ tpj::ParkMesh foodOverlayMesh(const tpj::World &world, bool show) {
 }
 
 // Rebuilds the ghost and food overlay meshes when the preview was made again, or the tool's
-// highlight or the overlay's checkbox differs from when they were last built. Returns false if an
-// upload failed.
+// highlight, the inspected subject, or the overlay's checkbox differs from when they were last
+// built. Returns false if an upload failed.
 bool updatePreviewMeshes(tpj::Renderer &renderer, const tpj::World &world,
                          const tpj::ToolState &tool, const tpj::Preview &preview, bool remade,
-                         bool showOverlay, std::optional<DrawnPreview> &drawn) {
-  const DrawnPreview current{tpj::highlightedEntity(tool, world), showOverlay};
+                         const std::optional<tpj::InspectorSubject> &inspected, bool showOverlay,
+                         std::optional<DrawnPreview> &drawn) {
+  const DrawnPreview current{tpj::highlightedEntity(tool, world), inspected, showOverlay};
   if (!remade && drawn && *drawn == current) {
     return true;
   }
   drawn = current;
-  return tpj::setGhostMesh(renderer, ghostMesh(world, tool, preview)) &&
+  return tpj::setGhostMesh(renderer, ghostMesh(world, tool, preview, inspected)) &&
          tpj::setOverlayMesh(renderer,
                              foodOverlayMesh(tpj::previewedWorld(world, preview), showOverlay));
 }
 
-// The ground under the cursor, or none while ImGui wants the mouse or the cursor meets no ground.
-std::optional<tpj::ParkPoint> groundUnderCursor(SDL_Window *window, const tpj::CameraView &view) {
+// Where the cursor lies in normalized device coordinates, and the window's aspect ratio.
+struct CursorNdc {
+  float X = 0.0f;
+  float Y = 0.0f;
+  float Aspect = 1.0f;
+};
+
+// The cursor, or none while ImGui wants the mouse or the window has no size.
+std::optional<CursorNdc> cursorNdc(SDL_Window *window) {
   if (ImGui::GetIO().WantCaptureMouse) {
     return std::nullopt;
   }
@@ -392,10 +410,36 @@ std::optional<tpj::ParkPoint> groundUnderCursor(SDL_Window *window, const tpj::C
   float x = 0.0f;
   float y = 0.0f;
   SDL_GetMouseState(&x, &y);
-  const float ndcX = 2.0f * x / static_cast<float>(width) - 1.0f;
-  const float ndcY = 1.0f - 2.0f * y / static_cast<float>(height);
-  return tpj::groundAtCursor(view, static_cast<float>(width) / static_cast<float>(height), ndcX,
-                             ndcY);
+  return CursorNdc{2.0f * x / static_cast<float>(width) - 1.0f,
+                   1.0f - 2.0f * y / static_cast<float>(height),
+                   static_cast<float>(width) / static_cast<float>(height)};
+}
+
+// The ground under the cursor, or none while ImGui wants the mouse or the cursor meets no ground.
+std::optional<tpj::ParkPoint> groundUnderCursor(SDL_Window *window, const tpj::CameraView &view) {
+  const std::optional<CursorNdc> cursor = cursorNdc(window);
+  if (!cursor) {
+    return std::nullopt;
+  }
+  return tpj::groundAtCursor(view, cursor->Aspect, cursor->X, cursor->Y);
+}
+
+// The view the camera gives.
+tpj::CameraView cameraView(const tpj::OrbitCamera &camera) {
+  tpj::CameraView view;
+  view.Eye = tpj::orbitCameraEye(camera);
+  view.Target = camera.Focus;
+  return view;
+}
+
+// The entity the cursor's ray first meets in the view, or none while ImGui wants the mouse.
+std::optional<tpj::EntityKey> entityUnderCursor(SDL_Window *window, const tpj::World &world,
+                                                const tpj::CameraView &view) {
+  const std::optional<CursorNdc> cursor = cursorNdc(window);
+  if (!cursor) {
+    return std::nullopt;
+  }
+  return tpj::entityAtCursor(world, view, cursor->Aspect, cursor->X, cursor->Y);
 }
 
 float keyAxis(const bool *keys, SDL_Scancode positive, SDL_Scancode negative) {
@@ -458,6 +502,16 @@ void useButtons(tpj::ToolState &tool, const tpj::World &world, tpj::CommandQueue
     if (const std::optional<tpj::ParkEdit> edit = tpj::releasePointer(tool, world)) {
       tpj::queueEdit(commands, *edit);
     }
+  }
+}
+
+// With the Look tool, a press inspects the guest or shop under the cursor. Called before the
+// camera moves this frame, so it picks from the view on screen.
+void pickOnLookPress(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
+                     const tpj::ToolState &tool, const PointerButtons &buttons,
+                     std::optional<tpj::InspectorSubject> &inspected) {
+  if (buttons.Pressed && tool.Kind == tpj::ToolKind::None) {
+    tpj::pickSubject(inspected, world, entityUnderCursor(window, world, cameraView(camera)));
   }
 }
 
@@ -526,15 +580,19 @@ void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCam
 }
 
 // Builds the frame's ImGui draw data: the panels, which set the shown views from their
-// checkboxes, the graph over the scene while it is shown, the food tooltip at the cursor while the
-// overlay is, on the preview's candidate when it has one, and a shop ghost's context.
+// checkboxes, the Inspector while it has a subject, forgetting it when closed, the graph over the
+// scene while it is shown, the food tooltip at the cursor while the overlay is, on the preview's
+// candidate when it has one, and a shop ghost's context.
 void buildUi(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
              const tpj::CameraView &view, ShownViews &shown, tpj::ToolState &tool,
-             const tpj::Preview &preview) {
+             const tpj::Preview &preview, std::optional<tpj::InspectorSubject> &inspected) {
   tpj::beginUiFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
   drawPanels(window, world, camera, shown, tool);
+  if (inspected && !tpj::drawInspector(tpj::inspectSubject(world, *inspected))) {
+    inspected.reset();
+  }
   if (shown.Graph) {
     drawGraph(world, view);
   }
@@ -554,6 +612,7 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
   std::optional<uint64_t> guestTick;
   tpj::KeptPreview kept;
   std::optional<DrawnPreview> drawnPreview;
+  std::optional<tpj::InspectorSubject> inspected;
   tpj::ToolState tool;
   tpj::CommandQueue commands;
   ShownViews shown{options.ShowGraph, options.ShowFoodOverlay};
@@ -572,6 +631,7 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
       drawn.reset();
       guestTick.reset();
       kept = {};
+      inspected.reset();
     }
 
     const uint64_t counter = SDL_GetPerformanceCounter();
@@ -583,6 +643,7 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
     }
 
     useButtons(tool, world, commands, buttons);
+    pickOnLookPress(renderer.Window, world, camera, tool, buttons, inspected);
 
     // The simulation advances in fixed ticks regardless of frame rate, and queued edits apply at
     // the next (principle 10).
@@ -599,19 +660,17 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
     }
 
     tpj::updateOrbitCamera(camera, input, static_cast<float>(dt), 0.5f * PARK_SIZE_METERS);
-    tpj::CameraView view;
-    view.Eye = tpj::orbitCameraEye(camera);
-    view.Target = camera.Focus;
+    const tpj::CameraView view = cameraView(camera);
     tpj::movePointer(tool, groundUnderCursor(renderer.Window, view));
     // Made again only when the world ticks or the edit changes, so the ghost, the overlay, and the
     // tooltips show one candidate, and frames between ticks rebuild nothing.
     const bool remade = tpj::keepPreview(kept, world, tpj::tentativeEdit(tool, world));
 
-    buildUi(renderer.Window, world, camera, view, shown, tool, kept.Made);
+    buildUi(renderer.Window, world, camera, view, shown, tool, kept.Made, inspected);
 
     const bool lastFrame = options.FrameLimit > 0 && frame >= options.FrameLimit;
     // The meshes are updated after the panels, so a change of the checkbox shows in this frame.
-    if (!updatePreviewMeshes(renderer, world, tool, kept.Made, remade, shown.FoodOverlay,
+    if (!updatePreviewMeshes(renderer, world, tool, kept.Made, remade, inspected, shown.FoodOverlay,
                              drawnPreview) ||
         !tpj::drawFrame(renderer, view, ImGui::GetDrawData(),
                         lastFrame ? options.CapturePath : nullptr)) {
