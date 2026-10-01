@@ -3,6 +3,7 @@
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
 #include "sim/save.h"
+#include "sim/schema.h"
 #include "sim/world.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -11,6 +12,7 @@
 #include <cmath>
 #include <fstream>
 #include <ios>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -32,21 +34,33 @@ double distanceToFootprint(const CarrierPoint &point, const Footprint &footprint
   return std::sqrt(outAlong * outAlong + outAcross * outAcross);
 }
 
-TEST_CASE(
-    "makeNewPark gives the template: an entrance on the +z edge and a guest path leading in") {
-  const World park = makeNewPark(7);
+TEST_CASE("makeNewPark gives the template with the given schema and seed: an entrance on the +z "
+          "edge and a guest path leading in") {
+  // A schema holding only park intent, unlike the park's, so the world shows which schema it got.
+  auto schema = std::make_shared<WorldSchema>();
+  addParkIntent(*schema);
+  const std::shared_ptr<const WorldSchema> given = schema;
+  const World park = makeNewPark(given, 7);
 
+  CHECK(&park.schema() == given.get());
   CHECK(park.Seed == 7);
   CHECK(park.Tick == 0);
   CHECK(park.nextKey() == 3);
   CHECK(park.isResolvePending());
-  CHECK(park.schema().sameComponents(*makeParkSchema()));
   CHECK(park.keys() == std::vector<EntityKey>{EntityKey{1}, EntityKey{2}});
   CHECK(parkEntrances(park) ==
         std::vector<ParkEntrance>{{EntityKey{1}, Pose{0.0, 126.5, 0.0, -1.0}}});
   CHECK(parkPaths(park) ==
         std::vector<ParkPath>{{EntityKey{2}, PathKind::Guest, {{0.0, 123.0}, {0.0, 103.0}}}});
   CHECK(parkBoxes(park).empty());
+}
+
+TEST_CASE("makeNewPark(seed) is makeNewPark with the park's schema and the seed") {
+  const World park = makeNewPark(7);
+
+  CHECK(park.schema().sameComponents(*makeParkSchema()));
+  CHECK(park.Seed == 7);
+  CHECK(worldsEqual(park, makeNewPark(makeParkSchema(), 7)));
 }
 
 TEST_CASE(

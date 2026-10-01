@@ -5,6 +5,7 @@
 #include "sim/medium/network.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
+#include "sim/park_schema.h"
 #include "sim/routes/networks.h"
 #include "sim/save.h"
 #include "sim/schema.h"

@@ -5,6 +5,7 @@
 #include "sim/park/edits.h"
 #include "sim/park/geometry.h"
 #include "sim/park/intent.h"
+#include "sim/park_schema.h"
 #include "sim/world.h"
 
 #include <catch2/catch_test_macros.hpp>

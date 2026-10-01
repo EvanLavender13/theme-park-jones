@@ -65,4 +65,4 @@ Commands compare equal when their fields do. A ParkEdit is any one of the five c
 
 ## The new park
 
-makeNewPark(seed) gives a world with makeParkSchema's schema, the seed, tick 0, next key 3, and resolution pending, holding exactly two entities. It is physically valid. Entity 1 is an entrance at (0, 126.5) facing (0, -1), so its back lies on the park's edge at z = 128 and its front faces into the park. Entity 2 is a guest path through (0, 123) and (0, 103), which starts 2 m in front of the entrance and runs 20 m into the park. tests/parks/new.park is its save with seed 1.
+makeNewPark(schema, seed) gives a world with the given schema, the seed, tick 0, next key 3, and resolution pending, holding exactly two entities. It is physically valid. Entity 1 is an entrance at (0, 126.5) facing (0, -1), so its back lies on the park's edge at z = 128 and its front faces into the park. Entity 2 is a guest path through (0, 123) and (0, 103), which starts 2 m in front of the entrance and runs 20 m into the park. tests/parks/new.park is the save of makeNewPark(seed), the park's schema's overload in sim/park_schema.h (sim/SPEC.md), with seed 1.

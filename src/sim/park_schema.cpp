@@ -30,4 +30,6 @@ std::shared_ptr<const WorldSchema> makeParkSchema() {
   return schema;
 }
 
+World makeNewPark(uint64_t seed) { return makeNewPark(makeParkSchema(), seed); }
+
 } // namespace tpj

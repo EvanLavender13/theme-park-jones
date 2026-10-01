@@ -1,7 +1,6 @@
 #include "sim/park/intent.h"
 
 #include "sim/park/internal/components.h"
-#include "sim/park_schema.h"
 
 #include <utility>
 #include <vector>
@@ -46,8 +45,8 @@ std::vector<ParkBox> parkBoxes(const World &world) {
       world, [](EntityKey key, const BoxIntent &box) { return ParkBox{key, box.Kind, box.At}; });
 }
 
-World makeNewPark(uint64_t seed) {
-  World world(makeParkSchema(), seed);
+World makeNewPark(std::shared_ptr<const WorldSchema> schema, uint64_t seed) {
+  World world(std::move(schema), seed);
   // The entrance's back lies on the edge at z = 128, and it faces into the park.
   const EntityKey entrance = world.createEntity();
   world.Registry.emplace<EntranceIntent>(world.findEntity(entrance),
