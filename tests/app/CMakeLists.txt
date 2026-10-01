@@ -1,14 +1,19 @@
 # The app's tests run ThemeParkJones itself, and compare its --hash line with what tpj_scenarios
 # writes for the same park file, so both are built first. They link the sim and tpj_app_core, to
-# read the errors a park file's load gives and to call the app's window-free components.
+# read the errors a park file's load gives and to call the app's window-free components, and SDL,
+# to make the events input mapping takes.
 add_executable(tpj_app_tests
     command_line_test.cpp
+    cursor_test.cpp
+    frame_clock_test.cpp
+    input_map_test.cpp
     interaction_test.cpp
+    orbit_camera_test.cpp
     park_file_requests_test.cpp
     park_file_test.cpp
     park_session_test.cpp
     scene_sync_test.cpp)
-target_link_libraries(tpj_app_tests PRIVATE tpj_app_core tpj_sim Catch2::Catch2WithMain)
+target_link_libraries(tpj_app_tests PRIVATE tpj_app_core tpj_sim SDL3::SDL3 Catch2::Catch2WithMain)
 target_compile_definitions(tpj_app_tests PRIVATE
     TPJ_APP_EXECUTABLE="$<TARGET_FILE:tpj_app>"
     TPJ_SCENARIOS_EXECUTABLE="$<TARGET_FILE:tpj_scenarios>"

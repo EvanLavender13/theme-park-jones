@@ -1,12 +1,16 @@
 # The app's components that need no window, so the app's tests call them through their headers.
 add_library(tpj_app_core STATIC
+    cursor.cpp
+    frame_clock.cpp
+    input_map.cpp
     interaction.cpp
+    orbit_camera.cpp
     park_file.cpp
     park_file_requests.cpp
     park_session.cpp
     scene_sync.cpp)
 target_include_directories(tpj_app_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tpj_app_core PUBLIC tpj_legible tpj_sim tpj_tools PRIVATE SDL3::SDL3)
+target_link_libraries(tpj_app_core PUBLIC tpj_legible tpj_render tpj_sim tpj_tools PRIVATE SDL3::SDL3)
 tpj_configure_target(tpj_app_core)
 
 add_executable(tpj_app
@@ -14,8 +18,8 @@ add_executable(tpj_app
     food_tooltip.cpp
     inspector_window.cpp
     main.cpp
-    orbit_camera.cpp
     park_dialogs.cpp
+    platform_input.cpp
     scene_uploads.cpp
     shop_context_tooltip.cpp
     tool_panel.cpp)

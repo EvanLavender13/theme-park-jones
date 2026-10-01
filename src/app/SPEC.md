@@ -4,7 +4,7 @@ The executable: owns the window, the main loop, and input, and connects the simu
 
 ## Main loop
 
-The app owns the Dear ImGui context and its SDL3 platform backend, created before the renderer and destroyed after it. Each frame gathers input, advances the simulation by as many fixed ticks as the elapsed time covers, updates the camera, builds the tooling UI, and draws. Elapsed time per frame is clamped to 0.25 s so a stall does not trigger a burst of ticks.
+The app owns the Dear ImGui context and its SDL3 platform backend, created before the renderer and destroyed after it. Each frame gathers input, advances the simulation by as many fixed ticks as the elapsed time covers, updates the camera, builds the tooling UI, and draws. Elapsed time per frame is clamped to 0.25 s so a stall does not trigger a burst of ticks. The frame clock, FrameClock in frame_clock.h, turns the performance counter's readings into each frame's elapsed time, clamped, and the whole ticks the time not yet stepped covers, carrying the rest to the next frame. Input mapping, in input_map.h, turns each event and the held keys into the frame's camera input, the left button's press and release, and a request to quit, given whether ImGui wants the mouse and the keyboard. platform_input.h, the input's platform edge, drains SDL's events, handing each to ImGui and then to input mapping, and reads the cursor.
 
 ## Park
 
@@ -37,6 +37,8 @@ An orbit camera around a focus point on the ground.
 - Q and E rotate the view around the focus.
 
 Pitch stays between about 10 and 85 degrees, distance between 4 and 400 m, and the focus inside the park's square bounds. Mouse input ImGui wants (a cursor over a panel) and keyboard input ImGui wants (a focused text field) do not reach the camera.
+
+The camera and orbitCameraView, which gives the view from its eye toward its focus, are in orbit_camera.h. The cursor, in cursor.h, gives the cursor's normalized device coordinates and the window's aspect ratio from the window's size and the mouse position, none when the window has no size, and the ground and the entity under it. platform_input.h reads it from SDL, none while ImGui wants the mouse.
 
 ## Tooling UI
 

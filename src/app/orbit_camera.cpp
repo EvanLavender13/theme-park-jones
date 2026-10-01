@@ -47,6 +47,13 @@ Vec3 orbitCameraEye(const OrbitCamera &camera) {
   return camera.Focus + offset;
 }
 
+CameraView orbitCameraView(const OrbitCamera &camera) {
+  CameraView view;
+  view.Eye = orbitCameraEye(camera);
+  view.Target = camera.Focus;
+  return view;
+}
+
 void frameOrbitCamera(OrbitCamera &camera, const GroundBounds &bounds, float fovY) {
   const float width = bounds.MaxX - bounds.MinX;
   const float depth = bounds.MaxZ - bounds.MinZ;

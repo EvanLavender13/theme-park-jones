@@ -3,6 +3,7 @@
 
 #include "render/math.h"
 #include "render/park_mesh.h"
+#include "render/renderer.h"
 
 namespace tpj {
 
@@ -34,6 +35,10 @@ void updateOrbitCamera(OrbitCamera &camera, const CameraInput &input, float dt,
                        float boundsHalfExtent);
 
 Vec3 orbitCameraEye(const OrbitCamera &camera);
+
+// The view the camera gives: from its eye toward its focus, with CameraView's other fields as a
+// default CameraView has them.
+CameraView orbitCameraView(const OrbitCamera &camera);
 
 // Centers the focus on the bounds and sets the distance at which a sphere around them fits the
 // vertical field of view, within the camera's distance limits.
