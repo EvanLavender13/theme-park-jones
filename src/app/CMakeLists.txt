@@ -4,6 +4,7 @@ add_library(tpj_app_core STATIC
     frame_clock.cpp
     input_map.cpp
     interaction.cpp
+    options.cpp
     orbit_camera.cpp
     park_file.cpp
     park_file_requests.cpp
@@ -14,12 +15,14 @@ target_link_libraries(tpj_app_core PUBLIC tpj_legible tpj_render tpj_sim tpj_too
 tpj_configure_target(tpj_app_core)
 
 add_executable(tpj_app
+    application.cpp
     debug_panel.cpp
     food_tooltip.cpp
     graph_view.cpp
     inspector_window.cpp
     main.cpp
     park_dialogs.cpp
+    platform.cpp
     platform_input.cpp
     scene_uploads.cpp
     shop_context_tooltip.cpp

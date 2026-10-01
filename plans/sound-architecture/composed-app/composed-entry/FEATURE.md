@@ -16,6 +16,8 @@ composed-entry finishes composed-app's restructure of src/app, leaving main.cpp 
   - A --capture of a park with --graph and --overlay food shows the same scene and the same Debug panel lines.
   - The layer check and the private header check pass.
 
+The platform owners, the Application, and main.cpp need SDL, a window, and the GPU, which tpj_app_tests cannot reach, so the fourth and fifth criteria are checked by review and by hand, and the sixth by the full test runs and the capture. The usage goes to SDL's log, which tests/app/command_line_test.cpp already reads through the executable, so the options' tests check only that a refused command line gives no Options.
+
 ## Medium
 
 None. The feature moves the app's entry, its platform setup and teardown, and its frame loop, which read the park through the session and the components as before, and emits nothing.
@@ -63,4 +65,4 @@ src/app/SPEC.md, "## Command line", a new last paragraph:
 
 ## Open questions
 
-None.
+- Three command lines the Command line section does not name keep their behavior from before the restructure and get no test: a --ticks value of decimal digits too large for 64 bits, which is refused; an argument that does not start with --, which is refused as an unknown option; and a --frames value that is not positive without --capture, which runs until the player quits. Evan decides whether the section should name them, should one matter.

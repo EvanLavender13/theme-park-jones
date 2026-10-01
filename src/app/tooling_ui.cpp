@@ -39,8 +39,9 @@ void drawPanels(ParkDialogs &dialogs, const World &world, const OrbitCamera &cam
 
 } // namespace
 
-void ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, const World &world,
-                      const OrbitCamera &camera, Interaction &interaction, const Preview &preview) {
+ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, const World &world,
+                             const OrbitCamera &camera, Interaction &interaction,
+                             const Preview &preview) {
   const CameraView view = orbitCameraView(camera);
   beginUiFrame();
   ImGui_ImplSDL3_NewFrame();
@@ -60,6 +61,7 @@ void ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, const World &wor
     drawShopContextTooltip(*preview.Shop);
   }
   ImGui::Render();
+  return ImGui::GetDrawData();
 }
 
 } // namespace tpj
