@@ -11,7 +11,7 @@ This skill routes. It does not plan, decompose, or build.
 
 Work decomposes through four levels.
 
-1. Capability: a durable quality, discipline, or principle implementation the game deepens over many milestones; never completes.
+1. Capability: a durable quality, discipline, or principle implementation the game deepens over many milestones; never completes. An engineering capability deepens a property of the software the player cannot perceive, such as performance or code structure (decision 0028).
 2. Milestone: weeks of work; one coherent slice that deepens a capability; completes.
 3. Feature: hours to days; one implementable unit; completes.
 4. Implementation: code satisfying a feature's plan, with the module specs updated to match.
@@ -72,7 +72,8 @@ A tree gives each thing one owner, which is why cross-cutting mechanics felt wro
 - A plan in which one system depends on another's internals fails the gate (principle 6). Rework it so the interaction goes through the shared medium.
 - Anything that genuinely cannot fit fields, flows, or encapsulation is raised with Evan before planning continues. If he accepts it, it goes in docs/exceptions.md with a reason.
 - A plan that conflicts with any principle is surfaced to Evan, not planned around.
-- Work that cuts across capabilities lives under the capability whose quality it primarily deepens. It names the other capabilities it touches, and reaches them only through the medium. A goal that needs several capabilities to move together is a slice, and its medium map is where the gate applies across them.
+- Work that cuts across capabilities lives under the capability whose quality it primarily deepens. It names the other capabilities it touches, and reaches them only through the medium.
+- Work a player would not notice missing, if the machine were infinitely fast and the code never changed again, is engineering: it lives in an engineering capability, whichever capability surfaced it, and changes no observable behavior (decision 0028). Work motivated by speed that changes what the player sees is gameplay. A goal that needs several capabilities to move together is a slice, and its medium map is where the gate applies across them.
 
 ## Rules every planning skill enforces
 

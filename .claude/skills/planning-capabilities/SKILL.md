@@ -19,6 +19,8 @@ A quality deepens indefinitely and never reaches done: `legible-simulation`, `ef
 
 A capability named for a principle cites the principle in its Summary, and its foundation criteria include the checks that back the principle (docs/principles.md says which principles can be violated by code).
 
+An engineering capability deepens a property of the software that a player would not notice missing if the machine were infinitely fast and the code never changed again, such as performance or code structure: `sound-architecture` (decision 0028). It is named after that property. Its Medium section says it introduces no fields or flows. Its foundation criteria are checks it owns, and its work may change code in any module only if observable behavior does not change: existing tests pass unchanged, the cross-build check's output is identical where the simulation is touched, and a public contract changes only with its module's SPEC.md.
+
 Test the name before committing it: can a tenth milestone land inside it two years from now without the name feeling wrong? If yes, the name is durable. If the name implies a finish line, rework it.
 
 Content-heavy domains need the same treatment. A catalog of shops or rides grows by accreting instances, which is not the same as deepening a quality. Name the capability after the quality the content serves.

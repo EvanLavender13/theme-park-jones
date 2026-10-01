@@ -15,6 +15,8 @@ The pools catch inspiration without forcing commitment. Most items will never be
 
 Ideas live in one of three pools. Route by the narrowest scope that fits.
 
+First apply decision 0028's test: an idea a player would not notice missing, if the machine were infinitely fast and the code never changed again, such as a speedup or a restructure, belongs to an engineering capability's pools, whichever capability's work surfaced it. With no engineering capability that fits, it goes to `plans/BACKLOG.md`.
+
 - An idea that fits one existing milestone thematically goes to the `## Deepening candidates` section of that milestone's `MILESTONE.md`. Milestones are durable buckets; a shipped milestone still collects candidates.
 - An idea scoped to one existing capability but no milestone goes to the `## Deepening candidates` section of that capability's `CAPABILITY.md`.
 - An idea spanning capabilities, or with no capability yet, goes to `plans/BACKLOG.md`.
