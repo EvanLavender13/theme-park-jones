@@ -112,3 +112,36 @@ tpj_layer_case("layer check reports each unit listed more than once"
     units_listed_twice)
 tpj_layer_case("layer check prints each finding whole to standard error"
     long_finding_line)
+
+set(TPJ_PLACEMENT_CHECK ${CMAKE_SOURCE_DIR}/cmake/check_placement.cmake)
+
+# Each case plants its own small tree of plans under the build directory and runs the check on it.
+function(tpj_placement_case name case)
+    add_test(NAME "${name}"
+        COMMAND ${CMAKE_COMMAND} -DCASE=${case} -DCHECK=${TPJ_PLACEMENT_CHECK}
+            -DSCRATCH=${CMAKE_CURRENT_BINARY_DIR}/placement_trees
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/placement_check_test.cmake)
+endfunction()
+
+tpj_placement_case("placement check fails naming ROOT when ROOT is not set"
+    missing_root)
+tpj_placement_case("placement check fails naming ROOT when ROOT is empty"
+    empty_root)
+tpj_placement_case("placement check fails naming PLANS when PLANS is not set"
+    missing_plans)
+tpj_placement_case("placement check fails naming a plan it cannot read"
+    unreadable_plan)
+tpj_placement_case("placement check finds the section on a line that is the heading followed by nothing but blanks"
+    section_lines)
+tpj_placement_case("placement check ignores a carriage return at a line's end"
+    carriage_returns)
+tpj_placement_case("placement check reads a plan as UTF-8, keeping a character outside ASCII on its line"
+    utf8_lines)
+tpj_placement_case("placement check takes no other line for the section"
+    other_lines)
+tpj_placement_case("placement check reports each plan without the section once, as listed"
+    once_per_plan)
+tpj_placement_case("placement check reports nothing and passes when PLANS is empty"
+    empty_plans)
+tpj_placement_case("placement check prints each report line whole to standard error"
+    long_report_line)
