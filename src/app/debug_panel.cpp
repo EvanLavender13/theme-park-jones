@@ -18,10 +18,10 @@ void drawDebugPanel(const DebugStats &stats, bool &showGraph, bool &showFoodOver
     ImGui::Text("Distance %.1f m", stats.Distance);
     ImGui::Checkbox("Graph", &showGraph);
     ImGui::Checkbox("Food overlay", &showFoodOverlay);
-    if (!stats.Shops.empty()) {
+    if (!stats.Park.Shops.empty()) {
       ImGui::Separator();
     }
-    for (const ShopLine &line : stats.Shops) {
+    for (const ShopLine &line : stats.Park.Shops) {
       const std::string_view limit = limitingFactorName(line.Record.Limit);
       ImGui::Text(
           "Shop %llu: stock %lld, queue %lld, on order %lld, %.*s",
@@ -30,14 +30,15 @@ void drawDebugPanel(const DebugStats &stats, bool &showGraph, bool &showFoodOver
           static_cast<int>(limit.size()), limit.data());
     }
     ImGui::Separator();
-    if (stats.Guests == 0) {
+    if (stats.Park.Guests == 0) {
       ImGui::Text("Guests 0");
     } else {
-      ImGui::Text("Guests %llu, mean hunger %.2f", static_cast<unsigned long long>(stats.Guests),
-                  stats.MeanHunger);
+      ImGui::Text("Guests %llu, mean hunger %.2f",
+                  static_cast<unsigned long long>(stats.Park.Guests), stats.Park.MeanHunger);
     }
-    ImGui::Text("Waiting %llu, meals eaten %lld", static_cast<unsigned long long>(stats.Waiting),
-                static_cast<long long>(stats.MealsEaten));
+    ImGui::Text("Waiting %llu, meals eaten %lld",
+                static_cast<unsigned long long>(stats.Park.Waiting),
+                static_cast<long long>(stats.Park.MealsEaten));
   }
   ImGui::End();
 }
