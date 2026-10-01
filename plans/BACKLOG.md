@@ -5,3 +5,7 @@ Unordered pool of ideas held for future work. Items get added when they drift ou
 ## Items
 
 - GitHub Actions per decision 0021, now that the remote exists: a Linux job building linux-debug (sanitizers, clang-tidy, warnings fail) and running ctest, and a Windows job building windows-debug with MSYS2 UCRT64 via msys2/setup-msys2, both on pushes and pull requests to main with .cpm-cache cached.
+- Placeable path lamps and buildings lit at night, so an open park reads differently from a closed one after dark, possibly with guests preferring lit paths.
+- A view toggle that keeps the scene in daylight whatever the time of day, for building at night.
+- Footfall for needs beyond hunger, such as thirsty or tired footfall, and a ghost's context that shows the footfall of the needs its facility answers.
+- Arrivals that depend on how well the park serves its guests, such as a reputation built from departures and their reasons, instead of a fixed daily curve.

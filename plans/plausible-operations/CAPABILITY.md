@@ -64,6 +64,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 - Garbage as a flow from shops and guests into bins, and litter pressure as a field.
 - Capacity on backstage routes, so congested supply routes slow shipments (shared-medium's edge capacity).
 - Maintenance as a flow for rides, with infrastructure as capacity for it (decision 0006).
+- Dirt as a stock in toilet blocks that builds with use and is drained by cleaning staff, lowering the toilet offer's appeal rather than closing it.
 
 ## Open questions
 
