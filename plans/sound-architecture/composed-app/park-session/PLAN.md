@@ -470,16 +470,13 @@ Step 4: Change runLoop and runLoopLogged to take `tpj::ParkSession &session` in 
 
 ```cpp
     session.useFileRequest(dialogs.take(), dialogs);
-    // A replaced world resets what was built from, or held for, the old one.
     if (session.generation() != generation) {
       generation = session.generation();
-      tpj::selectTool(tool, tool.Kind);
-      drawn.reset();
-      guestTick.reset();
-      kept = {};
-      inspected.reset();
+      forgetOldWorld(tool, drawn, guestTick, kept, inspected);
     }
 ```
+
+forgetOldWorld, defined just before runLoop, does the five resets runLoop did after useFileRequest replaced the world: `tpj::selectTool(tool, tool.Kind);`, `drawn.reset();`, `guestTick.reset();`, `kept = {};`, and `inspected.reset();`. Inline, they would put runLoop at 61 statements, past .clang-tidy's readability-function-size threshold of 60.
 
 Delete the local `tpj::CommandQueue commands;`. Replace the tick loop's `tpj::stepWorld(world, commands);` with `session.step();`, pass `session.commands()` where useButtons took `commands`, and call buildUi as `buildUi(renderer.Window, dialogs, session.world(), camera, shown, tool, kept.Made, inspected);`. Replace every remaining `world` argument in runLoop with `session.world()`.
 

@@ -46,4 +46,6 @@ std::string withParkExtension(std::string_view path) {
   return result;
 }
 
+bool fileExists(const char *path) { return SDL_GetPathInfo(path, nullptr); }
+
 } // namespace tpj

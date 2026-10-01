@@ -1,9 +1,11 @@
-# Park files, apart from the window, so the app's tests read and write them without a display.
-add_library(tpj_park_files STATIC
-    park_file.cpp)
-target_include_directories(tpj_park_files PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tpj_park_files PUBLIC tpj_sim PRIVATE SDL3::SDL3)
-tpj_configure_target(tpj_park_files)
+# The app's components that need no window, so the app's tests call them through their headers.
+add_library(tpj_app_core STATIC
+    park_file.cpp
+    park_file_requests.cpp
+    park_session.cpp)
+target_include_directories(tpj_app_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tpj_app_core PUBLIC tpj_sim PRIVATE SDL3::SDL3)
+tpj_configure_target(tpj_app_core)
 
 add_executable(tpj_app
     debug_panel.cpp
@@ -11,10 +13,11 @@ add_executable(tpj_app
     inspector_window.cpp
     main.cpp
     orbit_camera.cpp
+    park_dialogs.cpp
     shop_context_tooltip.cpp
     tool_panel.cpp)
 set_target_properties(tpj_app PROPERTIES OUTPUT_NAME ThemeParkJones)
-target_link_libraries(tpj_app PRIVATE tpj_legible tpj_park_files tpj_render tpj_sim tpj_tools)
+target_link_libraries(tpj_app PRIVATE tpj_app_core tpj_legible tpj_render tpj_sim tpj_tools)
 tpj_configure_target(tpj_app)
 
 if(TPJ_SANITIZE)

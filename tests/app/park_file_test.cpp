@@ -150,5 +150,16 @@ TEST_CASE("withParkExtension adds .park exactly when the file name after the las
   }
 }
 
+TEST_CASE("fileExists is true exactly when a file or directory exists at the path") {
+  const auto directory = scratchDirectory("file-exists");
+  const std::filesystem::path file = directory / "present.park";
+  writeFile(file, "");
+  const std::filesystem::path missing = directory / "missing.park";
+
+  CHECK(fileExists(file.string().c_str()));
+  CHECK(fileExists(directory.string().c_str()));
+  CHECK_FALSE(fileExists(missing.string().c_str()));
+}
+
 } // namespace
 } // namespace tpj
