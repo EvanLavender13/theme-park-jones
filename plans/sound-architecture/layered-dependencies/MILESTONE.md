@@ -52,6 +52,7 @@ layer-check is the core. It makes the layer order a property of the build, catch
 
 - Link-level agreement: a check that each CMake target links exactly the modules its unit may include, so a target cannot link a module the table forbids or omit one its includes need.
 - A placement report: the layer check prints each unit's actual dependencies when asked, so a review can see where a unit's reach is widening before it becomes a violation.
+- A hook test: a ctest that commits in a scratch repository through .githooks/pre-commit and checks the placement refusal end to end, once the hook's temporary paths survive Git for Windows's conversion of path-like arguments.
 
 ## Open questions
 
