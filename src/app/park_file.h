@@ -25,6 +25,8 @@ OpenedPark openParkFile(const char *path);
 std::string saveParkFile(const World &world, const char *path);
 // The path, followed by .park when its file name has no extension.
 std::string withParkExtension(std::string_view path);
+// True when a file or directory exists at the path.
+bool fileExists(const char *path);
 
 } // namespace tpj
 

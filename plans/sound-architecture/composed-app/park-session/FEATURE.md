@@ -7,7 +7,7 @@ park-session gives the world the app holds one owner. ParkSession, in app/park_s
 ## Acceptance criteria
 
 - ParkFileRequests: with no dialog showing, pressing New records the request New with an empty path and shows no dialog, and pressing Open or Save returns that dialog, after which a dialog shows. While a dialog shows, or for None, a press returns no dialog and leaves the request as it was.
-- ParkFileRequests: an answer leaves no dialog showing. With a chosen path, the request becomes the answering dialog's action with that path. With none, as when the dialog was cancelled or failed, the request stays as it was. take gives the request and leaves none: a take after it gives None with an empty path.
+- ParkFileRequests: an answer leaves no dialog showing. With a chosen path, the request becomes the answering dialog's action with that path. With none, as when the dialog was cancelled or failed, the request stays as it was. take gives the request and leaves none: a take after it gives None with an empty path. An answer acts the same whether or not a dialog shows, since only one dialog shows at a time and only a dialog answers.
 - ParkSession's generation changes exactly when the world is replaced: useFileRequest with New, or with Open of a file openParkFile opens, changes it to a value it has not had before. Constructing, stepping, saving, a failed open, and a None request do not change it.
 - A session's world is the world it was constructed with, its queue empty. step gives the world stepWorld gives for the same world and queued commands, and empties the queue.
 - useFileRequest with New makes the world equal to resolvedNewPark(), which is makeNewPark(1) resolved, and with Open of a file openParkFile opens, equal to that world. Either empties the queue. Open of a file it cannot open leaves the world and the queue as they were and reports openParkFile's message to the edge once.
@@ -15,6 +15,8 @@ park-session gives the world the app holds one owner. ParkSession, in app/park_s
 - fileExists, in park_file.h, is true exactly when a file or directory exists at the path.
 - startingPark with no path gives resolvedNewPark() stepped the given number of cycles with no commands, and with a path, openParkFile's world stepped the same. For a file openParkFile cannot open, it gives no world and openParkFile's message.
 - The app's behavior is unchanged. Every existing test passes with its source unchanged, and tests/app/CMakeLists.txt links tpj_app_core in place of tpj_park_files.
+
+The mailbox's lock, which makes an answer from a dialog's thread safe, shows in no property a test can observe, and ParkDialogs needs a window; both are checked by hand in PLAN.md's verification task.
 
 ## Medium
 

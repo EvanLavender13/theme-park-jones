@@ -1,15 +1,13 @@
 #ifndef TPJ_APP_TOOL_PANEL_H
 #define TPJ_APP_TOOL_PANEL_H
 
+#include "app/park_file_requests.h"
 #include "tools/tools.h"
 
 #include <optional>
 #include <stdint.h>
 
 namespace tpj {
-
-// A park button the player pressed in the Tools panel.
-enum class ParkAction : uint8_t { None, New, Open, Save };
 
 // What the player chose in the Tools panel this frame.
 struct ToolPanelChoice {

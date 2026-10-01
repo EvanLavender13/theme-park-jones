@@ -2,7 +2,8 @@
 #include "app/food_tooltip.h"
 #include "app/inspector_window.h"
 #include "app/orbit_camera.h"
-#include "app/park_file.h"
+#include "app/park_dialogs.h"
+#include "app/park_session.h"
 #include "app/shop_context_tooltip.h"
 #include "app/tool_panel.h"
 #include "core/profile.h"
@@ -22,7 +23,6 @@
 #include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
-#include "sim/park_schema.h"
 #include "sim/save.h"
 #include "sim/world.h"
 #include "tools/tools.h"
@@ -34,7 +34,6 @@
 
 #include <charconv>
 #include <exception>
-#include <mutex>
 #include <optional>
 #include <stdint.h>
 #include <stdio.h>
@@ -114,33 +113,6 @@ bool parseOptions(int argc, char **argv, Options &options) {
   return true;
 }
 
-// A new park, resolved.
-tpj::World resolvedNewPark() {
-  tpj::World world = tpj::makeNewPark(1);
-  tpj::resolveWorld(world);
-  return world;
-}
-
-// The new park, or the park file, resolved and stepped the requested ticks. None, after a message
-// on standard error, when the file cannot be read or loaded.
-std::optional<tpj::World> startingWorld(const Options &options) {
-  std::optional<tpj::World> world;
-  if (options.ParkPath == nullptr) {
-    world = resolvedNewPark();
-  } else {
-    tpj::OpenedPark opened = tpj::openParkFile(options.ParkPath);
-    if (!opened.Park) {
-      (void)fprintf(stderr, "%s\n", opened.Error.c_str());
-      return std::nullopt;
-    }
-    world = std::move(opened.Park);
-  }
-  for (uint64_t tick = 0; tick < options.Ticks; ++tick) {
-    tpj::stepWorld(*world);
-  }
-  return world;
-}
-
 // The intent a park mesh was built from, so the mesh is rebuilt only when intent changes.
 struct DrawnIntent {
   std::vector<tpj::ParkEntrance> Entrances;
@@ -165,153 +137,6 @@ struct PointerButtons {
   bool Pressed = false;
   bool Released = false;
 };
-
-// What the park buttons and the file dialogs ask of the main loop, handed over under a lock, since
-// a dialog's callback may run on another thread.
-struct FileRequests {
-  std::mutex Lock;
-  bool DialogShowing = false;
-  tpj::ParkAction Action = tpj::ParkAction::None;
-  std::string Path;
-};
-
-// One request, taken by the main loop.
-struct FileRequest {
-  tpj::ParkAction Action = tpj::ParkAction::None;
-  std::string Path;
-};
-
-constexpr SDL_DialogFileFilter PARK_FILTERS[] = {{"Park files", "park"}};
-
-// The parks folder beside the executable, where the dialogs start. The build links it to the
-// source tree's. It ends with a separator, since SDL's Windows dialog takes what follows the last
-// one as a file name.
-const char *parksFolder() {
-  static const std::string folder = [] {
-    const char *base = SDL_GetBasePath();
-    return std::string(base != nullptr ? base : "") + "parks/";
-  }();
-  return folder.c_str();
-}
-
-// Lives for the whole program, since a dialog left open at quit may still call back.
-FileRequests &fileRequests() {
-  static FileRequests requests;
-  return requests;
-}
-
-// A dialog's callback: hands the first chosen path to the main loop, and nothing when cancelled.
-void handOver(void *userdata, const char *const *filelist, tpj::ParkAction action) {
-  auto &requests = *static_cast<FileRequests *>(userdata);
-  if (filelist == nullptr) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "File dialog: %s", SDL_GetError());
-  }
-  const std::scoped_lock lock(requests.Lock);
-  requests.DialogShowing = false;
-  if (filelist != nullptr && filelist[0] != nullptr) {
-    requests.Action = action;
-    requests.Path = filelist[0];
-  }
-}
-
-void SDLCALL onOpenChosen(void *userdata, const char *const *filelist, int /*filter*/) {
-  handOver(userdata, filelist, tpj::ParkAction::Open);
-}
-
-void SDLCALL onSaveChosen(void *userdata, const char *const *filelist, int /*filter*/) {
-  handOver(userdata, filelist, tpj::ParkAction::Save);
-}
-
-bool dialogShowing() {
-  FileRequests &requests = fileRequests();
-  const std::scoped_lock lock(requests.Lock);
-  return requests.DialogShowing;
-}
-
-// Acts on a park button: New waits for the next frame, and Open and Save show their dialog. Does
-// nothing while a dialog is showing.
-void startParkAction(tpj::ParkAction action, SDL_Window *window) {
-  if (action == tpj::ParkAction::None) {
-    return;
-  }
-  FileRequests &requests = fileRequests();
-  {
-    const std::scoped_lock lock(requests.Lock);
-    if (requests.DialogShowing) {
-      return;
-    }
-    if (action == tpj::ParkAction::New) {
-      requests.Action = action;
-      requests.Path.clear();
-      return;
-    }
-    requests.DialogShowing = true;
-  }
-  // The callback may run before these return, so the lock is not held while they run.
-  if (action == tpj::ParkAction::Open) {
-    SDL_ShowOpenFileDialog(onOpenChosen, &requests, window, PARK_FILTERS, 1, parksFolder(), false);
-  } else {
-    SDL_ShowSaveFileDialog(onSaveChosen, &requests, window, PARK_FILTERS, 1, parksFolder());
-  }
-}
-
-FileRequest takeFileRequest() {
-  FileRequests &requests = fileRequests();
-  const std::scoped_lock lock(requests.Lock);
-  FileRequest request{requests.Action, std::move(requests.Path)};
-  requests.Action = tpj::ParkAction::None;
-  requests.Path.clear();
-  return request;
-}
-
-void reportFileError(SDL_Window *window, const std::string &message) {
-  SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", message.c_str());
-  (void)SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Theme Park Jones", message.c_str(), window);
-}
-
-// Asks whether to replace the file at the path. True when the player chooses Replace.
-bool confirmReplace(SDL_Window *window, const std::string &path) {
-  const std::string message = path + " already exists. Replace it?";
-  const SDL_MessageBoxButtonData buttons[] = {
-      {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Cancel"},
-      {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Replace"}};
-  const SDL_MessageBoxData data{
-      SDL_MESSAGEBOX_WARNING, window, "Theme Park Jones", message.c_str(), 2, buttons, nullptr};
-  int chosen = 0;
-  return SDL_ShowMessageBox(&data, &chosen) && chosen == 1;
-}
-
-// Saves, or replaces the world, as the request asks. Returns true when it replaced the world. A
-// save whose extension was added asks before replacing a file, since the dialog asked only about
-// the name as typed.
-bool useFileRequest(SDL_Window *window, const FileRequest &request, tpj::World &world) {
-  if (request.Action == tpj::ParkAction::Save) {
-    const std::string path = tpj::withParkExtension(request.Path);
-    if (path != request.Path && SDL_GetPathInfo(path.c_str(), nullptr) &&
-        !confirmReplace(window, path)) {
-      return false;
-    }
-    const std::string error = tpj::saveParkFile(world, path.c_str());
-    if (!error.empty()) {
-      reportFileError(window, error);
-    }
-    return false;
-  }
-  if (request.Action == tpj::ParkAction::New) {
-    world = resolvedNewPark();
-    return true;
-  }
-  if (request.Action == tpj::ParkAction::Open) {
-    tpj::OpenedPark opened = tpj::openParkFile(request.Path.c_str());
-    if (!opened.Park) {
-      reportFileError(window, opened.Error);
-      return false;
-    }
-    world = std::move(*opened.Park);
-    return true;
-  }
-  return false;
-}
 
 // Rebuilds the park mesh when the world's intent differs from what was last drawn, framing the
 // camera on the first one. Returns false if the upload failed.
@@ -547,7 +372,7 @@ struct ShownViews {
 
 // Builds the Debug and Tools panels, setting the shown views from their checkboxes, selecting the
 // tool the player chose and starting the park action they pressed.
-void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
+void drawPanels(tpj::ParkDialogs &dialogs, const tpj::World &world, const tpj::OrbitCamera &camera,
                 ShownViews &shown, tpj::ToolState &tool) {
   tpj::DebugStats stats;
   stats.SimTick = world.Tick;
@@ -572,24 +397,25 @@ void drawPanels(SDL_Window *window, const tpj::World &world, const tpj::OrbitCam
   stats.MealsEaten = tpj::unitsConsumed<tpj::Meals>(world, tpj::EATEN_CAUSE);
   tpj::drawDebugPanel(stats, shown.Graph, shown.FoodOverlay);
   const tpj::ToolPanelChoice choice =
-      tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty(), dialogShowing());
+      tpj::drawToolPanel(tool.Kind, !tool.Drawn.empty(), dialogs.dialogShowing());
   if (choice.Tool) {
     tpj::selectTool(tool, *choice.Tool);
   }
-  startParkAction(choice.Park, window);
+  dialogs.press(choice.Park);
 }
 
 // Builds the frame's ImGui draw data: the panels, which set the shown views from their
 // checkboxes, the Inspector while it has a subject, forgetting it when closed, the graph over the
 // scene while it is shown, the food tooltip at the cursor while the overlay is, on the preview's
 // candidate when it has one, and a shop ghost's context.
-void buildUi(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera &camera,
-             const tpj::CameraView &view, ShownViews &shown, tpj::ToolState &tool,
+void buildUi(SDL_Window *window, tpj::ParkDialogs &dialogs, const tpj::World &world,
+             const tpj::OrbitCamera &camera, ShownViews &shown, tpj::ToolState &tool,
              const tpj::Preview &preview, std::optional<tpj::InspectorSubject> &inspected) {
+  const tpj::CameraView view = cameraView(camera);
   tpj::beginUiFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
-  drawPanels(window, world, camera, shown, tool);
+  drawPanels(dialogs, world, camera, shown, tool);
   if (inspected && !tpj::drawInspector(tpj::inspectSubject(world, *inspected))) {
     inspected.reset();
   }
@@ -605,8 +431,21 @@ void buildUi(SDL_Window *window, const tpj::World &world, const tpj::OrbitCamera
   ImGui::Render();
 }
 
+// A replaced world resets what was built from, or held for, the old one: the tool drops any hold
+// and drawn points, the meshes are rebuilt, the kept preview is emptied, and the Inspector forgets
+// its subject.
+void forgetOldWorld(tpj::ToolState &tool, std::optional<DrawnIntent> &drawn,
+                    std::optional<uint64_t> &guestTick, tpj::KeptPreview &kept,
+                    std::optional<tpj::InspectorSubject> &inspected) {
+  tpj::selectTool(tool, tool.Kind);
+  drawn.reset();
+  guestTick.reset();
+  kept = {};
+  inspected.reset();
+}
+
 // Runs the main loop until quit or the frame limit. Returns false if rendering failed.
-bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world) {
+bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::ParkSession &session) {
   tpj::OrbitCamera camera;
   std::optional<DrawnIntent> drawn;
   std::optional<uint64_t> guestTick;
@@ -614,10 +453,11 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
   std::optional<DrawnPreview> drawnPreview;
   std::optional<tpj::InspectorSubject> inspected;
   tpj::ToolState tool;
-  tpj::CommandQueue commands;
   ShownViews shown{options.ShowGraph, options.ShowFoodOverlay};
   uint64_t lastCounter = SDL_GetPerformanceCounter();
   double simAccumulator = 0.0;
+  tpj::ParkDialogs dialogs(renderer.Window);
+  uint64_t generation = session.generation();
 
   for (int frame = 1;; ++frame) {
     tpj::CameraInput input;
@@ -625,13 +465,10 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
     if (!gatherInput(input, buttons)) {
       return true;
     }
-    if (useFileRequest(renderer.Window, takeFileRequest(), world)) {
-      commands.clear();
-      tpj::selectTool(tool, tool.Kind);
-      drawn.reset();
-      guestTick.reset();
-      kept = {};
-      inspected.reset();
+    session.useFileRequest(dialogs.take(), dialogs);
+    if (session.generation() != generation) {
+      generation = session.generation();
+      forgetOldWorld(tool, drawn, guestTick, kept, inspected);
     }
 
     const uint64_t counter = SDL_GetPerformanceCounter();
@@ -642,20 +479,20 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
       dt = MAX_FRAME_SECONDS;
     }
 
-    useButtons(tool, world, commands, buttons);
-    pickOnLookPress(renderer.Window, world, camera, tool, buttons, inspected);
+    useButtons(tool, session.world(), session.commands(), buttons);
+    pickOnLookPress(renderer.Window, session.world(), camera, tool, buttons, inspected);
 
     // The simulation advances in fixed ticks regardless of frame rate, and queued edits apply at
     // the next (principle 10).
     simAccumulator += dt;
     while (simAccumulator >= tpj::SIM_TICK_SECONDS) {
-      tpj::stepWorld(world, commands);
+      session.step();
       simAccumulator -= tpj::SIM_TICK_SECONDS;
     }
-    if (!updateParkMesh(renderer, world, drawn, camera)) {
+    if (!updateParkMesh(renderer, session.world(), drawn, camera)) {
       return false;
     }
-    if (!updateGuestMesh(renderer, world, guestTick)) {
+    if (!updateGuestMesh(renderer, session.world(), guestTick)) {
       return false;
     }
 
@@ -664,14 +501,15 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
     tpj::movePointer(tool, groundUnderCursor(renderer.Window, view));
     // Made again only when the world ticks or the edit changes, so the ghost, the overlay, and the
     // tooltips show one candidate, and frames between ticks rebuild nothing.
-    const bool remade = tpj::keepPreview(kept, world, tpj::tentativeEdit(tool, world));
+    const bool remade =
+        tpj::keepPreview(kept, session.world(), tpj::tentativeEdit(tool, session.world()));
 
-    buildUi(renderer.Window, world, camera, view, shown, tool, kept.Made, inspected);
+    buildUi(renderer.Window, dialogs, session.world(), camera, shown, tool, kept.Made, inspected);
 
     const bool lastFrame = options.FrameLimit > 0 && frame >= options.FrameLimit;
     // The meshes are updated after the panels, so a change of the checkbox shows in this frame.
-    if (!updatePreviewMeshes(renderer, world, tool, kept.Made, remade, inspected, shown.FoodOverlay,
-                             drawnPreview) ||
+    if (!updatePreviewMeshes(renderer, session.world(), tool, kept.Made, remade, inspected,
+                             shown.FoodOverlay, drawnPreview) ||
         !tpj::drawFrame(renderer, view, ImGui::GetDrawData(),
                         lastFrame ? options.CapturePath : nullptr)) {
       return false;
@@ -685,9 +523,9 @@ bool runLoop(tpj::Renderer &renderer, const Options &options, tpj::World &world)
 
 // Runs the main loop, logging anything it throws, such as a world invariant the simulation
 // checks, so the window and GPU are still released. Returns false if the loop failed or threw.
-bool runLoopLogged(tpj::Renderer &renderer, const Options &options, tpj::World &world) {
+bool runLoopLogged(tpj::Renderer &renderer, const Options &options, tpj::ParkSession &session) {
   try {
-    return runLoop(renderer, options, world);
+    return runLoop(renderer, options, session);
   } catch (const std::exception &error) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Main loop: %s", error.what());
     return false;
@@ -701,14 +539,15 @@ int main(int argc, char **argv) {
   if (!parseOptions(argc, argv, options)) {
     return EXIT_FAILURE;
   }
-  std::optional<tpj::World> world = startingWorld(options);
-  if (!world) {
+  tpj::OpenedPark start = tpj::startingPark(options.ParkPath, options.Ticks);
+  if (!start.Park) {
+    (void)fprintf(stderr, "%s\n", start.Error.c_str());
     return EXIT_FAILURE;
   }
   // The hash needs no window, so it can be checked where there is no display.
   if (options.PrintHash) {
-    printf("tick %llu hash %016llx\n", static_cast<unsigned long long>(world->Tick),
-           static_cast<unsigned long long>(tpj::hashWorld(*world)));
+    printf("tick %llu hash %016llx\n", static_cast<unsigned long long>(start.Park->Tick),
+           static_cast<unsigned long long>(tpj::hashWorld(*start.Park)));
     return EXIT_SUCCESS;
   }
   if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -729,9 +568,10 @@ int main(int argc, char **argv) {
   ImGui::StyleColorsDark();
   ImGui_ImplSDL3_InitForSDLGPU(window);
 
+  tpj::ParkSession session(std::move(*start.Park));
   tpj::Renderer renderer;
   const bool ok = tpj::createRenderer(renderer, window, PARK_SIZE_METERS) &&
-                  runLoopLogged(renderer, options, *world);
+                  runLoopLogged(renderer, options, session);
 
   tpj::destroyRenderer(renderer);
   ImGui_ImplSDL3_Shutdown();
