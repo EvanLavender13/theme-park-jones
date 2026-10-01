@@ -8,6 +8,7 @@ add_executable(tpj_app_tests
     frame_clock_test.cpp
     input_map_test.cpp
     interaction_test.cpp
+    options_test.cpp
     orbit_camera_test.cpp
     park_file_requests_test.cpp
     park_file_test.cpp

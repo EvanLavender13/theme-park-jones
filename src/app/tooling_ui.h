@@ -7,6 +7,7 @@
 #include "legible/preview.h"
 #include "sim/world.h"
 
+struct ImDrawData;
 struct SDL_Window;
 
 namespace tpj {
@@ -25,13 +26,14 @@ public:
 
   [[nodiscard]] const ShownViews &shown() const { return Shown; }
 
-  // Builds the frame's ImGui draw data: the Debug and Tools panels, which set the shown views from
-  // their checkboxes, select the tool the player chose, and start the park action they pressed;
-  // the Inspector while the interaction has a subject, forgetting it when closed; the graph over
-  // the scene while it is shown; the food tooltip at the cursor while the overlay is, on the
-  // preview's candidate when it has one; and a shop ghost's context.
-  void build(SDL_Window *window, ParkDialogs &dialogs, const World &world,
-             const OrbitCamera &camera, Interaction &interaction, const Preview &preview);
+  // Builds the frame's ImGui frame and gives its draw data: the Debug and Tools panels, which set
+  // the shown views from their checkboxes, select the tool the player chose, and start the park
+  // action they pressed; the Inspector while the interaction has a subject, forgetting it when
+  // closed; the graph over the scene while it is shown; the food tooltip at the cursor while the
+  // overlay is, on the preview's candidate when it has one; and a shop ghost's context.
+  [[nodiscard]] ImDrawData *build(SDL_Window *window, ParkDialogs &dialogs, const World &world,
+                                  const OrbitCamera &camera, Interaction &interaction,
+                                  const Preview &preview);
 
 private:
   ShownViews Shown;
