@@ -3,12 +3,14 @@
 add_executable(tpj_legible_tests
     food_test.cpp
     inspect_test.cpp
+    park_summary_test.cpp
     path_place_test.cpp
     preview_test.cpp)
 target_link_libraries(tpj_legible_tests PRIVATE tpj_legible Catch2::Catch2WithMain)
 # The availability tests read tests/parks/warm.park, whose shop has guests queued, the preview
 # tests edit it, since its guests have left hungry footfall on its paths, and the inspector tests
-# read its guests' and shop's records.
+# read its guests' and shop's records. The park summary tests read warm.park's guests and meals,
+# and tests/parks/supply.park, whose two shops lie on either side of a depot.
 target_compile_definitions(tpj_legible_tests PRIVATE TPJ_PARKS_DIR="${CMAKE_SOURCE_DIR}/tests/parks")
 tpj_configure_target(tpj_legible_tests)
 # Every test finishes within TIMEOUT seconds under the parallel ctest run; a slower one fails.

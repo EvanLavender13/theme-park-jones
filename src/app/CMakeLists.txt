@@ -16,13 +16,15 @@ tpj_configure_target(tpj_app_core)
 add_executable(tpj_app
     debug_panel.cpp
     food_tooltip.cpp
+    graph_view.cpp
     inspector_window.cpp
     main.cpp
     park_dialogs.cpp
     platform_input.cpp
     scene_uploads.cpp
     shop_context_tooltip.cpp
-    tool_panel.cpp)
+    tool_panel.cpp
+    tooling_ui.cpp)
 set_target_properties(tpj_app PROPERTIES OUTPUT_NAME ThemeParkJones)
 target_link_libraries(tpj_app PRIVATE tpj_app_core tpj_legible tpj_render tpj_sim tpj_tools)
 tpj_configure_target(tpj_app)

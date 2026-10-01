@@ -7,7 +7,7 @@ tooling-ui moves the frame's panels, the graph's drawing, and the Debug panel's 
 ## Acceptance criteria
 
 - summarizePark's Shops holds a ShopLine for each box of parkBoxes that has a shopRecord, in parkBoxes' order, each with the box's key and that record, and no other line.
-- summarizePark's Guests is the number of parkGuests that have a guestRecord, its MeanHunger the mean of those records' Hunger, or 0 when there are none, and its Waiting the number of those records whose Activity is Waiting.
+- summarizePark's Guests is the number of parkGuests that have a guestRecord, its MeanHunger the mean of those records' Hunger, summed in parkGuests' order, or 0 when there are none, and its Waiting the number of those records whose Activity is Waiting.
 - summarizePark's MealsEaten is unitsConsumed of Meals with the cause EATEN_CAUSE.
 - The app's behavior is unchanged. Every existing test passes with its source unchanged, a --capture of a park with --graph and --overlay food shows the same scene and the same Debug panel lines, and main.cpp builds no panel, draws no graph, and computes none of the Debug panel's numbers.
 
@@ -25,7 +25,7 @@ src/legible/SPEC.md, a new section after "## Inspectors":
 
 > ## Park summary
 >
-> summarizePark(world) gives a ParkSummary, what the Debug panel shows about the park (app/SPEC.md, Tooling UI). Shops holds a ShopLine for each box of parkBoxes(world) that has a shopRecord, in parkBoxes' order, with the box's key and that record. Guests is the number of parkGuests(world) that have a guestRecord, MeanHunger the mean of their records' Hunger, or 0 when there are none, and Waiting the number of those records whose Activity is Waiting. MealsEaten is the meals units consumed with the cause eaten, unitsConsumed of Meals with EATEN_CAUSE (sim/guests/SPEC.md).
+> summarizePark(world) gives a ParkSummary, what the Debug panel shows about the park (app/SPEC.md, Tooling UI). Shops holds a ShopLine for each box of parkBoxes(world) that has a shopRecord, in parkBoxes' order, with the box's key and that record. Guests is the number of parkGuests(world) that have a guestRecord, MeanHunger the mean of their records' Hunger, summed in parkGuests' order, or 0 when there are none, and Waiting the number of those records whose Activity is Waiting. MealsEaten is the meals units consumed with the cause eaten, unitsConsumed of Meals with EATEN_CAUSE (sim/guests/SPEC.md).
 
 src/app/SPEC.md, "## Tooling UI", a new paragraph after its first:
 

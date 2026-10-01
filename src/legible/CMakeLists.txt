@@ -4,6 +4,7 @@ add_library(tpj_legible STATIC
     food.cpp
     inspect.cpp
     path_place.cpp
+    park_summary.cpp
     preview.cpp)
 target_include_directories(tpj_legible PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tpj_legible PUBLIC tpj_sim)
