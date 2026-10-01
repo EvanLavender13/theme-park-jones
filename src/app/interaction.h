@@ -1,6 +1,7 @@
 #ifndef TPJ_APP_INTERACTION_H
 #define TPJ_APP_INTERACTION_H
 
+#include "app/input_map.h"
 #include "legible/inspect.h"
 #include "sim/command_queue.h"
 #include "sim/park/edits.h"
@@ -12,12 +13,6 @@
 #include <stdint.h>
 
 namespace tpj {
-
-// The left button's presses and releases over one frame.
-struct PointerButtons {
-  bool Pressed = false;
-  bool Released = false;
-};
 
 // The player's hold on the park: the tool, and the guest or shop the Inspector shows. It follows
 // the park session's generation, so a replaced world drops the tool's hold and the subject.
