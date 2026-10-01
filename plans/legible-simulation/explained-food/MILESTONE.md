@@ -84,5 +84,6 @@ None.
 - The band is drawn as a ribbon along each guest path with per-vertex values, falling from its line so the nearest line's ribbon lies highest where bands overlap, cheap and testable without a GPU. A ground grid and a shader were rejected.
 - One resolution of warm.park costs at most about 30 ms, so a candidate per tick is expected to stay interactive, and candidate-previews measures it.
 - Guests and shops are picked by a ray against their drawn boxes, not by the ground point, which misses a guest's body from a low camera.
+- The overlay's build cost follows total guest path length, 38 ms on windows-debug for 3 km of path, and it is rebuilt every tick. The purest remedy found is an exact band with rows at the analytic breakpoints of availability along each edge, colored without blending error, and rebuilt only when the network, the route field, or a shop's offer changes (food-overlay/RESEARCH.md).
 
 Depth is in RESEARCH.md.
