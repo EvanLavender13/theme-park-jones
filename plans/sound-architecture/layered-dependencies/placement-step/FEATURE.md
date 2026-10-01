@@ -6,9 +6,9 @@ placement-step makes every new plan say where its code goes, and makes review ho
 
 ## Acceptance criteria
 
-- A plan has a Placement section exactly when one of its lines is "## Placement" followed by nothing but blanks. A carriage return at a line's end is ignored, and the file is read as UTF-8, so a character outside ASCII belongs to the line it is on. No other line, such as a heading of another level or other words, or a mention of the section in prose, is the section.
-- cmake/check_placement.cmake, run as `cmake -DROOT=<tree> -DPLANS=<plans> -P check_placement.cmake`, where PLANS is a CMake list of paths relative to ROOT, reports each listed plan that has no Placement section, once however many times it is listed, as the whole, unprefixed line `<plan> has no Placement section` on standard error, with the plan's path as listed. When ROOT and PLANS are set and every listed plan can be read, it exits with status 0 exactly when it reports no plan. A PLANS that is set but empty reports nothing.
-- Run without ROOT or without PLANS, the check fails naming the missing variable. Given a plan it cannot read, it fails naming the plan.
+- A plan has a Placement section exactly when one of its lines is "## Placement" followed by nothing but blanks, meaning spaces and tabs. A carriage return at a line's end is ignored, and the file is read as UTF-8, so a character outside ASCII belongs to the line it is on. No other line, such as a heading of another level or other words, or a mention of the section in prose, is the section.
+- cmake/check_placement.cmake, run as `cmake -DROOT=<tree> -DPLANS=<plans> -P check_placement.cmake`, where PLANS is a CMake list of paths relative to ROOT, reports each listed plan that has no Placement section, once however many times it is listed, comparing plans as listed, since the hook lists each by its path in the repository, as the whole, unprefixed line `<plan> has no Placement section` on standard error, with the plan's path as listed. When ROOT and PLANS are set and every listed plan can be read, it exits with status 0 exactly when it reports no plan. A PLANS that is set but empty reports nothing.
+- Run without ROOT, or with ROOT empty, or without PLANS, the check fails naming the missing variable. Given a plan it cannot read, it fails naming the plan.
 - The pre-commit hook refuses a commit that adds a file plans/.../PLAN.md, at any depth under plans, whose staged version has no Placement section, and the plan's path appears in its output. It passes a commit whose added plans each have the section in their staged version, whatever their working-tree version says.
 - The hook passes a commit that modifies, deletes, or moves a plan already in the tree, whether or not that plan has the section. A move is a rename under git's rename detection, regardless of the diff.renames setting.
 - When a commit adds a plan and no cmake is on the PATH, the hook refuses it, saying cmake is needed to check the plan. A commit that adds no plan never needs cmake.
@@ -77,4 +77,4 @@ CLAUDE.md, in Build and test, "Git hooks format on commit, check commit messages
 
 ## Open questions
 
-None.
+- Whether a UTF-8 byte-order mark before a plan's first line is part of that line. No plan carries one, and planning writes none; resolved if a plan with one is ever added and the hook's verdict on it is wrong.

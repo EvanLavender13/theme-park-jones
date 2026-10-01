@@ -19,7 +19,7 @@ The Linux build verifies once work is done. linux-debug runs AddressSanitizer an
     ctest --preset linux-debug
     scripts/tidy.sh
 
-A change is finished when both builds build without warnings, scripts/tidy.sh is clean, and the tests pass on both (`ctest.exe --preset windows-debug` for Windows). Git hooks format on commit, check commit messages, and gate pushes on linux-debug and tidy; activate them once per clone with `git config core.hooksPath .githooks`. scripts/cross-build-check.sh compares the Windows and Linux builds' simulation outputs (decision 0022), and pre-push runs it when the simulation's inputs change. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
+A change is finished when both builds build without warnings, scripts/tidy.sh is clean, and the tests pass on both (`ctest.exe --preset windows-debug` for Windows). Git hooks format on commit, refuse a new PLAN.md with no Placement section, check commit messages, and gate pushes on linux-debug and tidy; activate them once per clone with `git config core.hooksPath .githooks`. scripts/cross-build-check.sh compares the Windows and Linux builds' simulation outputs (decision 0022), and pre-push runs it when the simulation's inputs change. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
 
 ## Authority
 

@@ -31,13 +31,14 @@ Create a task for each item. Complete in order.
 7. Name the simplest version that works. Strip polish, edge cases, and nice-to-haves and send them to `maintaining-backlog`.
 8. Map the medium and principle checks: the fields and flows the feature samples, emits, draws, or supplies, and for each principle the feature can violate in code (1 to 6, 8, 10), the property a test should assert. Apply the principles gate from `planning-overview`.
 9. Draft the spec change: the exact sentences to add or change in each affected SPEC.md, and the public interface (header declarations) the feature exposes.
-10. List files to touch, with specific paths, each marked create or modify.
-11. Decompose into bite-sized tasks, each one action of two to five minutes, in the task structure below.
-12. Write FEATURE.md at plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md.
-13. Write PLAN.md at the same path.
-14. Self-review: every acceptance criterion is testable from FEATURE.md and the specs alone, and each states one property, with no lists of example inputs and nothing that reads as every function against every case; every spec statement the feature adds or changes is covered by a criterion; every task has exact paths, exact commands, and expected outputs. Fix inline.
-15. Review: stage FEATURE.md, PLAN.md, and RESEARCH.md, then dispatch the reviewer via `reviewing`, with MILESTONE.md, the SPEC.md of every module the feature touches, and docs/principles.md as context. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
-16. Ask the user to approve both artifacts.
+10. Place each behavior the feature adds, under decision 0027: the module and component that own it, and why. A behavior that fits no existing component gets a new one. src/app/main.cpp and src/scenarios/main.cpp take no new concern until sound-architecture restructures them; a feature that must touch one says what it adds there, and that it is composition only.
+11. List files to touch, with specific paths, each marked create or modify.
+12. Decompose into bite-sized tasks, each one action of two to five minutes, in the task structure below.
+13. Write FEATURE.md at plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md.
+14. Write PLAN.md at the same path.
+15. Self-review: every acceptance criterion is testable from FEATURE.md and the specs alone, and each states one property, with no lists of example inputs and nothing that reads as every function against every case; every spec statement the feature adds or changes is covered by a criterion; every task has exact paths, exact commands, and expected outputs; the Placement section places every behavior the tasks add. Fix inline.
+16. Review: stage FEATURE.md, PLAN.md, and RESEARCH.md, then dispatch the reviewer via `reviewing`, with MILESTONE.md, the SPEC.md of every module the feature touches, and docs/principles.md as context. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
+17. Ask the user to approve both artifacts.
 
 ## Process notes
 
@@ -48,6 +49,8 @@ Tests come from a separate pass. The implementer does not write the feature's te
 Criteria are properties, not enumerations. State each one once, as a law or invariant of the public interface (a copy equals its original; a save loads back equal; a malformed name is refused), with concrete values only where the value is the contract. Never list example inputs for the test to repeat. A feature needs a handful; more than about eight means the feature is too big or its criteria are listing examples. PLAN.md contains no test code.
 
 Order of work inside PLAN.md: spec tasks first (update SPEC.md), then interface tasks (public headers with stub definitions that compile, so tests can be written against them), then the test pass (one task that says to run it, no content), then implementation tasks, then the commit.
+
+Every PLAN.md has a Placement section. The pre-commit hook refuses a commit that adds a PLAN.md without a line reading "## Placement", and the reviewer judges what the section says.
 
 Graybox first. When a feature combines mechanics and presentation, deliver mechanics first and add presentation in later tasks.
 
@@ -132,6 +135,12 @@ One sentence describing what this plan delivers.
 ## Approach
 
 Two to three sentences on the technical approach.
+
+## Placement
+
+Decision 0027 places each behavior this feature adds:
+
+- <Behavior>: <module>, <component and its header>. <Why that component owns it.>
 
 ## Tasks
 

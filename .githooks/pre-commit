@@ -1,10 +1,33 @@
 #!/bin/bash
-# pre-commit: clang-format staged C/C++ files (decision 0021).
+# pre-commit: refuse a new PLAN.md with no Placement section (decision 0027), then clang-format
+# staged C/C++ files (decision 0021).
 # clang-tidy runs in scripts/tidy.sh, which the pre-push hook gates.
 # Activate once per clone: git config core.hooksPath .githooks
 #
 # A file with no unstaged changes is formatted in place and re-staged. A file with unstaged
 # changes has only its staged version formatted, so work left out of the commit stays out.
+
+# Each PLAN.md the commit adds needs a Placement section (decision 0027). The staged versions are
+# checked, since they are what is committed, and -M makes a moved plan a rename, not an addition.
+PLANS=()
+while IFS= read -r -d '' PLAN; do
+    PLANS+=("$PLAN")
+done < <(git diff --cached --name-only --diff-filter=A -M -z -- ':(glob)plans/**/PLAN.md')
+if [ ${#PLANS[@]} -gt 0 ]; then
+    if ! command -v cmake &> /dev/null; then
+        echo "pre-commit: cmake is needed to check the Placement section of each new PLAN.md; commit aborted."
+        exit 1
+    fi
+    STAGED=$(mktemp -d)
+    trap 'rm -rf "$STAGED"' EXIT
+    git checkout-index --prefix="$STAGED/" -- "${PLANS[@]}"
+    PLAN_LIST=$(IFS=';'; echo "${PLANS[*]}")
+    if ! cmake -DROOT="$STAGED" -DPLANS="$PLAN_LIST" \
+            -P "$(git rev-parse --show-toplevel)/cmake/check_placement.cmake"; then
+        echo "pre-commit: each new PLAN.md needs a Placement section (decision 0027); commit aborted."
+        exit 1
+    fi
+fi
 
 if command -v clang-format &> /dev/null; then
     CLANG_FORMAT="clang-format"

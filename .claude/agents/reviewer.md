@@ -93,6 +93,7 @@ Read docs/principles.md and docs/exceptions.md first. A violation of a principle
 - Test code in the plan. Tests come from the separate test pass, so a plan that writes them has the implementer testing its own work.
 - Spec changes listed in `FEATURE.md` with no task that makes them.
 - Tasks that combine unrelated changes into one commit.
+- A behavior the tasks add that the Placement section does not place, or a placement that breaks decision 0027: a component given a second concern, derived state given a second owner or a second invalidation path, a platform call away from a component's edge, an include cmake/layers.txt forbids, or a new concern in src/app/main.cpp or src/scenarios/main.cpp. Read docs/decisions/0027-code-architecture.md and cmake/layers.txt for this check.
 
 ### Code or diffs
 
@@ -103,6 +104,7 @@ Read docs/principles.md and docs/exceptions.md first. A violation of a principle
 - Behavior the code introduces or changes that the module's SPEC.md does not describe, or SPEC.md statements the code contradicts.
 - Tests from the test pass that were edited, weakened, or deleted by the change.
 - Dead code introduced by the change.
+- Code placed against decision 0027 or against its PLAN.md's Placement section, in the ways the implementation plans lens lists.
 
 ## Investigation procedure
 
