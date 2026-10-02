@@ -1,33 +1,33 @@
 # The app's components that need no window, so the app's tests call them through their headers.
 add_library(tpj_app_core STATIC
-    cursor.cpp
     frame_clock.cpp
-    input_map.cpp
-    interaction.cpp
+    input/cursor.cpp
+    input/input_map.cpp
+    input/interaction.cpp
+    input/orbit_camera.cpp
     options.cpp
-    orbit_camera.cpp
-    park_file.cpp
-    park_file_requests.cpp
-    park_session.cpp
-    scene_sync.cpp)
+    scene/scene_sync.cpp
+    session/park_file.cpp
+    session/park_file_requests.cpp
+    session/park_session.cpp)
 target_include_directories(tpj_app_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tpj_app_core PUBLIC tpj_legible tpj_render tpj_sim tpj_tools PRIVATE SDL3::SDL3)
 tpj_configure_target(tpj_app_core)
 
 add_executable(tpj_app
     application.cpp
-    debug_panel.cpp
-    food_tooltip.cpp
-    graph_view.cpp
-    inspector_window.cpp
+    input/platform_input.cpp
     main.cpp
-    park_dialogs.cpp
     platform.cpp
-    platform_input.cpp
-    scene_uploads.cpp
-    shop_context_tooltip.cpp
-    tool_panel.cpp
-    tooling_ui.cpp)
+    scene/scene_uploads.cpp
+    session/park_dialogs.cpp
+    ui/debug_panel.cpp
+    ui/food_tooltip.cpp
+    ui/graph_view.cpp
+    ui/inspector_window.cpp
+    ui/shop_context_tooltip.cpp
+    ui/tool_panel.cpp
+    ui/tooling_ui.cpp)
 set_target_properties(tpj_app PROPERTIES OUTPUT_NAME ThemeParkJones)
 target_link_libraries(tpj_app PRIVATE tpj_app_core tpj_legible tpj_render tpj_sim tpj_tools)
 tpj_configure_target(tpj_app)

@@ -2,14 +2,14 @@
 #define TPJ_APP_APPLICATION_H
 
 #include "app/frame_clock.h"
-#include "app/interaction.h"
+#include "app/input/interaction.h"
+#include "app/input/orbit_camera.h"
 #include "app/options.h"
-#include "app/orbit_camera.h"
-#include "app/park_dialogs.h"
-#include "app/park_session.h"
 #include "app/platform.h"
-#include "app/scene_sync.h"
-#include "app/tooling_ui.h"
+#include "app/scene/scene_sync.h"
+#include "app/session/park_dialogs.h"
+#include "app/session/park_session.h"
+#include "app/ui/tooling_ui.h"
 #include "sim/world.h"
 
 namespace tpj {

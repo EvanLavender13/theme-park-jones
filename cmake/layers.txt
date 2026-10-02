@@ -13,4 +13,6 @@ sim/operations
 sim/guests
 sim/park_schema
 tools render legible scenarios
-app
+app/session app/input
+app/scene app/ui
+app/*
