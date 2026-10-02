@@ -19,7 +19,7 @@ The Linux build verifies once work is done. linux-debug runs AddressSanitizer an
     ctest --preset linux-debug
     scripts/tidy.sh
 
-A change is finished when both builds build without warnings, scripts/tidy.sh is clean, and the tests pass on both (`ctest.exe --preset windows-debug` for Windows). Git hooks format on commit, refuse a new PLAN.md with no Placement section, check commit messages, and gate pushes on linux-debug and tidy; activate them once per clone with `git config core.hooksPath .githooks`. scripts/cross-build-check.sh compares the Windows and Linux builds' simulation outputs (decision 0022), and pre-push runs it when the simulation's inputs change. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
+A change is finished when both builds build without warnings, scripts/tidy.sh is clean, and the tests pass on both (`ctest.exe --preset windows-debug` for Windows). Git hooks format on commit, refuse a new PLAN.md with no Placement section, check commit messages, and gate pushes on linux-debug and tidy; activate them once per clone with `git config core.hooksPath .githooks`. scripts/cross-build-check.sh compares the Windows and Linux builds' simulation outputs (decision 0022), and pre-push runs it when the simulation's inputs change. scripts/runtime-report.sh times the gameplay runtime on the stress parks with both Windows builds, and compares two reports (src/bench/SPEC.md); timings are reported, never gated. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
 
 ## Authority
 
@@ -35,7 +35,7 @@ Planning and building go through the skills in .claude/skills; start at planning
 
 Each module keeps a SPEC.md beside its code, updated in the same change as the code it describes. Scale ceremony to the change: a small fix needs no spec edit.
 
-Tests are derived from the principles and specs, assert properties rather than enumerated examples, and are written in a separate pass from the implementation, by the test-writer agent, never by the context that writes the code. After implementing, the reviewer agent checks the diff against the spec and the principles with fresh context and reports only gaps that affect correctness or stated requirements. Report results with evidence such as test output, never as self-assessment.
+Tests are derived from the principles and specs, assert properties rather than enumerated examples, and are written in a separate pass from the implementation, by the test-writer agent, never by the context that writes the code. Test utilities, measuring or testing tools such as tpj_bench and the scripts, get no tests ever; they are checked by running them. After implementing, the reviewer agent checks the diff against the spec and the principles with fresh context and reports only gaps that affect correctness or stated requirements. Report results with evidence such as test output, never as self-assessment.
 
 Anything mechanically checkable belongs in a test, hook, or CI check, not in a document.
 

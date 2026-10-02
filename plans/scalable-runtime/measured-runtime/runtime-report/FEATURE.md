@@ -2,26 +2,17 @@
 
 ## Summary
 
-runtime-report turns tpj_bench's single launches into a report and tells a real change from noise. A new tool, tpj_bench_report, in src/bench/report/, reads a stream of launches, each tpj_bench's output after a line naming the build that ran it. It summarizes the launches of each build and park into the median of their medians, with the least and greatest as the spread. It refuses launches of one build and park whose results differ, since they did not do the same work. It writes the report as text and reads it back, and it compares two reports. A stage's change is clear only when every launch of one report lies strictly beyond every launch of the other. The comparison prints times in microseconds and ends with how many changes were clear. scripts/runtime-report.sh builds tpj_bench with windows-release and windows-debug. It launches tpj_bench ten times by default on every stress park with each build, in rounds, writes the report, and prints how long it took. It also compares two reports. Every check in this feature is on arithmetic and text. No test reads a clock or fails on a timing.
+runtime-report turns tpj_bench's single launches into a report and tells a real change from noise. A new tool, tpj_bench_report, in src/bench/report/, reads a stream of launches, each tpj_bench's output after a line naming the build that ran it. It summarizes the launches of each build and park into the median of their medians, with the least and greatest as the spread. It refuses launches of one build and park whose results differ, since they did not do the same work. It writes the report as text and reads it back, and it compares two reports. A stage's change is clear only when every launch of one report lies strictly beyond every launch of the other. The comparison prints times in microseconds and ends with how many changes were clear. scripts/runtime-report.sh builds tpj_bench with windows-release and windows-debug. It launches tpj_bench ten times by default on every stress park with each build, in rounds, writes the report, and prints how long it took. It also compares two reports. It is a test utility: it has no tests, and every criterion is checked by running it. Nothing checks a timing.
 
 ## Acceptance criteria
 
-1. parseLaunches reads back what tpj_bench writes. Text made of launches, each a line `build <name>` followed by parkLine's line and the stageLine of each of its stages, reads as those launches in order. The same text with each line feed preceded by a carriage return reads the same.
-2. parseReport(reportText(report)) equals the report, for the report summarizeLaunches gives of any launches parseLaunches gives.
-3. parseLaunches and parseReport each refuse text that breaks their form with a ReportError. Its message begins `line <n>: `, where n is the number of the first line that breaks the form, counting every line from 1. Breaking the form includes a line in the wrong place, a field that is missing or not of its kind, a launch that repeats a stage name, and a report that repeats a park on one build or a stage within one park.
-4. summarizeLaunches gives one ReportPark per build and park among the launches, in the order each pair first appears. Its Launches is the number of those launches, and its Ticks, WarmUps, and Repetitions are theirs. Its stages are theirs, in their order, each with its Kind and Result and with Times equal to summarizeTimes of that stage's Median in each of the launches.
-5. summarizeLaunches throws ReportError, naming the build and the park, when launches of one build and park differ in their Ticks, WarmUps, or Repetitions, in their stages' names or order, or in a stage's Kind or Result.
-6. compareReports marks a stage present in both reports Faster exactly when the after report's Greatest is less than the before report's Least. It marks it Slower exactly when the after report's Least is greater than the before report's Greatest, and Unclear otherwise, so equal bounds are Unclear. It marks the result changed exactly when the stage's Kind or Result differs between the reports.
-7. compareReports gives exactly one comparison for each build, park, and stage name found in either report. Those of the before report come first, in its order, and then those found only in the after report, in its order. A stage missing from one report has that report's side empty, is Unclear, and has its result unchanged.
-8. comparisonText writes one line per comparison, in order, and then `clear <n> of <m>`. m counts the comparisons present in both reports, and n those of them that are not Unclear. Split at runs of spaces, each line holds the fields the spec gives: times in microseconds to one decimal place, and the change in medians as a signed percentage to one decimal place, or `n/a` when the before report's median is 0.
-9. tpj_bench_report writes to standard output what each command makes from its files and exits with status 0. `summarize LAUNCHES` writes reportText of summarizeLaunches of parseLaunches of the file. `compare BEFORE AFTER` writes comparisonText of compareReports of parseReport of each file. It exits with a nonzero status, writes a message to standard error, and writes nothing to standard output in three cases:
-   - the command line parseReportOptions refuses, which the message names;
-   - a file it cannot read, which the message names;
-   - a ReportError, where the message names the file and gives the error's message.
+tpj_bench_report and the script are test utilities. They have no tests. The implementer checks each criterion by running them, and the feature's report gives the output.
 
-   parseReportOptions refuses a missing or unknown command, the unknown one named in its message, and a count of files other than one for summarize and two for compare.
-
-scripts/runtime-report.sh is checked by running it, not by a test: it builds presets, and what it writes is timings. Two reports of the unchanged tree, compared by it, end with `clear 0 of <m>`. The feature's report shows that line with m above 0.
+1. Two reports of the unchanged tree, made by `scripts/runtime-report.sh`, each give a park line for every stress park on each build with `launches 10`, and stage lines carrying the results tpj_bench wrote. Each stage's results are the same on both builds. Their comparison by `scripts/runtime-report.sh --compare` ends with `clear 0 of <m>`, with m above 0.
+2. In the first report, one stage of one park and build has as its median the lower middle of that stage's ten launch medians in build/runtime-report/launches.txt once sorted, and as its least and greatest their smallest and largest.
+3. Compare the first report against a copy with one stage's three times edited so they all lie below that stage's least. The comparison marks that stage faster, marks every other stage unclear, and ends with `clear 1 of <m>`. Edited instead to overlap, the stage is unclear. With its result edited, the stage is marked result-changed.
+4. Edit one launch's result in a copy of build/runtime-report/launches.txt. `tpj_bench_report summarize` of the copy then exits with a nonzero status and a message naming the build and the park, and writes nothing to standard output.
+5. The script refuses `--launches 0` and a missing report to compare, each with a message and a nonzero status. A report run ends by printing how long it took.
 
 ## Medium
 
@@ -29,8 +20,8 @@ This feature introduces, samples, and emits no fields or flows. tpj_bench_report
 
 ## Principle checks
 
-- Principle 10: the simulation is deterministic. summarizeLaunches refuses launches of one build and park whose results differ (criterion 5). If a run were nondeterministic, its hash would differ between launches, and the report would refuse it rather than summarize it. tpj_bench_report reads no clock. Every number it reports is one tpj_bench wrote.
-- No timing gates: the tests feed made-up times through text and check the summary's arithmetic and the rule for a clear change. None measures anything.
+- Principle 10: the simulation is deterministic. summarizeLaunches refuses launches of one build and park whose results differ (criterion 4). If a run were nondeterministic, its hash would differ between launches, and the report would refuse it rather than summarize it. tpj_bench_report reads no clock. Every number it reports is one tpj_bench wrote.
+- No timing gates: nothing fails on a time. Reports and comparisons are read, never gated on.
 - Principle 6: tpj_bench_report includes only bench's own headers. The private header check covers report/internal/.
 
 No other principle applies: the feature touches no world, field, flow, or view.
@@ -104,7 +95,7 @@ src/bench/SPEC.md, a new section after Command line:
 >
 > ### The script
 >
-> scripts/runtime-report.sh [--launches N] REPORT runs from WSL. It builds tpj_bench and tpj_bench_report with windows-release and tpj_bench with windows-debug, first configuring a preset whose build directory holds no CMakeCache.txt. It launches tpj_bench with no options on every file matching tests/parks/stress/*.park, in name order, N times on each build, 10 by default. It runs the launches in rounds: in each round, every park runs once with windows-release and then every park once with windows-debug. So each park's launches span the whole report, and any drift during it widens the spread rather than moving one park's median. Each launch's output goes to build/runtime-report/launches.txt after `build <preset>`, with carriage returns removed. Once the last launch is done, tpj_bench_report summarize of that file writes the report, without carriage returns, to REPORT. The script ends by printing `runtime-report: wrote <REPORT> in <m>m <ss>s`, the time since it started, builds included. scripts/runtime-report.sh --compare BEFORE AFTER builds tpj_bench_report with windows-release and prints its comparison of the two reports, handing it their paths through wslpath -w. Either stops with a message and a nonzero status when:
+> scripts/runtime-report.sh [--launches N] REPORT runs from WSL. It builds tpj_bench and tpj_bench_report with windows-release and tpj_bench with windows-debug, first configuring a preset whose build directory holds no CMakeCache.txt. It launches tpj_bench with no options on every file matching tests/parks/stress/*.park, in name order, N times on each build, 10 by default. It runs the launches in rounds: in each round, every park runs once with windows-release and then every park once with windows-debug. So each park's launches span the whole report, and any drift during it widens the spread rather than moving one park's median. Each launch's output goes to build/runtime-report/launches.txt after `build <preset>`, with carriage returns removed. Once the last launch is done, tpj_bench_report summarize of that file writes the report, without carriage returns, to REPORT, through REPORT.partial renamed into place. The script ends by printing `runtime-report: wrote <REPORT> in <m>m <ss>s`, the time since it started, builds included. scripts/runtime-report.sh --compare BEFORE AFTER builds tpj_bench_report with windows-release and prints its comparison of the two reports, handing it their paths through wslpath -w. Either stops with a message and a nonzero status when:
 >
 > - the arguments are not one of these forms;
 > - N is not a positive integer;
@@ -123,8 +114,9 @@ CLAUDE.md, Build and test, after the sentence about scripts/cross-build-check.sh
 - Create: src/bench/report/report_error.h, src/bench/report/launches.h, src/bench/report/launches.cpp, src/bench/report/report.h, src/bench/report/report.cpp, src/bench/report/comparison.h, src/bench/report/comparison.cpp, src/bench/report/report_options.h, src/bench/report/report_options.cpp, src/bench/report/internal/lines.h, src/bench/report/internal/lines.cpp, src/bench/report/main.cpp
 - Create: scripts/runtime-report.sh
 - Move: src/bench/park_file.h and src/bench/park_file.cpp to src/bench/text_file.h and src/bench/text_file.cpp, with readParkFile renamed readTextFile
-- Modify: src/bench/stages.h (StageResult gains equality), src/bench/main.cpp, src/bench/CMakeLists.txt, src/bench/SPEC.md, CLAUDE.md
-- The test pass creates tests/bench/report/ with launches_test.cpp, report_test.cpp, comparison_test.cpp, report_options_test.cpp, and report_command_line_test.cpp, and adds them to tests/bench/CMakeLists.txt with tpj_bench_report's path.
+- Modify: src/bench/stages.h (StageResult gains equality), src/bench/main.cpp, src/bench/CMakeLists.txt, src/bench/SPEC.md (whose first paragraph's "No test checks a time." becomes "It is a test utility: it is checked by running it, and has no tests."), CLAUDE.md, tests/CMakeLists.txt
+- Modify: .claude/skills/planning-features/SKILL.md, .claude/skills/implementing-features/SKILL.md, .claude/agents/test-writer.md, and CLAUDE.md, so a test utility gets no test pass and no tests
+- Delete: tests/bench/, stage-runner's tests of tpj_bench, since a test utility gets no tests. tests/CMakeLists.txt no longer adds it.
 
 ## Dependencies
 
