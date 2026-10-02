@@ -29,7 +29,7 @@ Its speedups reach into code other capabilities own: shared-medium's sampling, n
 
 - Decision 0028, engineering capabilities: met.
 - Park files and loading, which already save every guest's state: met.
-- A public function of the guests module that creates a guest: unmet. measured-runtime adds it, with src/sim/guests/SPEC.md in the same work.
+- A public function of the guests module that creates a guest: met. measured-runtime's created-guests added addGuest, with src/sim/guests/SPEC.md.
 - The first incident park: held untracked as parks/lowfps.park until measured-runtime moves it to tests/parks/stress/winding-path.park.
 - The layer table and its check: met (sound-architecture's layered-dependencies). The runner's own module is not: tpj_scenarios links the simulation alone and shares a layer with render and legible, so it cannot time the overlay or the meshes. measured-runtime adds a new unit to cmake/layers.txt above render and legible and below the app's.
 - The app's scene sync as the one owner of the preview and overlay meshes: met (sound-architecture's composed-app).
