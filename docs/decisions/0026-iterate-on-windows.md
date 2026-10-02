@@ -1,6 +1,6 @@
 # 0026. Iterate on Windows, verify on Linux at the end
 
-Status: Accepted, 2026-09-29
+Status: Superseded by 0030
 
 ## Context
 

@@ -4,7 +4,7 @@ A theme park game in C++20 on SDL3 and SDL_GPU. docs/vision.md says what it is f
 
 ## Build and test
 
-Commands run from WSL at the repository root. Windows is the target, and work iterates on windows-debug: it uses cmake.exe and needs MSYS2 UCRT64 GCC and Ninja on the Windows PATH (decision 0026).
+Commands run from WSL at the repository root. Windows is the target, and work iterates on windows-debug: it uses cmake.exe and needs MSYS2 UCRT64 GCC and Ninja on the Windows PATH (decision 0030).
 
     cmake.exe --preset windows-debug
     cmake.exe --build --preset windows-debug
@@ -12,14 +12,9 @@ Commands run from WSL at the repository root. Windows is the target, and work it
 
 While iterating, build one test executable with `--target` and run it directly with a Catch2 filter, such as `cmake.exe --build --preset windows-debug --target tpj_sim_tests` and `build/windows-debug/tpj_sim_tests.exe -# "[#edits_test]"` for one file's tests. Warnings are errors in both builds.
 
-The Linux build verifies once work is done. linux-debug runs AddressSanitizer and UBSan, and scripts/tidy.sh runs clang-tidy over the whole project, warnings as errors.
+scripts/tidy.sh runs clang-tidy over the whole project, warnings as errors. It reads linux-debug's compile commands, so configure linux-debug once with `cmake --preset linux-debug`; it never needs building.
 
-    cmake --preset linux-debug
-    cmake --build --preset linux-debug
-    ctest --preset linux-debug
-    scripts/tidy.sh
-
-A change is finished when both builds build without warnings, scripts/tidy.sh is clean, and the tests pass on both (`ctest.exe --preset windows-debug` for Windows). Git hooks format on commit, refuse a new PLAN.md with no Placement section, check commit messages, and gate pushes on linux-debug and tidy; activate them once per clone with `git config core.hooksPath .githooks`. scripts/cross-build-check.sh compares the Windows and Linux builds' simulation outputs (decision 0022), and pre-push runs it when the simulation's inputs change. scripts/runtime-report.sh times the gameplay runtime on the stress parks with both Windows builds, and compares two reports (src/bench/SPEC.md); timings are reported, never gated. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
+A change is finished when windows-debug builds without warnings, its tests pass (`ctest.exe --preset windows-debug`), and scripts/tidy.sh is clean (decision 0030). Work that must leave the simulation unchanged shows it by comparing tpj_scenarios's windows-debug output before and after with `tpj_scenarios --compare`. Git hooks format on commit, refuse a new PLAN.md with no Placement section, check commit messages, and gate pushes on the windows-debug build, its tests, and tidy; activate them once per clone with `git config core.hooksPath .githooks`. Linux is checked at release, not per change: scripts/release-check.sh builds linux-debug with AddressSanitizer and UBSan, runs its tests, and runs scripts/cross-build-check.sh, which compares the Windows and Linux builds' simulation outputs (decision 0022). scripts/runtime-report.sh times the gameplay runtime on the stress parks with both Windows builds, and compares two reports (src/bench/SPEC.md); timings are reported, never gated. To check rendering, run the app with --capture out.bmp; it renders a few frames, saves the last one, and exits.
 
 ## Authority
 

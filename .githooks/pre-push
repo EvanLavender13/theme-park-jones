@@ -1,41 +1,45 @@
 #!/bin/bash
-# pre-push: build linux-debug (ASan, UBSan, warnings as errors), run clang-tidy over the project
-# (decision 0026), and run its tests (decision 0021). Checks the working tree, so commit or stash unrelated changes first. Then, when
-# the pushed commits touch the simulation's build inputs, runs scripts/cross-build-check.sh
-# (decision 0022).
+# pre-push: build windows-debug (warnings as errors), run clang-tidy over the project, and run the
+# Windows tests (decision 0030). Checks the working tree, so commit or stash unrelated changes
+# first. Linux, with its sanitizers and the cross-build check, is checked at release by
+# scripts/release-check.sh.
 # Activate once per clone: git config core.hooksPath .githooks
 
-if [ "$(uname -s)" != "Linux" ]; then
-    echo "pre-push: the linux-debug checks run under WSL; push from WSL, or use --no-verify."
+if [ "$(uname -s)" != "Linux" ] || ! command -v cmake.exe >/dev/null; then
+    echo "pre-push: the checks run under WSL with cmake.exe on the PATH; push from WSL, or use --no-verify."
     exit 1
 fi
 
-# git passes the pushed refs on standard input; read them before anything else can.
-PUSHED_REFS=$(cat)
+# git passes the pushed refs on standard input; no check needs them.
+cat >/dev/null
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
-if [ ! -f build/linux-debug/CMakeCache.txt ]; then
-    echo "pre-push: configuring linux-debug..."
-    cmake --preset linux-debug || { echo "pre-push: configure failed."; exit 1; }
+if [ ! -f build/windows-debug/CMakeCache.txt ]; then
+    echo "pre-push: configuring windows-debug..."
+    cmake.exe --preset windows-debug || { echo "pre-push: configure failed."; exit 1; }
 fi
 
 # Build output streams to the terminal so progress is visible, and is saved for the warning check.
-echo "pre-push: building linux-debug (sanitizers); this can take a while after big changes..."
+echo "pre-push: building windows-debug..."
 BUILD_LOG=$(mktemp)
 trap 'rm -f "$BUILD_LOG"' EXIT
-cmake --build --preset linux-debug 2>&1 | tee "$BUILD_LOG"
+cmake.exe --build --preset windows-debug 2>&1 | tee "$BUILD_LOG"
 BUILD_STATUS=${PIPESTATUS[0]}
 
-# Compiler diagnostics only (file:line:column:), not make's own messages such
-# as clock-skew notices on the Windows drive, and not dependency code.
+# Compiler diagnostics only (file:line:column:), not dependency code.
 WARNINGS=$(grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):" "$BUILD_LOG" | grep -v "/.cpm-cache/" || true)
-if [ $BUILD_STATUS -ne 0 ] || [ -n "$WARNINGS" ]; then
+if [ "$BUILD_STATUS" -ne 0 ] || [ -n "$WARNINGS" ]; then
     echo "$WARNINGS"
-    echo "pre-push: linux-debug build failed or has warnings; push aborted."
+    echo "pre-push: windows-debug build failed or has warnings; push aborted."
     exit 1
 fi
 
+# tidy reads linux-debug's compile commands, which need it configured, not built.
+if [ ! -f build/linux-debug/compile_commands.json ]; then
+    echo "pre-push: configuring linux-debug for clang-tidy..."
+    cmake --preset linux-debug >/dev/null || { echo "pre-push: configure failed."; exit 1; }
+fi
 echo "pre-push: running clang-tidy..."
 if ! scripts/tidy.sh; then
     echo "pre-push: clang-tidy found problems; push aborted."
@@ -43,40 +47,10 @@ if ! scripts/tidy.sh; then
 fi
 
 echo "pre-push: running tests..."
-if ! ctest --preset linux-debug; then
+if ! ctest.exe --preset windows-debug; then
     echo "pre-push: tests failed; push aborted."
     exit 1
 fi
 
-# Everything tpj_scenarios's output depends on.
-CROSS_BUILD_INPUTS='^(src/sim/|src/core/|src/scenarios/|cmake/|CMakeLists\.txt$|CMakePresets\.json$|tests/parks/|tests/sim/support/|scripts/cross-build-check\.sh$)'
-ZERO_SHA='^0+$'
-RUN_CROSS_BUILD=false
-while read -r _ local_sha _ remote_sha; do
-    if [ -z "$local_sha" ] || [[ $local_sha =~ $ZERO_SHA ]]; then
-        continue # nothing pushed, or a deletion
-    fi
-    if [[ $remote_sha =~ $ZERO_SHA ]]; then
-        FILES=$(git log --format= --name-only "$local_sha" --not --remotes)
-    else
-        FILES=$(git log --format= --name-only "$remote_sha..$local_sha")
-    fi
-    # A range git cannot list, such as a force push over unfetched commits, runs the check.
-    # shellcheck disable=SC2181
-    if [ $? -ne 0 ] || grep -qE "$CROSS_BUILD_INPUTS" <<<"$FILES"; then
-        RUN_CROSS_BUILD=true
-        break
-    fi
-done <<<"$PUSHED_REFS"
-
-if $RUN_CROSS_BUILD; then
-    echo "pre-push: the pushed commits touch the simulation's build inputs; running the cross-build check..."
-    if ! scripts/cross-build-check.sh; then
-        echo "pre-push: the cross-build check failed; push aborted."
-        exit 1
-    fi
-else
-    echo "pre-push: the pushed commits touch none of the simulation's build inputs; skipping the cross-build check."
-fi
 echo "pre-push: all checks passed; pushing."
 exit 0

@@ -2,8 +2,7 @@
 # cross-build-check: the Windows and Linux builds must simulate bit-identically (decision 0022).
 # Builds tpj_scenarios with linux-debug and windows-debug, runs both over the registered scenarios
 # and every park file in tests/parks/, and fails on the first line where their outputs differ.
-# Run from WSL at the repository root. The pre-push hook runs it when the pushed commits touch the
-# simulation's build inputs.
+# Run from WSL at the repository root. scripts/release-check.sh runs it at release (decision 0030).
 set -uo pipefail
 
 stage() { echo "cross-build-check: $*"; }

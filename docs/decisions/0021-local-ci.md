@@ -1,6 +1,6 @@
 # 0021. Local hooks now, hosted CI later
 
-Status: Accepted, 2026-09-26
+Status: Accepted, 2026-09-26; its pre-push check of linux-debug superseded by 0030
 
 ## Context
 
