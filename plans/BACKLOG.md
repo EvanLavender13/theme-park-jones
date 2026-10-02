@@ -9,3 +9,4 @@ Unordered pool of ideas held for future work. Items get added when they drift ou
 - A view toggle that keeps the scene in daylight whatever the time of day, for building at night.
 - Footfall for needs beyond hunger, such as thirsty or tired footfall, and a ghost's context that shows the footfall of the needs its facility answers.
 - Arrivals that depend on how well the park serves its guests, such as a reputation built from departures and their reasons, instead of a fixed daily curve.
+- Boxes standing inside plazas, such as kiosks and fountains, as obstacles that plaza crossings bend around, with their supply settled alongside how supplies and staff reach guest areas.

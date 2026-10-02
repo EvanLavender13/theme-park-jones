@@ -69,6 +69,9 @@ Later milestones are drawn from the deepening candidates once the slice has been
 - Box sizes and shapes: resizable footprints, and later procedural building forms resolved from context (decision 0004, docs/design-notes.md). Gated on: the slice's boxes working as shops.
 - Paths on terrain: paths that follow the ground, or climb it as ramps and stairs. Gated on: terrain editing.
 - Path styles and widths as intent, with queue lines as a kind of path.
+- Stamps beyond a square: shapes, stamps the player saves from a selection, and stamps that stay grouped for moving and rescaling.
+- Frontage as saved intent: a box attached to a path at a distance along it, a side, and a setback, so reshaping the path carries its boxes.
+- A row tool that lays boxes along a stretch of path in one drag, after Cities: Skylines 2's Line Tool.
 
 ## Open questions
 
