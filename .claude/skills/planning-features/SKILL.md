@@ -81,7 +81,7 @@ Run: `exact command`
 Expected: <exact expected output>
 ```
 
-Implementation tasks verify with the narrowest windows-debug build and test run that covers them: build the test executables for the modules the task changes (`cmake.exe --build --preset windows-debug --target tpj_sim_tests`) and run them directly, filtered to the relevant files or test names (`build/windows-debug/tpj_sim_tests.exe -# "[#edits_test]"`), stating which of the test pass's tests are expected to pass after the task. The full builds, both ctest runs, and `scripts/tidy.sh` run once, when the feature's acceptance criteria are confirmed (decision 0026).
+Implementation tasks verify with the narrowest windows-debug build and test run that covers them: build the test executables for the modules the task changes (`cmake.exe --build --preset windows-debug --target tpj_sim_tests`) and run them directly, filtered to the relevant files or test names (`build/windows-debug/tpj_sim_tests.exe -# "[#edits_test]"`), stating which of the test pass's tests are expected to pass after the task. The full windows-debug build, its ctest run, and `scripts/tidy.sh` run once, when the feature's acceptance criteria are confirmed (decision 0030).
 
 ## FEATURE.md format
 

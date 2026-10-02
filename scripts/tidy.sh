@@ -1,6 +1,6 @@
 #!/bin/bash
 # Runs clang-tidy, warnings as errors, over every project source file in linux-debug's compile
-# database, 16 files at a time (decision 0026). Headers are checked through the sources that
+# database, 16 files at a time (decision 0030). Headers are checked through the sources that
 # include them, as .clang-tidy's HeaderFilterRegex allows. Run it once work is done, before review
 # and push; the pre-push hook runs it. Prints only diagnostics, and exits nonzero on any.
 
