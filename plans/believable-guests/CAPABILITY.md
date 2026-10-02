@@ -69,6 +69,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 - Thoughts: short player-facing statements drawn from choice explanations, as RollerCoaster Tycoon does. Gated on: the player-facing UI question.
 - Walking off a deleted path, instead of moving to the nearest point of the network.
 - Aggregate guests at scale: distant or numerous guests as flows, with individuals shown near the camera. Gated on: profiling.
+- Fuzzy choice: a guest weighs a few options it happens to notice, such as nearby or recently seen shops and rides, rather than scoring every reachable one at every junction, so a choice's cost does not grow with the number of attractions and decisions feel human rather than exhaustive.
 
 ## Open questions
 
