@@ -1,0 +1,19 @@
+# Research: indexed-sampling
+
+## Where does a full-park tick's time go?
+
+A gprof profile of tpj_bench stepping tests/parks/stress/full.park 600 ticks on a windows-release build with -pg puts 78% of the run in sampleSlots for the guest route distance field and 75% in stepGuests, which calls it. Ticks are about nine tenths of that run; the food overlay's builds are most of the rest. Guests sample the field about 2,760 times a tick, more than once each for the ~2,000 guests, because walk samples again at every node it passes. Each sample costs about 7 microseconds of its own time and calls sampleRouteEdge about 31 times, once for each source with an entry at the edge, so nearly every one of the 31 sources reaches every place. The next cost, World::findEntity, is 6%, almost all from the overlay's parkBoxes.
+
+The cost is the scan. Route distance publishes, for each source, one entry at every node it reaches, so a slot holds about as many entries as the network has nodes. sampleSlotAtNode and sampleSlotInEdge (src/sim/medium/field.h) walk every entry of every slot and compare its place with the sampled node's stop places, or with the edge's carrier and bounds. A sample therefore costs sources times entries per source, and a tick costs guests times shops times network size. affordable-sampling removed the resolve per entry, which left the scan.
+
+## How should a slot find its entries at a place?
+
+Every comparison the scan makes is against a place: equality with a node's stop places, and, inside an edge, the same carrier with a distance strictly between two stop distances. Both are lookups in entries ordered by carrier and then distance: a stop place is an exact match, and the inside of an edge is a range on one carrier. So an index of each slot's entries sorted by place answers a sample with a few binary searches per source, and it depends on the entries alone, not on the network, so one index serves whatever network a caller samples on. The spec returns a source's entries in the source's order, so the index keeps each entry's position and the few matches are put back in that order.
+
+Rejected: an index by node or edge — ties the index to one network, while sampleField takes the network as an argument and the app samples candidates on other networks. A hash map from place to entries — cannot answer the range inside an edge, and its iteration order invites nondeterminism. Sorting the slot's own entries — changes the source's order, which sampling returns and saves write. Sampling only the guest's target source between nodes — removes most samples but not the scan at nodes where guests choose, and changes the guests module; it stays a candidate.
+
+## How should a stress report measure play?
+
+The stage runner steps 300 ticks and reports a median, which is ten seconds of game time, and nothing in the report compares a stage with the 33 ms a tick covers or shows what the app does when ticks overrun. That is how the full park's 44 ms tick went unremarked while the app spiralled to 3 FPS. Timing the app itself over a fixed number of frames on the full park gave 320 ms a frame before the frame clock's tick cap and about 100 ms after it, numbers no headless stage shows. A report that steps minutes of game time, marks every stage over its budget, and times the app's frames on each stress park would have caught both.
+
+Sources: gprof flat profile and call graph of tpj_bench on full.park, windows-release with -pg, -no-pie, and ASLR disabled at link; src/sim/medium/field.h; src/sim/routes/SPEC.md (one entry per reached node per source); src/sim/guests/guests.cpp walk; plans/shared-medium/affordable-sampling/MILESTONE.md.

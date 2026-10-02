@@ -11,7 +11,7 @@ scalable-runtime deepens how gently the gameplay runtime's costs grow with the s
 - A script builds windows-release and windows-debug, launches the runner several times on each stress park, and prints, per park and stage, each build's median and spread. Release decides what is slow, and debug is reported beside it.
 - The script compares two reports and marks a change clear only when it exceeds the spread both reports measured. Two reports of an unchanged tree mark no change clear.
 - No test, hook, or check fails on a timing. Timings are reported and compared, never gated.
-- Each milestone this capability ships includes the script's comparison before and after its change on the stress parks, and changes no observable behavior: existing tests pass unchanged, and the cross-build check's output is identical wherever the simulation is touched.
+- Each milestone this capability ships includes the script's comparison before and after its change on the stress parks, and changes no observable behavior: existing tests pass unchanged, and tpj_scenarios's windows-debug output is identical before and after wherever the simulation is touched (decision 0030).
 
 ## Medium
 
@@ -21,7 +21,7 @@ Its speedups reach into code other capabilities own: shared-medium's sampling, n
 
 ## Principles
 
-- Principle 10: the simulation is deterministic and runs independently of rendering. Speedups in the simulation keep the cross-build check's output identical, line for line, and simulation code never reads the clock: only executables' entry points and the runner do (src/scenarios/SPEC.md already keeps timing out of compared output).
+- Principle 10: the simulation is deterministic and runs independently of rendering. Speedups in the simulation keep tpj_scenarios's output identical before and after, line for line, and the cross-build check passes at release (decision 0030), and simulation code never reads the clock: only executables' entry points and the runner do (src/scenarios/SPEC.md already keeps timing out of compared output).
 - Principle 1: everything visible is derived. A speedup that keeps derived state between frames, such as an overlay rebuilt only when its inputs change, gives it one owner and one path by which a change of its sources reaches it (decision 0027), and a test checks that the kept state equals a fresh rebuild.
 - Principle 8: every change can be previewed before it is committed. Faster candidates still equal, by worldsEqual, the world the committed edit gives.
 
@@ -37,19 +37,19 @@ Its speedups reach into code other capabilities own: shared-medium's sampling, n
 
 ## Foundation
 
-The foundation is the measuring: stress parks the size the game means to support, a runner that times each runtime stage on them, and a report that tells a real change from noise. It produces value on its own, since its first report says which costs matter at 2,000 guests, before any speedup is chosen. The overlay that set this off comes next, measured before and after by it.
+The foundation is the measuring: stress parks the size the game means to support, a runner that times each runtime stage on them, and a report that tells a real change from noise. It produces value on its own, since its first report says which costs matter at 2,000 guests, before any speedup is chosen. The tick, which a profile of the full park found over budget, comes next, and then the overlay that set this off, each measured before and after by it.
 
 ## Milestones
 
 1. `measured-runtime`: the stress parks, the full park's generator, the headless runner timing each runtime stage, and the script that reports both builds' medians and spreads and compares two reports against their noise. Depends on: none.
-2. `affordable-overlay`: the food overlay rebuilt only when the guest network, the route distance field, or a reachable shop's offer changes, and each shop's offer found once per build rather than at every sample, so an idle park rebuilds nothing and a build's cost no longer multiplies samples by shops. Depends on: milestone 1, and its report showing the overlay costly on windows-release on the full park. A build finds every shop's offer at every sample, so its release cost of 2 ms with one shop is expected to grow many times over with 30.
+2. `indexed-sampling`: the report steps minutes of play, marks every stage over its budget, and times the app's frames, and each field slot's entries are indexed by place so a sample looks up its entries instead of scanning every source's, bringing the full park's tick under 33 ms on windows-release. Depends on: milestone 1, and a Windows profile putting three quarters of a full-park tick in guests' route distance samples.
+3. `affordable-overlay`: the food overlay rebuilt only when the guest network, the route distance field, or a reachable shop's offer changes, and each shop's offer found once per build rather than at every sample, so an idle park rebuilds nothing and a build's cost no longer multiplies samples by shops. Depends on: milestone 2, and its report showing the overlay still costly on windows-release on the full park after the index. A build finds every shop's offer at every sample, so its release cost of 2 ms with one shop is expected to grow many times over with 30.
 
 ## Deepening candidates
 
 Unordered pool this capability draws later milestones from.
 
 - Overlay rebuilt by region: when one shop's offer changes, rebuild only the band within the route distance at which that shop's term falls to zero, with the mesh kept in chunks, so a park with many busy shops does not rebuild everything every tick. Gated on: the report showing whole rebuilds costly on the full park after affordable-overlay.
-- Entries indexed by place: sampling that visits only the entries at the sampled node or edge, not every entry of every source. Gated on: the report showing sampling's scan matters on the full park.
 - Incremental resolution: run only the resolvers an applied command affects, in dependency order, so a candidate costs what its edit touches. Gated on: the report showing candidates costly on the full park.
 - Candidates off the frame's thread: copy the world on the main thread and resolve the candidate on a worker, showing the last finished one. Gated on: incremental resolution leaving a candidate too slow for a frame.
 - Sampling without allocation: sampleField builds its list of slots and each EdgeSample's vectors on every sample. Gated on: the report attributing a large share of sampling to allocation.
