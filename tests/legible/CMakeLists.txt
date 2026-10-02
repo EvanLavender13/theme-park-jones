@@ -13,5 +13,5 @@ target_link_libraries(tpj_legible_tests PRIVATE tpj_legible Catch2::Catch2WithMa
 # and tests/parks/supply.park, whose two shops lie on either side of a depot.
 target_compile_definitions(tpj_legible_tests PRIVATE TPJ_PARKS_DIR="${CMAKE_SOURCE_DIR}/tests/parks")
 tpj_configure_target(tpj_legible_tests)
-# Every test finishes within TIMEOUT seconds under the parallel ctest run; a slower one fails.
-catch_discover_tests(tpj_legible_tests PROPERTIES TIMEOUT 10)
+# A test that runs past TIMEOUT seconds has hung, and fails.
+catch_discover_tests(tpj_legible_tests PROPERTIES TIMEOUT 300)

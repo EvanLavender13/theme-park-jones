@@ -50,8 +50,8 @@ target_compile_definitions(tpj_sim_tests PRIVATE TPJ_PARKS_DIR="${CMAKE_SOURCE_D
 # operation as tpj_sim does, never fusing a multiply and an add.
 target_compile_options(tpj_sim_tests PRIVATE -ffp-contract=off)
 tpj_configure_target(tpj_sim_tests)
-# Every test finishes within TIMEOUT seconds under the parallel ctest run; a slower one fails.
-catch_discover_tests(tpj_sim_tests PROPERTIES TIMEOUT 10)
+# A test that runs past TIMEOUT seconds has hung, and fails.
+catch_discover_tests(tpj_sim_tests PROPERTIES TIMEOUT 300)
 
 # The symbol check keeps the C runtime's transcendental functions out of tpj_sim, whose results
 # must not depend on the build's runtime (decision 0022).

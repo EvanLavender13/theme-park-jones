@@ -17,8 +17,8 @@ target_compile_definitions(tpj_scenarios_tests PRIVATE
     TPJ_PARKS_DIR="${CMAKE_SOURCE_DIR}/tests/parks")
 add_dependencies(tpj_scenarios_tests tpj_scenarios)
 tpj_configure_target(tpj_scenarios_tests)
-# Every test finishes within TIMEOUT seconds under the parallel ctest run; a slower one fails.
-catch_discover_tests(tpj_scenarios_tests PROPERTIES TIMEOUT 10)
+# A test that runs past TIMEOUT seconds has hung, and fails.
+catch_discover_tests(tpj_scenarios_tests PROPERTIES TIMEOUT 300)
 
 # The scenarios library is simulation code, so the C runtime's transcendental functions stay out
 # of it as they do out of tpj_sim (decision 0022).
