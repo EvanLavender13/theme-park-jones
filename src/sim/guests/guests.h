@@ -48,37 +48,6 @@ struct ChoiceOption {
   bool operator==(const ChoiceOption &) const = default;
 };
 
-template <typename Visitor> void visitFields(Visitor &visitor, ChoiceOption &option) {
-  visitor.field("kind", option.Kind);
-  visitor.field("shop", option.Shop);
-  visitor.field("relief", option.Relief);
-  visitor.field("distance", option.Distance);
-  visitor.field("wait", option.Wait);
-  visitor.field("commitment", option.Commitment);
-  visitor.field("score", option.Score);
-  visitor.field("probability", option.Probability);
-}
-
-// A choice a guest made: the tick, where it stood, how hungry it was, its options, and the index
-// of the one it picked.
-struct GuestChoice {
-  uint64_t Tick = 0;
-  Place At;
-  double Hunger = 0.0;
-  std::vector<ChoiceOption> Options;
-  uint64_t Picked = 0;
-
-  bool operator==(const GuestChoice &) const = default;
-};
-
-template <typename Visitor> void visitFields(Visitor &visitor, GuestChoice &choice) {
-  visitor.field("tick", choice.Tick);
-  visitor.field("at", choice.At);
-  visitor.field("hunger", choice.Hunger);
-  visitor.field("options", choice.Options);
-  visitor.field("picked", choice.Picked);
-}
-
 // A meal a guest ate: the tick, and its hunger before and after.
 struct GuestMeal {
   uint64_t Tick = 0;
@@ -102,8 +71,8 @@ struct CurvePoint {
 
 // What a guest publishes about itself for display and tests (decision 0025): what it is doing,
 // where it stands, where that is on the ground (none while its place does not resolve), how
-// hungry it is, the tick its stay ends, the shop it is heading to or waiting at, the meals it has
-// eaten and the last of them, and its last choice. Nothing in the park reads it.
+// hungry it is, the tick its stay ends, the shop it is heading to or waiting at, and the meals it
+// has eaten and the last of them. Nothing in the park reads it.
 struct GuestRecord {
   GuestActivity Activity = GuestActivity::Wandering;
   Place At;
@@ -113,7 +82,6 @@ struct GuestRecord {
   EntityKey Target = NULL_KEY;
   uint64_t MealsEaten = 0;
   std::optional<GuestMeal> LastMeal;
-  std::optional<GuestChoice> LastChoice;
 
   bool operator==(const GuestRecord &) const = default;
 };
@@ -154,6 +122,10 @@ inline constexpr std::string_view EATEN_CAUSE = "eaten";
 std::vector<EntityKey> parkGuests(const World &world);
 // The guest's inspection record, or none when the key holds no guest.
 std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest);
+// The options the guest would weigh if it chose now, each with its terms, score, and softmax
+// probability, or none when the key holds no guest or its place does not resolve on the guest
+// network. Draws nothing and changes nothing; it costs one choice, so call it for one guest.
+std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, EntityKey guest);
 // Creates a guest standing at the place, whose stay ends at the tick, with its hunger and hunger
 // rate drawn on its key, and gives its key. Throws std::invalid_argument, changing nothing, when
 // the place does not resolve on the guest network.

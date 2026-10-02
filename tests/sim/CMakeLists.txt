@@ -9,6 +9,8 @@ add_executable(tpj_sim_tests
     guests/choice_test.cpp
     guests/footfall_test.cpp
     guests/guest_edits_test.cpp
+    guests/guest_options_test.cpp
+    guests/guest_save_test.cpp
     guests/visits_test.cpp
     guests/walks_test.cpp
     medium/carry_over_test.cpp

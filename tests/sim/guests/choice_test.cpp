@@ -6,6 +6,7 @@
 #include "sim/entity_key.h"
 #include "sim/guests/guests.h"
 #include "sim/medium/field.h"
+#include "sim/medium/flow.h"
 #include "sim/medium/network.h"
 #include "sim/mix.h"
 #include "sim/operations/operations.h"
@@ -25,6 +26,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <stdint.h>
@@ -196,11 +198,12 @@ constexpr uint64_t EATING_CYCLES = 20 * ARRIVAL_INTERVAL;
 constexpr uint64_t LAST_CYCLE = CLOSE_GATE + STAY_MAX + 1000;
 
 // What a check reads of the eating park before a cycle: the tick it steps, its guests' records,
-// and the offers, which shops publish as they step.
+// the offers, which shops publish as they step, and the guests whose visits have come back.
 struct BeforeCycle {
   uint64_t Tick = 0;
   std::map<EntityKey, GuestRecord> Guests;
   test::ParkOffers Offers;
+  std::set<EntityKey> VisitsBack;
 };
 
 // Steps the eating park until isDone(world), with no command except in two cycles: the one
@@ -229,9 +232,13 @@ template <typename Done, typename Check> void runEatingPark(Done isDone, Check c
       REQUIRE(test::eatingGatePath(world).has_value() == reopened);
       continue;
     }
-    BeforeCycle before{.Tick = world.Tick, .Guests = {}, .Offers = test::parkOffers(world)};
+    BeforeCycle before{
+        .Tick = world.Tick, .Guests = {}, .Offers = test::parkOffers(world), .VisitsBack = {}};
     for (const EntityKey guest : parkGuests(world)) {
       before.Guests.emplace(guest, recordOf(world, guest));
+      if (unitsHeld<GuestVisits>(world, guest, guest) > 0) {
+        before.VisitsBack.insert(guest);
+      }
     }
     stepWorld(world);
     INFO("stepped " << before.Tick);
@@ -248,113 +255,14 @@ bool anyHeadingHome(const World &world) {
   });
 }
 
-// The options of a guest choosing at a place with the route entries, with the offers, its hunger,
-// and its target, before their probabilities are set.
-std::vector<ChoiceOption> expectedOptions(const World &world, const test::ParkOffers &offers,
-                                          const std::vector<SampledEntry<RouteEntry>> &routes,
-                                          double hunger, EntityKey target, bool stayOver) {
-  std::vector<ChoiceOption> options;
-  for (const SampledEntry<RouteEntry> &sampled : routes) {
-    if (!test::isOfferReachable(offers, routes, sampled.Source)) {
-      continue;
-    }
-    const OfferEntry offer = test::offerAmong(offers, sampled.Source).value_or(OfferEntry{});
-    ChoiceOption option = optionOf(ChoiceKind::Offer, sampled.Source, 0.0);
-    option.Relief = RELIEF_WEIGHT * hungerCurve(hunger) * offer.Relief;
-    option.Distance = DISTANCE_WEIGHT * sampled.Value.Distance;
-    option.Wait = WAIT_WEIGHT * (static_cast<double>(offer.Wait) * SIM_TICK_SECONDS);
-    option.Commitment = sampled.Source == target ? COMMITMENT_BONUS : 0.0;
-    option.Score = option.Relief + option.Distance + option.Wait + option.Commitment;
-    options.push_back(option);
-  }
-  options.push_back(optionOf(ChoiceKind::CarryOn, NULL_KEY, CARRY_ON_SCORE));
-  if (stayOver && test::homeEntry(world, routes).has_value()) {
-    options.push_back(optionOf(ChoiceKind::HeadHome, NULL_KEY, HEAD_HOME_SCORE));
-  }
-  return options;
-}
-
-TEST_CASE("A guest's LastChoice after a cycle in which it chose gives the tick, its Hunger, and "
-          "the reachable offers, carrying on, and heading home once its stay is over, with the "
-          "spec's terms and scores, softmaxPick's probabilities, and the pick, which its Activity "
-          "and Target follow") {
-  bool sawOfferPicked = false;
-  bool sawCarryOnPicked = false;
-  bool sawHeadHomePicked = false;
-  bool sawPickAtAnchor = false;
-  bool sawTwoOffers = false;
-  bool sawCommitment = false;
-  bool sawVisitBack = false;
-  runEatingPark(anyHeadingHome, [&](const BeforeCycle &before, const World &after) {
-    const uint64_t tick = before.Tick;
-    for (const auto &[guest, was] : before.Guests) {
-      const std::optional<GuestRecord> now = guestRecord(after, guest);
-      if (!now.has_value() || test::choiceTick(now.value()) != tick) {
-        continue;
-      }
-      CAPTURE(guest);
-      const GuestRecord &record = now.value();
-      const GuestChoice choice = record.LastChoice.value_or(GuestChoice{});
-      CHECK(choice.Hunger == record.Hunger);
-
-      // A guest whose visit came back, or that dropped its target, chooses with none.
-      const bool dropped =
-          was.Activity == GuestActivity::HeadingToShop &&
-          !test::isOfferReachable(before.Offers, test::routesAt(after, was.At), was.Target);
-      const EntityKey target =
-          was.Activity == GuestActivity::Waiting || dropped ? NULL_KEY : was.Target;
-      const std::vector<SampledEntry<RouteEntry>> routes = test::routesAt(after, choice.At);
-      std::vector<ChoiceOption> expected = expectedOptions(
-          after, before.Offers, routes, choice.Hunger, target, tick >= record.StayUntil);
-      // Every edge of the eating park is longer than a cycle's walk, so a guest chooses at most
-      // once in a cycle with no edit, and its draw has index 0.
-      const size_t picked =
-          softmaxPick(DrawKey{after.Seed, guest, hashName("guest-choice"), tick, 0}, expected);
-      CHECK(choice.Options == expected);
-      CHECK(choice.Picked == picked);
-
-      REQUIRE(choice.Picked < choice.Options.size());
-      const ChoiceOption &option = choice.Options.at(choice.Picked);
-      switch (option.Kind) {
-      case ChoiceKind::Offer: {
-        const std::optional<RouteEntry> entry = test::routeFrom(routes, option.Shop);
-        REQUIRE(entry.has_value());
-        const bool atAnchor = entry.value_or(RouteEntry{}).Next.Carrier == NULL_KEY;
-        CHECK(record.Activity ==
-              (atAnchor ? GuestActivity::Waiting : GuestActivity::HeadingToShop));
-        CHECK(record.Target == option.Shop);
-        if (atAnchor) {
-          CHECK(record.At == choice.At);
-        }
-        sawOfferPicked = true;
-        sawPickAtAnchor = sawPickAtAnchor || atAnchor;
-        break;
-      }
-      case ChoiceKind::CarryOn:
-        CHECK(record.Activity == GuestActivity::Wandering);
-        CHECK(record.Target == NULL_KEY);
-        sawCarryOnPicked = true;
-        break;
-      case ChoiceKind::HeadHome:
-        CHECK(record.Activity == GuestActivity::HeadingHome);
-        CHECK(record.Target == NULL_KEY);
-        sawHeadHomePicked = true;
-        break;
-      }
-      sawTwoOffers = sawTwoOffers || std::ranges::count(choice.Options, ChoiceKind::Offer,
-                                                        &ChoiceOption::Kind) >= 2;
-      sawCommitment = sawCommitment || std::ranges::count(choice.Options, COMMITMENT_BONUS,
-                                                          &ChoiceOption::Commitment) > 0;
-      sawVisitBack = sawVisitBack || was.Activity == GuestActivity::Waiting;
-    }
-  });
-  CHECK(sawOfferPicked);
-  CHECK(sawCarryOnPicked);
-  CHECK(sawHeadHomePicked);
-  CHECK(sawPickAtAnchor);
-  CHECK(sawTwoOffers);
-  CHECK(sawCommitment);
-  CHECK(sawVisitBack);
+// Whether the guest, before a cycle, must choose because it has lost its way: it is heading to a
+// shop whose offer is not reachable at its place, or heading home with no entrance entry there.
+bool losesWay(const World &after, const test::ParkOffers &offers, const GuestRecord &was) {
+  const std::vector<SampledEntry<RouteEntry>> routes = test::routesAt(after, was.At);
+  return (was.Activity == GuestActivity::HeadingToShop &&
+          !test::isOfferReachable(offers, routes, was.Target)) ||
+         (was.Activity == GuestActivity::HeadingHome &&
+          !test::homeEntry(after, routes).has_value());
 }
 
 // The entity anchored to the node at the place, or NULL_KEY.
@@ -367,33 +275,100 @@ EntityKey anchorAt(const World &world, const Place &place) {
   return test::guestNetwork(world).nodeAnchor(node->Node);
 }
 
-TEST_CASE("A guest that is not waiting chooses in every cycle in which it starts its walk at a "
-          "node, and not in a cycle in which it walks to a node with no distance left") {
-  int startsAtNode = 0;
-  runEatingPark(isEatingRunOver, [&](const BeforeCycle &before, const World &after) {
+TEST_CASE("A guest chooses where it stands when it starts its walk at a node or its visit has come "
+          "back, picking by softmaxPick keyed by its first choice of the cycle over the options "
+          "Choice lists, and its Activity and Target follow the pick") {
+  bool sawOfferPicked = false;
+  bool sawCarryOnPicked = false;
+  bool sawHeadHomePicked = false;
+  bool sawPickAtAnchor = false;
+  runEatingPark(anyHeadingHome, [&](const BeforeCycle &before, const World &after) {
     const uint64_t tick = before.Tick;
     for (const auto &[guest, was] : before.Guests) {
-      if (was.Activity == GuestActivity::Waiting) {
+      const bool visitBack = before.VisitsBack.contains(guest);
+      if (!visitBack &&
+          (was.Activity == GuestActivity::Waiting || !test::isAtNode(after, was.At))) {
         continue;
       }
-      CAPTURE(guest);
+      CAPTURE(guest, visitBack);
+      // A guest whose visit came back, or that dropped its target, chooses with none.
+      const EntityKey target =
+          visitBack || losesWay(after, before.Offers, was) ? NULL_KEY : was.Target;
       const std::optional<GuestRecord> now = guestRecord(after, guest);
-      if (test::isAtNode(after, was.At)) {
-        ++startsAtNode;
-        if (now.has_value()) {
-          CHECK(test::choiceTick(now.value()) == tick);
-        } else {
-          // It chose, and picked heading home at an entrance's anchor, where it left.
-          CHECK(tick >= was.StayUntil);
-          CHECK(test::isEntrance(after, anchorAt(after, was.At)));
-        }
-      } else if (now.has_value() && now.value().Activity != GuestActivity::Waiting &&
-                 test::isAtNode(after, now.value().At)) {
-        CHECK(test::choiceTick(now.value()) != tick);
+      if (!now.has_value()) {
+        // It chose, and picked heading home at an entrance's anchor, where it left.
+        CHECK(tick >= was.StayUntil);
+        CHECK(test::isEntrance(after, anchorAt(after, was.At)));
+        sawHeadHomePicked = true;
+        continue;
+      }
+      const GuestRecord record = now.value_or(GuestRecord{});
+      const std::vector<SampledEntry<RouteEntry>> routes = test::routesAt(after, was.At);
+      // Hunger changes in a step only before the guest chooses, by its rise and a meal, so its
+      // hunger after the cycle is the hunger it chose with. Every edge of the eating park is
+      // longer than a cycle's walk, so a guest chooses at most once in a cycle with no edit, and
+      // its draw has index 0.
+      const ChoiceOption picked =
+          test::checkPick(after, guest, tick,
+                          test::choiceOptions(after, before.Offers, routes, record.Hunger, target,
+                                              tick >= was.StayUntil),
+                          routes);
+      switch (picked.Kind) {
+      case ChoiceKind::Offer:
+        sawOfferPicked = true;
+        sawPickAtAnchor = sawPickAtAnchor || record.Activity == GuestActivity::Waiting;
+        break;
+      case ChoiceKind::CarryOn:
+        sawCarryOnPicked = true;
+        break;
+      case ChoiceKind::HeadHome:
+        sawHeadHomePicked = true;
+        break;
       }
     }
   });
-  CHECK(startsAtNode > 0);
+
+  // A guest standing at the junction of the gate path and the spine once its stay is over, which
+  // the eating run's guests rarely are when they start a walk.
+  World world = test::eatingWorld();
+  test::stepUntil(world, test::FIRST_ARRIVAL + 1);
+  const Place junction{test::EATING_GATE_PATH, 4.0};
+  REQUIRE(test::isAtNode(world, junction));
+  const EntityKey late = addGuest(world, junction, world.Tick);
+  const uint64_t tick = world.Tick;
+  const test::ParkOffers offers = test::parkOffers(world);
+  stepWorld(world);
+  const std::vector<SampledEntry<RouteEntry>> routes = test::routesAt(world, junction);
+  const ChoiceOption picked = test::checkPick(
+      world, late, tick,
+      test::choiceOptions(world, offers, routes, recordOf(world, late).Hunger, NULL_KEY, true),
+      routes);
+  sawHeadHomePicked = sawHeadHomePicked || picked.Kind == ChoiceKind::HeadHome;
+
+  CHECK(sawOfferPicked);
+  CHECK(sawCarryOnPicked);
+  CHECK(sawHeadHomePicked);
+  CHECK(sawPickAtAnchor);
+}
+
+TEST_CASE("A guest that walks to a node with no distance left does not choose there in that "
+          "cycle: it keeps its Activity and Target") {
+  runEatingPark(isEatingRunOver, [&](const BeforeCycle &before, const World &after) {
+    for (const auto &[guest, was] : before.Guests) {
+      if (was.Activity == GuestActivity::Waiting || test::isAtNode(after, was.At) ||
+          losesWay(after, before.Offers, was)) {
+        continue;
+      }
+      const std::optional<GuestRecord> now = guestRecord(after, guest);
+      if (!now.has_value() || now.value_or(GuestRecord{}).Activity == GuestActivity::Waiting ||
+          !test::isAtNode(after, now.value_or(GuestRecord{}).At)) {
+        continue;
+      }
+      CAPTURE(guest);
+      CHECK(now.value_or(GuestRecord{}).Activity == was.Activity);
+      CHECK(now.value_or(GuestRecord{}).Target == was.Target);
+    }
+  });
 }
 
 TEST_CASE("A guest heading to a shop that keeps its target comes WALK_STEP nearer the shop by "
@@ -482,29 +457,34 @@ LostTarget loseTarget(bool deleteShop) {
   return LostTarget{.Park = std::move(world), .Guest = guest, .Target = target};
 }
 
-// Checks that the guest that lost its target chooses in the next cycle as a guest with none.
+// Checks that the guest that lost its target chooses in the next cycle, where it stands, as a guest
+// with none.
 void checkDrop(bool deleteShop) {
   LostTarget lost = loseTarget(deleteShop);
   CAPTURE(lost.Guest, lost.Target);
   const uint64_t tick = lost.Park.Tick;
+  const GuestRecord was = recordOf(lost.Park, lost.Guest);
+  const test::ParkOffers offers = test::parkOffers(lost.Park);
   stepWorld(lost.Park);
   const GuestRecord record = recordOf(lost.Park, lost.Guest);
-  CHECK(test::choiceTick(record) == tick);
   CHECK(record.Target != lost.Target);
-  for (const ChoiceOption &option : record.LastChoice.value_or(GuestChoice{}).Options) {
-    CHECK(option.Shop != lost.Target);
-    CHECK(option.Commitment == 0.0);
-  }
+  // A cycle with no command leaves route distance as it was. The guest's hunger after the cycle is
+  // the hunger it chose with, since it rises before the guest walks.
+  const std::vector<SampledEntry<RouteEntry>> routes = test::routesAt(lost.Park, was.At);
+  (void)test::checkPick(lost.Park, lost.Guest, tick,
+                        test::choiceOptions(lost.Park, offers, routes, record.Hunger, NULL_KEY,
+                                            tick >= was.StayUntil),
+                        routes);
 }
 
-TEST_CASE("A guest heading to a shop whose offer stops being reachable chooses in the next cycle, "
-          "with no commitment to any offer") {
+TEST_CASE("A guest heading to a shop whose offer stops being reachable chooses in the next cycle "
+          "with no target, and its Activity and Target follow the pick") {
   SECTION("the shop's supply route is cut, so its offer says no meals") { checkDrop(false); }
   SECTION("the shop is deleted, so route distance has no entry for it") { checkDrop(true); }
 }
 
 TEST_CASE("A guest heading home that has no entrance entry at its place chooses in that cycle, and "
-          "with carrying on its only option, wanders") {
+          "with carrying on its only option, wanders with no target") {
   World world = test::legsWorld();
   const EntityKey guest = test::strandPastStay(world, test::stepWith);
   // Stranded past its stay with the near leg drawn again, it heads home from the far leg's dead
@@ -529,13 +509,14 @@ TEST_CASE("A guest heading home that has no entrance entry at its place chooses 
   REQUIRE(recordOf(world, guest).Activity == GuestActivity::HeadingHome);
   REQUIRE_FALSE(test::homeDistance(world, recordOf(world, guest).At).has_value());
 
-  const uint64_t tick = world.Tick;
+  // With no offer in the legs park and no entrance entry, carrying on is all it would weigh.
+  const std::optional<std::vector<ChoiceOption>> options = guestOptions(world, guest);
+  REQUIRE(options.has_value());
+  REQUIRE(options.value_or(std::vector<ChoiceOption>{}).size() == 1);
+  REQUIRE(options.value_or(std::vector<ChoiceOption>{}).front().Kind == ChoiceKind::CarryOn);
+
   stepWorld(world);
   const GuestRecord record = recordOf(world, guest);
-  CHECK(test::choiceTick(record) == tick);
-  const std::vector<ChoiceOption> options = record.LastChoice.value_or(GuestChoice{}).Options;
-  REQUIRE(options.size() == 1);
-  CHECK(options.front().Kind == ChoiceKind::CarryOn);
   CHECK(record.Activity == GuestActivity::Wandering);
   CHECK(record.Target == NULL_KEY);
 }

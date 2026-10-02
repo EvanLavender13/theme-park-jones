@@ -48,21 +48,13 @@ std::vector<InspectorRow> guestRows(const World &world, const GuestRecord &recor
   } else {
     rows.push_back({"Last meal", "none"});
   }
-  if (const std::optional<GuestChoice> &choice = record.LastChoice) {
-    rows.push_back(
-        {"Last choice", std::format("{} s ago at hunger {:.2f}",
-                                    seconds(ticksSince(world, choice->Tick)), choice->Hunger)});
-  } else {
-    rows.push_back({"Last choice", "none"});
-  }
   return rows;
 }
 
-// Each option the guest weighed, its terms only for an offer, and the one it picked.
-std::vector<ChoiceRow> choiceRows(const GuestChoice &choice) {
+// Each option the guest would weigh now, its terms only for an offer.
+std::vector<ChoiceRow> choiceRows(const std::vector<ChoiceOption> &options) {
   std::vector<ChoiceRow> rows;
-  for (size_t index = 0; index < choice.Options.size(); ++index) {
-    const ChoiceOption &option = choice.Options[index];
+  for (const ChoiceOption &option : options) {
     ChoiceRow row;
     if (option.Kind == ChoiceKind::Offer) {
       row.Option = "shop " + keyText(option.Shop);
@@ -75,7 +67,6 @@ std::vector<ChoiceRow> choiceRows(const GuestChoice &choice) {
     }
     row.Score = twoDecimals(option.Score);
     row.Probability = twoDecimals(option.Probability);
-    row.Picked = index == choice.Picked;
     rows.push_back(std::move(row));
   }
   return rows;
@@ -119,8 +110,9 @@ Inspection inspectSubject(const World &world, const InspectorSubject &subject) {
     inspection.Gone = !record;
     if (record) {
       inspection.Rows = guestRows(world, *record);
-      if (record->LastChoice) {
-        inspection.Choices = choiceRows(*record->LastChoice);
+      if (const std::optional<std::vector<ChoiceOption>> options =
+              guestOptions(world, subject.Key)) {
+        inspection.Choices = choiceRows(*options);
       }
     }
     return inspection;

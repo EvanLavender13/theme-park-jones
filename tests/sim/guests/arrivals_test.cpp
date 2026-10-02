@@ -136,7 +136,7 @@ TEST_CASE("A cycle's arrivals take keys from the counter in entrance key order, 
 
 TEST_CASE("A new guest's record shows it wandering at its entrance's node place, on the ground "
           "there, with the StayUntil and Hunger drawn from its key and arrival tick, no target, no "
-          "meal, and no choice") {
+          "meals, and no last meal") {
   World world = gatesWorld();
   test::stepUntil(world, FIRST_ARRIVAL);
   const EntityKey guest = keyAt(world.nextKey());
@@ -152,7 +152,6 @@ TEST_CASE("A new guest's record shows it wandering at its entrance's node place,
   CHECK(record.Target == NULL_KEY);
   CHECK(record.MealsEaten == 0);
   CHECK_FALSE(record.LastMeal.has_value());
-  CHECK_FALSE(record.LastChoice.has_value());
 }
 
 } // namespace

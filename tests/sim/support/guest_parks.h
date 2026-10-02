@@ -25,6 +25,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <stddef.h>
 #include <stdint.h>
 #include <string_view>
 #include <utility>
@@ -378,11 +379,80 @@ inline double footfallAt(const World &world, const Place &place) {
   return fieldValue<HungryFootfall>(world, guestNetwork(world), place);
 }
 
-// The tick of the guest's last choice, or none before its first.
-inline std::optional<uint64_t> choiceTick(const GuestRecord &record) {
-  return record.LastChoice.has_value()
-             ? std::optional<uint64_t>(record.LastChoice.value_or(GuestChoice{}).Tick)
-             : std::nullopt;
+// The options a guest choosing at a place with the route entries weighs, with the offers, its
+// hunger, its target, and whether its stay is over: each reachable offer in source order with its
+// terms and score, carrying on, and heading home once the stay is over and an entrance has an
+// entry, each with the probability softmaxPick sets.
+inline std::vector<ChoiceOption> choiceOptions(const World &world, const ParkOffers &offers,
+                                               const std::vector<SampledEntry<RouteEntry>> &routes,
+                                               double hunger, EntityKey target, bool stayOver) {
+  std::vector<ChoiceOption> options;
+  for (const SampledEntry<RouteEntry> &sampled : routes) {
+    if (!isOfferReachable(offers, routes, sampled.Source)) {
+      continue;
+    }
+    const OfferEntry offer = offerAmong(offers, sampled.Source).value_or(OfferEntry{});
+    ChoiceOption option;
+    option.Kind = ChoiceKind::Offer;
+    option.Shop = sampled.Source;
+    option.Relief = RELIEF_WEIGHT * hungerCurve(hunger) * offer.Relief;
+    option.Distance = DISTANCE_WEIGHT * sampled.Value.Distance;
+    option.Wait = WAIT_WEIGHT * (static_cast<double>(offer.Wait) * SIM_TICK_SECONDS);
+    option.Commitment = sampled.Source == target ? COMMITMENT_BONUS : 0.0;
+    option.Score = option.Relief + option.Distance + option.Wait + option.Commitment;
+    options.push_back(option);
+  }
+  options.push_back(ChoiceOption{.Kind = ChoiceKind::CarryOn, .Score = CARRY_ON_SCORE});
+  if (stayOver && homeEntry(world, routes).has_value()) {
+    options.push_back(ChoiceOption{.Kind = ChoiceKind::HeadHome, .Score = HEAD_HOME_SCORE});
+  }
+  // The probabilities do not depend on the key the pick draws with.
+  (void)softmaxPick(DrawKey{world.Seed, NULL_KEY, hashName("guest-choice"), 0, 0}, options);
+  return options;
+}
+
+// Checks that a guest that picked an offer heads to the shop, or waits there when it chose at the
+// shop's anchor, by the route entries at the place it chose.
+inline void checkFollowsOffer(const GuestRecord &record, const ChoiceOption &option,
+                              const std::vector<SampledEntry<RouteEntry>> &routes) {
+  const std::optional<RouteEntry> entry = routeFrom(routes, option.Shop);
+  REQUIRE(entry.has_value());
+  const bool atAnchor = entry.value_or(RouteEntry{}).Next.Carrier == NULL_KEY;
+  CHECK(record.Activity == (atAnchor ? GuestActivity::Waiting : GuestActivity::HeadingToShop));
+  CHECK(record.Target == option.Shop);
+}
+
+// Checks that a guest still in the park does what the picked option says: an offer as
+// checkFollowsOffer checks, carrying on makes it wander, and heading home makes it head home.
+inline void checkFollows(const GuestRecord &record, const ChoiceOption &option,
+                         const std::vector<SampledEntry<RouteEntry>> &routes) {
+  if (option.Kind == ChoiceKind::Offer) {
+    checkFollowsOffer(record, option, routes);
+    return;
+  }
+  CHECK(record.Activity == (option.Kind == ChoiceKind::HeadHome ? GuestActivity::HeadingHome
+                                                                : GuestActivity::Wandering));
+  CHECK(record.Target == NULL_KEY);
+}
+
+// Picks among the options as a guest's first choice in the cycle stepping the tick does, checks
+// that the guest after the cycle does what the pick says, and gives the pick. A guest gone from
+// the park must have picked heading home, leaving at an entrance's anchor.
+inline ChoiceOption checkPick(const World &after, EntityKey guest, uint64_t tick,
+                              std::vector<ChoiceOption> options,
+                              const std::vector<SampledEntry<RouteEntry>> &routes) {
+  const size_t picked =
+      softmaxPick(DrawKey{after.Seed, guest, hashName("guest-choice"), tick, 0}, options);
+  REQUIRE(picked < options.size());
+  const ChoiceOption option = options.at(picked);
+  CAPTURE(picked, options.size());
+  const std::optional<GuestRecord> now = guestRecord(after, guest);
+  if (!now.has_value()) {
+    CHECK(option.Kind == ChoiceKind::HeadHome);
+    return option;
+  }
+  checkFollows(now.value_or(GuestRecord{}), option, routes);
+  return option;
 }
 
 } // namespace tpj::test

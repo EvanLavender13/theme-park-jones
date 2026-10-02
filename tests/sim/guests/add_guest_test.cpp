@@ -59,7 +59,7 @@ World worldAtAddTick() {
 
 TEST_CASE(
     "addGuest gives the key nextKey gave before the call, a wandering guest at the place with "
-    "the stay given, no target, no meals, and no meal or choice") {
+    "the stay given, no target, no meals, and no last meal") {
   World world = worldAtAddTick();
   const uint64_t next = world.nextKey();
   const EntityKey guest = addGuest(world, INSIDE_WALK, LONG_STAY);
@@ -72,7 +72,6 @@ TEST_CASE(
   CHECK(record.Target == NULL_KEY);
   CHECK(record.MealsEaten == 0);
   CHECK_FALSE(record.LastMeal.has_value());
-  CHECK_FALSE(record.LastChoice.has_value());
 }
 
 TEST_CASE("An added guest's starting hunger and hunger rate are drawn on its key with the world's "

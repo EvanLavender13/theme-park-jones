@@ -12,8 +12,7 @@ namespace tpj {
 // State, on a guest's entity: where it stands on the guest network, whether it walks toward
 // higher distances along that place's carrier, what it is doing, how hungry it is and how fast
 // that rises, the tick its stay ends, the shop it is heading to or waiting at, the relief of the
-// offer it last picked, the meals it has eaten and the last of them, and its last choice, whose
-// options are empty until it first chooses.
+// offer it last picked, and the meals it has eaten and the last of them.
 struct Guest {
   Place At;
   bool Forward = true;
@@ -25,7 +24,6 @@ struct Guest {
   double MealRelief = 0.0;
   uint64_t MealsEaten = 0;
   GuestMeal LastMeal;
-  GuestChoice LastChoice;
 };
 
 template <typename Visitor> void visitFields(Visitor &visitor, Guest &guest) {
@@ -39,7 +37,6 @@ template <typename Visitor> void visitFields(Visitor &visitor, Guest &guest) {
   visitor.field("meal-relief", guest.MealRelief);
   visitor.field("meals-eaten", guest.MealsEaten);
   visitor.field("last-meal", guest.LastMeal);
-  visitor.field("last-choice", guest.LastChoice);
 }
 
 } // namespace tpj

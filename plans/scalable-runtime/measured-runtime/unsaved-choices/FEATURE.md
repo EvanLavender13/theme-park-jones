@@ -15,6 +15,8 @@ guestOptions and the inspection are simulation and legible code: the test pass w
 5. For a guest present in the world, inspectSubject's Rows are, in order, Activity, Hunger, Target, Stay, Meals eaten, and Last meal. Its Choices have one row per option guestOptions gives for the guest, in order, each formatted as Inspectors describes.
 6. `tpj_scenarios --slice-parks tests/parks/fed.park tests/parks/warm.park tests/parks/cut.park` remakes warm.park and cut.park. Each equals, byte for byte, its committed version with every ` last-choice=` field removed to the end of its line. So guests behave identically through the slice's 1,920 ticks. scripts/cross-build-check.sh passes. Its output differs from before only in the hashes of worlds holding guests, since a world's hash no longer folds a last choice. tpj_bench loads tests/parks/stress/winding-path.park once the field is removed from it.
 
+With no record of a choice, tests see a guest's choices only through its Activity and Target and only where the place it chose at is known: at the start of a walk at a node, when its visit comes back, or when it loses its target. The options' contents are tested through guestOptions. A guest's choice and guestOptions score with the same code, and criterion 6 shows 1,920 ticks of choices unchanged bit for bit, so a choice made mid-walk needs no test of its own.
+
 ## Medium
 
 This feature introduces, samples, and emits no fields or flows. guestOptions samples what a choice samples, guest route distance and food offer, through sampleField, and reads the guest's own state, inside the guests module.
