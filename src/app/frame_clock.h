@@ -8,6 +8,10 @@ namespace tpj {
 // The longest time one frame covers, so a stall does not step a burst of ticks.
 inline constexpr double MAX_FRAME_SECONDS = 0.25;
 
+// The most ticks one frame steps, so ticks slower than the time they cover slow the park down
+// instead of making every frame step more of them.
+inline constexpr uint32_t MAX_FRAME_TICKS = 2;
+
 // What one frame covers: its elapsed seconds, clamped, and the simulation ticks it steps.
 struct FrameStep {
   double Dt = 0.0;
@@ -25,7 +29,8 @@ public:
 
   // For the reading at a frame's start: the seconds since the last reading, at most
   // MAX_FRAME_SECONDS, and as many SIM_TICK_SECONDS ticks as the time not yet stepped then holds,
-  // keeping the rest.
+  // at most MAX_FRAME_TICKS, keeping the part of a tick left over and dropping the whole ticks
+  // beyond the cap.
   FrameStep advance(uint64_t counter);
 
 private:

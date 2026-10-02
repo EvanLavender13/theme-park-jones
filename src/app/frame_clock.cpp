@@ -12,7 +12,9 @@ FrameStep FrameClock::advance(uint64_t counter) {
   Last = counter;
   Unstepped += step.Dt;
   while (Unstepped >= SIM_TICK_SECONDS) {
-    ++step.Ticks;
+    if (step.Ticks < MAX_FRAME_TICKS) {
+      ++step.Ticks;
+    }
     Unstepped -= SIM_TICK_SECONDS;
   }
   return step;

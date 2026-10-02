@@ -35,12 +35,20 @@ TEST_CASE("advance gives at most MAX_FRAME_SECONDS, which is 0.25") {
   CHECK_THAT(clock.advance(1'350).Dt, WithinAbs(0.1, SECONDS_TOLERANCE));
 }
 
-TEST_CASE("The ticks given so far are the whole ticks the Dts given so far hold, the rest carrying "
-          "to later frames") {
-  // Frames of 1.5, 0.4, 0.3, a stall clamped to 7.5, and 0.05 ticks: frames that step one, none,
-  // and several ticks, with the running total never near a whole tick, where rounding may go either
-  // way.
-  const std::array<uint64_t, 5> readings{150'000, 190'000, 220'000, 1'220'000, 1'225'000};
+TEST_CASE("No frame steps more than MAX_FRAME_TICKS, which is 2") {
+  CHECK(MAX_FRAME_TICKS == 2);
+  FrameClock clock(0, FREQUENCY);
+  // 3.5 ticks: more than the cap holds, though under MAX_FRAME_SECONDS.
+  CHECK(clock.advance(350'000).Ticks == MAX_FRAME_TICKS);
+  // A stall clamped to MAX_FRAME_SECONDS, 7.5 ticks.
+  CHECK(clock.advance(10'350'000).Ticks == MAX_FRAME_TICKS);
+}
+
+TEST_CASE("While no frame holds more than MAX_FRAME_TICKS whole ticks, the ticks given so far are "
+          "the whole ticks the Dts given so far hold, the rest carrying to later frames") {
+  // Frames of 1.5, 0.4, 0.3, 1.9, and 0.05 ticks: frames that step one, none, and two ticks, with
+  // the running total never near a whole tick, where rounding may go either way.
+  const std::array<uint64_t, 5> readings{150'000, 190'000, 220'000, 410'000, 415'000};
   FrameClock clock(0, FREQUENCY);
   double seconds = 0.0;
   uint64_t ticks = 0;
@@ -50,7 +58,16 @@ TEST_CASE("The ticks given so far are the whole ticks the Dts given so far hold,
     ticks += step.Ticks;
     CHECK(ticks == static_cast<uint64_t>(std::floor(seconds / SIM_TICK_SECONDS)));
   }
-  CHECK(ticks == 9);
+  CHECK(ticks == 4);
+}
+
+TEST_CASE("A frame over MAX_FRAME_TICKS drops the whole ticks beyond it and carries the part of a "
+          "tick left over to the next frame") {
+  // A frame of 3.4 ticks steps two, drops one, and leaves 0.4. The next frame of 0.8 ticks then
+  // holds 1.2 and steps one: two if the dropped tick carried, none if the 0.4 were lost.
+  FrameClock clock(0, FREQUENCY);
+  clock.advance(340'000);
+  CHECK(clock.advance(420'000).Ticks == 1);
 }
 
 } // namespace
