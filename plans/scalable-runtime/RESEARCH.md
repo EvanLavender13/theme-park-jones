@@ -14,7 +14,7 @@ Sources: https://forums.factorio.com/viewtopic.php?t=52931 — --benchmark and -
 
 ## How large is a full park?
 
-Planet Coaster's players report its frame rate falling mainly with guest count, and many cap their parks near 7,000 guests to stay playable. Planet Coaster 2 enforces a hard cap of 6,000. Those parks are far larger in area than this project's 256 m square. Guests are also where this project's own profile, taken before affordable-sampling, put three quarters of a tick's time (affordable-sampling's RESEARCH.md). So a full park's target is set by guests in the low thousands, with path length, junctions, and shops scaled to a densely built 256 m park. The lowfps.park incident shows path length alone can matter, through the overlay, independent of guests.
+Planet Coaster's players report its frame rate falling mainly with guest count, and many cap their parks near 7,000 guests to stay playable. Planet Coaster 2 enforces a hard cap of 6,000. Those parks are far larger in area than this project's 256 m square. Guests are also where this project's own profile, taken before affordable-sampling, put three quarters of a tick's time (affordable-sampling's RESEARCH.md). So a full park's target is set by guests in the low thousands, with path length, junctions, and shops scaled to a densely built 256 m park. The winding-path.park incident shows path length alone can matter, through the overlay, independent of guests.
 
 Sources: https://steamcommunity.com/app/493340/discussions/0/1290690669225215538/ — players capping guests for playability; https://forums.frontier.co.uk/threads/warning-hard-limit-for-6000-guests-and-parks-are-smaller-than-planco1.629146/ — Planet Coaster 2's 6,000 guest cap; plans/shared-medium/affordable-sampling/RESEARCH.md.
 

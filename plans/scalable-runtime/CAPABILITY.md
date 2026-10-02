@@ -6,7 +6,7 @@ scalable-runtime deepens how gently the gameplay runtime's costs grow with the s
 
 ## Foundation criteria
 
-- Stress parks live in tests/parks/stress/, outside the files the cross-build check and the integration tests read. One is the full park: in the 256 m park, about 2,000 guests, 30 shops supplied by a few depots over backstage paths, and about 4 km of guest path with about 100 junctions. The generator creates its guests through a public function of the guests module, never by writing its private components (principle 6), and writes them into the park file with the rest of its state, so a run loads a full park and never waits for guests to arrive, and the park holds about 2,000 guests through every run the runner makes of it. It is generated from a seed and its sizes, so making it again from the same inputs gives the same file, and making it again after a rules change takes the change up. Beside it are incident parks, each a park that once played slowly, starting with lowfps.park and its single 3 km guest path.
+- Stress parks live in tests/parks/stress/, outside the files the cross-build check and the integration tests read. One is the full park: in the 256 m park, about 2,000 guests, 30 shops supplied by a few depots over backstage paths, and about 4 km of guest path with about 100 junctions. The generator creates its guests through a public function of the guests module, never by writing its private components (principle 6), and writes them into the park file with the rest of its state, so a run loads a full park and never waits for guests to arrive, and the park holds about 2,000 guests through every run the runner makes of it. It is generated from a seed and its sizes, so making it again from the same inputs gives the same file, and making it again after a rules change takes the change up. Beside it are incident parks, each a park that once played slowly, named for what it holds rather than how it played, starting with winding-path.park and its single 3 km guest path.
 - A headless runner loads a park and times each stage of the gameplay runtime through public headers: stepping ticks, with the median, the spread, and the worst tick; one resolution; making a candidate for an edit; building the food overlay; and building the park and guest meshes. It is the only code that reads the clock for this, and running it leaves the world's hash what stepping alone would give.
 - A script builds windows-release and windows-debug, launches the runner several times on each stress park, and prints, per park and stage, each build's median and spread. Release decides what is slow, and debug is reported beside it.
 - The script compares two reports and marks a change clear only when it exceeds the spread both reports measured. Two reports of an unchanged tree mark no change clear.
@@ -30,8 +30,8 @@ Its speedups reach into code other capabilities own: shared-medium's sampling, n
 - Decision 0028, engineering capabilities: met.
 - Park files and loading, which already save every guest's state: met.
 - A public function of the guests module that creates a guest: unmet. measured-runtime adds it, with src/sim/guests/SPEC.md in the same work.
-- lowfps.park, the first incident park: held untracked in parks/ until measured-runtime moves it into tests/parks/stress/.
-- The layer table and its check: met (sound-architecture's layered-dependencies). The runner's own module is not: tpj_scenarios links the simulation alone and shares a layer with render and legible, so it cannot time the overlay or the meshes. measured-runtime adds a new unit to cmake/layers.txt above render and legible, beside the app's.
+- The first incident park: held untracked as parks/lowfps.park until measured-runtime moves it to tests/parks/stress/winding-path.park.
+- The layer table and its check: met (sound-architecture's layered-dependencies). The runner's own module is not: tpj_scenarios links the simulation alone and shares a layer with render and legible, so it cannot time the overlay or the meshes. measured-runtime adds a new unit to cmake/layers.txt above render and legible and below the app's.
 - The app's scene sync as the one owner of the preview and overlay meshes: met (sound-architecture's composed-app).
 - The windows-release preset: met.
 
@@ -54,6 +54,7 @@ Unordered pool this capability draws later milestones from.
 - Candidates off the frame's thread: copy the world on the main thread and resolve the candidate on a worker, showing the last finished one. Gated on: incremental resolution leaving a candidate too slow for a frame.
 - Sampling without allocation: sampleField builds its list of slots and each EdgeSample's vectors on every sample. Gated on: the report attributing a large share of sampling to allocation.
 - Drawing measured: the GPU's share of a frame, from the app's --frames runs. Gated on: a slow frame the CPU stages do not explain.
+- Faster stepping: parallel or batched systems that keep bit-identical results. Gated on: the report showing ticks costly on the full park.
 
 ## Open questions
 

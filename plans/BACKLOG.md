@@ -11,3 +11,4 @@ Unordered pool of ideas held for future work. Items get added when they drift ou
 - Arrivals that depend on how well the park serves its guests, such as a reputation built from departures and their reasons, instead of a fixed daily curve.
 - Boxes standing inside plazas, such as kiosks and fountains, as obstacles that plaza crossings bend around, with their supply settled alongside how supplies and staff reach guest areas.
 - An engineering capability for performance outside the gameplay runtime: how long parks take to open and save, and how long tests and builds take as it slows the test-writer and the implementer.
+- Binary park files: a compact encoding behind the same walk, for the performance capability outside the gameplay runtime. Gated on: parks large enough for text saves to be slow.
