@@ -4,8 +4,8 @@
 //   tpj_bench [--ticks N] FILE
 
 #include "bench/options.h"
-#include "bench/park_file.h"
 #include "bench/stages.h"
+#include "bench/text_file.h"
 #include "sim/field_text.h"
 #include "sim/park_schema.h"
 #include "sim/save.h"
@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     std::cerr << "tpj_bench: " << error << "\nusage: tpj_bench [--ticks N] FILE\n";
     return 2;
   }
-  const std::optional<std::string> text = tpj::readParkFile(options->Park);
+  const std::optional<std::string> text = tpj::readTextFile(options->Park);
   if (!text) {
     std::cerr << "tpj_bench: cannot read " << options->Park << '\n';
     return 1;

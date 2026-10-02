@@ -17,11 +17,11 @@ Decision 0027 places each behavior this feature adds:
 - Reading a stream of launches: bench, src/bench/report/launches.h. It owns what a launch is, and is the inverse of tpj_bench's own lines.
 - Summarizing launches into a report, and writing and reading a report: bench, src/bench/report/report.h. It owns what a report is, and its text is its own form.
 - Comparing two reports and writing the comparison: bench, src/bench/report/comparison.h. It owns the rule for a clear change.
-- Reading tpj_bench_report's command line: bench, src/bench/report/report_options.h, so it is tested through a header, as tpj_bench's options are.
+- Reading tpj_bench_report's command line: bench, src/bench/report/report_options.h, so main.cpp only composes, as tpj_bench's options keep its main.
 - tpj_bench_report's entry point: bench, src/bench/report/main.cpp. It is composition only: it parses, reads, runs one command, writes, and turns each failure into a message and a status.
 - Reading a file's text: bench, src/bench/text_file.h, renamed from park_file.h. Both executables use it, and a report is not a park.
 - Equality of StageResult: bench, src/bench/stages.h, beside the type, so a Launch and a ReportPark can be compared whole.
-- Building both presets, launching tpj_bench in rounds, and handing files to tpj_bench_report: scripts/runtime-report.sh. Only a script can drive cmake.exe and the Windows executables from WSL, as cross-build-check.sh does. It holds no arithmetic on times, which is all in tested C++.
+- Building both presets, launching tpj_bench in rounds, and handing files to tpj_bench_report: scripts/runtime-report.sh. Only a script can drive cmake.exe and the Windows executables from WSL, as cross-build-check.sh does. It holds no arithmetic on times, which is all in tpj_bench_report.
 - src/scenarios/main.cpp and src/app/main.cpp are untouched.
 
 ## Tasks
@@ -403,26 +403,16 @@ lines.cpp:
 Step 1: Run: `cmake.exe --build --preset windows-debug --target tpj_bench tpj_bench_report`
 Expected: both build with no warnings.
 
-### Task 8: Test pass
+### Task 8: Remove the tests of tpj_bench
 
-Step 1: Run the test pass as implementing-features describes, with the feature plans/scalable-runtime/measured-runtime/runtime-report/FEATURE.md, the spec src/bench/SPEC.md, and the public headers:
-- src/bench/report/report_error.h
-- src/bench/report/launches.h
-- src/bench/report/report.h
-- src/bench/report/comparison.h
-- src/bench/report/report_options.h
-- src/bench/stages.h
-- src/bench/timing.h
-- src/bench/text_file.h
+Files:
+- Delete: `tests/bench/`
+- Modify: `tests/CMakeLists.txt`
 
-It writes these tests in tests/bench/report/, and adds them to tpj_bench_tests in tests/bench/CMakeLists.txt with a TPJ_BENCH_REPORT_EXECUTABLE compile definition and a dependency on tpj_bench_report:
-- launches_test.cpp
-- report_test.cpp
-- comparison_test.cpp
-- report_options_test.cpp
-- report_command_line_test.cpp
+Step 1: tpj_bench and tpj_bench_report are test utilities, which get no tests. Run: `git rm -rqf tests/bench && rm -rf tests/bench`
+Expected: no output.
 
-The test names have to differ from tests/bench/options_test.cpp and command_line_test.cpp, so that each file's Catch2 tag is its own. Do not write test content here. The new tests must build and fail on behavior against the stubs.
+Step 2: In tests/CMakeLists.txt, remove `    add_subdirectory(bench)`, and change the comment above the block to say that the renderer, the views, and the app build only with the windowed application, and that the runner in src/bench is a test utility, checked by running it, with no tests.
 
 ### Task 9: Read lines and fields
 
@@ -683,10 +673,10 @@ std::vector<Launch> parseLaunches(std::string_view text) {
 } // namespace tpj
 ```
 
-Step 2: Build and run the launches tests.
+Step 2: Build.
 
-Run: `cmake.exe --build --preset windows-debug --target tpj_bench_tests && build/windows-debug/tpj_bench_tests.exe -# "[#launches_test]"`
-Expected: every test passes.
+Run: `cmake.exe --build --preset windows-debug --target tpj_bench_report`
+Expected: it builds with no warnings.
 
 ### Task 11: Summarize launches into a report
 
@@ -837,10 +827,10 @@ std::vector<ReportPark> parseReport(std::string_view text) {
 } // namespace tpj
 ```
 
-Step 2: Build and run the report tests.
+Step 2: Build.
 
-Run: `cmake.exe --build --preset windows-debug --target tpj_bench_tests && build/windows-debug/tpj_bench_tests.exe -# "[#report_test]"`
-Expected: every test passes.
+Run: `cmake.exe --build --preset windows-debug --target tpj_bench_report`
+Expected: it builds with no warnings.
 
 ### Task 12: Compare two reports
 
@@ -917,10 +907,10 @@ std::string comparisonText(std::span<const StageComparison> /*comparisons*/) { r
 } // namespace tpj
 ```
 
-Step 2: Build and run the comparison tests.
+Step 2: Build.
 
-Run: `cmake.exe --build --preset windows-debug --target tpj_bench_tests && build/windows-debug/tpj_bench_tests.exe -# "[#comparison_test]"`
-Expected: the tests of compareReports pass. The tests of comparisonText still fail, until Task 13.
+Run: `cmake.exe --build --preset windows-debug --target tpj_bench_report`
+Expected: it builds with no warnings.
 
 ### Task 13: Write the comparison
 
@@ -1025,10 +1015,10 @@ std::string comparisonText(std::span<const StageComparison> comparisons) {
 }
 ```
 
-Step 3: Build and run the comparison tests.
+Step 3: Build.
 
-Run: `cmake.exe --build --preset windows-debug --target tpj_bench_tests && build/windows-debug/tpj_bench_tests.exe -# "[#comparison_test]"`
-Expected: every test passes.
+Run: `cmake.exe --build --preset windows-debug --target tpj_bench_report`
+Expected: it builds with no warnings.
 
 ### Task 14: Read tpj_bench_report's command line
 
@@ -1074,10 +1064,10 @@ std::optional<ReportOptions> parseReportOptions(std::span<const std::string> arg
 } // namespace tpj
 ```
 
-Step 2: Build and run the options tests.
+Step 2: Build.
 
-Run: `cmake.exe --build --preset windows-debug --target tpj_bench_tests && build/windows-debug/tpj_bench_tests.exe -# "[#report_options_test]"`
-Expected: every test passes.
+Run: `cmake.exe --build --preset windows-debug --target tpj_bench_report`
+Expected: it builds with no warnings.
 
 ### Task 15: Compose tpj_bench_report
 
@@ -1149,10 +1139,10 @@ int main(int argc, char **argv) {
 }
 ```
 
-Step 2: Build and run every bench test.
+Step 2: Build.
 
-Run: `cmake.exe --build --preset windows-debug --target tpj_bench_tests && build/windows-debug/tpj_bench_tests.exe`
-Expected: every test passes, the stage-runner's tests included.
+Run: `cmake.exe --build --preset windows-debug --target tpj_bench_report`
+Expected: it builds with no warnings.
 
 ### Task 16: Write the script
 
@@ -1253,8 +1243,8 @@ for ((round = 1; round <= launches; round++)); do
 done
 
 build/windows-release/tpj_bench_report.exe summarize "$out/launches.txt" | tr -d '\r' \
-    >"$out/report.txt" || fail "summarizing the launches failed"
-cp "$out/report.txt" "$report" || fail "cannot write $report"
+    >"$report.partial" || fail "summarizing the launches failed"
+mv "$report.partial" "$report" || fail "cannot write $report"
 elapsed=$((SECONDS - start))
 echo "runtime-report: wrote $report in $((elapsed / 60))m $(printf '%02d' $((elapsed % 60)))s"
 ```
@@ -1275,6 +1265,15 @@ Step 1: Make two reports of the unchanged tree and compare them.
 
 Run: `scripts/runtime-report.sh build/runtime-report/first.txt && scripts/runtime-report.sh build/runtime-report/second.txt && scripts/runtime-report.sh --compare build/runtime-report/first.txt build/runtime-report/second.txt`
 Expected: each report ends with `runtime-report: wrote <path> in <m>m <ss>s`. first.txt holds a park line for winding-path.park on each build, each with `launches 10` and six stage lines, and each stage's result is the same on both builds. The comparison has one line per stage of each build, each marked unclear, and ends with `clear 0 of 12`. The feature's report gives first.txt, the comparison, and both durations. A clear change here is a deviation: report it rather than rerunning until none shows.
+
+Step 2: Check one stage's summary by hand, criterion 2. Run: `grep -A7 '^build windows-release' build/runtime-report/launches.txt | grep '^stage food-overlay' | awk '{print $6}' | sort -n` and `grep -A7 'park windows-release' build/runtime-report/second.txt | grep '^stage food-overlay'`. Note that the launches file was overwritten by the second report, so compare against second.txt.
+Expected: ten medians; second.txt's food-overlay median is the fifth of them, its least the first, and its greatest the last.
+
+Step 3: Check the comparison rule, criterion 3. Copy second.txt to build/runtime-report/edited.txt, and in its windows-release food-overlay line set median, least, and greatest to values below that stage's least in second.txt. Run: `scripts/runtime-report.sh --compare build/runtime-report/second.txt build/runtime-report/edited.txt`
+Expected: that stage's line reads faster, every other line reads unclear, and the last line is `clear 1 of 12`. Then set the edited times to overlap second.txt's spread, and change the stage's vertices, and compare again. Expected: that stage reads unclear with result-changed, and the last line is `clear 0 of 12`.
+
+Step 4: Check the refusal of launches that disagree, criterion 4. Copy build/runtime-report/launches.txt to build/runtime-report/disagree.txt, and change the hash on the first `stage ticks` line. Run: `build/windows-release/tpj_bench_report.exe summarize build/runtime-report/disagree.txt; echo "status $?"`
+Expected: a message on standard error naming windows-release and tests/parks/stress/winding-path.park, nothing on standard output, and a nonzero status.
 
 ### Task 18: Confirm the acceptance criteria
 

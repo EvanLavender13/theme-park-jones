@@ -36,7 +36,7 @@ Create a task for each item. Complete in order.
 12. Decompose into bite-sized tasks, each one action of two to five minutes, in the task structure below.
 13. Write FEATURE.md at plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md.
 14. Write PLAN.md at the same path.
-15. Self-review: every acceptance criterion is testable from FEATURE.md and the specs alone, and each states one property, with no lists of example inputs and nothing that reads as every function against every case; every spec statement the feature adds or changes is covered by a criterion; every task has exact paths, exact commands, and expected outputs; the Placement section places every behavior the tasks add. Fix inline.
+15. Self-review: every acceptance criterion is testable from FEATURE.md and the specs alone, or, for a test utility, is a check the implementer runs with its command and expected output, and each states one property, with no lists of example inputs and nothing that reads as every function against every case; every spec statement the feature adds or changes is covered by a criterion; every task has exact paths, exact commands, and expected outputs; the Placement section places every behavior the tasks add. Fix inline.
 16. Review: stage FEATURE.md, PLAN.md, and RESEARCH.md, then dispatch the reviewer via `reviewing`, with MILESTONE.md, the SPEC.md of every module the feature touches, and docs/principles.md as context. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
 17. Ask the user to approve both artifacts.
 
@@ -46,9 +46,11 @@ Assume the implementer has no project context. Write paths and commands in full.
 
 Tests come from a separate pass. The implementer does not write the feature's tests; the `test-writer` agent derives them from FEATURE.md, the specs, and the principles, without reading PLAN.md. So FEATURE.md must carry everything a test needs: acceptance criteria stated as properties, the edge cases the spec names, and the principle checks.
 
+Test utilities get no tests, ever. A measuring or testing tool, such as tpj_bench, tpj_bench_report, or a script under scripts/, has no test pass and no tests under tests/. Its acceptance criteria are checks the implementer runs, each naming the command and the output that shows it holds. Its PLAN.md has no interface stubs written for tests and no test pass task, and its confirming task runs the tool and puts the output in the feature's report. Do not specify a tool's edge cases, such as every malformed input, merely so they can be tested.
+
 Criteria are properties, not enumerations. State each one once, as a law or invariant of the public interface (a copy equals its original; a save loads back equal; a malformed name is refused), with concrete values only where the value is the contract. Never list example inputs for the test to repeat. A feature needs a handful; more than about eight means the feature is too big or its criteria are listing examples. PLAN.md contains no test code.
 
-Order of work inside PLAN.md: spec tasks first (update SPEC.md), then interface tasks (public headers with stub definitions that compile, so tests can be written against them), then the test pass (one task that says to run it, no content), then implementation tasks, then the commit.
+Order of work inside PLAN.md: spec tasks first (update SPEC.md), then interface tasks (public headers with stub definitions that compile, so tests can be written against them), then the test pass (one task that says to run it, no content; none for a test utility), then implementation tasks, then the commit.
 
 Every PLAN.md has a Placement section. The pre-commit hook refuses a commit that adds a PLAN.md without a line reading "## Placement", and the reviewer judges what the section says.
 

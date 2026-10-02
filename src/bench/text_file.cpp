@@ -1,4 +1,4 @@
-#include "bench/park_file.h"
+#include "bench/text_file.h"
 
 #include <array>
 #include <fstream>
@@ -6,7 +6,7 @@
 
 namespace tpj {
 
-std::optional<std::string> readParkFile(const std::string &path) {
+std::optional<std::string> readTextFile(const std::string &path) {
   std::ifstream file(path, std::ios::binary);
   if (!file) {
     return std::nullopt;

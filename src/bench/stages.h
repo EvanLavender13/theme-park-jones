@@ -28,6 +28,8 @@ struct StageResult {
   TimeSummary Times;
   ResultKind Kind = ResultKind::Hash;
   uint64_t Result = 0;
+
+  bool operator==(const StageResult &) const = default;
 };
 
 // Times resolution, preview (only when the resolved park holds a box), food-overlay, park-mesh,
