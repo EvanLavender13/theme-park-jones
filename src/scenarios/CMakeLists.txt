@@ -4,6 +4,7 @@
 add_library(tpj_scenarios_lib STATIC
     beacons.cpp
     food_shop.cpp
+    full_park.cpp
     park_edits.cpp
     runner.cpp
     slice_parks.cpp

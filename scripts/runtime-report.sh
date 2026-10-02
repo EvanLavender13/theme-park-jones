@@ -5,7 +5,8 @@
 #   scripts/runtime-report.sh --compare BEFORE AFTER
 #
 # The first builds tpj_bench with windows-release and windows-debug, launches it N times, 10 by
-# default, on every park in tests/parks/stress/ with each build, in rounds, and writes the report
+# default, on every park in tests/parks/stress/ with each build, in rounds, windows-debug skipping
+# the full park, which it cannot step in reasonable time, and writes the report
 # tpj_bench_report makes of the launches to REPORT. The second prints tpj_bench_report's
 # comparison of two reports. Run from WSL. Nothing checks a time: reports are read, never gated on.
 set -uo pipefail
@@ -72,6 +73,9 @@ shopt -s nullglob
 parks=(tests/parks/stress/*.park)
 [ ${#parks[@]} -gt 0 ] || fail "no stress parks in tests/parks/stress/"
 out=build/runtime-report
+# windows-debug takes over an hour to step a minute of the full park, so only windows-release
+# times it.
+release_only=tests/parks/stress/full.park
 mkdir -p "$out"
 : >"$out/launches.txt"
 
@@ -81,6 +85,9 @@ for ((round = 1; round <= launches; round++)); do
     say "round $round of $launches"
     for preset in windows-release windows-debug; do
         for park in "${parks[@]}"; do
+            if [ "$preset" = windows-debug ] && [ "$park" = "$release_only" ]; then
+                continue
+            fi
             echo "build $preset" >>"$out/launches.txt"
             "build/$preset/tpj_bench.exe" "$park" | tr -d '\r' >>"$out/launches.txt" ||
                 fail "tpj_bench failed on $park with $preset in round $round"
