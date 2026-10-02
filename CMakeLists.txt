@@ -81,6 +81,8 @@ if(TPJ_BUILD_APP)
     target_link_libraries(tpj_imgui PUBLIC SDL3::SDL3)
 
     add_subdirectory(src/render)
+    add_subdirectory(src/views)
+    add_subdirectory(src/bench)
     add_subdirectory(src/app)
 endif()
 

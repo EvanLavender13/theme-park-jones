@@ -115,8 +115,8 @@ if(CASE STREQUAL "repository_layers")
         list(APPEND actual "${layer}")
     endforeach()
     set(expected core sim/* sim/medium sim/park sim/routes sim/operations sim/guests
-        sim/park_schema "legible render scenarios tools" "app/input app/session" "app/scene app/ui"
-        app/*)
+        sim/park_schema "legible render scenarios tools" views bench "app/input app/session"
+        "app/scene app/ui" app/*)
     if(NOT "${actual}" STREQUAL "${expected}")
         list(JOIN expected "\n" expectedText)
         list(JOIN actual "\n" actualText)

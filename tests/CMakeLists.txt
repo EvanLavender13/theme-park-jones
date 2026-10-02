@@ -15,8 +15,10 @@ add_subdirectory(checks)
 add_subdirectory(tools)
 add_subdirectory(legible)
 add_subdirectory(integration)
-# The renderer and the app build only with the windowed application.
+# The renderer, the views, the runner, and the app build only with the windowed application.
 if(TPJ_BUILD_APP)
     add_subdirectory(render)
+    add_subdirectory(views)
+    add_subdirectory(bench)
     add_subdirectory(app)
 endif()
