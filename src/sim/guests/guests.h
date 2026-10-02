@@ -154,6 +154,10 @@ inline constexpr std::string_view EATEN_CAUSE = "eaten";
 std::vector<EntityKey> parkGuests(const World &world);
 // The guest's inspection record, or none when the key holds no guest.
 std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest);
+// Creates a guest standing at the place, whose stay ends at the tick, with its hunger and hunger
+// rate drawn on its key, and gives its key. Throws std::invalid_argument, changing nothing, when
+// the place does not resolve on the guest network.
+EntityKey addGuest(World &world, const Place &place, uint64_t stayUntil);
 // The hunger curve's value at the hunger, clamped to [0, 1].
 double hungerCurve(double hunger);
 // Sets each option's softmax probability from the scores and returns the index the draw picks.

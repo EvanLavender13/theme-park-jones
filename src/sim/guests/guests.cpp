@@ -297,8 +297,13 @@ bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
   }
 }
 
+// The guest's uniform draw for the purpose, on its key and the world's seed and tick.
+double guestDraw(const World &world, EntityKey guest, const char *purpose) {
+  return drawUniform(drawKey(world, guest, hashName(purpose), 0));
+}
+
 // Each entrance with a guest connector admits a guest at the end of every ARRIVAL_INTERVAL
-// ticks, with its stay, hunger rate, and starting hunger drawn on its key.
+// ticks, through addGuest, with its stay drawn on the key addGuest gives it.
 void admitGuests(World &world, const Network &network) {
   if ((world.Tick + 1) % ARRIVAL_INTERVAL != 0) {
     return;
@@ -308,19 +313,11 @@ void admitGuests(World &world, const Network &network) {
     if (anchored.empty()) {
       continue;
     }
-    const EntityKey key = world.createEntity();
-    const auto draw = [&world, key](const char *purpose) {
-      return drawUniform(drawKey(world, key, hashName(purpose), 0));
-    };
-    Guest guest;
-    guest.At = network.nodePlace(anchored.front());
-    guest.StayUntil =
-        world.Tick + STAY_MIN +
-        static_cast<uint64_t>(draw("guest-stay") * static_cast<double>(STAY_MAX - STAY_MIN));
-    guest.HungerRate =
-        HUNGER_RATE_MIN + draw("guest-hunger-rate") * (HUNGER_RATE_MAX - HUNGER_RATE_MIN);
-    guest.Hunger = draw("guest-starting-hunger") * STARTING_HUNGER_MAX;
-    world.Registry.emplace<Guest>(world.findEntity(key), guest);
+    const EntityKey key{world.nextKey()};
+    const uint64_t stayUntil = world.Tick + STAY_MIN +
+                               static_cast<uint64_t>(guestDraw(world, key, "guest-stay") *
+                                                     static_cast<double>(STAY_MAX - STAY_MIN));
+    addGuest(world, network.nodePlace(anchored.front()), stayUntil);
   }
 }
 
@@ -435,6 +432,21 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
     record.LastChoice = state->LastChoice;
   }
   return record;
+}
+
+EntityKey addGuest(World &world, const Place &place, uint64_t stayUntil) {
+  if (!parkNetwork(world, PathKind::Guest).resolve(place)) {
+    throw std::invalid_argument("addGuest: the place is not on the guest network");
+  }
+  const EntityKey key = world.createEntity();
+  Guest guest;
+  guest.At = place;
+  guest.StayUntil = stayUntil;
+  guest.HungerRate = HUNGER_RATE_MIN + guestDraw(world, key, "guest-hunger-rate") *
+                                           (HUNGER_RATE_MAX - HUNGER_RATE_MIN);
+  guest.Hunger = guestDraw(world, key, "guest-starting-hunger") * STARTING_HUNGER_MAX;
+  world.Registry.emplace<Guest>(world.findEntity(key), guest);
+  return key;
 }
 
 double hungerCurve(double hunger) {
