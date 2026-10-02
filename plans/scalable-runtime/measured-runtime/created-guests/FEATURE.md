@@ -13,6 +13,8 @@ addGuest is simulation code: the test pass writes its tests. Criterion 6 is chec
 3. addGuest refuses a place that does not resolve on the guest network. It throws std::invalid_argument, and the world is unchanged: worldsEqual to a copy taken before the call, with the same nextKey.
 4. The guests that arrive in the cycle stepping t have the records addGuest gives in a copy of the world at tick t, taken before that cycle, when it is called once for each of them in key order with that guest's place and stay.
 5. The existing tests pass unchanged, and scripts/cross-build-check.sh passes, so the two builds still simulate identically and the change touches no output it compares.
+HungerRate, Forward, and MealRelief are not in GuestRecord. HungerRate shows through the hunger one stepped cycle adds (Stepping), and Forward and MealRelief show only through walking and eating, which the existing walk and visit tests cover for arriving guests. A world with added guests is never equal to one whose guests arrived at the same moment, since arriving steps a cycle, so criterion 4 compares the guests' records.
+
 6. Two runtime reports of winding-path.park, one before the change and one after it, compared by `scripts/runtime-report.sh --compare`, mark no stage `result-changed`. The comparison's line for each stage is in the feature's report, whatever it says of time.
 
 ## Medium
