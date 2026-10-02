@@ -25,4 +25,14 @@ std::optional<std::string> readTextFile(const std::string &path) {
   return text;
 }
 
+bool writeTextFile(const std::string &path, std::string_view text) {
+  std::ofstream file(path, std::ios::binary | std::ios::trunc);
+  if (!file) {
+    return false;
+  }
+  file.write(text.data(), static_cast<std::streamsize>(text.size()));
+  file.close();
+  return !file.fail();
+}
+
 } // namespace tpj

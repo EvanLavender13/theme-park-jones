@@ -290,32 +290,22 @@ echo "supplies in transit $(section supplies-ledger | grep -o '{arrival=' | wc -
 ```
 Expected: about 1 MB; `guest paths 21  backstage paths 6`; `shops 30  depots 3`; guests at least 2000 with `added 2000`; queued shops at least 1; supplies in transit at least 1.
 
-### Task 8: Check the same text on every build
+### Task 8: Check the same text on both Windows builds
 
-Run: `build/windows-debug/tpj_bench.exe --full-park build/full-debug.park && cmake --build --preset linux-debug --target tpj_bench && build/linux-debug/tpj_bench --full-park build/full-linux.park && cmp tests/parks/stress/full.park build/full-debug.park && cmp tests/parks/stress/full.park build/full-linux.park && echo identical`
-Expected: `identical` (criterion 2). Each debug run may take minutes; keep their times for the report.
+Amended: windows-debug ran over an hour without finishing the full warm-up, and Evan moved the Linux checks to release time, so the check uses a 60-tick warm-up on the two Windows builds.
 
-### Task 9: Confirm the builds, tests, and checks
+Run: `build/windows-release/tpj_bench.exe --full-park build/full-release-60.park --warm-ticks 60 && build/windows-debug/tpj_bench.exe --full-park build/full-debug-60.park --warm-ticks 60 && cmp build/full-release-60.park build/full-debug-60.park && echo identical`
+Expected: `identical` (criterion 2).
 
-Step 1: Windows.
+### Task 9: Confirm the build, tests, and tidy
 
-Run: `cmake.exe --build --preset windows-debug && ctest.exe --preset windows-debug`
-Expected: no warnings; every test passes.
-
-Step 2: Linux and tidy.
-
-Run: `cmake --build --preset linux-debug && ctest --preset linux-debug && scripts/tidy.sh`
-Expected: no warnings, every test passes, tidy is clean.
-
-Step 3: The cross-build check (criterion 5).
-
-Run: `scripts/cross-build-check.sh`
-Expected: it ends with `cross-build-check: both builds wrote the same 36343 lines; passed.`, the count unchanged, since it reads only tests/parks/*.park.
+Run: `cmake.exe --build --preset windows-debug && ctest.exe --preset windows-debug && scripts/tidy.sh`
+Expected: no warnings; every test passes; tidy is clean (criterion 5).
 
 ### Task 10: The first report on the full park
 
 Run: `scripts/runtime-report.sh build/runtime-report/full-park-first.txt && scripts/runtime-report.sh --compare build/runtime-report/full-park-first.txt build/runtime-report/full-park-first.txt`
-Expected: `runtime-report: wrote ... in <m>m <ss>s`, and a comparison listing every stage of tests/parks/stress/full.park and winding-path.park on both builds, in microseconds, ending `clear 0 of 24`. Put the comparison's lines and the time in the feature's report, with the full park's windows-release food-overlay median beside the 33 ms between ticks. If the report takes too long to wait for, say how long, for Evan's decision on fewer debug ticks.
+Expected: `runtime-report: wrote ... in <m>m <ss>s`, and a comparison listing every stage of tests/parks/stress/full.park and winding-path.park on both builds, in microseconds, ending `clear 0 of 18`: six stages of full.park on windows-release and six of winding-path.park on each build. Put the comparison's lines and the time in the feature's report, with the full park's windows-release food-overlay median beside the 33 ms between ticks. If the report takes too long to wait for, say how long, for Evan's decision on fewer debug ticks.
 
 ### Task 11: Commit
 

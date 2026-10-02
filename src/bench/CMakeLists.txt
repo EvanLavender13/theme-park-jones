@@ -12,7 +12,7 @@ add_library(tpj_bench_lib STATIC
     text_file.cpp
     timing.cpp)
 target_include_directories(tpj_bench_lib PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tpj_bench_lib PUBLIC tpj_views tpj_legible tpj_render tpj_sim)
+target_link_libraries(tpj_bench_lib PUBLIC tpj_views tpj_legible tpj_render tpj_scenarios_lib tpj_sim)
 tpj_configure_target(tpj_bench_lib)
 
 add_executable(tpj_bench main.cpp)
