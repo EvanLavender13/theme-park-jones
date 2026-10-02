@@ -1,6 +1,6 @@
 #include "app/application.h"
 #include "app/options.h"
-#include "app/park_session.h"
+#include "app/session/park_session.h"
 #include "sim/world.h"
 
 #include <SDL3/SDL_main.h>

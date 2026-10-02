@@ -4,16 +4,16 @@
 # to make the events input mapping takes.
 add_executable(tpj_app_tests
     command_line_test.cpp
-    cursor_test.cpp
     frame_clock_test.cpp
-    input_map_test.cpp
-    interaction_test.cpp
+    input/cursor_test.cpp
+    input/input_map_test.cpp
+    input/interaction_test.cpp
+    input/orbit_camera_test.cpp
     options_test.cpp
-    orbit_camera_test.cpp
-    park_file_requests_test.cpp
-    park_file_test.cpp
-    park_session_test.cpp
-    scene_sync_test.cpp)
+    scene/scene_sync_test.cpp
+    session/park_file_requests_test.cpp
+    session/park_file_test.cpp
+    session/park_session_test.cpp)
 target_link_libraries(tpj_app_tests PRIVATE tpj_app_core tpj_sim SDL3::SDL3 Catch2::Catch2WithMain)
 target_compile_definitions(tpj_app_tests PRIVATE
     TPJ_APP_EXECUTABLE="$<TARGET_FILE:tpj_app>"

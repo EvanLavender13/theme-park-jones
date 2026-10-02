@@ -1,8 +1,8 @@
 #include "app/application.h"
 
-#include "app/cursor.h"
-#include "app/platform_input.h"
-#include "app/scene_uploads.h"
+#include "app/input/cursor.h"
+#include "app/input/platform_input.h"
+#include "app/scene/scene_uploads.h"
 #include "core/profile.h"
 #include "render/renderer.h"
 
