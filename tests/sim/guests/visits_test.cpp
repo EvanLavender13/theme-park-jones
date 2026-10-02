@@ -246,7 +246,6 @@ TEST_CASE("A guest creates guest-visits units only in a cycle that ends with it 
   CHECK(VISIT_DELAY == 1);
   int sent = 0;
   runStallPark([&](const BeforeCycle &before, const World &after) {
-    const uint64_t tick = before.Tick;
     int64_t senders = 0;
     for (const EntityKey guest : parkGuests(after)) {
       const GuestRecord now = recordOf(after, guest);
@@ -256,7 +255,7 @@ TEST_CASE("A guest creates guest-visits units only in a cycle that ends with it 
       const bool waitsAfresh =
           now.Activity == GuestActivity::Waiting &&
           (was == before.Guests.end() || was->second.Record.Activity != GuestActivity::Waiting ||
-           test::choiceTick(now) == tick);
+           was->second.VisitsHeld > 0);
       if (!waitsAfresh) {
         continue;
       }
@@ -308,7 +307,6 @@ TEST_CASE("A waiting guest whose visit has not come back keeps its place, Activi
       CHECK(record.At == was.Record.At);
       CHECK(record.Activity == GuestActivity::Waiting);
       CHECK(record.Target == was.Record.Target);
-      CHECK(test::choiceTick(record) != tick);
       CHECK(visitsAddressedTo(after, guest) == was.VisitsAddressed);
       sawNoMeals =
           sawNoMeals ||
@@ -323,11 +321,10 @@ TEST_CASE("A waiting guest whose visit has not come back keeps its place, Activi
 }
 
 TEST_CASE("A waiting guest holding guest-visits units under its own key consumes them all as "
-          "finished, and chooses at its place in that cycle") {
+          "finished") {
   bool sawServed = false;
   bool sawUnserved = false;
   runStallPark([&](const BeforeCycle &before, const World &after) {
-    const uint64_t tick = before.Tick;
     int64_t returned = 0;
     for (const auto &[guest, was] : before.Guests) {
       if (was.Record.Activity != GuestActivity::Waiting || was.VisitsHeld == 0) {
@@ -336,9 +333,6 @@ TEST_CASE("A waiting guest holding guest-visits units under its own key consumes
       CAPTURE(guest);
       returned += was.VisitsHeld;
       CHECK(unitsHeld<GuestVisits>(after, guest, guest) == 0);
-      const GuestRecord now = recordOf(after, guest);
-      CHECK(test::choiceTick(now) == tick);
-      CHECK(now.LastChoice.value_or(GuestChoice{}).At == was.Record.At);
       const bool served = was.MealsHeld > 0;
       sawServed = sawServed || served;
       sawUnserved = sawUnserved || !served;

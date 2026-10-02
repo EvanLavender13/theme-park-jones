@@ -86,18 +86,25 @@ std::optional<OfferEntry> offerOf(const World &world, EntityKey shop) {
   return std::nullopt;
 }
 
-// Whether the guest's last choice was made while stepping the tick and picked an offer of the
-// shop.
-bool pickedAt(const GuestRecord &record, EntityKey shop, uint64_t tick) {
-  if (!record.LastChoice.has_value()) {
+// A guest before a cycle: its record, and whether its visit has come back, so that it chooses in
+// the cycle.
+struct GuestBefore {
+  GuestRecord Record;
+  bool VisitBack = false;
+};
+
+// Whether a guest picked the shop in a cycle: it ends the cycle with the shop as its target, and
+// either did not have it before or chose again because its visit came back, which a guest waiting
+// at the shop does when the shop returns its visit.
+bool takesShop(const std::optional<GuestBefore> &before, const GuestRecord &after, EntityKey shop) {
+  if (after.Target != shop) {
     return false;
   }
-  const GuestChoice &choice = record.LastChoice.value_or(GuestChoice{});
-  if (choice.Tick != tick || choice.Picked >= choice.Options.size()) {
-    return false;
+  if (!before.has_value()) {
+    return true;
   }
-  const ChoiceOption &picked = choice.Options.at(choice.Picked);
-  return picked.Kind == ChoiceKind::Offer && picked.Shop == shop;
+  const GuestBefore was = before.value_or(GuestBefore{});
+  return was.Record.Target != shop || was.VisitBack;
 }
 
 double meanHunger(const World &world) {
@@ -150,14 +157,22 @@ TEST_CASE("In cut.park the starved shop's offer says no meals from its first tic
   }
 }
 
-// The picks of an offer of the shop that guests make in a run of the world.
+// The picks of the shop that guests make in a run of the world.
 uint64_t picksInRun(World &world, EntityKey shop, uint64_t ticks) {
   uint64_t picks = 0;
   for (uint64_t cycle = 0; cycle < ticks; ++cycle) {
-    const uint64_t stepping = world.Tick;
+    std::map<EntityKey, GuestBefore> before;
+    for (const EntityKey guest : parkGuests(world)) {
+      before.emplace(guest,
+                     GuestBefore{.Record = recordOf(world, guest),
+                                 .VisitBack = unitsHeld<GuestVisits>(world, guest, guest) > 0});
+    }
     stepWorld(world);
     for (const EntityKey guest : parkGuests(world)) {
-      if (pickedAt(recordOf(world, guest), shop, stepping)) {
+      const auto was = before.find(guest);
+      const std::optional<GuestBefore> previous =
+          was == before.end() ? std::nullopt : std::optional<GuestBefore>(was->second);
+      if (takesShop(previous, recordOf(world, guest), shop)) {
         ++picks;
       }
     }

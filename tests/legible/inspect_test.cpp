@@ -15,6 +15,7 @@
 
 #include <array>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
 #include <optional>
@@ -34,7 +35,7 @@ template <> struct Catch::StringMaker<tpj::ChoiceRow> {
   static std::string convert(const tpj::ChoiceRow &row) {
     return "{\"" + row.Option + "\", \"" + row.Relief + "\", \"" + row.Distance + "\", \"" +
            row.Wait + "\", \"" + row.Commitment + "\", \"" + row.Score + "\", \"" +
-           row.Probability + "\", " + (row.Picked ? "picked" : "not picked") + "}";
+           row.Probability + "\"}";
   }
 };
 
@@ -51,28 +52,25 @@ namespace {
 // tests/parks/warm.park, saved at tick 1920: entrance 1, guest paths 2 to 5, backstage path 6,
 // shop 7 supplied by depot 8, and guests 9 to 40.
 //
-// Guest 9 is heading to shop 7 with hunger 0.6654..., its stay ends at tick 2373, it has eaten one
-// meal, at tick 623 from hunger 0.4836... to 0, and its last choice, at tick 1857 and hunger
-// 0.6336..., weighed an offer of shop 7 (relief 1.3677..., distance -0.33499..., wait -0.2573...,
-// commitment 0, score 0.7753..., probability 0.7505...), which it picked, against carrying on
-// (score 0.5, probability 0.2494...).
+// Guest 9 is heading to shop 7 with hunger 0.6654..., its stay ends at tick 2373, and it has eaten
+// one meal, at tick 623 from hunger 0.4836... to 0.
 constexpr EntityKey ENTRANCE{1};
 constexpr EntityKey GUEST_PATH{2};
 constexpr EntityKey BACKSTAGE_PATH{6};
 constexpr EntityKey SHOP{7};
 constexpr EntityKey DEPOT{8};
 constexpr EntityKey HEADING_GUEST{9};
-// Wandering with no target, and its last choice picked its second option, carrying on.
+// Wandering with no target.
 constexpr EntityKey WANDERING_GUEST{10};
-// Admitted in the last cycle: it has neither eaten nor chosen.
+// Admitted in the last cycle: it has not eaten.
 constexpr EntityKey NEW_GUEST{40};
 constexpr EntityKey MISSING{99};
 constexpr std::array<EntityKey, 4> GUEST_PATHS{EntityKey{2}, EntityKey{3}, EntityKey{4},
                                                EntityKey{5}};
 constexpr uint64_t HEADING_STAY_UNTIL = 2373;
 
-const std::vector<std::string> GUEST_LABELS{"Activity",    "Hunger",    "Target",     "Stay",
-                                            "Meals eaten", "Last meal", "Last choice"};
+const std::vector<std::string> GUEST_LABELS{"Activity", "Hunger",      "Target",
+                                            "Stay",     "Meals eaten", "Last meal"};
 
 World openWarm() {
   std::ifstream file(std::filesystem::path(TPJ_PARKS_DIR) / "warm.park", std::ios::binary);
@@ -168,15 +166,14 @@ TEST_CASE("pickSubject leaves the subject as it was for no key or a key with no 
   CHECK_FALSE(none.has_value());
 }
 
-TEST_CASE("A guest's inspector shows its title and the seven rows formatted from its record and "
-          "the world's tick") {
+TEST_CASE("A guest's inspector shows its title and the six rows formatted from its record and the "
+          "world's tick") {
   const World world = openWarm();
   const Inspection inspection =
       inspectSubject(world, InspectorSubject{HEADING_GUEST, SubjectKind::Guest});
   CHECK(inspection.Title == "Guest 9");
   CHECK_FALSE(inspection.Gone);
-  // Stay: 453 ticks left is 15.1 s. Last meal: 1297 ticks ago is 43.2 s. Last choice: 63 ticks
-  // ago is 2.1 s.
+  // Stay: 453 ticks left is 15.1 s. Last meal: 1297 ticks ago is 43.2 s.
   const std::vector<InspectorRow> expected{
       {"Activity", "heading to shop"},
       {"Hunger", "0.67"},
@@ -184,19 +181,17 @@ TEST_CASE("A guest's inspector shows its title and the seven rows formatted from
       {"Stay", "15.1 s left"},
       {"Meals eaten", "1"},
       {"Last meal", "43.2 s ago, hunger 0.48 to 0.00"},
-      {"Last choice", "2.1 s ago at hunger 0.63"},
   };
   CHECK(inspection.Rows == expected);
 }
 
-TEST_CASE("A guest with no target, no meal, and no choice shows none for each") {
+TEST_CASE("A guest with no target and no meal shows none for each") {
   const Inspection fresh =
       inspectSubject(openWarm(), InspectorSubject{NEW_GUEST, SubjectKind::Guest});
   CHECK(labelsOf(fresh) == GUEST_LABELS);
   CHECK(valueOf(fresh, "Target") == "none");
   CHECK(valueOf(fresh, "Meals eaten") == "0");
   CHECK(valueOf(fresh, "Last meal") == "none");
-  CHECK(valueOf(fresh, "Last choice") == "none");
 }
 
 TEST_CASE("A guest's stay reads the seconds left while StayUntil is later than the world's tick, "
@@ -210,49 +205,61 @@ TEST_CASE("A guest's stay reads the seconds left while StayUntil is later than t
   CHECK(valueOf(inspectSubject(atTick(world, HEADING_STAY_UNTIL + 300), guest), "Stay") == "over");
 }
 
-TEST_CASE("A meal or choice later than the world's tick reads as 0 s ago") {
-  // Tick 600 is before guest 9's meal at 623 and its choice at 1857; its stay has 1773 ticks left.
+TEST_CASE("A meal later than the world's tick reads as 0 s ago") {
+  // Tick 600 is before guest 9's meal at 623; its stay has 1773 ticks left.
   const Inspection inspection =
       inspectSubject(atTick(openWarm(), 600), InspectorSubject{HEADING_GUEST, SubjectKind::Guest});
   CHECK(valueOf(inspection, "Last meal") == "0.0 s ago, hunger 0.48 to 0.00");
-  CHECK(valueOf(inspection, "Last choice") == "0.0 s ago at hunger 0.63");
   CHECK(valueOf(inspection, "Stay") == "59.1 s left");
 }
 
-TEST_CASE("A guest's choice table has a row for each option it weighed, in order, with an offer's "
-          "terms, every score and probability, and its pick marked") {
-  const World world = openWarm();
-  const Inspection inspection =
-      inspectSubject(world, InspectorSubject{HEADING_GUEST, SubjectKind::Guest});
-  // Carrying on has no terms, so its term cells are empty.
-  const std::vector<ChoiceRow> expected{
-      {"shop 7", "1.37", "-0.33", "-0.26", "0.00", "0.78", "0.75", true},
-      {"carry on", "", "", "", "", "0.50", "0.25", false},
-  };
-  CHECK(inspection.Choices == expected);
-}
+std::string twoDecimals(double value) { return std::format("{:.2f}", value); }
 
-TEST_CASE("Exactly the choice row at the record's Picked index is marked picked") {
-  // Guest 10 picked its second option, carrying on.
-  const World world = openWarm();
-  const std::optional<GuestRecord> record = guestRecord(world, WANDERING_GUEST);
-  REQUIRE(record.has_value());
-  const GuestChoice choice = record.value_or(GuestRecord{}).LastChoice.value_or(GuestChoice{});
-  REQUIRE(choice.Options.size() == 2);
-  REQUIRE(choice.Picked == 1);
-  const Inspection inspection =
-      inspectSubject(world, InspectorSubject{WANDERING_GUEST, SubjectKind::Guest});
-  std::vector<bool> picked;
-  picked.reserve(inspection.Choices.size());
-  for (const ChoiceRow &row : inspection.Choices) {
-    picked.push_back(row.Picked);
+// The rows of a choice table showing the options: an offer as its shop with its terms, and
+// carrying on and heading home by name with no terms.
+std::vector<ChoiceRow> choiceRows(const std::vector<ChoiceOption> &options) {
+  std::vector<ChoiceRow> rows;
+  for (const ChoiceOption &option : options) {
+    if (option.Kind == ChoiceKind::Offer) {
+      rows.push_back({"shop " + std::to_string(static_cast<uint64_t>(option.Shop)),
+                      twoDecimals(option.Relief), twoDecimals(option.Distance),
+                      twoDecimals(option.Wait), twoDecimals(option.Commitment),
+                      twoDecimals(option.Score), twoDecimals(option.Probability)});
+    } else {
+      rows.push_back({option.Kind == ChoiceKind::CarryOn ? "carry on" : "head home", "", "", "", "",
+                      twoDecimals(option.Score), twoDecimals(option.Probability)});
+    }
   }
-  CHECK(picked == std::vector<bool>{false, true});
+  return rows;
 }
 
-TEST_CASE("A guest that has not chosen has an empty choice table") {
+TEST_CASE("A guest's choice table has a row for each option guestOptions gives for it, in order, "
+          "an offer's with its shop and terms and every row with its score and probability") {
   const World world = openWarm();
-  CHECK(inspectSubject(world, InspectorSubject{NEW_GUEST, SubjectKind::Guest}).Choices.empty());
+  // At its StayUntil, guest 9 would also weigh heading home.
+  const World stayOver = atTick(world, HEADING_STAY_UNTIL);
+  bool sawOffer = false;
+  bool sawCarryOn = false;
+  bool sawHeadHome = false;
+  for (const World *shown : {&world, &stayOver}) {
+    for (const EntityKey guest : {HEADING_GUEST, WANDERING_GUEST, NEW_GUEST}) {
+      CAPTURE(shown->Tick, guest);
+      const std::optional<std::vector<ChoiceOption>> options = guestOptions(*shown, guest);
+      REQUIRE(options.has_value());
+      const std::vector<ChoiceOption> held = options.value_or(std::vector<ChoiceOption>{});
+      const Inspection inspection =
+          inspectSubject(*shown, InspectorSubject{guest, SubjectKind::Guest});
+      CHECK(inspection.Choices == choiceRows(held));
+      for (const ChoiceOption &option : held) {
+        sawOffer = sawOffer || option.Kind == ChoiceKind::Offer;
+        sawCarryOn = sawCarryOn || option.Kind == ChoiceKind::CarryOn;
+        sawHeadHome = sawHeadHome || option.Kind == ChoiceKind::HeadHome;
+      }
+    }
+  }
+  CHECK(sawOffer);
+  CHECK(sawCarryOn);
+  CHECK(sawHeadHome);
 }
 
 // The rows state the record's own values, so they are compared with the record rather than with
@@ -310,7 +317,7 @@ TEST_CASE("A guest that has left the park is inspected as gone, keeping its titl
   CHECK(inspection.Choices.empty());
 }
 
-TEST_CASE("A guest whose place does not resolve is inspected like any other") {
+TEST_CASE("A guest whose place does not resolve is inspected like any other, with no options") {
   const World cut = cutWarm();
   const std::optional<GuestRecord> record = guestRecord(cut, HEADING_GUEST);
   REQUIRE(record.has_value());
@@ -320,7 +327,7 @@ TEST_CASE("A guest whose place does not resolve is inspected like any other") {
       inspectSubject(cut, InspectorSubject{HEADING_GUEST, SubjectKind::Guest});
   CHECK_FALSE(inspection.Gone);
   CHECK(labelsOf(inspection) == GUEST_LABELS);
-  CHECK(inspection.Choices.size() == held.LastChoice.value_or(GuestChoice{}).Options.size());
+  CHECK(inspection.Choices.empty());
 }
 
 TEST_CASE("Inspecting changes nothing in the world") {

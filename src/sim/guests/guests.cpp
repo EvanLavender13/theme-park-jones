@@ -135,17 +135,17 @@ RouteStep wanderStep(const World &world, EntityKey key, const Guest &guest, cons
   return onward[drawPick(drawKey(world, key, hashName("guest-wander"), picks++), weights)];
 }
 
-// Scores the guest's options where it stands, picks one by softmax, and takes it up, recording
-// the choice.
-void choose(const World &world, EntityKey key, Guest &guest, const Network &network,
-            const RouteSample &routes, const std::vector<EntityKey> &entrances, uint64_t &choices) {
-  GuestChoice choice;
-  choice.Tick = world.Tick;
-  choice.At = guest.At;
-  choice.Hunger = guest.Hunger;
+// The options a guest weighs where it stands, scored as a choice scores them, and each offer's
+// relief by option index, for the meal it would give.
+struct ScoredOptions {
+  std::vector<ChoiceOption> Options;
+  std::vector<double> Reliefs;
+};
+
+ScoredOptions scoreOptions(const World &world, const Guest &guest, const Network &network,
+                           const RouteSample &routes, const std::vector<EntityKey> &entrances) {
+  ScoredOptions scored;
   const double curve = hungerCurve(guest.Hunger);
-  // Each offer's relief, by option index, for the meal it would give.
-  std::vector<double> reliefs;
   for (const SampledEntry<RouteEntry> &entry : routes) {
     const std::optional<OfferEntry> offer = suppliedOffer(world, network, entry.Source);
     if (!offer) {
@@ -159,34 +159,66 @@ void choose(const World &world, EntityKey key, Guest &guest, const Network &netw
     option.Wait = WAIT_WEIGHT * (static_cast<double>(offer->Wait) * SIM_TICK_SECONDS);
     option.Commitment = entry.Source == guest.Target ? COMMITMENT_BONUS : 0.0;
     option.Score = option.Relief + option.Distance + option.Wait + option.Commitment;
-    choice.Options.push_back(option);
-    reliefs.push_back(offer->Relief);
+    scored.Options.push_back(option);
+    scored.Reliefs.push_back(offer->Relief);
   }
   ChoiceOption carryOn;
   carryOn.Kind = ChoiceKind::CarryOn;
   carryOn.Score = CARRY_ON_SCORE;
-  choice.Options.push_back(carryOn);
+  scored.Options.push_back(carryOn);
   if (world.Tick >= guest.StayUntil && homeEntry(routes, entrances) != nullptr) {
     ChoiceOption headHome;
     headHome.Kind = ChoiceKind::HeadHome;
     headHome.Score = HEAD_HOME_SCORE;
-    choice.Options.push_back(headHome);
+    scored.Options.push_back(headHome);
   }
+  return scored;
+}
+
+// Sets each option's softmax probability and gives the weights they came from. Throws
+// std::invalid_argument for no options or a score that is not finite.
+std::vector<double> softmaxWeights(std::span<ChoiceOption> options) {
+  if (options.empty()) {
+    throw std::invalid_argument("a choice needs at least one option");
+  }
+  double greatest = -std::numeric_limits<double>::infinity();
+  for (const ChoiceOption &option : options) {
+    if (!std::isfinite(option.Score)) {
+      throw std::invalid_argument("a choice's score is not finite");
+    }
+    greatest = std::max(greatest, option.Score);
+  }
+  // Scores are shifted so the greatest weighs exactly 1: no weight overflows, and the total is at
+  // least 1.
+  std::vector<double> weights;
+  double total = 0.0;
+  for (const ChoiceOption &option : options) {
+    weights.push_back(simExp((option.Score - greatest) / CHOICE_TEMPERATURE));
+    total += weights.back();
+  }
+  for (size_t i = 0; i < options.size(); ++i) {
+    options[i].Probability = weights[i] / total;
+  }
+  return weights;
+}
+
+// Scores the guest's options where it stands, picks one by softmax, and takes it up.
+void choose(const World &world, EntityKey key, Guest &guest, const Network &network,
+            const RouteSample &routes, const std::vector<EntityKey> &entrances, uint64_t &choices) {
+  ScoredOptions scored = scoreOptions(world, guest, network, routes, entrances);
   const size_t picked =
-      softmaxPick(drawKey(world, key, hashName("guest-choice"), choices++), choice.Options);
-  choice.Picked = picked;
-  const ChoiceOption &option = choice.Options[picked];
+      softmaxPick(drawKey(world, key, hashName("guest-choice"), choices++), scored.Options);
+  const ChoiceOption &option = scored.Options[picked];
   guest.Target = NULL_KEY;
   if (option.Kind == ChoiceKind::Offer) {
     guest.Activity = GuestActivity::HeadingToShop;
     guest.Target = option.Shop;
-    guest.MealRelief = reliefs[picked];
+    guest.MealRelief = scored.Reliefs[picked];
   } else if (option.Kind == ChoiceKind::HeadHome) {
     guest.Activity = GuestActivity::HeadingHome;
   } else {
     guest.Activity = GuestActivity::Wandering;
   }
-  guest.LastChoice = std::move(choice);
 }
 
 // Sends the guest's visit to the shop: one unit created under its own key, arriving after
@@ -428,10 +460,26 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
   if (state->MealsEaten > 0) {
     record.LastMeal = state->LastMeal;
   }
-  if (!state->LastChoice.Options.empty()) {
-    record.LastChoice = state->LastChoice;
-  }
   return record;
+}
+
+std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, EntityKey guest) {
+  const entt::entity entity = world.findEntity(guest);
+  if (entity == entt::null) {
+    return std::nullopt;
+  }
+  const Guest *state = world.Registry.try_get<Guest>(entity);
+  if (state == nullptr) {
+    return std::nullopt;
+  }
+  const Network &network = parkNetwork(world, PathKind::Guest);
+  if (!network.resolve(state->At)) {
+    return std::nullopt;
+  }
+  const RouteSample routes = sampleField<GuestRouteDistance>(world, network, state->At);
+  ScoredOptions scored = scoreOptions(world, *state, network, routes, entranceKeys(world));
+  softmaxWeights(scored.Options);
+  return std::move(scored.Options);
 }
 
 EntityKey addGuest(World &world, const Place &place, uint64_t stayUntil) {
@@ -465,27 +513,7 @@ double hungerCurve(double hunger) {
 }
 
 size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options) {
-  if (options.empty()) {
-    throw std::invalid_argument("a choice needs at least one option");
-  }
-  double greatest = -std::numeric_limits<double>::infinity();
-  for (const ChoiceOption &option : options) {
-    if (!std::isfinite(option.Score)) {
-      throw std::invalid_argument("a choice's score is not finite");
-    }
-    greatest = std::max(greatest, option.Score);
-  }
-  // Scores are shifted so the greatest weighs exactly 1: no weight overflows, and the total is at
-  // least 1.
-  std::vector<double> weights;
-  double total = 0.0;
-  for (const ChoiceOption &option : options) {
-    weights.push_back(simExp((option.Score - greatest) / CHOICE_TEMPERATURE));
-    total += weights.back();
-  }
-  for (size_t i = 0; i < options.size(); ++i) {
-    options[i].Probability = weights[i] / total;
-  }
+  const std::vector<double> weights = softmaxWeights(options);
   return drawPick(key, std::span<const double>(weights));
 }
 

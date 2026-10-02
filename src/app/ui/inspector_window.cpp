@@ -22,21 +22,19 @@ void drawRows(const std::vector<InspectorRow> &rows) {
   ImGui::EndTable();
 }
 
-// The guest's last choice, one option to a row, the picked one marked in the first column.
+// The options the guest would weigh now, one to a row.
 void drawChoices(const std::vector<ChoiceRow> &choices) {
-  ImGui::TextUnformatted("Last choice");
-  if (!ImGui::BeginTable("choices", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
+  ImGui::TextUnformatted("Options now");
+  if (!ImGui::BeginTable("choices", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
     return;
   }
   for (const char *heading :
-       {"", "Option", "Relief", "Distance", "Wait", "Commitment", "Score", "Chance"}) {
+       {"Option", "Relief", "Distance", "Wait", "Commitment", "Score", "Chance"}) {
     ImGui::TableSetupColumn(heading);
   }
   ImGui::TableHeadersRow();
   for (const ChoiceRow &choice : choices) {
     ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::TextUnformatted(choice.Picked ? ">" : "");
     for (const std::string *cell : {&choice.Option, &choice.Relief, &choice.Distance, &choice.Wait,
                                     &choice.Commitment, &choice.Score, &choice.Probability}) {
       ImGui::TableNextColumn();

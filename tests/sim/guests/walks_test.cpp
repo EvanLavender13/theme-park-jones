@@ -154,11 +154,15 @@ template <typename Step> void runHomeward(Step step) {
   CHECK_FALSE(test::isLive(world, stranded));
 }
 
-TEST_CASE("A guest wanders until its StayUntil, and heads home only by a choice made at or after "
-          "it that picks heading home") {
+TEST_CASE("A guest wanders until its StayUntil, and starts heading home only in a cycle stepping "
+          "its StayUntil or later") {
   bool sawHeadingHome = false;
   runHomeward([&](World &world, CommandQueue &commands) {
     const uint64_t tick = world.Tick;
+    std::map<EntityKey, GuestActivity> activities;
+    for (const EntityKey guest : parkGuests(world)) {
+      activities.emplace(guest, recordOf(world, guest).Activity);
+    }
     stepWorld(world, commands);
     INFO("stepped " << tick);
     for (const EntityKey guest : parkGuests(world)) {
@@ -167,14 +171,12 @@ TEST_CASE("A guest wanders until its StayUntil, and heads home only by a choice 
       if (tick < record.StayUntil) {
         CHECK(record.Activity == GuestActivity::Wandering);
       }
-      if (record.Activity != GuestActivity::HeadingHome) {
+      const auto was = activities.find(guest);
+      if (record.Activity != GuestActivity::HeadingHome ||
+          (was != activities.end() && was->second == GuestActivity::HeadingHome)) {
         continue;
       }
-      REQUIRE(record.LastChoice.has_value());
-      const GuestChoice choice = record.LastChoice.value_or(GuestChoice{});
-      CHECK(choice.Tick >= record.StayUntil);
-      REQUIRE(choice.Picked < choice.Options.size());
-      CHECK(choice.Options.at(choice.Picked).Kind == ChoiceKind::HeadHome);
+      CHECK(tick >= record.StayUntil);
       sawHeadingHome = true;
     }
   });

@@ -30,8 +30,8 @@ struct InspectorRow {
   bool operator==(const InspectorRow &) const = default;
 };
 
-// One option of a guest's last choice, as text: the option, its terms, score, and probability,
-// and whether the guest picked it. Carrying on and heading home have empty terms.
+// One option a guest would weigh now, as text: the option, its terms, score, and probability.
+// Carrying on and heading home have empty terms.
 struct ChoiceRow {
   std::string Option;
   std::string Relief;
@@ -40,13 +40,12 @@ struct ChoiceRow {
   std::string Commitment;
   std::string Score;
   std::string Probability;
-  bool Picked = false;
 
   bool operator==(const ChoiceRow &) const = default;
 };
 
-// What an inspector shows: its title, whether its entity is gone, its lines, and a guest's last
-// choice.
+// What an inspector shows: its title, whether its entity is gone, its lines, and the options a
+// guest would weigh now.
 struct Inspection {
   std::string Title;
   bool Gone = false;
