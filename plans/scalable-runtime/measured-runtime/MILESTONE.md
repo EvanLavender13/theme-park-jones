@@ -50,6 +50,8 @@ stage-runner, because it produces numbers on its own. On winding-path.park and t
 Unordered pool this milestone draws later features from.
 
 - Paired runs: the script builds two commits side by side and alternates their launches, so a drift in the machine cannot pass for a change. Gated on: a comparison that sequential reports leave unclear.
+- Worst calls across launches: the report gives, beside each stage's median and spread, the slowest call of any launch, so the worst tick, the hitch a player feels, survives summarizing. Gated on: a stage whose worst tick matters while its median does not.
+- A readable view of one report: the script prints a report in microseconds with its columns aligned, as the comparison does, rather than leaving the nanoseconds of the file to be read. Gated on: reading single reports often enough that comparing one with itself is a nuisance.
 - Upkeep over ticks: the runner drives the scene sync over a run of ticks and times what keeping the meshes current costs per tick, not one build of each. Gated on: a milestone whose change is how often a mesh is rebuilt, as affordable-overlay's is.
 
 ## Open questions
@@ -59,6 +61,7 @@ Unordered pool this milestone draws later features from.
 ## Research notes
 
 - Launches, not repetitions inside one, carry the variance that matters, so each launch is summarized by its median and launches are compared as samples. A change is clear only when two reports' launches do not overlap, which with ten launches each marks almost nothing clear in an unchanged tree, where a significance test at 5% per stage would, across many stages and parks.
+- The script runs a report's launches in rounds, every park once on each build per round, so drift during a report widens every park's spread alike, and in a fixed order, so a position effect is the same in the two reports a comparison reads (runtime-report/RESEARCH.md).
 - The clock is steady_clock, backed by QueryPerformanceCounter on MinGW-w64, never high_resolution_clock, which libstdc++ makes the wall clock. Repetitions are fixed counts after discarded warm-ups, and each result is written out so the optimizer keeps the work.
 
 Depth is in RESEARCH.md.
