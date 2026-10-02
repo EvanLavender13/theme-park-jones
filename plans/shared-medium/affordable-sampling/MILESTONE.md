@@ -33,8 +33,6 @@ stop-matched-sampling, the milestone's one feature. It removes the cost the prof
 
 Unordered pool this milestone draws later features from.
 
-- Entries indexed by place: sampling that visits only the entries at the sampled node or edge, instead of every entry of every source. Gated on: profiling showing the plain scan matters, as sources multiply.
-
 ## Open questions
 
 None.

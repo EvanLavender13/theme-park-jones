@@ -72,8 +72,6 @@ registered-walk is the core. It makes a world a value, with stable keys and regi
 
 - Release builds in the cross-build check: compare windows-release too, once players run release builds.
 - A first-divergence report: when the script finds differing hashes, rerun both sides with per-type hashes to name the first diverging type and entity. Gated on: a divergence that is hard to find.
-- Incremental resolution: run only the resolvers an applied command affects, in dependency order, instead of every resolver. Gated on: resolution cost showing up in the tick or in a preview's candidate. Met: candidate-previews measured a candidate of warm.park at 1.7 ms on windows-debug, paid for every new pose of a moving ghost (plans/legible-simulation/explained-food/candidate-previews/RESEARCH.md).
-- Candidates off the frame's thread: copy the world on the main thread and resolve the candidate on a worker, showing the last finished one, so a moving ghost never stalls a frame. The copy is a value independent of the world, so the worker shares nothing with the tick. Gated on: incremental resolution leaving a candidate too slow for a frame.
 
 ## Open questions
 
