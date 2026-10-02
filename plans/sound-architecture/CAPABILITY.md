@@ -51,7 +51,7 @@ The foundation is 0027 made enforceable and then applied to the worst case. The 
 
 - render/renderer.cpp, at 608 lines the next largest file, audited for concerns that deserve their own components. Gated on: an audit showing it holds more than one.
 - Levelization within a module: a check that a module's files form no include cycle among themselves, as Lakos requires of components. Gated on: a cycle found in review, or a module large enough that one is likely.
-- src/scenarios/main.cpp restructured so it only composes. It holds file reading, output comparison, timing reports, and slice-park writing beside its composition. Gated on: composed-app, whose shape it follows.
+- src/scenarios/main.cpp restructured so it only composes. It holds file reading, output comparison, timing reports, and slice-park writing beside its composition. Gated on: composed-app, whose shape it follows. Its file reading checks the source stream's state after copying its buffer into another stream, so a read that fails after the open, as of a directory, gives empty text rather than an error; read through the file's own stream as src/bench/park_file.cpp does.
 - A standing architecture audit: the reviewer run over the whole tree against 0027 rather than one diff, at the close of each milestone in any capability.
 - A signal for files that outgrow one concern, such as a line count past which the reviewer must justify the file. Gated on: drift the function size limits and placement step miss.
 - Public surfaces listed per module, so a module's SPEC.md names exactly which headers other modules may include.

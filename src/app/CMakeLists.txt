@@ -29,7 +29,7 @@ add_executable(tpj_app
     ui/tool_panel.cpp
     ui/tooling_ui.cpp)
 set_target_properties(tpj_app PROPERTIES OUTPUT_NAME ThemeParkJones)
-target_link_libraries(tpj_app PRIVATE tpj_app_core tpj_legible tpj_render tpj_sim tpj_tools)
+target_link_libraries(tpj_app PRIVATE tpj_app_core tpj_legible tpj_render tpj_sim tpj_tools tpj_views)
 tpj_configure_target(tpj_app)
 
 if(TPJ_SANITIZE)
