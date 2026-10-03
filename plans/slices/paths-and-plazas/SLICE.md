@@ -73,7 +73,7 @@ Undo history is the tools' own session state, a list of edits and their inverses
 
 ## Members
 
-Ordered for building. Milestone slugs are provisional until each capability plans them. sound-architecture's composed-app, which keeps tool modes, keys, and undo out of src/app/main.cpp (decision 0027), is a prerequisite, not a member. So is scalable-runtime's footfall that follows its guests (decision 0031), which lands before ground-becomes-routes grows the guest network.
+Ordered for building. Milestone slugs are provisional until each capability plans them. sound-architecture's composed-app, which keeps tool modes, keys, and undo out of src/app/main.cpp (decision 0027), is a prerequisite, not a member. So is scalable-runtime's following-footfall, which keeps hungry footfall's tick work following its guests (decision 0031), which lands before ground-becomes-routes grows the guest network.
 
 1. `deterministic-simulation/restored-keys`: a command may recreate an entity under a key the counter issued and no entity holds, so undoing a deletion restores the same key, with saves, copies, and hashes unchanged in meaning. Depends on: none.
 2. `shared-medium/carrier-widths`: a walkable width at every place of every carrier of the network type, which may vary along a carrier, carried through construction and copies, and derived again on load like the rest of the network, with queries for the width and direction at a place. Depends on: none.

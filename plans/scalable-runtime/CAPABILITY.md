@@ -2,7 +2,7 @@
 
 ## Summary
 
-scalable-runtime deepens how gently the gameplay runtime's costs grow with the size of the park: the simulation's ticks and resolutions, and the work a frame does to show the park, its overlays, and its previews. It is an engineering capability (decision 0028). A player with an infinitely fast machine would never notice it, and on a real one it decides whether a park they built keeps playing smoothly. It owns the measuring that finds where time goes, on parks as large as the game means to support, and the speedups that measuring points at. Every speedup changes how fast an answer comes, never what the answer is. Its value is that building a bigger park never turns into a slower game unnoticed: drawing one 3 km guest path took the food overlay's rebuild to 38 ms a tick on windows-debug, past the 33 ms between ticks, and 2 ms on windows-release, with one shop. Nothing measured it until it was played, and nothing yet says what it costs with 30 shops.
+scalable-runtime deepens how gently the gameplay runtime's costs grow with the size of the park: the simulation's ticks and resolutions, and the work a frame does to show the park, its overlays, and its previews. It is an engineering capability (decision 0028). A player with an infinitely fast machine would never notice it, and on a real one it decides whether a park they built keeps playing smoothly. It owns the measuring that finds where time goes, on parks as large as the game means to support, and the speedups that measuring points at. Every speedup changes how fast an answer comes, never what the answer is. The one exception is a metric that decision 0031 has rebuilt to follow its movers, whose answer may change in its last bits under the rule its spec states. Its value is that building a bigger park never turns into a slower game unnoticed: drawing one 3 km guest path took the food overlay's rebuild to 38 ms a tick on windows-debug, past the 33 ms between ticks, and 2 ms on windows-release, with one shop. Nothing measured it until it was played, and nothing yet says what it costs with 30 shops.
 
 ## Foundation criteria
 
@@ -11,7 +11,7 @@ scalable-runtime deepens how gently the gameplay runtime's costs grow with the s
 - A script builds windows-release and windows-debug, launches the runner several times on each stress park, and prints, per park and stage, each build's median and spread. Release decides what is slow, and debug is reported beside it.
 - The script compares two reports and marks a change clear only when it exceeds the spread both reports measured. Two reports of an unchanged tree mark no change clear.
 - No test, hook, or check fails on a timing. Timings are reported and compared, never gated.
-- Each milestone this capability ships includes the script's comparison before and after its change on the stress parks, and changes no observable behavior: existing tests pass unchanged, and tpj_scenarios's windows-debug output is identical before and after wherever the simulation is touched (decision 0030).
+- Each milestone this capability ships includes the script's comparison before and after its change on the stress parks, and changes no observable behavior: existing tests pass unchanged, and tpj_scenarios's windows-debug output is identical before and after wherever the simulation is touched (decision 0030). The one exception is a metric rebuilt under decision 0031, whose spec may state a decay rule that differs from the old one in the last bits and whose saved form changes: its tests are rewritten, and saves remade before and after differ only in that metric's sections.
 
 ## Medium
 
@@ -21,7 +21,7 @@ Its speedups reach into code other capabilities own: shared-medium's sampling, n
 
 ## Principles
 
-- Principle 10: the simulation is deterministic and runs independently of rendering. Speedups in the simulation keep tpj_scenarios's output identical before and after, line for line, and the cross-build check passes at release (decision 0030), and simulation code never reads the clock: only executables' entry points and the runner do (src/scenarios/SPEC.md already keeps timing out of compared output).
+- Principle 10: the simulation is deterministic and runs independently of rendering. Speedups in the simulation keep tpj_scenarios's output identical before and after, line for line, except where decision 0031 has a metric restate its rule, as the foundation criteria above allow, and the cross-build check passes at release (decision 0030), and simulation code never reads the clock: only executables' entry points and the runner do (src/scenarios/SPEC.md already keeps timing out of compared output).
 - Principle 1: everything visible is derived. A speedup that keeps derived state between frames, such as an overlay rebuilt only when its inputs change, gives it one owner and one path by which a change of its sources reaches it (decision 0027), and a test checks that the kept state equals a fresh rebuild.
 - Principle 8: every change can be previewed before it is committed. Faster candidates still equal, by worldsEqual, the world the committed edit gives.
 
@@ -44,6 +44,7 @@ The foundation is the measuring: stress parks the size the game means to support
 1. `measured-runtime`: the stress parks, the full park's generator, the headless runner timing each runtime stage, and the script that reports both builds' medians and spreads and compares two reports against their noise. Depends on: none.
 2. `indexed-sampling`: the report steps minutes of play, marks every stage over its budget, and times the app's frames, and walking guests read only the route distance entry they follow between choices, without allocating, so the full park holds one tick per frame in the app on windows-release. Depends on: milestone 1, and a Windows profile putting four fifths of a full-park tick in guests' route distance samples.
 3. `affordable-overlay`: the food overlay rebuilt only when the guest network, the route distance field, or a reachable shop's offer changes, and each shop's offer found once per build rather than at every sample, so an idle park rebuilds nothing and a build's cost no longer multiplies samples by shops. Depends on: milestone 2, and its report showing the overlay still costly on windows-release on the full park after indexed-sampling. A build finds every shop's offer at every sample, so its release cost of 2 ms with one shop is expected to grow many times over with 30.
+4. `following-footfall`: the shared medium's kept entries, which a system changes at one place and which stay readable until changed, and hungry footfall moved onto them, so its tick work grows with guests rather than the guest network (decision 0031). Depends on: milestone 2. Lands before paths-and-plazas grows the guest network.
 
 ## Deepening candidates
 
@@ -55,7 +56,6 @@ Unordered pool this capability draws later milestones from.
 - Sampling without allocation: sampleField builds its list of slots and each EdgeSample's vectors on every sample. Gated on: the report attributing a large share of sampling outside walking guests, such as choices and the overlay, to allocation.
 - Drawing measured: the GPU's share of a frame, from the app's --frames runs. Gated on: a slow frame the CPU stages do not explain.
 - Faster stepping: parallel or batched systems that keep bit-identical results. Gated on: the report showing ticks costly on the full park.
-- Footfall that follows its guests: each guest adds its hunger to the stretch it stands on, and each stretch holds its value with the tick it last changed, decaying when read, so hungry footfall's tick work grows with guests rather than the guest network (decision 0031). Gated on: none, since decision 0031 requires it; drawn before the network grows, as paths-and-plazas grows it.
 - Resolution across cores: route distance for each source derived in parallel, with results identical to deriving them in turn. Gated on: the report showing resolution, and so candidates, costly on a park with plazas.
 - Instanced guests: draw every guest from one shared mesh with a small per-guest instance buffer, instead of rebuilding and re-uploading one mesh of all guests whenever the world ticks. Gated on: the report showing the guest mesh and its upload a real share of the app's frame after indexed-sampling, or guests drawn as models rather than simple shapes.
 
