@@ -32,6 +32,7 @@ add_executable(tpj_sim_tests
     park/intent_test.cpp
     park/sketch_park_test.cpp
     park/validity_test.cpp
+    park_world_checks_test.cpp
     routes/connections_test.cpp
     routes/network_edits_test.cpp
     routes/route_distance_test.cpp
