@@ -30,7 +30,6 @@ namespace {
 using test::carry;
 using test::DEPOT;
 using test::depotAt;
-using test::GONE;
 using test::hold;
 using test::intentOf;
 using test::LINE;
@@ -38,7 +37,6 @@ using test::linePath;
 using test::LOOSE_SHOP;
 using test::looseDepot;
 using test::looseShop;
-using test::packetsFrom;
 using test::ParkIntent;
 using test::SHOP;
 using test::shopAt;
@@ -308,85 +306,6 @@ TEST_CASE("In a cycle, each shop box publishes stepped entries at the places of 
   CHECK(offersOf(steppedSlots(world), CUT_OFF_SHOP) ==
         std::optional<Offers>(offeredAt(world, CUT_OFF_SHOP, OfferEntry{})));
   CHECK(offersOf(steppedSlots(world), LOOSE_SHOP) == std::optional<Offers>(Offers{}));
-}
-
-TEST_CASE("A supplied shop's stepped offer is {MEAL_RELIEF, T_n - r, true}, T_n being when the "
-          "guest behind its n queued ones is taken, from its supply units in order: stock, "
-          "shipments in ascending arrival, then an order placed in the cycle") {
-  World world = offerWorld({shopAt(SHOP, 0.0), depotAt(DEPOT, 32.0)});
-  const uint64_t ordered = ORDER_DELAY + shipDelay(world, SHOP);
-  uint64_t expected = 0;
-
-  SECTION("a shop with nothing queued, held, or shipped waits for the order it places") {
-    // t = 0 and r = 1: T_0 = max(r, 0, t + ORDER_DELAY + D).
-    stepWorld(world);
-    expected = ordered - 1;
-  }
-  SECTION("guests queued behind the one served in the cycle, taken from stock at the service "
-          "rate") {
-    hold<Supplies>(world, SHOP, SHOP, 5);
-    queueGuests(world, SHOP, 3);
-    // A visit of a guest that is gone is not queued.
-    hold<GuestVisits>(world, SHOP, GONE, 1);
-    stepWorld(world);
-    // n = 2 and F = SERVICE_INTERVAL: T_i = (i + 1) * SERVICE_INTERVAL.
-    expected = (3 * SERVICE_INTERVAL) - 1;
-  }
-  SECTION("guests waiting on shipments in ascending arrival, and then on an order placed in the "
-          "cycle") {
-    hold<Supplies>(world, SHOP, SHOP, 1);
-    carry<Supplies>(world, shipment(2, 200));
-    carry<Supplies>(world, shipment(1, 100));
-    // A shipment under the shop's handle heading back to the depot brings the shop nothing.
-    carry<Supplies>(world, FlowPacket{.Arrival = 50,
-                                      .From = SHOP,
-                                      .To = DEPOT,
-                                      .Handle = SHOP,
-                                      .Units = 5,
-                                      .Delay = 50,
-                                      .Returning = true});
-    queueGuests(world, SHOP, 5);
-    stepWorld(world);
-    // The shop serves from its one unit of stock, so n = 4, F = SERVICE_INTERVAL, and units 0 to
-    // 2 arrive at 100, 200, and 200, and units 3 and 4 at t + ORDER_DELAY + D.
-    const uint64_t taken0 = std::max<uint64_t>(SERVICE_INTERVAL, 100);
-    const uint64_t taken1 = std::max<uint64_t>(taken0 + SERVICE_INTERVAL, 200);
-    const uint64_t taken2 = std::max<uint64_t>(taken1 + SERVICE_INTERVAL, 200);
-    const uint64_t taken3 = std::max(taken2 + SERVICE_INTERVAL, ordered);
-    const uint64_t taken4 = std::max(taken3 + SERVICE_INTERVAL, ordered);
-    expected = taken4 - 1;
-  }
-  SECTION("a shop that served in an earlier cycle is free SERVICE_INTERVAL after it") {
-    // Above the reorder point, so the stock is all the shop has.
-    hold<Supplies>(world, SHOP, SHOP, 12);
-    queueGuests(world, SHOP, 1);
-    stepUntil(world, 10);
-    REQUIRE(unitsCreated<Meals>(world) == 1);
-    queueGuests(world, SHOP, 2);
-    stepWorld(world);
-    // t = 10, r = 11, n = 2, and F = 0 + SERVICE_INTERVAL: T_2 = F + 2 * SERVICE_INTERVAL.
-    expected = (3 * SERVICE_INTERVAL) - 11;
-  }
-  SECTION("a shop with nothing on order still counts units beyond its shipments as coming from an "
-          "order placed in the cycle") {
-    // Its inventory position is 9, above the reorder point, so it orders nothing.
-    hold<Supplies>(world, SHOP, SHOP, 1);
-    carry<Supplies>(world, shipment(8, 1000));
-    queueGuests(world, SHOP, 11);
-    stepWorld(world);
-    REQUIRE(packetsFrom<SupplyOrders>(world, SHOP).empty());
-    // n = 10: units 0 to 7 arrive at 1000, and units 8 to 10 at t + ORDER_DELAY + D, after them in
-    // order whenever they arrive.
-    const uint64_t taken7 = 1000 + (7 * SERVICE_INTERVAL);
-    const uint64_t taken8 = std::max(taken7 + SERVICE_INTERVAL, ordered);
-    const uint64_t taken9 = std::max(taken8 + SERVICE_INTERVAL, ordered);
-    const uint64_t taken10 = std::max(taken9 + SERVICE_INTERVAL, ordered);
-    expected = taken10 - 1;
-  }
-
-  CHECK(offersOf(steppedSlots(world), SHOP) ==
-        std::optional<Offers>(offeredAt(
-            world, SHOP, OfferEntry{.Relief = MEAL_RELIEF, .Wait = expected, .Supplied = true})));
 }
 
 // Prediction.

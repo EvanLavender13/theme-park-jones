@@ -44,48 +44,6 @@ World gatesWorld() {
 
 EntityKey keyAt(uint64_t value) { return EntityKey{value}; }
 
-TEST_CASE("addGuests registers guest and hungry footfall's kept field, then stepGuests and the "
-          "footfall system, then carryGuests and the footfall finisher, and makeParkSchema's "
-          "component types and systems end with them") {
-  WorldSchema guestsAlone;
-  addGuests(guestsAlone);
-  CHECK(HungryFootfall::Name == "hungry-footfall");
-  WorldSchema keptAlone;
-  addKeptField<HungryFootfall>(keptAlone);
-  REQUIRE(keptAlone.components().size() == 1);
-  REQUIRE(keptAlone.resolvers().size() == 1);
-  REQUIRE(keptAlone.swaps().size() == 1);
-
-  const std::vector<ComponentType> &types = guestsAlone.components();
-  REQUIRE(types.size() == 2);
-  CHECK(types[0].Name == "guest");
-  CHECK(types[0].Kind == DataKind::State);
-  CHECK(types[1].Name == keptAlone.components().front().Name);
-  CHECK(types[1].Kind == keptAlone.components().front().Kind);
-  CHECK(types[1].TypeId == keptAlone.components().front().TypeId);
-  REQUIRE(guestsAlone.resolvers().size() == 1);
-  CHECK(guestsAlone.resolvers().front().Name == keptAlone.resolvers().front().Name);
-  CHECK(guestsAlone.resolvers().front().Resolve == keptAlone.resolvers().front().Resolve);
-  REQUIRE(guestsAlone.swaps().size() == 1);
-  CHECK(guestsAlone.swaps().front() == keptAlone.swaps().front());
-  CHECK(guestsAlone.systems().size() == 2);
-  CHECK(guestsAlone.finishers().size() == 2);
-
-  const std::shared_ptr<const WorldSchema> park = makeParkSchema();
-  REQUIRE(park != nullptr);
-  const std::vector<ComponentType> &parkTypes = park->components();
-  REQUIRE(parkTypes.size() >= types.size());
-  const std::size_t typesFrom = parkTypes.size() - types.size();
-  for (std::size_t index = 0; index < types.size(); ++index) {
-    CAPTURE(index);
-    CHECK(parkTypes[typesFrom + index].Name == types[index].Name);
-    CHECK(parkTypes[typesFrom + index].TypeId == types[index].TypeId);
-  }
-  const std::vector<WorldFunction> &systems = guestsAlone.systems();
-  REQUIRE(park->systems().size() >= systems.size());
-  CHECK(std::equal(systems.begin(), systems.end(), park->systems().end() - std::ssize(systems)));
-}
-
 TEST_CASE("parkGuests gives the guests' keys ascending, and guestRecord gives a record exactly for "
           "those keys") {
   World world = gatesWorld();

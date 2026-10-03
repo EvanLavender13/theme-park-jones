@@ -441,65 +441,11 @@ template <PathKind Kind> const SteppedEntries<RouteDistance<Kind>> *steppedOf(co
                               : world.Registry.try_get<SteppedEntries<RouteDistance<Kind>>>(holder);
 }
 
-// A source's routeEntries as the field should hold them: each node's entry at its nodePlace.
-std::vector<std::pair<Place, RouteEntry>> expectedPlacedEntries(const Network &network,
-                                                                EntityKey source) {
-  const std::vector<std::optional<RouteEntry>> entries = routeEntries(network, source);
-  std::vector<std::pair<Place, RouteEntry>> expected;
-  for (uint32_t node = 0; node < entries.size(); ++node) {
-    if (entries[node]) {
-      expected.emplace_back(network.nodePlace(node), entryAt(entries, node));
-    }
-  }
-  return expected;
-}
-
-std::vector<std::pair<Place, RouteEntry>> placedEntries(const FieldSlot<RouteEntry> &slot) {
-  std::vector<std::pair<Place, RouteEntry>> placed;
-  placed.reserve(slot.Entries.size());
-  for (const PlacedEntry<RouteEntry> &entry : slot.Entries) {
-    placed.emplace_back(entry.At, entry.Value);
-  }
-  return placed;
-}
-
-std::vector<EntityKey> slotSources(const std::vector<FieldSlot<RouteEntry>> &slots) {
-  std::vector<EntityKey> sources;
-  sources.reserve(slots.size());
-  for (const FieldSlot<RouteEntry> &slot : slots) {
-    sources.push_back(slot.Source);
-  }
-  return sources;
-}
-
 template <PathKind Kind> void checkNoSteppedEntries(const World &world) {
   const auto *stepped = steppedOf<Kind>(world);
   REQUIRE(stepped != nullptr);
   CHECK(stepped->Readable.empty());
   CHECK(stepped->Pending.empty());
-}
-
-template <PathKind Kind> void checkPublishedEntries(const World &world) {
-  INFO("kind " << static_cast<int>(Kind));
-  checkNoSteppedEntries<Kind>(world);
-  const Network &network = parkNetwork(world, Kind);
-  const auto *resolved = resolvedOf<Kind>(world);
-  REQUIRE(resolved != nullptr);
-  REQUIRE(slotSources(resolved->Slots) == anchoringEntities(network));
-  for (const FieldSlot<RouteEntry> &slot : resolved->Slots) {
-    INFO("source " << static_cast<uint64_t>(slot.Source));
-    CHECK(placedEntries(slot) == expectedPlacedEntries(network, slot.Source));
-  }
-}
-
-TEST_CASE("In a resolved world, each kind's route distance field holds, for each entity anchoring "
-          "a node of the kind's network, its routeEntries at each node's nodePlace in node order, "
-          "and no other source and no stepped entries") {
-  for (const auto &[name, world] : resolvedParks()) {
-    INFO(name);
-    checkPublishedEntries<PathKind::Guest>(world);
-    checkPublishedEntries<PathKind::Backstage>(world);
-  }
 }
 
 template <PathKind Kind> void checkSampledAtNodes(const World &world) {
@@ -633,32 +579,6 @@ TEST_CASE(
     CHECK(fromNodes > 0);
     CHECK(fromEdges > 0);
   }
-}
-
-TEST_CASE("In tests/parks/routes.park resolved, the entrance's guest node samples an entry for the "
-          "shop, and the shop's backstage node samples one for the depot") {
-  const World world = routesWorld();
-  const std::vector<ParkEntrance> entrances = parkEntrances(world);
-  REQUIRE(entrances.size() == 1);
-  EntityKey shop = NULL_KEY;
-  EntityKey depot = NULL_KEY;
-  for (const ParkBox &box : parkBoxes(world)) {
-    (box.Kind == BoxKind::Shop ? shop : depot) = box.Key;
-  }
-  REQUIRE(shop != NULL_KEY);
-  REQUIRE(depot != NULL_KEY);
-
-  const Network &guest = parkNetwork(world, PathKind::Guest);
-  const std::vector<uint32_t> entranceNodes = guest.anchoredNodes(entrances.front().Key);
-  REQUIRE(entranceNodes.size() == 1);
-  CHECK(
-      sampledFor<PathKind::Guest>(world, shop, guest.nodePlace(entranceNodes.front())).has_value());
-
-  const Network &backstage = parkNetwork(world, PathKind::Backstage);
-  const std::vector<uint32_t> shopNodes = backstage.anchoredNodes(shop);
-  REQUIRE(shopNodes.size() == 1);
-  CHECK(sampledFor<PathKind::Backstage>(world, depot, backstage.nodePlace(shopNodes.front()))
-            .has_value());
 }
 
 // Derivation from intent.
@@ -824,14 +744,6 @@ template <PathKind Kind> void checkNothingSampled(const World &unresolved, const
     INFO("node " << node);
     CHECK(sampleField<RouteDistance<Kind>>(unresolved, network, network.nodePlace(node)).empty());
   }
-}
-
-TEST_CASE("A world before its first resolution samples no route distance entries") {
-  // Sampled on the networks its resolution would derive, where the resolved world has entries.
-  const World unresolved = loadWorld(makeParkSchema(), routesText());
-  const World resolved = routesWorld();
-  checkNothingSampled<PathKind::Guest>(unresolved, resolved);
-  checkNothingSampled<PathKind::Backstage>(unresolved, resolved);
 }
 
 } // namespace

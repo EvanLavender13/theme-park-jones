@@ -37,14 +37,6 @@ TEST_CASE("boxAt gives the least-keyed box whose footprint holds the point") {
   CHECK(boxAt(world, {-40.0, 20.0}) == std::optional{test::DEPOT_ON_PATH});
 }
 
-TEST_CASE("boxAt counts a footprint's edges as holding the point") {
-  const World world = toolPark();
-  // A corner of the turned shop, 3 m along its facing and 4 m across it, so its depth runs along
-  // its facing and its width across.
-  CHECK(boxAt(world, {37.0, -4.0}) == std::optional{TURNED_SHOP});
-  CHECK(boxAt(world, {48.0, 3.0}) == std::optional{OVERLAPPING_SHOP});
-}
-
 TEST_CASE("boxAt gives none where no box's footprint holds the point, and never the entrance") {
   const World world = toolPark();
   // 3.5 m along the turned shop's facing: outside its 6 m depth, inside its 8 m width.

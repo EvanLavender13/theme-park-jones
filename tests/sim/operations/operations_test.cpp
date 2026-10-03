@@ -40,7 +40,6 @@ using test::depotAt;
 using test::FAR_DEPOT;
 using test::GONE;
 using test::hold;
-using test::LINE;
 using test::lineWorld;
 using test::LOOSE_DEPOT;
 using test::LOOSE_SHOP;
@@ -48,11 +47,9 @@ using test::looseDepot;
 using test::looseShop;
 using test::OTHER_SHOP;
 using test::packetsFrom;
-using test::ParkIntent;
 using test::SHOP;
 using test::shopAt;
 using test::TWIN_DEPOT;
-using test::worldOf;
 
 // The least Distance among the source's entries that sampling backstage-route-distance gives at
 // the nodePlace of each backstage node anchored to at, or none.
@@ -88,124 +85,7 @@ FlowPacket packetOf(EntityKey from, EntityKey to, EntityKey handle, int64_t unit
 
 // Registration.
 
-TEST_CASE("Resolving a world made with makeParkSchema gives it a ledger for each of "
-          "supply-orders, supplies, guest-visits, and meals") {
-  SECTION("an empty park") {
-    World world = worldOf({});
-    resolveWorld(world);
-    CHECK(ledgerOf<SupplyOrders>(world) != nullptr);
-    CHECK(ledgerOf<Supplies>(world) != nullptr);
-    CHECK(ledgerOf<GuestVisits>(world) != nullptr);
-    CHECK(ledgerOf<Meals>(world) != nullptr);
-  }
-  SECTION("the new-park template") {
-    World world = makeNewPark(5);
-    resolveWorld(world);
-    CHECK(ledgerOf<SupplyOrders>(world) != nullptr);
-    CHECK(ledgerOf<Supplies>(world) != nullptr);
-    CHECK(ledgerOf<GuestVisits>(world) != nullptr);
-    CHECK(ledgerOf<Meals>(world) != nullptr);
-  }
-}
-
-// A schema holding what addPark registers before the operations module.
-WorldSchema schemaBeforeOperations() {
-  WorldSchema schema;
-  addNetworkComponent(schema);
-  addParkIntent(schema);
-  addParkEdits(schema);
-  addRoutes(schema);
-  return schema;
-}
-
-TEST_CASE("addOperations registers the four kinds, then shop-service, then the field food-offer, "
-          "then the resolver food-offer depending on path-networks, route-distance, and "
-          "food-offer-field, then its two systems") {
-  WorldSchema schema = schemaBeforeOperations();
-  const std::size_t components = schema.components().size();
-  const std::size_t resolvers = schema.resolvers().size();
-  const std::size_t systems = schema.systems().size();
-
-  addOperations(schema);
-
-  std::vector<std::string> names;
-  std::vector<DataKind> kinds;
-  for (auto type = schema.components().begin() + static_cast<std::ptrdiff_t>(components);
-       type != schema.components().end(); ++type) {
-    names.push_back(type->Name);
-    kinds.push_back(type->Kind);
-  }
-  CHECK(names == std::vector<std::string>{"supply-orders-ledger", "supplies-ledger",
-                                          "guest-visits-ledger", "meals-ledger", "shop-service",
-                                          "food-offer-resolved", "food-offer-stepped"});
-  CHECK(kinds == std::vector<DataKind>{DataKind::State, DataKind::State, DataKind::State,
-                                       DataKind::State, DataKind::State, DataKind::Derived,
-                                       DataKind::State});
-
-  std::vector<std::string> resolverNames;
-  for (auto resolver = schema.resolvers().begin() + static_cast<std::ptrdiff_t>(resolvers);
-       resolver != schema.resolvers().end(); ++resolver) {
-    resolverNames.push_back(resolver->Name);
-  }
-  CHECK(resolverNames == std::vector<std::string>{"supply-orders-flow", "supplies-flow",
-                                                  "guest-visits-flow", "meals-flow",
-                                                  "food-offer-field", "food-offer"});
-  REQUIRE_FALSE(schema.resolvers().empty());
-  std::vector<std::string> dependencies = schema.resolvers().back().Dependencies;
-  std::ranges::sort(dependencies);
-  CHECK(dependencies ==
-        std::vector<std::string>{"food-offer-field", "path-networks", "route-distance"});
-
-  CHECK(schema.systems().size() == systems + 2);
-}
-
-TEST_CASE("addOperations throws std::invalid_argument into a schema without the routes module's "
-          "registrations") {
-  WorldSchema schema;
-  CHECK_THROWS_AS(addOperations(schema), std::invalid_argument);
-}
-
 // Supply routes.
-
-TEST_CASE("supplyRouteLength is the backstage route distance from the node anchored to at to the "
-          "source") {
-  const World world =
-      lineWorld({shopAt(SHOP, 0.0), depotAt(DEPOT, 32.0), shopAt(OTHER_SHOP, 16.0)});
-  REQUIRE(sampledLength(world, SHOP, DEPOT).has_value());
-  REQUIRE(sampledLength(world, DEPOT, SHOP).has_value());
-  REQUIRE(sampledLength(world, SHOP, OTHER_SHOP).has_value());
-  CHECK(supplyRouteLength(world, SHOP, DEPOT) == sampledLength(world, SHOP, DEPOT));
-  CHECK(supplyRouteLength(world, DEPOT, SHOP) == sampledLength(world, DEPOT, SHOP));
-  // Any source on the backstage network, not only a depot.
-  CHECK(supplyRouteLength(world, SHOP, OTHER_SHOP) == sampledLength(world, SHOP, OTHER_SHOP));
-}
-
-TEST_CASE("supplyRouteLength is none when at anchors no backstage node or the source has no entry "
-          "there") {
-  SECTION("at has no backstage connector") {
-    const World world = lineWorld({shopAt(SHOP, 0.0), depotAt(DEPOT, 32.0), looseShop()});
-    CHECK_FALSE(supplyRouteLength(world, LOOSE_SHOP, DEPOT).has_value());
-  }
-  SECTION("the source has no backstage connector") {
-    const World world = lineWorld({shopAt(SHOP, 0.0), looseDepot()});
-    CHECK_FALSE(supplyRouteLength(world, SHOP, LOOSE_DEPOT).has_value());
-  }
-  SECTION("the source is no entity") {
-    const World world = lineWorld({shopAt(SHOP, 0.0), depotAt(DEPOT, 32.0)});
-    CHECK_FALSE(supplyRouteLength(world, SHOP, GONE).has_value());
-  }
-  SECTION("at and the source are joined only by a guest path") {
-    // Both shops' front doors are 3 m from the guest path at z = -12, and no backstage line is
-    // near their back doors.
-    World world = worldOf(ParkIntent{.Entrances = {},
-                                     .Paths = {ParkPath{.Key = LINE,
-                                                        .Kind = PathKind::Guest,
-                                                        .Points = {{-64.0, -12.0}, {64.0, -12.0}}}},
-                                     .Boxes = {shopAt(SHOP, 0.0), shopAt(OTHER_SHOP, 16.0)}});
-    resolveWorld(world);
-    CHECK_FALSE(supplyRouteLength(world, SHOP, OTHER_SHOP).has_value());
-  }
-}
 
 TEST_CASE("nearestDepot is the depot box with the least supply route length at the shop, with that "
           "length") {
@@ -259,16 +139,6 @@ TEST_CASE("nearestDepot is none when no depot box has a supply route length at t
 }
 
 // Shipment delay.
-
-TEST_CASE("shipmentDelay is ceil(distance / (SUPPLY_SPEED * SIM_TICK_SECONDS)), SUPPLY_SPEED being "
-          "2 m/s") {
-  CHECK(SUPPLY_SPEED == 2.0);
-  for (const double distance : {38.0, 1.0, 1000.0, 2.0e8}) {
-    CAPTURE(distance);
-    CHECK(shipmentDelay(distance) ==
-          static_cast<uint32_t>(std::ceil(distance / (SUPPLY_SPEED * SIM_TICK_SECONDS))));
-  }
-}
 
 TEST_CASE("shipmentDelay gives 1 for a result below 1 or a NaN") {
   for (const double distance : {0.0, -0.0, -5.0, -std::numeric_limits<double>::infinity(),

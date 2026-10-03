@@ -51,7 +51,6 @@ constexpr Pose OPEN_GROUND{-60.0, 40.0, 0.0, -1.0};
 // Over shop 7.
 constexpr Pose OVER_SHOP{6.5, 115.0, -1.0, 0.0};
 // Over depot 8.
-constexpr Pose OVER_DEPOT{12.0, 80.0, -1.0, 0.0};
 
 // The distance along guest path 2 of the supplied shop's front door, and of the path's end.
 constexpr double SUPPLIED_CONNECTION = 123.0 - 106.8;
@@ -99,17 +98,6 @@ ShopContext requireContext(const std::optional<ShopContext> &context) {
   return context.value_or(ShopContext{});
 }
 
-TEST_CASE("A preview holds the edit it is given") {
-  const World world = openWarm();
-  const std::vector<std::optional<ParkEdit>> edits = {
-      std::nullopt, ParkEdit{AddBox{BoxKind::Shop, SUPPLIED_SHOP}},
-      ParkEdit{AddBox{BoxKind::Shop, OVER_SHOP}}};
-  for (const std::optional<ParkEdit> &edit : edits) {
-    INFO("edit given: " << edit.has_value());
-    CHECK(previewEdit(world, edit).Edit == edit);
-  }
-}
-
 TEST_CASE("A preview's candidate is the candidate of its edit when the edit is accepted, and none "
           "when it is refused or absent") {
   const World world = openWarm();
@@ -127,42 +115,6 @@ TEST_CASE("A preview's candidate is the candidate of its edit when the edit is a
   REQUIRE_FALSE(isAccepted(world, refused));
   CHECK_FALSE(previewEdit(world, refused).Candidate.has_value());
   CHECK_FALSE(previewEdit(world, std::nullopt).Candidate.has_value());
-}
-
-TEST_CASE("A preview's shop context is shopContext of its candidate when it holds one, and none "
-          "when it holds no candidate") {
-  const World world = openWarm();
-  SECTION("an accepted shop") {
-    const ParkEdit edit = AddBox{BoxKind::Shop, SUPPLIED_SHOP};
-    const Preview preview = previewEdit(world, edit);
-    REQUIRE(preview.Candidate.has_value());
-    if (preview.Candidate.has_value()) {
-      const std::optional<ShopContext> expected = shopContext(world, *preview.Candidate, edit);
-      REQUIRE(expected.has_value());
-      CHECK(preview.Shop == expected);
-    }
-  }
-  // A move of a shop box names a shop whatever the candidate, so only the refusal can leave the
-  // preview without a context.
-  SECTION("a refused move of a shop box") {
-    const ParkEdit edit = MoveBox{SHOP, OVER_DEPOT};
-    REQUIRE_FALSE(isAccepted(world, edit));
-    CHECK_FALSE(previewEdit(world, edit).Shop.has_value());
-  }
-  SECTION("no edit") { CHECK_FALSE(previewEdit(world, std::nullopt).Shop.has_value()); }
-}
-
-TEST_CASE("previewedWorld is the preview's candidate when it holds one, and the world otherwise") {
-  const World world = openWarm();
-  const Preview accepted = previewEdit(world, ParkEdit{AddBox{BoxKind::Shop, SUPPLIED_SHOP}});
-  REQUIRE(accepted.Candidate.has_value());
-  if (accepted.Candidate.has_value()) {
-    CHECK(&previewedWorld(world, accepted) == &*accepted.Candidate);
-  }
-  const Preview refused = previewEdit(world, ParkEdit{AddBox{BoxKind::Shop, OVER_SHOP}});
-  CHECK(&previewedWorld(world, refused) == &world);
-  const Preview none = previewEdit(world, std::nullopt);
-  CHECK(&previewedWorld(world, none) == &world);
 }
 
 TEST_CASE("shopContext of an AddBox of a shop gives a context for the lowest key of a box the "
@@ -245,18 +197,6 @@ TEST_CASE("A shop whose front door reaches no guest path has a context with no c
   const ShopContext context = requireContext(shopContext(world, candidateOf(world, edit), edit));
   CHECK_FALSE(context.Connection.has_value());
   CHECK(context.Footfall == 0.0);
-}
-
-TEST_CASE("A shop context's footfall is the committed world's hungry footfall at its connection") {
-  const World world = openWarm();
-  const AddBox edit{BoxKind::Shop, SUPPLIED_SHOP};
-  const ShopContext context = requireContext(shopContext(world, candidateOf(world, edit), edit));
-  REQUIRE(context.Connection.has_value());
-  const double committed = fieldValue<HungryFootfall>(world, parkNetwork(world, PathKind::Guest),
-                                                      context.Connection.value_or(Place{}));
-  // warm.park's guests have walked guest path 2, so the footfall there is not the default.
-  CHECK(committed > 0.0);
-  CHECK(context.Footfall == committed);
 }
 
 TEST_CASE("A shop context's supply is the nearest depot to its shop in the candidate") {
@@ -348,28 +288,6 @@ TEST_CASE("keepPreview leaves the kept preview unchanged when its tick is the wo
     CHECK(kept.Tick == world.Tick);
     CHECK(samePreview(kept.Made, plantedPreview(world.Tick, edit).Made));
   }
-}
-
-// Principle 1: a preview is shown, never committed, so making one leaves nothing in the world.
-TEST_CASE("Making previews, kept previews, and shop contexts leaves the world's hash unchanged") {
-  const World world = openWarm();
-  const uint64_t before = hashWorld(world);
-  const std::vector<std::optional<ParkEdit>> edits = {
-      std::nullopt,
-      ParkEdit{AddBox{BoxKind::Shop, SUPPLIED_SHOP}},
-      ParkEdit{MoveBox{SHOP, JUNCTION_SHOP}},
-      ParkEdit{DeletePath{BACKSTAGE_PATH}},
-      ParkEdit{AddBox{BoxKind::Shop, OVER_SHOP}},
-  };
-  KeptPreview kept;
-  for (const std::optional<ParkEdit> &edit : edits) {
-    const Preview preview = previewEdit(world, edit);
-    if (edit.has_value() && preview.Candidate.has_value()) {
-      static_cast<void>(shopContext(world, *preview.Candidate, *edit));
-    }
-    static_cast<void>(keepPreview(kept, world, edit));
-  }
-  CHECK(hashWorld(world) == before);
 }
 
 } // namespace

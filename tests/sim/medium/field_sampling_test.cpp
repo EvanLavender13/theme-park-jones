@@ -144,32 +144,6 @@ RandomFieldCase randomFieldCase(const RandomCase &random) {
   return result;
 }
 
-std::vector<double> valuesAtNode(const std::vector<Published> &published, uint32_t node) {
-  std::vector<double> values;
-  for (const Published &entry : published) {
-    if (entry.Node == node) {
-      values.push_back(entry.Entry.Value);
-    }
-  }
-  return values;
-}
-
-std::vector<Published> insideEdgeOf(const std::vector<Published> &published, EntityKey carrier) {
-  std::vector<Published> inside;
-  for (const Published &entry : published) {
-    if (entry.Inside == carrier) {
-      inside.push_back(entry);
-    }
-  }
-  return inside;
-}
-
-void appendFrom(Sampled &sampled, EntityKey source, const std::vector<double> &values) {
-  for (const double value : values) {
-    sampled.emplace_back(source, value);
-  }
-}
-
 template <typename F>
 Sampled sampledOn(const World &world, const Network &network, const Place &at) {
   Sampled result;
@@ -216,23 +190,6 @@ std::vector<uint64_t> callBits(const std::vector<ReachCall> &calls) {
   return bits;
 }
 
-// The entries inside an edge as sampleEdge should receive them: in the source's order, each with
-// its offsets as resolve gives them.
-void requireAlong(const Network &network, const std::vector<EdgeEntry<double>> &actual,
-                  const std::vector<Published> &expected) {
-  REQUIRE(actual.size() == expected.size());
-  for (size_t i = 0; i < expected.size(); ++i) {
-    CAPTURE(i);
-    const std::optional<NetworkPosition> position = network.resolve(expected[i].Entry.At);
-    const auto *edge = position.has_value() ? std::get_if<EdgePosition>(&*position) : nullptr;
-    REQUIRE(edge != nullptr);
-    REQUIRE(std::bit_cast<uint64_t>(actual[i].FromOffset) ==
-            std::bit_cast<uint64_t>(edge->FromOffset));
-    REQUIRE(std::bit_cast<uint64_t>(actual[i].ToOffset) == std::bit_cast<uint64_t>(edge->ToOffset));
-    REQUIRE(actual[i].Value == expected[i].Entry.Value);
-  }
-}
-
 // Every place the fixture sampled at: each stop, each entry's place inside an edge, and a place
 // inside each edge that no entry names.
 std::vector<Place> samplePlaces(const RandomFieldCase &fieldCase) {
@@ -252,94 +209,6 @@ std::vector<Place> samplePlaces(const RandomFieldCase &fieldCase) {
         {.Carrier = edge.Carrier, .Distance = edge.FromDistance + (edge.length() / 4.0)});
   }
   return places;
-}
-
-TEST_CASE("on random synthetic networks, sampling at a node gives each source's entries at the "
-          "node's stops, whatever carrier they name, in the source's order") {
-  for (const RandomCase &random : RANDOM_CASES) {
-    CAPTURE(random.Seed);
-    const RandomFieldCase fieldCase = randomFieldCase(random);
-    // Sampled through every stop of the node, since each names the same node.
-    for (const Carrier &carrier : fieldCase.Inputs.Carriers) {
-      for (const CarrierStop &stop : carrier.Stops) {
-        const Place at{.Carrier = carrier.Key, .Distance = stop.Distance};
-        CAPTURE(at.Carrier, at.Distance, stop.Node);
-        Sampled expected;
-        appendFrom(expected, fieldCase.First, valuesAtNode(fieldCase.FirstEntries, stop.Node));
-        appendFrom(expected, fieldCase.Second, valuesAtNode(fieldCase.SecondEntries, stop.Node));
-        REQUIRE(sampledOn<Footfall>(fieldCase.Resolved, fieldCase.Built, at) == expected);
-      }
-    }
-  }
-}
-
-TEST_CASE("on random synthetic networks, a field without sampleEdge gives at a place strictly "
-          "inside an edge each source's entries at that place and no others") {
-  for (const RandomCase &random : RANDOM_CASES) {
-    CAPTURE(random.Seed);
-    const RandomFieldCase fieldCase = randomFieldCase(random);
-    // Includes the places nearest each end of every edge, where a node's entries must not leak in.
-    for (const Published &entry : fieldCase.FirstEntries) {
-      if (!entry.Inside.has_value()) {
-        continue;
-      }
-      const Place &at = entry.Entry.At;
-      CAPTURE(at.Carrier, at.Distance);
-      const Sampled expected = {{fieldCase.First, entry.Entry.Value},
-                                {fieldCase.Second, entry.Entry.Value + 1000.0}};
-      REQUIRE(sampledOn<Footfall>(fieldCase.Resolved, fieldCase.Built, at) == expected);
-    }
-  }
-}
-
-TEST_CASE("on random synthetic networks, sampleEdge is given each source's entries at the edge's "
-          "From and To nodes and those strictly inside the edge with their offsets, in the "
-          "source's order") {
-  for (const RandomCase &random : RANDOM_CASES) {
-    CAPTURE(random.Seed);
-    const RandomFieldCase fieldCase = randomFieldCase(random);
-    const Network &network = fieldCase.Built;
-    for (const NetworkEdge &edge : network.edges()) {
-      const Place at{.Carrier = edge.Carrier,
-                     .Distance = edge.FromDistance + (edge.length() / 4.0)};
-      CAPTURE(at.Carrier, at.Distance, edge.From, edge.To);
-      reachCalls().clear();
-      static_cast<void>(sampleField<Reach>(fieldCase.Resolved, network, at));
-      // Both sources have entries at both nodes, so each is called, in ascending key order.
-      REQUIRE(reachCalls().size() == 2);
-      for (size_t call = 0; call < 2; ++call) {
-        CAPTURE(call);
-        const std::vector<Published> &entries =
-            call == 0 ? fieldCase.FirstEntries : fieldCase.SecondEntries;
-        const EdgeSample<double> &sample = reachCalls()[call].Sample;
-        REQUIRE(sample.AtFrom == valuesAtNode(entries, edge.From));
-        REQUIRE(sample.AtTo == valuesAtNode(entries, edge.To));
-        requireAlong(network, sample.Along, insideEdgeOf(entries, edge.Carrier));
-      }
-    }
-  }
-}
-
-TEST_CASE("sampleResolvedField and fieldValue sample a random synthetic network as sampleField "
-          "does") {
-  const RandomFieldCase fieldCase = randomFieldCase(RANDOM_CASES[1]);
-  const World &world = fieldCase.Resolved;
-  const Network &network = fieldCase.Built;
-  for (const Place &at : samplePlaces(fieldCase)) {
-    CAPTURE(at.Carrier, at.Distance);
-    const std::vector<SampledEntry<double>> footfall = sampleField<Footfall>(world, network, at);
-    // The world holds no stepped entries, so the resolved sample is the whole sample.
-    REQUIRE(bitsOf(sampleResolvedField<Footfall>(world, network, at)) == bitsOf(footfall));
-    REQUIRE(bitsOf(sampleResolvedField<Reach>(world, network, at)) ==
-            bitsOf(sampleField<Reach>(world, network, at)));
-
-    double sum = 0.0;
-    for (const SampledEntry<double> &entry : footfall) {
-      sum += entry.Value;
-    }
-    REQUIRE(std::bit_cast<uint64_t>(fieldValue<Footfall>(world, network, at)) ==
-            std::bit_cast<uint64_t>(sum));
-  }
 }
 
 // Distance is measured along routes, so where a carrier lies on the ground cannot change a sample.

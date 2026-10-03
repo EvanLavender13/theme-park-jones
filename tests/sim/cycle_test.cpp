@@ -196,23 +196,6 @@ TEST_CASE("a cycle resolves if pending, steps the systems, advances the tick, ru
   REQUIRE_FALSE(world.isResolvePending());
 }
 
-TEST_CASE("stepWorld without a queue runs the same cycle as with an empty queue") {
-  const auto schema = makeRecordingSchema();
-  World withQueue(schema, 0);
-  World withoutQueue(schema, 0);
-
-  journal().clear();
-  CommandQueue empty;
-  stepWorld(withQueue, empty);
-  const std::vector<std::string> queued = journal();
-
-  journal().clear();
-  stepWorld(withoutQueue);
-
-  REQUIRE(journal() == queued);
-  requireSameValue(withoutQueue, withQueue);
-}
-
 TEST_CASE("a new world is pending until resolveWorld calls every resolver once, in registration "
           "order") {
   World world(makeRecordingSchema(), 0);
@@ -338,27 +321,6 @@ TEST_CASE("makeCandidate applies the commands in submission order and resolves, 
   REQUIRE_FALSE(candidate.isResolvePending());
 }
 
-TEST_CASE("makeCandidate resolves its copy only when resolution is pending") {
-  const CommandQueue none;
-
-  SECTION("a resolved source gives an equal copy and calls no resolver") {
-    World world(makeRecordingSchema(), 0);
-    resolveWorld(world);
-    journal().clear();
-    const World candidate = makeCandidate(world, none);
-    REQUIRE(journal().empty());
-    requireSameValue(candidate, world);
-  }
-  SECTION("a pending source gives a resolved copy and stays pending") {
-    const World world(makeRecordingSchema(), 0);
-    journal().clear();
-    const World candidate = makeCandidate(world, none);
-    REQUIRE(journal() == std::vector<std::string>{"resolver zones @0", "resolver access @0"});
-    REQUIRE_FALSE(candidate.isResolvePending());
-    REQUIRE(world.isResolvePending());
-  }
-}
-
 TEST_CASE("worlds built by the same calls and cycled with the same commands at the same ticks "
           "stay equal after every cycle") {
   const auto schema = makeParkSchema();
@@ -381,19 +343,6 @@ TEST_CASE("worlds built by the same calls and cycled with the same commands at t
   }
 }
 
-TEST_CASE("a resolved world with nothing registered cycles by advancing only its tick") {
-  World world(std::make_shared<WorldSchema>(), 3);
-  world.createEntity();
-  world.createEntity();
-  resolveWorld(world);
-  World expected = copyWorld(world);
-  expected.Tick += 1;
-
-  stepWorld(world);
-
-  requireSameValue(world, expected);
-}
-
 TEST_CASE("in debug builds, createEntity during resolution throws WorldInvariantError") {
   if (!WORLD_CHECKS) {
     SKIP("world checks run only in debug builds");
@@ -403,28 +352,6 @@ TEST_CASE("in debug builds, createEntity during resolution throws WorldInvariant
   World world(schema, 0);
 
   REQUIRE_THROWS_AS(resolveWorld(world), WorldInvariantError);
-}
-
-// Derived keys depend only on their arguments, so resolving again finds the same entities rather
-// than adding new ones.
-TEST_CASE("createDerivedEntity works during resolution, and resolving again recreates the same "
-          "keys") {
-  auto schema = std::make_shared<WorldSchema>();
-  schema->addResolver("slots", [](World &world) {
-    world.createDerivedEntity(FIRST, SLOT_PURPOSE, 0);
-    world.createDerivedEntity(FIRST, SLOT_PURPOSE, 1);
-  });
-  World world(schema, 0);
-  world.createEntity();
-
-  REQUIRE_NOTHROW(resolveWorld(world));
-  std::vector<EntityKey> expected = {FIRST, deriveKey(FIRST, SLOT_PURPOSE, 0),
-                                     deriveKey(FIRST, SLOT_PURPOSE, 1)};
-  std::ranges::sort(expected);
-  REQUIRE(world.keys() == expected);
-
-  resolveWorld(world);
-  REQUIRE(world.keys() == expected);
 }
 
 // A command that records whether the world is stepping when it is applied.

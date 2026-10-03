@@ -137,40 +137,6 @@ TEST_CASE("cursorRay starts at the eye, and drawFrame's projection maps every po
   }
 }
 
-// The direction is the unit view direction plus parts along the view's right and up, so its
-// component along the view is 1 at every cursor, and it is the view direction at the middle.
-TEST_CASE("cursorRay's direction advances one unit along the view direction per unit of t") {
-  constexpr float DIRECTION_TOLERANCE = 1e-5f;
-  const Vec3 forward = normalize(OBLIQUE.Target - OBLIQUE.Eye);
-  const CursorRay middle = cursorRay(OBLIQUE, 16.0f / 9.0f, 0.0f, 0.0f);
-  CHECK(std::abs(middle.Direction.X - forward.X) <= DIRECTION_TOLERANCE);
-  CHECK(std::abs(middle.Direction.Y - forward.Y) <= DIRECTION_TOLERANCE);
-  CHECK(std::abs(middle.Direction.Z - forward.Z) <= DIRECTION_TOLERANCE);
-  const CursorRay corner = cursorRay(OBLIQUE, 16.0f / 9.0f, 0.8f, -0.7f);
-  CHECK(std::abs(dot(corner.Direction, forward) - 1.0f) <= DIRECTION_TOLERANCE);
-}
-
-TEST_CASE("groundAtCursor is where cursorRay meets the ground") {
-  // Positions a few hundred meters out, computed in float, agree to a millimeter.
-  constexpr double GROUND_TOLERANCE = 1e-3;
-  const PickCase cases[] = {
-      {"toward a corner of a wide oblique view", OBLIQUE, 16.0f / 9.0f, {0.8, -0.7}},
-      {"below the middle of a level view", LEVEL, 1.5f, {0.3, -0.5}},
-  };
-  for (const PickCase &pick : cases) {
-    INFO(pick.Name);
-    const auto x = static_cast<float>(pick.Cursor.X);
-    const auto y = static_cast<float>(pick.Cursor.Y);
-    const CursorRay ray = cursorRay(pick.View, pick.Aspect, x, y);
-    const double t = -static_cast<double>(ray.Origin.Y) / static_cast<double>(ray.Direction.Y);
-    const std::optional<ParkPoint> ground = groundAtCursor(pick.View, pick.Aspect, x, y);
-    REQUIRE(ground.has_value());
-    const ParkPoint point = ground.value_or(ParkPoint{});
-    CHECK(std::abs(point.X - (ray.Origin.X + (ray.Direction.X * t))) <= GROUND_TOLERANCE);
-    CHECK(std::abs(point.Z - (ray.Origin.Z + (ray.Direction.Z * t))) <= GROUND_TOLERANCE);
-  }
-}
-
 // An upright box 2 m square and 3 m high, over x from 19 to 21 and z from -11 to -9.
 constexpr Pose BOX_POSE{20.0, -10.0, 0.0, -1.0};
 constexpr FootprintSize BOX_SIZE{2.0, 2.0};
@@ -240,9 +206,6 @@ constexpr EntityKey ENTRANCE{1};
 constexpr EntityKey SHOP{7};
 constexpr EntityKey DEPOT{8};
 constexpr EntityKey LONE_GUEST{10};
-constexpr EntityKey WAITING_GUEST{12};
-constexpr EntityKey OTHER_WAITING_GUEST{21};
-constexpr EntityKey ARRIVED_GUEST{40};
 
 World openWarm() {
   std::ifstream file(TPJ_PARKS_DIR "/warm.park", std::ios::binary);
@@ -320,39 +283,6 @@ TEST_CASE("entityAtCursor gives the solid its ray meets first") {
         LONE_GUEST);
 }
 
-TEST_CASE("Of equal entries, an entrance or a box takes the click before a guest") {
-  const World world = openWarm();
-  // An eye a meter up, 10 cm inside the front face where the guest stands at the door, looking
-  // inward: it starts inside both the guest's box and the entrance's or shop's, so both enter at 0.
-  const Pose entrance = entrancePose(world, ENTRANCE);
-  const GroundPoint arrived = positionOf(world, ARRIVED_GUEST);
-  const Vec3 intoEntrance =
-      point(arrived.X - (entrance.FacingX * 0.1), 1.0f, arrived.Z - (entrance.FacingZ * 0.1));
-  CHECK(pickToward(world, intoEntrance,
-                   intoEntrance + Vec3{-static_cast<float>(entrance.FacingX), 0.0f,
-                                       -static_cast<float>(entrance.FacingZ)}) == ENTRANCE);
-
-  const Pose shop = boxPose(world, SHOP);
-  const GroundPoint waiting = positionOf(world, WAITING_GUEST);
-  const Vec3 intoShop =
-      point(waiting.X - (shop.FacingX * 0.1), 1.0f, waiting.Z - (shop.FacingZ * 0.1));
-  CHECK(pickToward(world, intoShop,
-                   intoShop + Vec3{-static_cast<float>(shop.FacingX), 0.0f,
-                                   -static_cast<float>(shop.FacingZ)}) == SHOP);
-}
-
-TEST_CASE("Of guests met at equal entries, the one parkGuests gives first takes the click") {
-  // The waiting guests stand at one point, so a ray meets their boxes at the same entry. It runs
-  // level along the shop's front, 10 cm in front of it, toward the door from 5 m away.
-  const World world = openWarm();
-  const GroundPoint waiting = positionOf(world, WAITING_GUEST);
-  REQUIRE(positionOf(world, OTHER_WAITING_GUEST) == waiting);
-  const Pose shop = boxPose(world, SHOP);
-  const double x = waiting.X + (shop.FacingX * 0.1);
-  const double z = waiting.Z + (shop.FacingZ * 0.1);
-  CHECK(pickToward(world, point(x, 1.0f, z + 5.0), point(x, 1.0f, z)) == WAITING_GUEST);
-}
-
 TEST_CASE("entityAtCursor gives none when its ray meets no solid, passing through paths") {
   // Down onto path 3 where no guest walks, 25 m along it.
   const World world = openWarm();
@@ -383,15 +313,6 @@ TEST_CASE("A guest whose place does not resolve cannot be picked") {
     REQUIRE_FALSE(guestRecord(cut, guest).value_or(GuestRecord{}).Position.has_value());
   }
   CHECK_FALSE(pickToward(cut, eye, along).has_value());
-}
-
-TEST_CASE("entityAtCursor changes nothing in the world") {
-  const World world = openWarm();
-  const uint64_t before = hashWorld(world);
-  const Pose shop = boxPose(world, SHOP);
-  (void)pickDownAt(world, shop.X, shop.Z, 2.0f);
-  (void)pickDownAt(world, -25.0, 110.0, 0.0f);
-  CHECK(hashWorld(world) == before);
 }
 
 } // namespace

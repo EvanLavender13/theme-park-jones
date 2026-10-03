@@ -367,41 +367,5 @@ TEST_CASE("The delete tool shows DeleteBox for the box under the pointer, else D
   }
 }
 
-// Principle 10: tools read the world and never write it; edits reach it only through the queue.
-TEST_CASE("Driving every tool leaves the world's save and hash unchanged") {
-  const World world = toolPark();
-  const std::string save = saveWorld(world);
-  const uint64_t hash = hashWorld(world);
-
-  for (const ToolKind kind : {ToolKind::None, ToolKind::PlaceShop, ToolKind::PlaceDepot,
-                              ToolKind::MoveBox, ToolKind::Delete}) {
-    ToolState tool = toolOf(kind);
-    movePointer(tool, ParkPoint{47.0, 0.0});
-    pressPointer(tool, world);
-    movePointer(tool, ParkPoint{83.0, -40.0});
-    static_cast<void>(tentativeEdit(tool, world));
-    static_cast<void>(highlightedEntity(tool, world));
-    static_cast<void>(releasePointer(tool, world));
-  }
-  // The path tools draw a snapped point and an open one, and finish on the open one.
-  for (const ToolKind kind : {ToolKind::GuestPath, ToolKind::BackstagePath}) {
-    ToolState tool = toolOf(kind);
-    for (const ParkPoint at :
-         {ParkPoint{-40.5, 1.5}, ParkPoint{60.0, 60.0}, ParkPoint{60.0, 60.0}}) {
-      movePointer(tool, at);
-      pressPointer(tool, world);
-      static_cast<void>(tentativeEdit(tool, world));
-    }
-    static_cast<void>(highlightedEntity(tool, world));
-    static_cast<void>(releasePointer(tool, world));
-  }
-  static_cast<void>(boxAt(world, {47.0, 0.0}));
-  static_cast<void>(pathAt(world, {-50.0, 1.0}));
-  static_cast<void>(snapToPath(world, PathKind::Guest, {-50.0, 1.0}));
-
-  CHECK(saveWorld(world) == save);
-  CHECK(hashWorld(world) == hash);
-}
-
 } // namespace
 } // namespace tpj

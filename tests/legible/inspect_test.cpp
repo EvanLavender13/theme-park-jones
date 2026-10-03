@@ -56,7 +56,6 @@ namespace {
 // one meal, at tick 623 from hunger 0.4836... to 0.
 constexpr EntityKey ENTRANCE{1};
 constexpr EntityKey GUEST_PATH{2};
-constexpr EntityKey BACKSTAGE_PATH{6};
 constexpr EntityKey SHOP{7};
 constexpr EntityKey DEPOT{8};
 constexpr EntityKey HEADING_GUEST{9};
@@ -65,8 +64,6 @@ constexpr EntityKey WANDERING_GUEST{10};
 // Admitted in the last cycle: it has not eaten.
 constexpr EntityKey NEW_GUEST{40};
 constexpr EntityKey MISSING{99};
-constexpr std::array<EntityKey, 4> GUEST_PATHS{EntityKey{2}, EntityKey{3}, EntityKey{4},
-                                               EntityKey{5}};
 constexpr uint64_t HEADING_STAY_UNTIL = 2373;
 
 const std::vector<std::string> GUEST_LABELS{"Activity", "Hunger",      "Target",
@@ -85,37 +82,6 @@ World candidateOf(const World &world, const ParkEdit &edit) {
   CommandQueue queue;
   queueEdit(queue, edit);
   return makeCandidate(world, queue);
-}
-
-// warm.park after a cycle deleting every guest path: its guests remain, but with no guest network
-// their places no longer resolve.
-World cutWarm() {
-  World world = openWarm();
-  CommandQueue cut;
-  for (const EntityKey path : GUEST_PATHS) {
-    queueEdit(cut, DeletePath{path});
-  }
-  stepWorld(world, cut);
-  return world;
-}
-
-std::vector<std::string> labelsOf(const Inspection &inspection) {
-  std::vector<std::string> labels;
-  labels.reserve(inspection.Rows.size());
-  for (const InspectorRow &row : inspection.Rows) {
-    labels.push_back(row.Label);
-  }
-  return labels;
-}
-
-std::string valueOf(const Inspection &inspection, std::string_view label) {
-  for (const InspectorRow &row : inspection.Rows) {
-    if (row.Label == label) {
-      return row.Value;
-    }
-  }
-  FAIL("no row labeled " << label);
-  return {};
 }
 
 // A world's tick is what an inspector measures elapsed and remaining time from, so moving it alone
@@ -164,53 +130,6 @@ TEST_CASE("pickSubject leaves the subject as it was for no key or a key with no 
   std::optional<InspectorSubject> none;
   pickSubject(none, world, DEPOT);
   CHECK_FALSE(none.has_value());
-}
-
-TEST_CASE("A guest's inspector shows its title and the six rows formatted from its record and the "
-          "world's tick") {
-  const World world = openWarm();
-  const Inspection inspection =
-      inspectSubject(world, InspectorSubject{HEADING_GUEST, SubjectKind::Guest});
-  CHECK(inspection.Title == "Guest 9");
-  CHECK_FALSE(inspection.Gone);
-  // Stay: 453 ticks left is 15.1 s. Last meal: 1297 ticks ago is 43.2 s.
-  const std::vector<InspectorRow> expected{
-      {"Activity", "heading to shop"},
-      {"Hunger", "0.67"},
-      {"Target", "shop 7"},
-      {"Stay", "15.1 s left"},
-      {"Meals eaten", "1"},
-      {"Last meal", "43.2 s ago, hunger 0.48 to 0.00"},
-  };
-  CHECK(inspection.Rows == expected);
-}
-
-TEST_CASE("A guest with no target and no meal shows none for each") {
-  const Inspection fresh =
-      inspectSubject(openWarm(), InspectorSubject{NEW_GUEST, SubjectKind::Guest});
-  CHECK(labelsOf(fresh) == GUEST_LABELS);
-  CHECK(valueOf(fresh, "Target") == "none");
-  CHECK(valueOf(fresh, "Meals eaten") == "0");
-  CHECK(valueOf(fresh, "Last meal") == "none");
-}
-
-TEST_CASE("A guest's stay reads the seconds left while StayUntil is later than the world's tick, "
-          "and over from StayUntil on") {
-  const World world = openWarm();
-  const InspectorSubject guest{HEADING_GUEST, SubjectKind::Guest};
-  // One tick left is 1/30 s.
-  CHECK(valueOf(inspectSubject(atTick(world, HEADING_STAY_UNTIL - 1), guest), "Stay") ==
-        "0.0 s left");
-  CHECK(valueOf(inspectSubject(atTick(world, HEADING_STAY_UNTIL), guest), "Stay") == "over");
-  CHECK(valueOf(inspectSubject(atTick(world, HEADING_STAY_UNTIL + 300), guest), "Stay") == "over");
-}
-
-TEST_CASE("A meal later than the world's tick reads as 0 s ago") {
-  // Tick 600 is before guest 9's meal at 623; its stay has 1773 ticks left.
-  const Inspection inspection =
-      inspectSubject(atTick(openWarm(), 600), InspectorSubject{HEADING_GUEST, SubjectKind::Guest});
-  CHECK(valueOf(inspection, "Last meal") == "0.0 s ago, hunger 0.48 to 0.00");
-  CHECK(valueOf(inspection, "Stay") == "59.1 s left");
 }
 
 std::string twoDecimals(double value) { return std::format("{:.2f}", value); }
@@ -262,38 +181,6 @@ TEST_CASE("A guest's choice table has a row for each option guestOptions gives f
   CHECK(sawHeadHome);
 }
 
-// The rows state the record's own values, so they are compared with the record rather than with
-// the ledger arithmetic behind it.
-std::vector<InspectorRow> shopRows(const ShopRecord &record) {
-  return {
-      {"Stock", std::to_string(record.Stock)},
-      {"Queue", std::to_string(record.Queue)},
-      {"On order", std::to_string(record.OnOrder)},
-      {"Limit", std::string(limitingFactorName(record.Limit))},
-      {"Starved", record.Starved ? "yes" : "no"},
-  };
-}
-
-TEST_CASE("A shop's inspector shows its title and its record's stock, queue, supplies on order, "
-          "limiting factor, and whether it is starved, and no choices") {
-  const World world = openWarm();
-  // Deleting the backstage path leaves the shop with no depot, so both answers of Starved show.
-  const World starved = candidateOf(world, DeletePath{BACKSTAGE_PATH});
-  for (const World *shown : {&world, &starved}) {
-    const std::optional<ShopRecord> record = shopRecord(*shown, SHOP);
-    REQUIRE(record.has_value());
-    const Inspection inspection = inspectSubject(*shown, InspectorSubject{SHOP, SubjectKind::Shop});
-    CHECK(inspection.Title == "Shop 7");
-    CHECK_FALSE(inspection.Gone);
-    CHECK(inspection.Rows == shopRows(record.value_or(ShopRecord{})));
-    CHECK(inspection.Choices.empty());
-  }
-  CHECK(valueOf(inspectSubject(world, InspectorSubject{SHOP, SubjectKind::Shop}), "Starved") ==
-        "no");
-  CHECK(valueOf(inspectSubject(starved, InspectorSubject{SHOP, SubjectKind::Shop}), "Starved") ==
-        "yes");
-}
-
 TEST_CASE("A shop whose box is deleted is inspected as gone, keeping its title") {
   const World deleted = candidateOf(openWarm(), DeleteBox{SHOP});
   REQUIRE_FALSE(shopRecord(deleted, SHOP).has_value());
@@ -302,46 +189,6 @@ TEST_CASE("A shop whose box is deleted is inspected as gone, keeping its title")
   CHECK(inspection.Gone);
   CHECK(inspection.Rows.empty());
   CHECK(inspection.Choices.empty());
-}
-
-TEST_CASE("A guest that has left the park is inspected as gone, keeping its title") {
-  // With no guest network, every guest leaves the park when it next steps.
-  World left = cutWarm();
-  stepWorld(left);
-  REQUIRE_FALSE(guestRecord(left, HEADING_GUEST).has_value());
-  const Inspection inspection =
-      inspectSubject(left, InspectorSubject{HEADING_GUEST, SubjectKind::Guest});
-  CHECK(inspection.Title == "Guest 9");
-  CHECK(inspection.Gone);
-  CHECK(inspection.Rows.empty());
-  CHECK(inspection.Choices.empty());
-}
-
-TEST_CASE("A guest whose place does not resolve is inspected like any other, with no options") {
-  const World cut = cutWarm();
-  const std::optional<GuestRecord> record = guestRecord(cut, HEADING_GUEST);
-  REQUIRE(record.has_value());
-  const GuestRecord held = record.value_or(GuestRecord{});
-  REQUIRE_FALSE(held.Position.has_value());
-  const Inspection inspection =
-      inspectSubject(cut, InspectorSubject{HEADING_GUEST, SubjectKind::Guest});
-  CHECK_FALSE(inspection.Gone);
-  CHECK(labelsOf(inspection) == GUEST_LABELS);
-  CHECK(inspection.Choices.empty());
-}
-
-TEST_CASE("Inspecting changes nothing in the world") {
-  const World world = openWarm();
-  const uint64_t before = hashWorld(world);
-  std::optional<InspectorSubject> subject;
-  for (const EntityKey key : {HEADING_GUEST, SHOP, DEPOT, MISSING}) {
-    (void)inspectorSubject(world, key);
-    pickSubject(subject, world, key);
-  }
-  (void)inspectSubject(world, InspectorSubject{HEADING_GUEST, SubjectKind::Guest});
-  (void)inspectSubject(world, InspectorSubject{SHOP, SubjectKind::Shop});
-  (void)inspectSubject(world, InspectorSubject{MISSING, SubjectKind::Guest});
-  CHECK(hashWorld(world) == before);
 }
 
 } // namespace

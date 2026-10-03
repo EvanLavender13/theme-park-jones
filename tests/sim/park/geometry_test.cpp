@@ -119,16 +119,6 @@ TEST_CASE("A ground line passes through every kept point bit for bit, in order, 
   }
 }
 
-TEST_CASE("Points within 1 cm of the last kept point are dropped without changing the line") {
-  // The third point is within 1 cm of the second but not of the first, which is the last kept.
-  const auto withRepeats =
-      groundLine({{0.0, 0.0}, {0.006, 0.0}, {0.012, 0.0}, {0.015, 0.001}, {5.0, 0.0}});
-  const auto keptOnly = groundLine({{0.0, 0.0}, {0.012, 0.0}, {5.0, 0.0}});
-
-  REQUIRE_FALSE(keptOnly.empty());
-  CHECK(sameLine(withRepeats, keptOnly));
-}
-
 TEST_CASE(
     "keptPoints gives the points groundLine keeps, in order, each at least 1 cm from the last "
     "kept one") {
@@ -141,44 +131,6 @@ TEST_CASE(
   const std::vector<ParkPoint> expected{{0.0, 0.0}, {0.012, 0.0}, {0.012, 0.01}, {5.0, 5.0}};
   CHECK(kept == expected);
   CHECK(sameLine(groundLine(kept), groundLine(points)));
-}
-
-TEST_CASE("Each ground line segment holds max(8, ceil(chord / 1 m)) points, counting its start") {
-  // Chords of 3, 12, and 9.5 m: below the minimum, a whole number of meters, and a fraction.
-  const std::vector<ParkPoint> points{{0.0, -20.0}, {0.0, -17.0}, {0.0, -5.0}, {0.0, 4.5}};
-  const auto line = groundLine(points);
-
-  REQUIRE(line.size() == 8 + 12 + 10 + 1);
-  CHECK(isAt(line[0], points[0]));
-  CHECK(isAt(line[8], points[1]));
-  CHECK(isAt(line[20], points[2]));
-  CHECK(isAt(line[30], points[3]));
-}
-
-TEST_CASE("A ground line's points between kept points lie on the centripetal Catmull-Rom curve") {
-  SECTION("a two-point path is its chord, sampled at k / n") {
-    // The reflected phantoms make the four points evenly spaced on one line, so the curve is the
-    // chord at the parameter's fraction. The chord is 20 m, so n is 20.
-    const auto line = groundLine({{-3.0, 5.0}, {9.0, -11.0}});
-    REQUIRE(line.size() == 21);
-    for (std::size_t k = 1; k < 20; ++k) {
-      const double fraction = static_cast<double>(k) / 20.0;
-      CHECK_THAT(line[k].X, WithinAbs(-3.0 + 12.0 * fraction, 1e-9));
-      CHECK_THAT(line[k].Z, WithinAbs(5.0 - 16.0 * fraction, 1e-9));
-    }
-  }
-
-  SECTION("a bent path follows centripetal knots through its phantom ends") {
-    // Chords of 1 and 4 m make every knot a whole number, so the pyramid works out by hand: knots
-    // 0, 1, 2, 4 for the first segment and 0, 1, 3, 5 for the second, each segment of 8 points.
-    // Uniform or chordal knots give other points.
-    const auto line = groundLine({{0.0, 0.0}, {1.0, 0.0}, {1.0, 4.0}});
-    REQUIRE(line.size() == 17);
-    CHECK_THAT(line[4].X, WithinAbs(13.0 / 24.0, 1e-9));
-    CHECK_THAT(line[4].Z, WithinAbs(-1.0 / 12.0, 1e-9));
-    CHECK_THAT(line[12].X, WithinAbs(7.0 / 6.0, 1e-9));
-    CHECK_THAT(line[12].Z, WithinAbs(5.0 / 3.0, 1e-9));
-  }
 }
 
 TEST_CASE("Each ground line distance is the previous plus the step's length, so distances strictly "

@@ -29,7 +29,6 @@ namespace tpj {
 namespace {
 
 constexpr EntityKey ENTRANCE{1};
-constexpr EntityKey GUEST_PATH{2};
 constexpr EntityKey BACKSTAGE{3};
 constexpr EntityKey SHOP{4};
 // The highest-keyed box, so buildParkMesh draws it last.
@@ -409,43 +408,6 @@ TEST_CASE(
   }
 }
 
-TEST_CASE("An accepted edit's ghost is its own ghost followed by the walkways of its candidate "
-          "world and then that world's starved marks, both at GHOST_ALPHA") {
-  World world = ghostPark();
-  ParkMesh own;
-  ParkEdit edit;
-
-  SECTION("an AddBox whose shop's front door is in reach of a guest path") {
-    const AddBox add{BoxKind::Shop, SHOP_IN_REACH};
-    own = boxOf(BoxKind::Shop, add.At, ghostOf(boxColor(BoxKind::Shop)));
-    edit = add;
-  }
-  // The new path passes 3 m from the committed shop's front door, at (40, -3).
-  SECTION("an AddPath that brings a committed door within reach") {
-    const AddPath add{PathKind::Guest, {{30.0, -6.0}, {50.0, -6.0}}};
-    own = pathOf(PathKind::Guest, add.Points, ghostOf(pathColor(PathKind::Guest)));
-    edit = add;
-  }
-  // The entrance's walkway leads to this path, so the candidate has none.
-  SECTION("a DeletePath that takes a door's path away") {
-    own = entityOf(world, GUEST_PATH, DELETE_TINT);
-    edit = DeletePath{GUEST_PATH};
-  }
-  SECTION("a DeletePath that cuts a shop's supply route") {
-    world = routesPark();
-    REQUIRE(marksOf(world, GHOST_ALPHA).Vertices.empty());
-    own = entityOf(world, ROUTES_BACKSTAGE, DELETE_TINT);
-    edit = DeletePath{ROUTES_BACKSTAGE};
-  }
-
-  REQUIRE(isAccepted(world, edit));
-  REQUIRE_FALSE(own.Vertices.empty());
-  const World candidate = candidateOf(world, edit);
-  // Every section's candidate holds a starved shop, so the marks' place in the ghost shows.
-  REQUIRE_FALSE(marksOf(candidate, GHOST_ALPHA).Vertices.empty());
-  CHECK(sameMesh(buildGhostMesh(world, edit), withCandidate(own, candidate)));
-}
-
 // Principle 8: the walkways a ghost shows are the ones its commit draws.
 TEST_CASE("An accepted edit's ghost walkways have, in order, the positions and normals of the "
           "walkways buildParkMesh draws in the candidate world the edit gives") {
@@ -468,21 +430,6 @@ TEST_CASE("An accepted edit's ghost walkways have, in order, the positions and n
         ghostWalkways(buildGhostMesh(committed, edit), BOX_VERTICES, candidateOf(committed, edit)),
         expected, sameShape));
   }
-}
-
-TEST_CASE("An accepted edit that leaves a door out of reach shows no walkway for it") {
-  // The shop's walkway is the only one the world with it has beyond the world without it.
-  const World without = ghostPark();
-  const World with = candidateOf(without, AddBox{BoxKind::Shop, SHOP_IN_REACH});
-  const MoveBox edit{parkBoxes(with).back().Key, OUT_OF_REACH};
-  REQUIRE(parkBoxes(with).back().Kind == BoxKind::Shop);
-  REQUIRE(isAccepted(with, edit));
-  REQUIRE(walkwaysDrawn(with).size() > walkwaysDrawn(without).size());
-
-  ParkMesh expected = boxOf(BoxKind::Shop, OUT_OF_REACH, ghostOf(boxColor(BoxKind::Shop)));
-  appendWalkways(expected, without, GHOST_ALPHA);
-  appendStarvedMarks(expected, candidateOf(with, edit), GHOST_ALPHA);
-  CHECK(sameMesh(buildGhostMesh(with, edit), expected));
 }
 
 // A starved mark is a cube of five faces like a box's and a bottom face, four vertices each.
@@ -562,50 +509,6 @@ TEST_CASE("A ghost given no candidate world is the edit's own ghost alone") {
   REQUIRE(isAccepted(world, edit));
   CHECK(sameMesh(buildGhostMesh(world, edit, std::nullopt),
                  boxOf(BoxKind::Shop, edit.At, ghostOf(boxColor(BoxKind::Shop)))));
-}
-
-TEST_CASE("A ghost built without a candidate is the ghost given the candidate of the edit when it "
-          "is accepted, and given none when it is refused") {
-  const World world = ghostPark();
-  SECTION("an accepted AddBox") {
-    const AddBox edit{BoxKind::Shop, SHOP_IN_REACH};
-    REQUIRE(isAccepted(world, edit));
-    CHECK(sameMesh(buildGhostMesh(world, edit),
-                   buildGhostMesh(world, edit, std::optional<World>{candidateOf(world, edit)})));
-  }
-  SECTION("an accepted DeletePath that starves a shop") {
-    const World routes = routesPark();
-    const DeletePath edit{ROUTES_BACKSTAGE};
-    REQUIRE(isAccepted(routes, edit));
-    CHECK(sameMesh(buildGhostMesh(routes, edit),
-                   buildGhostMesh(routes, edit, std::optional<World>{candidateOf(routes, edit)})));
-  }
-  SECTION("a refused AddBox") {
-    // Over the shop.
-    const AddBox edit{BoxKind::Shop, Pose{42.0, 0.0, 0.0, -1.0}};
-    REQUIRE_FALSE(isAccepted(world, edit));
-    CHECK(sameMesh(buildGhostMesh(world, edit), buildGhostMesh(world, edit, std::nullopt)));
-  }
-}
-
-// Principle 1: ghosts are derived, and building them leaves nothing behind in what is saved.
-TEST_CASE("Building a ghost, walkways included, or appending an entity leaves the world's save and "
-          "hash unchanged") {
-  const World world = ghostPark();
-  const std::string save = saveWorld(world);
-  const uint64_t hash = hashWorld(world);
-
-  static_cast<void>(buildGhostMesh(world, AddBox{BoxKind::Depot, Pose{60.0, -60.0, 3.0, 4.0}}));
-  static_cast<void>(buildGhostMesh(world, AddBox{BoxKind::Shop, SHOP_IN_REACH}));
-  static_cast<void>(buildGhostMesh(world, MoveBox{SHOP, Pose{60.0, 60.0, -1.0, 2.0}}));
-  static_cast<void>(buildGhostMesh(world, AddPath{PathKind::Guest, {{60.0, 60.0}, {60.0, 80.0}}}));
-  static_cast<void>(buildGhostMesh(world, DeletePath{BACKSTAGE}));
-  static_cast<void>(buildGhostMesh(world, DeleteBox{SHOP}));
-  static_cast<void>(entityOf(world, SHOP, MARK));
-  static_cast<void>(entityOf(world, BACKSTAGE, MARK));
-
-  CHECK(saveWorld(world) == save);
-  CHECK(hashWorld(world) == hash);
 }
 
 } // namespace

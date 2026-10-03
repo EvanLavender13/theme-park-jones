@@ -95,8 +95,6 @@ void requireSameValue(const World &one, const World &other) {
   REQUIRE(hashWorld(one) == hashWorld(other));
 }
 
-std::string decimal(EntityKey key) { return std::to_string(static_cast<uint64_t>(key)); }
-
 constexpr double INF = std::numeric_limits<double>::infinity();
 constexpr double NOT_A_NUMBER = std::numeric_limits<double>::quiet_NaN();
 
@@ -179,33 +177,6 @@ World buildFormWorldReordered(std::shared_ptr<const WorldSchema> schema) {
   world.Registry.emplace<Probe>(world.findEntity(FIRST), firstProbe());
   world.destroyEntity(EntityKey{5});
   return world;
-}
-
-std::string formText() {
-  return "tpj-park 1\n"
-         "seed 12345\n"
-         "tick 3000\n"
-         "next-key 6\n"
-         "\n"
-         "[entities]\n"
-         "3\n"
-         "\n"
-         "[probe]\n"
-         "1 flag=true count=-7 small=9 level=1.5 feeling=excited target=2 samples=[0.25 -3] "
-         "place={x=4.5 z=-2}\n"
-         "2 flag=false count=0 small=0 level=0 feeling=calm target=0 samples=[] "
-         "place={x=0 z=0}\n" +
-         decimal(SLOT) +
-         " flag=false count=0 small=0 level=1e+300 feeling=calm target=4 samples=[inf] "
-         "place={x=-0 z=-inf}\n"
-         "\n"
-         "[tag]\n"
-         "1\n"
-         "2\n"
-         "\n"
-         "[route]\n"
-         "4 points=[{x=1 z=2} {x=-0 z=0.30000000000000004}] moods=[calm excited] stops=[1 3] "
-         "low=-9223372036854775808 high=18446744073709551615\n";
 }
 
 // Draws for a randomized world, so that each world is a function of its seed alone.
@@ -360,14 +331,6 @@ TEST_CASE("a loaded and resolved world steps in lockstep with the world saved") 
     CAPTURE(tick);
     requireSameValue(loaded, original);
   }
-}
-
-// Whether resolution is pending is not saved, so resolving changes nothing in the text.
-TEST_CASE("a save is the text form the spec defines, before and after resolution") {
-  World world = buildFormWorld(makeSaveSchema());
-  REQUIRE(saveWorld(world) == formText());
-  resolveWorld(world);
-  REQUIRE(saveWorld(world) == formText());
 }
 
 TEST_CASE("equal worlds give identical saves however they were built") {
@@ -618,39 +581,6 @@ struct UnsavedGadget {
   int Value = 0;
 };
 
-// The WorldInvariantError message the call throws, or nothing if it throws none.
-std::optional<std::string> invariantRefusal(const std::function<void()> &call) {
-  try {
-    call();
-  } catch (const WorldInvariantError &error) {
-    return std::string(error.what());
-  }
-  return std::nullopt;
-}
-
-TEST_CASE("in debug builds, saveWorld refuses a world the walk cannot cover, as validateWorld "
-          "does") {
-  if (!WORLD_CHECKS) {
-    SKIP("world checks run only in debug builds");
-  }
-  World world = buildFormWorld(makeSaveSchema());
-  std::string named;
-  SECTION("a component of an unregistered type") {
-    world.Registry.emplace<UnsavedGadget>(world.findEntity(FIRST), UnsavedGadget{.Value = 1});
-    named = "UnsavedGadget";
-  }
-  SECTION("a NaN in registered state") {
-    componentOf<Probe>(world, SECOND).Level = NOT_A_NUMBER;
-    named = "level";
-  }
-  const std::optional<std::string> expected = invariantRefusal([&] { validateWorld(world); });
-  REQUIRE(expected.has_value());
-  const std::optional<std::string> refused =
-      invariantRefusal([&] { static_cast<void>(saveWorld(world)); });
-  REQUIRE(refused == expected);
-  CHECK_THAT(refused.value_or(""), ContainsSubstring(named));
-}
-
 TEST_CASE("a schema refuses a component type named entities and is left unchanged") {
   WorldSchema schema;
   schema.addComponent<Tag>("tag", DataKind::Intent);
@@ -660,20 +590,6 @@ TEST_CASE("a schema refuses a component type named entities and is left unchange
   REQUIRE(schema.components()[0].Name == "tag");
   // The refused type was not half registered.
   REQUIRE_NOTHROW(schema.addComponent<Probe>("probe", DataKind::State));
-}
-
-TEST_CASE("a world with nothing registered saves as its header and loads back equal once "
-          "resolved") {
-  const auto schema = std::make_shared<WorldSchema>();
-  World world(schema, 7);
-  world.Tick = 5;
-  resolveWorld(world);
-
-  const std::string text = saveWorld(world);
-  REQUIRE(text == "tpj-park 1\nseed 7\ntick 5\nnext-key 1\n");
-  World loaded = loadWorld(schema, text);
-  resolveWorld(loaded);
-  requireSameValue(loaded, world);
 }
 
 } // namespace

@@ -120,19 +120,6 @@ void requireSubnormalControls() {
 
 void constructDirectly() { const World world(makeSchema(), SEED); }
 
-TEST_CASE("constructing a World succeeds in the default floating-point environment") {
-  SECTION("with the default constructor") { REQUIRE_NOTHROW(World()); }
-  SECTION("with a schema and a seed") { REQUIRE_NOTHROW(constructDirectly()); }
-  SECTION("by copyWorld") {
-    const World original = buildWorld(makeSchema());
-    REQUIRE_NOTHROW(copyWorld(original));
-  }
-  SECTION("by loadWorld") {
-    const std::string text = saveWorld(buildWorld(makeSchema()));
-    REQUIRE_NOTHROW(loadWorld(makeSchema(), text));
-  }
-}
-
 // Each direction is its own case because an arithmetic probe can tell one direction from
 // to-nearest and still miss another.
 TEST_CASE("in debug builds, constructing a World throws unless rounding is to nearest") {

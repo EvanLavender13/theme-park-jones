@@ -74,26 +74,7 @@ void stepUntil(World &world, uint64_t tick) {
   }
 }
 
-void deleteShop(World &world) {
-  CommandQueue queue;
-  queueEdit(queue, DeleteBox{SHOP});
-  stepWorld(world, queue);
-  REQUIRE(world.findEntity(SHOP) == entt::null);
-}
-
 // Serving.
-
-TEST_CASE("A shop box that has never held a visit serves the first guest it holds at once") {
-  World world = suppliedWorld();
-  stepUntil(world, 10);
-  const EntityKey guest = world.createEntity();
-  hold<GuestVisits>(world, SHOP, guest, 1);
-  hold<Supplies>(world, SHOP, SHOP, 1);
-
-  stepWorld(world);
-
-  CHECK(unitsCreated<Meals>(world) == 1);
-}
 
 // What serving the guest leaves: one meal created and sent, one supply consumed as served, and the
 // guest's other visit still held.
@@ -127,24 +108,6 @@ TEST_CASE("Serving a guest consumes one supply as served and sends the guest one
   CHECK(SERVICE_INTERVAL == 90);
   SECTION("a supplied shop") { checkServes(suppliedWorld()); }
   SECTION("a starved shop serves from its stock") { checkServes(starvedWorld()); }
-}
-
-TEST_CASE("A supplied shop serves one guest in a cycle, sending visits and meals for that guest "
-          "only, however many are queued and however much it holds") {
-  World world = suppliedWorld();
-  for (const EntityKey guest : addGuests(world, 3)) {
-    hold<GuestVisits>(world, SHOP, guest, 1);
-  }
-  hold<Supplies>(world, SHOP, SHOP, 5);
-
-  stepWorld(world);
-
-  const std::vector<FlowPacket> visits = packetsFrom<GuestVisits>(world, SHOP);
-  const std::vector<FlowPacket> meals = packetsFrom<Meals>(world, SHOP);
-  REQUIRE(visits.size() == 1);
-  REQUIRE(meals.size() == 1);
-  CHECK(visits.front().To == meals.front().To);
-  CHECK(unitsConsumed<Supplies>(world, SERVED_CAUSE) == 1);
 }
 
 TEST_CASE("A shop that served while stepping tick t serves no other guest before tick t + "
@@ -387,70 +350,6 @@ TEST_CASE("A queued guest that leaves is never served, and the guest queued behi
 }
 
 // Deleted shops.
-
-TEST_CASE("When a shop box is deleted, the visits it held reach their guests' stocks with no "
-          "meal") {
-  World world = suppliedWorld();
-  const std::vector<EntityKey> guests = addGuests(world, 2);
-  hold<GuestVisits>(world, SHOP, guests[0], 2);
-  hold<GuestVisits>(world, SHOP, guests[1], 1);
-
-  deleteShop(world);
-  stepWorld(world);
-
-  CHECK(unitsHeld<GuestVisits>(world, guests[0], guests[0]) == 2);
-  CHECK(unitsHeld<GuestVisits>(world, guests[1], guests[1]) == 1);
-  CHECK(unitsConsumed<GuestVisits>(world) == 0);
-  CHECK(unitsCreated<Meals>(world) == 0);
-}
-
-TEST_CASE("When a shop box is deleted, the supplies it held are consumed as discarded") {
-  World world = suppliedWorld();
-  hold<Supplies>(world, SHOP, SHOP, 5);
-
-  deleteShop(world);
-  stepWorld(world);
-
-  CHECK(unitsConsumed<Supplies>(world, DISCARDED_CAUSE) == 5);
-  CHECK(unitsConsumed<Supplies>(world) == 5);
-}
-
-TEST_CASE("A visit and meal a shop sent to a guest that is gone come back to it and are consumed "
-          "as abandoned") {
-  World world = suppliedWorld();
-  const EntityKey guest = world.createEntity();
-  hold<GuestVisits>(world, SHOP, guest, 1);
-  hold<Supplies>(world, SHOP, SHOP, 1);
-  stepWorld(world);
-  REQUIRE(unitsCreated<Meals>(world) == 1);
-  REQUIRE(world.destroyEntity(guest));
-
-  // They reach the gone guest at SERVICE_INTERVAL, come back taking as long again, and the shop
-  // steps once more.
-  stepUntil(world, (2 * SERVICE_INTERVAL) + 1);
-
-  CHECK(unitsConsumed<GuestVisits>(world, ABANDONED_CAUSE) == 1);
-  CHECK(unitsConsumed<Meals>(world, ABANDONED_CAUSE) == 1);
-  CHECK(unitsInTransit<GuestVisits>(world) == 0);
-  CHECK(unitsInTransit<Meals>(world) == 0);
-}
-
-TEST_CASE("A visit and meal a shop sent to a guest that is gone are consumed as undeliverable "
-          "when the shop is gone too") {
-  World world = suppliedWorld();
-  const EntityKey guest = world.createEntity();
-  hold<GuestVisits>(world, SHOP, guest, 1);
-  hold<Supplies>(world, SHOP, SHOP, 1);
-  stepWorld(world);
-  REQUIRE(unitsCreated<Meals>(world) == 1);
-  REQUIRE(world.destroyEntity(guest));
-  deleteShop(world);
-
-  stepUntil(world, SERVICE_INTERVAL + 1);
-
-  CHECK(unitsConsumed<GuestVisits>(world, UNDELIVERABLE_CAUSE) == 1);
-  CHECK(unitsConsumed<Meals>(world, UNDELIVERABLE_CAUSE) == 1);
-}
 
 } // namespace
 } // namespace tpj

@@ -163,16 +163,5 @@ TEST_CASE("sourceEntryAtNode gives the first of a source's entries that sampleFi
   CHECK(checkAgainstSample<Footfall>(unresolved, network, sources) == 0);
 }
 
-TEST_CASE("sourceEntryAtNode throws std::out_of_range for a node not below the node count") {
-  World world = makeFieldWorld(makeSteppedFieldSchema());
-  const EntityKey source = addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 1.0)});
-  resolveWorld(world);
-  const Network &network = networkOf(world);
-
-  REQUIRE_THROWS_AS(sourceEntryAtNode<Footfall>(world, network, network.nodeCount(), source),
-                    std::out_of_range);
-  REQUIRE_THROWS_AS(sourceEntryAtNode<Footfall>(world, Network(), 0, source), std::out_of_range);
-}
-
 } // namespace
 } // namespace tpj

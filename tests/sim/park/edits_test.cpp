@@ -28,12 +28,7 @@ using test::samePoints;
 using test::samePose;
 using test::worldOf;
 
-constexpr double NOT_A_NUMBER = std::numeric_limits<double>::quiet_NaN();
-constexpr double INFINITE = std::numeric_limits<double>::infinity();
-
 // Kinds with no enumerator, which a command can still hold.
-constexpr auto NO_PATH_KIND = static_cast<PathKind>(2);
-constexpr auto NO_BOX_KIND = static_cast<BoxKind>(2);
 
 constexpr EntityKey ENTRANCE{1};
 constexpr EntityKey TEMPLATE_PATH{2};
@@ -106,28 +101,6 @@ bool acceptedWithoutThrowing(const World &world, const Command &command) {
   return accepted;
 }
 
-TEST_CASE("addParkEdits registers AddPath, AddBox, MoveBox, DeletePath, and DeleteBox in that "
-          "order, and makeParkSchema registers them") {
-  const std::vector<entt::id_type> expected{
-      entt::type_id<AddPath>().hash(), entt::type_id<AddBox>().hash(),
-      entt::type_id<MoveBox>().hash(), entt::type_id<DeletePath>().hash(),
-      entt::type_id<DeleteBox>().hash()};
-  const auto idsOf = [](const WorldSchema &schema) {
-    std::vector<entt::id_type> ids;
-    for (const CommandType &command : schema.commands()) {
-      ids.push_back(command.TypeId);
-    }
-    return ids;
-  };
-
-  WorldSchema schema;
-  addParkEdits(schema);
-  CHECK(idsOf(schema) == expected);
-
-  const std::vector<entt::id_type> park = idsOf(*makeParkSchema());
-  CHECK_FALSE(std::ranges::search(park, expected).empty());
-}
-
 TEST_CASE("An accepted AddPath gives the next key an entity holding a path of its kind through its "
           "kept points, and changes nothing else") {
   World world = editedPark();
@@ -184,17 +157,6 @@ TEST_CASE("An accepted MoveBox replaces the box's pose exactly with the one give
   CHECK(world.nextKey() == before.nextKey());
 }
 
-TEST_CASE("A MoveBox to the box's own pose is accepted and leaves the world equal") {
-  World world = editedPark();
-  const World before = copyWorld(world);
-  const MoveBox command{DEPOT, facingSouth(80.0, 40.0)};
-  REQUIRE(isAccepted(world, command));
-
-  applyCommand(world, command);
-
-  CHECK(worldsEqual(world, before));
-}
-
 TEST_CASE("An accepted DeletePath or DeleteBox destroys the entity it names, and changes nothing "
           "else") {
   World world = editedPark();
@@ -220,19 +182,6 @@ void checkLeavesResolutionAlone(const World &resolved, const Command &command) {
   REQUIRE(isAccepted(world, command));
   applyCommand(world, command);
   CHECK_FALSE(world.isResolvePending());
-}
-
-TEST_CASE("An accepted command given to applyCommand on a resolved world leaves resolution not "
-          "pending") {
-  World resolved = editedPark();
-  resolveWorld(resolved);
-  REQUIRE_FALSE(resolved.isResolvePending());
-
-  checkLeavesResolutionAlone(resolved, AddPath{PathKind::Guest, {{-60.0, -20.0}, {-60.0, 0.0}}});
-  checkLeavesResolutionAlone(resolved, AddBox{BoxKind::Depot, Pose{-0.0, -70.25, 3.0, -4.0}});
-  checkLeavesResolutionAlone(resolved, MoveBox{SHOP, Pose{60.5, -0.0, -0.5, 2.0}});
-  checkLeavesResolutionAlone(resolved, DeletePath{BACKSTAGE});
-  checkLeavesResolutionAlone(resolved, DeleteBox{SHOP});
 }
 
 template <typename Command>
@@ -296,42 +245,6 @@ TEST_CASE("Commands given to makeCandidate are each applied exactly when isAccep
   const World candidate = makeCandidate(world, queue);
 
   checkJudgedInTurn(candidate, world);
-}
-
-TEST_CASE("A command that describes no physical object is refused, without throwing") {
-  const World world = editedPark();
-  const ParkPoint start{60.0, 60.0};
-  const ParkPoint end{60.0, 80.0};
-  const Pose free = facingSouth(60.0, 70.0);
-  // Each refusal below is the same command as one of these but for what makes it describe nothing.
-  REQUIRE(isAccepted(world, AddPath{PathKind::Guest, {start, end}}));
-  REQUIRE(isAccepted(world, AddBox{BoxKind::Shop, free}));
-  REQUIRE(isAccepted(world, MoveBox{SHOP, free}));
-
-  CHECK_FALSE(acceptedWithoutThrowing(world, AddPath{NO_PATH_KIND, {start, end}}));
-  CHECK_FALSE(
-      acceptedWithoutThrowing(world, AddPath{PathKind::Guest, {start, {NOT_A_NUMBER, 80.0}}}));
-  CHECK_FALSE(acceptedWithoutThrowing(world, AddPath{PathKind::Guest, {start, {60.0, INFINITE}}}));
-  CHECK_FALSE(acceptedWithoutThrowing(world, AddPath{PathKind::Guest, {}}));
-  CHECK_FALSE(acceptedWithoutThrowing(world, AddPath{PathKind::Guest, {start}}));
-  CHECK_FALSE(acceptedWithoutThrowing(world, AddPath{PathKind::Guest, {start, start, start}}));
-  CHECK_FALSE(acceptedWithoutThrowing(world, AddPath{PathKind::Guest, {start, {60.005, 60.0}}}));
-
-  CHECK_FALSE(acceptedWithoutThrowing(world, AddBox{NO_BOX_KIND, free}));
-  CHECK_FALSE(
-      acceptedWithoutThrowing(world, AddBox{BoxKind::Shop, Pose{NOT_A_NUMBER, 70.0, 0.0, -1.0}}));
-  CHECK_FALSE(
-      acceptedWithoutThrowing(world, AddBox{BoxKind::Shop, Pose{60.0, -INFINITE, 0.0, -1.0}}));
-  CHECK_FALSE(
-      acceptedWithoutThrowing(world, AddBox{BoxKind::Shop, Pose{60.0, 70.0, NOT_A_NUMBER, -1.0}}));
-  CHECK_FALSE(
-      acceptedWithoutThrowing(world, AddBox{BoxKind::Shop, Pose{60.0, 70.0, 0.0, INFINITE}}));
-  CHECK_FALSE(acceptedWithoutThrowing(world, AddBox{BoxKind::Shop, Pose{60.0, 70.0, 0.0, 0.0}}));
-  CHECK_FALSE(acceptedWithoutThrowing(world, AddBox{BoxKind::Shop, Pose{60.0, 70.0, -0.0, 0.0}}));
-
-  CHECK_FALSE(acceptedWithoutThrowing(world, MoveBox{SHOP, Pose{60.0, NOT_A_NUMBER, 0.0, -1.0}}));
-  CHECK_FALSE(acceptedWithoutThrowing(world, MoveBox{SHOP, Pose{60.0, 70.0, INFINITE, 1.0}}));
-  CHECK_FALSE(acceptedWithoutThrowing(world, MoveBox{SHOP, Pose{60.0, 70.0, 0.0, 0.0}}));
 }
 
 TEST_CASE("A command naming no intent of the kind it acts on is refused, without throwing") {

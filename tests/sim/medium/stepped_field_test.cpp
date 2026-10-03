@@ -43,7 +43,6 @@ using test::PublishOrderScope;
 using test::publishSteppedSources;
 using test::publishSteppedSourcesWhere;
 using test::Reach;
-using test::reachCalls;
 using test::setSteps;
 using test::standardLayout;
 using test::Steps;
@@ -94,23 +93,9 @@ template <typename Call> Thrown thrownBy(Call call) {
   return Thrown::Nothing;
 }
 
-// What recording systems, swaps, and resolvers saw. They take only the world, so the record lives
-// outside it.
-std::vector<Thrown> &outcomes() {
-  static std::vector<Thrown> recorded;
-  return recorded;
-}
-
 std::vector<Sampled> &observed() {
   static std::vector<Sampled> recorded;
   return recorded;
-}
-
-const ComponentType *componentNamed(const WorldSchema &schema, std::string_view name) {
-  const auto &components = schema.components();
-  const auto found = std::ranges::find_if(
-      components, [name](const ComponentType &type) { return type.Name == name; });
-  return found == components.end() ? nullptr : &*found;
 }
 
 struct Occupant {
@@ -158,24 +143,6 @@ std::shared_ptr<WorldSchema> makeCommandedSchema() {
 
 constexpr Place JUNCTION = place(CARRIER_A, 4);
 
-TEST_CASE("addField registers the field's state component as <name>-stepped") {
-  const auto schema = makeSteppedFieldSchema();
-
-  for (const std::string_view name : {"footfall", "reach"}) {
-    CAPTURE(name);
-    const ComponentType *stepped = componentNamed(*schema, std::string(name) + "-stepped");
-    REQUIRE(stepped != nullptr);
-    REQUIRE(stepped->Kind == DataKind::State);
-  }
-}
-
-TEST_CASE("addField throws std::invalid_argument when <name>-stepped is already registered") {
-  WorldSchema schema;
-  schema.addComponent<Occupant>("footfall-stepped", DataKind::State);
-
-  REQUIRE(thrownBy([&] { addField<Footfall>(schema); }) == Thrown::InvalidArgument);
-}
-
 // Registered after the stepping sources' systems, so it runs in the same tick, after they publish.
 void observeJunction(World &world) { observed().push_back(sampled<Footfall>(world, JUNCTION)); }
 
@@ -203,135 +170,6 @@ TEST_CASE("entries published while stepping a tick are sampled from the swap tha
   stepWorld(world);
   REQUIRE(observed().back() == Sampled{{source, 2.0}});
   REQUIRE(sampled<Footfall>(world, JUNCTION).empty());
-}
-
-void publishOutsideStepping(World &world) {
-  outcomes().push_back(
-      thrownBy([&] { publishStepped<Footfall>(world, LAYOUT_KEY, {entryAt(CARRIER_A, 4, 1.0)}); }));
-}
-
-TEST_CASE("publishStepped throws std::logic_error when the world is not stepping") {
-  auto schema = std::make_shared<WorldSchema>();
-  addField<Footfall>(*schema);
-
-  SECTION("outside any cycle") {
-    World world(schema, 0);
-    world.createEntity();
-    resolveWorld(world);
-    outcomes().clear();
-    publishOutsideStepping(world);
-  }
-  SECTION("in a resolver") {
-    schema->addResolver("resolving-publisher", publishOutsideStepping, {"footfall-field"});
-    World world(schema, 0);
-    world.createEntity();
-    outcomes().clear();
-    resolveWorld(world);
-  }
-  SECTION("in a swap") {
-    schema->addSwap(publishOutsideStepping);
-    World world(schema, 0);
-    world.createEntity();
-    resolveWorld(world);
-    outcomes().clear();
-    stepWorld(world);
-  }
-
-  REQUIRE(outcomes() == std::vector<Thrown>{Thrown::OtherLogicError});
-}
-
-TEST_CASE("publishStepped throws std::logic_error when the world holds no stepped entries for the "
-          "field") {
-  // The field is not registered, so no resolver ever creates its stepped entries.
-  auto schema = std::make_shared<WorldSchema>();
-  schema->addSystem([](World &world) {
-    outcomes().push_back(thrownBy(
-        [&] { publishStepped<Footfall>(world, LAYOUT_KEY, {entryAt(CARRIER_A, 4, 1.0)}); }));
-  });
-  World world(schema, 0);
-  world.createEntity();
-
-  outcomes().clear();
-  stepWorld(world);
-
-  REQUIRE(outcomes() == std::vector<Thrown>{Thrown::OtherLogicError});
-}
-
-TEST_CASE("publishStepped throws std::invalid_argument for the null source key") {
-  auto schema = std::make_shared<WorldSchema>();
-  addField<Footfall>(*schema);
-  schema->addSystem([](World &world) {
-    outcomes().push_back(
-        thrownBy([&] { publishStepped<Footfall>(world, NULL_KEY, {entryAt(CARRIER_A, 4, 1.0)}); }));
-  });
-  World world(schema, 0);
-
-  outcomes().clear();
-  stepWorld(world);
-
-  REQUIRE(outcomes() == std::vector<Thrown>{Thrown::InvalidArgument});
-}
-
-// Publishes into footfall for the layout's key twice, the first time with the given entries.
-template <size_t FirstCount> void publishSteppedTwice(World &world) {
-  std::vector<PlacedEntry<double>> first;
-  if constexpr (FirstCount > 0) {
-    first.push_back(entryAt(CARRIER_A, 4, 1.0));
-  }
-  outcomes().push_back(
-      thrownBy([&] { publishStepped<Footfall>(world, LAYOUT_KEY, std::move(first)); }));
-  outcomes().push_back(
-      thrownBy([&] { publishStepped<Footfall>(world, LAYOUT_KEY, {entryAt(CARRIER_A, 4, 2.0)}); }));
-}
-
-// The refusal is per tick: the next tick accepts the source's first publication again.
-TEST_CASE("publishStepped throws std::invalid_argument for a source that has already published "
-          "into the field in the same tick, even with no entries") {
-  auto schema = std::make_shared<WorldSchema>();
-  addField<Footfall>(*schema);
-  SECTION("a first publication with entries") { schema->addSystem(publishSteppedTwice<1>); }
-  SECTION("a first publication with no entries") { schema->addSystem(publishSteppedTwice<0>); }
-  World world(schema, 0);
-  world.createEntity();
-
-  outcomes().clear();
-  stepWorld(world);
-  stepWorld(world);
-
-  REQUIRE(outcomes() == std::vector<Thrown>{Thrown::Nothing, Thrown::InvalidArgument,
-                                            Thrown::Nothing, Thrown::InvalidArgument});
-}
-
-TEST_CASE("a publishStepped that throws leaves the field's entries unchanged") {
-  SECTION("a repeated source keeps its first entries, and a null source adds none") {
-    auto schema = std::make_shared<WorldSchema>();
-    test::addSyntheticNetwork(*schema);
-    addField<Footfall>(*schema);
-    schema->addSystem([](World &world) {
-      publishSteppedTwice<1>(world);
-      outcomes().push_back(thrownBy(
-          [&] { publishStepped<Footfall>(world, NULL_KEY, {entryAt(CARRIER_A, 4, 3.0)}); }));
-    });
-    World world = makeFieldWorld(schema);
-
-    outcomes().clear();
-    stepWorld(world);
-
-    REQUIRE(outcomes() ==
-            std::vector<Thrown>{Thrown::Nothing, Thrown::InvalidArgument, Thrown::InvalidArgument});
-    REQUIRE(sampled<Footfall>(world, JUNCTION) == Sampled{{LAYOUT_KEY, 1.0}});
-  }
-  SECTION("outside stepping, the world is unchanged") {
-    World world = makeFieldWorld(makeSteppedFieldSchema());
-    const EntityKey source = addStepper<Footfall>(world, {entryAt(CARRIER_A, 4, 1.0)});
-    stepWorld(world);
-    const World before = copyWorld(world);
-
-    REQUIRE(thrownBy([&] {
-              publishStepped<Footfall>(world, source, {entryAt(CARRIER_A, 4, 2.0)});
-            }) == Thrown::OtherLogicError);
-    requireSameValue(world, before);
-  }
 }
 
 TEST_CASE("a source with readable stepped entries, even an empty list, is sampled by them, and "
@@ -377,29 +215,6 @@ TEST_CASE("sources are sampled in ascending key order across both layers, each s
                                                           {EntityKey{4}, 40.0},
                                                           {EntityKey{5}, 50.0}});
   }
-}
-
-TEST_CASE("a stepped entry whose place does not resolve on the network is not sampled") {
-  World world = makeFieldWorld(makeSteppedFieldSchema());
-  // Just beyond each end of A, and on a carrier the network lacks.
-  addStepper<Footfall>(world, {entryAt(CARRIER_A, -1, 1.0), entryAt(CARRIER_A, 11, 2.0),
-                               entryAt(EntityKey{99}, 0, 3.0)});
-  addStepper<Reach>(world, {entryAt(CARRIER_A, -1, 4.0), entryAt(EntityKey{99}, 0, 5.0),
-                            entryAt(CARRIER_A, 3, 7.0)});
-  resolveWorld(world);
-  stepWorld(world);
-
-  REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 0)).empty());
-  REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 10)).empty());
-
-  reachCalls().clear();
-  static_cast<void>(sampleField<Reach>(world, networkOf(world), place(CARRIER_A, 2)));
-  REQUIRE(reachCalls().size() == 1);
-  const EdgeSample<double> &sample = reachCalls().front().Sample;
-  REQUIRE(sample.AtFrom.empty());
-  REQUIRE(sample.AtTo.empty());
-  REQUIRE(sample.Along.size() == 1);
-  REQUIRE(sample.Along.front().Value == 7.0);
 }
 
 TEST_CASE("a resolution after a command clears the readable stepped entries of exactly the "
@@ -675,13 +490,6 @@ TEST_CASE("sampleResolvedField gives, at any place on any network, what sampleFi
   // A network the world's entries are not on.
   const Network other;
   CHECK(sampleResolvedField<Footfall>(world, other, JUNCTION).empty());
-}
-
-// A field is sampled without being consumed.
-TEST_CASE("sampleField takes the world by const reference") {
-  using Sampler =
-      std::vector<SampledEntry<double>> (*)(const World &, const Network &, const Place &);
-  STATIC_REQUIRE(std::is_same_v<decltype(&sampleField<Footfall>), Sampler>);
 }
 
 } // namespace

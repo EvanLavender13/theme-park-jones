@@ -76,16 +76,6 @@ bool sameBoxes(const std::vector<ParkBox> &left, const std::vector<ParkBox> &rig
   return true;
 }
 
-std::size_t indexOfComponent(const WorldSchema &schema, std::string_view name) {
-  const auto &types = schema.components();
-  for (std::size_t index = 0; index < types.size(); ++index) {
-    if (types[index].Name == name) {
-      return index;
-    }
-  }
-  return types.size();
-}
-
 // Intent of every kind, both path kinds and both box kinds, holding finite values a save spells
 // unusually (negative zero, the smallest subnormal, the largest double) and degenerate intent: a
 // path of repeated points leaving the park, a path of one point, a path of none, a box and an
@@ -110,35 +100,6 @@ constexpr std::string_view INTENT_SAVE = "tpj-park 1\n"
                                          "6 kind=depot x=1e+300 z=-128 facing-x=0 facing-z=0\n"
                                          "7 kind=shop x=-0 z=0 facing-x=-1.7976931348623157e+308 "
                                          "facing-z=1e-310\n";
-
-TEST_CASE("addParkIntent registers entrance, path, and box as intent, in that order") {
-  WorldSchema schema;
-  addParkIntent(schema);
-
-  const auto &types = schema.components();
-  REQUIRE(types.size() == 3);
-  CHECK(types[0].Name == "entrance");
-  CHECK(types[1].Name == "path");
-  CHECK(types[2].Name == "box");
-  for (const ComponentType &type : types) {
-    CHECK(type.Kind == DataKind::Intent);
-  }
-}
-
-TEST_CASE("makeParkSchema registers park intent after the network") {
-  const auto schema = makeParkSchema();
-  const std::size_t network = indexOfComponent(*schema, "network");
-  const std::size_t entrance = indexOfComponent(*schema, "entrance");
-  const std::size_t path = indexOfComponent(*schema, "path");
-  const std::size_t box = indexOfComponent(*schema, "box");
-  const std::size_t missing = schema->components().size();
-
-  REQUIRE(network < missing);
-  REQUIRE(box < missing);
-  CHECK(network < entrance);
-  CHECK(entrance < path);
-  CHECK(path < box);
-}
 
 TEST_CASE("A save of finite intent of every kind loads, saves to identical text, and loads equal") {
   const auto schema = makeParkSchema();

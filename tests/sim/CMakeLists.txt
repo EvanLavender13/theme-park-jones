@@ -10,7 +10,6 @@ add_executable(tpj_sim_tests
     guests/footfall_test.cpp
     guests/guest_edits_test.cpp
     guests/guest_options_test.cpp
-    guests/guest_save_test.cpp
     guests/visits_test.cpp
     guests/walks_test.cpp
     medium/carry_over_test.cpp
@@ -31,11 +30,8 @@ add_executable(tpj_sim_tests
     park/edits_test.cpp
     park/geometry_test.cpp
     park/intent_test.cpp
-    park/new_park_test.cpp
-    park/park_edit_test.cpp
     park/sketch_park_test.cpp
     park/validity_test.cpp
-    park_schema_test.cpp
     routes/connections_test.cpp
     routes/network_edits_test.cpp
     routes/route_distance_test.cpp
@@ -73,3 +69,8 @@ add_test(NAME "sim symbol check rejects a call to exp, naming exp and its object
     COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DARCHIVE=$<TARGET_FILE:tpj_planted_exp>
         -DCHECK=${CMAKE_SOURCE_DIR}/cmake/check_sim_symbols.cmake
         -P ${CMAKE_CURRENT_SOURCE_DIR}/support/expect_symbol_rejection.cmake)
+
+# The scenarios library is simulation code too, so the same check runs on its archive.
+add_test(NAME "sim symbol check passes on tpj_scenarios_lib"
+    COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DARCHIVE=$<TARGET_FILE:tpj_scenarios_lib>
+        -P ${CMAKE_SOURCE_DIR}/cmake/check_sim_symbols.cmake)

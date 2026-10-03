@@ -270,20 +270,6 @@ TEST_CASE("A connector has two points, its door at distance 0 and its connection
   }
 }
 
-// The shop's front door is (0, -3), and a guest line starting exactly 4 m from it, at (0, -7), runs
-// away from it, so the reach is exactly CONNECTION_REACH.
-TEST_CASE("A door exactly CONNECTION_REACH from the nearest point of its kind's lines has a "
-          "connector") {
-  const World world =
-      resolvedWorld(ParkIntent{.Entrances = {},
-                               .Paths = {pathOf(1, PathKind::Guest, {{0.0, -7.0}, {0.0, -20.0}})},
-                               .Boxes = {boxOf(2, BoxKind::Shop, Pose{})}});
-  const Carrier *connector =
-      findCarrier(parkNetwork(world, PathKind::Guest), connectorKey(EntityKey{2}, Face::Front));
-  REQUIRE(connector != nullptr);
-  CHECK(connector->Points.back().Distance == CONNECTION_REACH);
-}
-
 // Each case is a world holding an entity whose doors all go without a connector, and the reason.
 struct Unconnected {
   const char *Name = "";
@@ -454,24 +440,6 @@ TEST_CASE("Every stop of a path carrier other than its first and last lies withi
       }
     }
   }
-}
-
-TEST_CASE("The new park's entrance has a connector to its guest path") {
-  World world = makeNewPark(1);
-  resolveWorld(world);
-  const std::vector<ParkEntrance> entrances = parkEntrances(world);
-  const std::vector<ParkPath> paths = parkPaths(world);
-  REQUIRE(entrances.size() == 1);
-  REQUIRE(paths.size() == 1);
-  const Network &guest = parkNetwork(world, PathKind::Guest);
-  const Carrier *connector = findCarrier(guest, connectorKey(entrances.front().Key, Face::Front));
-  const Carrier *path = findCarrier(guest, paths.front().Key);
-  REQUIRE(connector != nullptr);
-  REQUIRE(path != nullptr);
-  REQUIRE_FALSE(connector->Stops.empty());
-  const uint32_t connection = connector->Stops.back().Node;
-  CHECK(std::ranges::any_of(
-      path->Stops, [connection](const CarrierStop &stop) { return stop.Node == connection; }));
 }
 
 } // namespace

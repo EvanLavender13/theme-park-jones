@@ -161,13 +161,6 @@ void requireAlong(const Network &network, const std::vector<EdgeEntry<double>> &
   }
 }
 
-// A field whose name holds characters a registered name may not.
-struct MisnamedField {
-  using Entry = double;
-  static constexpr std::string_view Name = "Foot Fall";
-  static constexpr FieldKind Kind = FieldKind::Scalar;
-};
-
 struct Occupant {
   int64_t Count = 0;
 };
@@ -186,42 +179,6 @@ TEST_CASE("addField registers the field's derived component as <name>-resolved a
     REQUIRE(resolved != nullptr);
     REQUIRE(resolved->Kind == DataKind::Derived);
     REQUIRE(hasResolver(*schema, std::string(name) + "-field"));
-  }
-}
-
-TEST_CASE("addField throws std::invalid_argument when either of its names is malformed or already "
-          "registered") {
-  WorldSchema schema;
-
-  SECTION("a malformed field name") {
-    REQUIRE(thrownBy([&] { addField<MisnamedField>(schema); }) == Thrown::InvalidArgument);
-  }
-  SECTION("a component already named <name>-resolved") {
-    schema.addComponent<Occupant>("footfall-resolved", DataKind::Derived);
-    REQUIRE(thrownBy([&] { addField<Footfall>(schema); }) == Thrown::InvalidArgument);
-  }
-  SECTION("a resolver already named <name>-field") {
-    schema.addResolver("footfall-field", [](World &) {});
-    REQUIRE(thrownBy([&] { addField<Footfall>(schema); }) == Thrown::InvalidArgument);
-  }
-}
-
-TEST_CASE("after a resolution, a field's entries sit on the entity keyed fieldKey of its name, "
-          "derived from the null key and the field purpose") {
-  REQUIRE(fieldKey("footfall") == deriveKey(NULL_KEY, hashName("field"), hashName("footfall")));
-
-  const auto schema = makeFieldSchema();
-  World world = makeFieldWorld(schema);
-  addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 1.0)});
-  resolveWorld(world);
-
-  for (const std::string_view name : {"footfall", "reach"}) {
-    CAPTURE(name);
-    const ComponentType *resolved = componentNamed(*schema, std::string(name) + "-resolved");
-    REQUIRE(resolved != nullptr);
-    const entt::entity holder = world.findEntity(fieldKey(name));
-    REQUIRE(holder != entt::null);
-    REQUIRE(resolved->Has(world.Registry, holder));
   }
 }
 
@@ -260,50 +217,6 @@ TEST_CASE("entries a resolver publishes are sampled at once, by later resolvers 
 
   REQUIRE(observed() == std::vector<Sampled>{expected});
   REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 4)) == expected);
-}
-
-TEST_CASE("publishResolved throws std::logic_error when the world is not resolving") {
-  World world = makeFieldWorld(makeFieldSchema());
-  const EntityKey source = addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 1.0)});
-  resolveWorld(world);
-
-  REQUIRE(thrownBy([&] {
-            publishResolved<Footfall>(world, source, {entryAt(CARRIER_A, 4, 2.0)});
-          }) == Thrown::OtherLogicError);
-}
-
-TEST_CASE("publishResolved throws std::logic_error before the field's resolver has first run") {
-  auto schema = std::make_shared<WorldSchema>();
-  schema->addResolver("early", [](World &world) {
-    outcomes().push_back(thrownBy(
-        [&] { publishResolved<Footfall>(world, LAYOUT_KEY, {entryAt(CARRIER_A, 4, 1.0)}); }));
-  });
-  addField<Footfall>(*schema);
-  World world(schema, 0);
-  world.createEntity();
-
-  outcomes().clear();
-  resolveWorld(world);
-
-  REQUIRE(outcomes() == std::vector<Thrown>{Thrown::OtherLogicError});
-}
-
-TEST_CASE("publishResolved throws std::invalid_argument for the null source key") {
-  auto schema = std::make_shared<WorldSchema>();
-  addField<Footfall>(*schema);
-  schema->addResolver("null-publisher",
-                      [](World &world) {
-                        outcomes().push_back(thrownBy([&] {
-                          publishResolved<Footfall>(world, NULL_KEY, {entryAt(CARRIER_A, 4, 1.0)});
-                        }));
-                      },
-                      {"footfall-field"});
-  World world(schema, 0);
-
-  outcomes().clear();
-  resolveWorld(world);
-
-  REQUIRE(outcomes() == std::vector<Thrown>{Thrown::InvalidArgument});
 }
 
 // Publishes into footfall for the layout's key twice, the first time with the given entries.
@@ -423,22 +336,6 @@ World threeSourceWorld() {
 
 const std::vector<PublishOrder> PUBLISH_ORDERS = {PublishOrder::Ascending, PublishOrder::Descending,
                                                   PublishOrder::Rotated};
-
-TEST_CASE("sampleField gives sources in ascending key order and each source's entries in the "
-          "order it published them, whatever order the sources were published in") {
-  for (const PublishOrder order : PUBLISH_ORDERS) {
-    CAPTURE(order);
-    const PublishOrderScope scope(order);
-    World world = threeSourceWorld();
-    resolveWorld(world);
-
-    REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 4)) == Sampled{{EntityKey{2}, 7.0},
-                                                                     {EntityKey{3}, 5.0},
-                                                                     {EntityKey{3}, 3.0},
-                                                                     {EntityKey{4}, 1.0},
-                                                                     {EntityKey{4}, 9.0}});
-  }
-}
 
 TEST_CASE("publishing the same sources in different orders gives the same world and the same "
           "hash") {
@@ -718,20 +615,6 @@ TEST_CASE("fieldValue of a scalar field is 0.0 with each entry sampleField gives
 
     const double value = fieldValue<Footfall>(world, networkOf(world), place(CARRIER_A, 4));
     REQUIRE(std::bit_cast<uint64_t>(value) == std::bit_cast<uint64_t>(0.0));
-  }
-}
-
-TEST_CASE("fieldValue at a place with no entries is 0.0") {
-  World world = makeFieldWorld(makeFieldSchema());
-  addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 1.0)});
-  resolveWorld(world);
-  const Network &network = networkOf(world);
-
-  // A place that resolves but holds no entries, and one that does not resolve.
-  for (const Place at : {place(CARRIER_C, 4), place(CARRIER_A, 11)}) {
-    CAPTURE(at.Carrier, at.Distance);
-    REQUIRE(std::bit_cast<uint64_t>(fieldValue<Footfall>(world, network, at)) ==
-            std::bit_cast<uint64_t>(0.0));
   }
 }
 

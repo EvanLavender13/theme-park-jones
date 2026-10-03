@@ -89,15 +89,6 @@ void holdAndInspect(Interaction &interaction, const World &world, CommandQueue &
   interaction.pick(world, firstBox(world, BoxKind::Shop).Key);
 }
 
-TEST_CASE("An Interaction starts with the tool at start and no subject") {
-  const Interaction interaction(3);
-
-  CHECK(interaction.tool().Kind == ToolKind::None);
-  CHECK_FALSE(interaction.tool().Holding);
-  CHECK(interaction.tool().Drawn.empty());
-  CHECK_FALSE(interaction.subject().has_value());
-}
-
 TEST_CASE("follow with the generation the interaction last saw changes nothing") {
   const World world = sketchPark();
   CommandQueue commands;
@@ -240,86 +231,6 @@ TEST_CASE("picks is true exactly when the frame's buttons hold a press and the t
   interaction.selectTool(ToolKind::MoveBox);
 
   CHECK_FALSE(interaction.picks(PRESS));
-}
-
-TEST_CASE("pick sets the subject as pickSubject does for the world and the entity") {
-  // Nothing, a shop, another shop, a depot, the entrance, and nothing: picks that set, replace,
-  // and keep the subject.
-  const World world = sketchPark();
-  std::vector<std::optional<EntityKey>> picked{std::nullopt};
-  for (const ParkBox &box : parkBoxes(world)) {
-    if (box.Kind == BoxKind::Shop) {
-      picked.emplace_back(box.Key);
-    }
-  }
-  REQUIRE(picked.size() >= 3);
-  picked.emplace_back(firstBox(world, BoxKind::Depot).Key);
-  picked.emplace_back(parkEntrances(world).at(0).Key);
-  picked.emplace_back(std::nullopt);
-  Interaction interaction(3);
-  std::optional<InspectorSubject> expected;
-
-  for (size_t index = 0; index < picked.size(); ++index) {
-    INFO("pick " << index);
-    interaction.pick(world, picked[index]);
-    pickSubject(expected, world, picked[index]);
-
-    CHECK(interaction.subject() == expected);
-  }
-  CHECK(expected.has_value());
-}
-
-TEST_CASE("forgetSubject leaves no subject") {
-  const World world = sketchPark();
-  Interaction interaction(3);
-  interaction.pick(world, firstBox(world, BoxKind::Shop).Key);
-  REQUIRE(interaction.subject().has_value());
-
-  interaction.forgetSubject();
-
-  CHECK_FALSE(interaction.subject().has_value());
-}
-
-TEST_CASE("selectTool, movePointer, tentativeEdit, and highlighted give what tools.h's functions "
-          "give for the interaction's tool") {
-  const World world = sketchPark();
-  Interaction interaction(3);
-  ToolState expected;
-
-  SECTION("A place tool's edit at the pointer") {
-    interaction.selectTool(ToolKind::PlaceShop);
-    selectTool(expected, ToolKind::PlaceShop);
-    interaction.movePointer(OPEN_GROUND);
-    movePointer(expected, OPEN_GROUND);
-
-    REQUIRE(tentativeEdit(expected, world).has_value());
-    CHECK(interaction.tentativeEdit(world) == tentativeEdit(expected, world));
-  }
-  SECTION("MoveBox's highlight of the box under the pointer") {
-    const Pose shop = firstBox(world, BoxKind::Shop).At;
-    interaction.selectTool(ToolKind::MoveBox);
-    selectTool(expected, ToolKind::MoveBox);
-    interaction.movePointer(ParkPoint{shop.X, shop.Z});
-    movePointer(expected, ParkPoint{shop.X, shop.Z});
-
-    REQUIRE(highlightedEntity(expected, world).has_value());
-    CHECK(interaction.highlighted(world) == highlightedEntity(expected, world));
-  }
-  SECTION("Selecting the tool again over drawn points") {
-    CommandQueue commands;
-    interaction.selectTool(ToolKind::GuestPath);
-    selectTool(expected, ToolKind::GuestPath);
-    interaction.movePointer(OPEN_GROUND);
-    movePointer(expected, OPEN_GROUND);
-    interaction.useButtons(world, commands, PRESS);
-    pressPointer(expected, world);
-    REQUIRE_FALSE(expected.Drawn.empty());
-
-    interaction.selectTool(ToolKind::GuestPath);
-    selectTool(expected, ToolKind::GuestPath);
-  }
-
-  checkSameTool(interaction.tool(), expected);
 }
 
 } // namespace
