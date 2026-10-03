@@ -78,6 +78,7 @@ Read docs/principles.md and docs/exceptions.md first. A violation of a principle
 ### Plan documents (`CAPABILITY.md`, `MILESTONE.md`, `FEATURE.md`)
 
 - Success or acceptance criteria that are not observable or testable.
+- An acceptance criterion whose subject is a list rather than one property: inputs or error conditions joined by commas or "or", every way a state can change, or every entry point or name. It is Major, since the test pass turns each item into a test.
 - Dependency order violations: item N listed before item M when N depends on M.
 - Stated dependencies on capabilities, milestones, or features that do not exist or are unmet without being marked unmet.
 - A named core that does not produce value standalone.
@@ -100,6 +101,7 @@ Read docs/principles.md and docs/exceptions.md first. A violation of a principle
 - Logic errors: trace the call chain and verify; do not flag suspected nulls or off-by-ones without checking the callers and guards.
 - Broken contracts: changed signature, missing case, wrong return shape — with the failing call site identified.
 - Missing tests for critical paths the change introduces or modifies.
+- Tests that enumerate: a SECTION, GENERATE, or block of checks for each item of a list of inputs, conditions, or entry points, rather than one property shown on a few inputs each chosen for a stated reason.
 - Violations of the project's stated standards (read `CLAUDE.md` and any referenced docs first).
 - Behavior the code introduces or changes that the module's SPEC.md does not describe, or SPEC.md statements the code contradicts.
 - Tests from the test pass that were edited, weakened, or deleted by the change.

@@ -1,6 +1,6 @@
 #!/bin/bash
-# pre-commit: refuse a new PLAN.md with no Placement section (decision 0027), then clang-format
-# staged C/C++ files (decision 0021).
+# pre-commit: refuse a new PLAN.md with no Placement section (decision 0027) and a new test case
+# with more than two SECTIONs, then clang-format staged C/C++ files (decision 0021).
 # clang-tidy runs in scripts/tidy.sh, which the pre-push hook gates.
 # Activate once per clone: git config core.hooksPath .githooks
 #
@@ -27,6 +27,12 @@ if [ ${#PLANS[@]} -gt 0 ]; then
         echo "pre-commit: each new PLAN.md needs a Placement section (decision 0027); commit aborted."
         exit 1
     fi
+fi
+
+# A new test case tests one property, not one section per input.
+if ! "$(git rev-parse --show-toplevel)/scripts/check-test-sections.sh"; then
+    echo "pre-commit: commit aborted."
+    exit 1
 fi
 
 if command -v clang-format &> /dev/null; then
