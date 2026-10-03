@@ -14,6 +14,7 @@ add_executable(tpj_sim_tests
     guests/visits_test.cpp
     guests/walks_test.cpp
     medium/carry_over_test.cpp
+    medium/field_index_test.cpp
     medium/field_sampling_test.cpp
     medium/field_test.cpp
     medium/flow_test.cpp

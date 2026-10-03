@@ -8,7 +8,9 @@
 #include "sim/world.h"
 
 #include <algorithm>
+#include <cmath>
 #include <concepts>
+#include <iterator>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -41,12 +43,48 @@ void visitFields(Visitor &visitor, PlacedEntry<Entry> &entry) {
 template <typename Entry> struct FieldSlot {
   EntityKey Source = NULL_KEY;
   std::vector<PlacedEntry<Entry>> Entries;
+  // The positions of Entries ordered by place, made on the slot's first sample. Derived from
+  // Entries, which nothing changes in place, and never visited, so saves, hashes, and comparisons
+  // never see it.
+  mutable std::optional<std::vector<uint32_t>> ByPlace = std::nullopt;
 };
 
 template <typename Visitor, typename Entry>
 void visitFields(Visitor &visitor, FieldSlot<Entry> &slot) {
   visitor.field("source", slot.Source);
   visitor.field("entries", slot.Entries);
+}
+
+// Whether a's place orders before b's: by carrier key, then distance.
+inline bool placeBefore(const Place &a, const Place &b) {
+  return a.Carrier != b.Carrier ? a.Carrier < b.Carrier : a.Distance < b.Distance;
+}
+
+// The positions of the entries whose distance is not NaN, each once, ordered by carrier key, then
+// distance, then position.
+template <typename Entry>
+std::vector<uint32_t> orderByPlace(std::span<const PlacedEntry<Entry>> entries) {
+  std::vector<uint32_t> order;
+  order.reserve(entries.size());
+  for (uint32_t i = 0; i < entries.size(); ++i) {
+    // A NaN distance equals no place and lies inside no edge, and would break the ordering.
+    if (!std::isnan(entries[i].At.Distance)) {
+      order.push_back(i);
+    }
+  }
+  std::ranges::stable_sort(order, [entries](uint32_t a, uint32_t b) {
+    return placeBefore(entries[a].At, entries[b].At);
+  });
+  return order;
+}
+
+// The slot's entries ordered by place, as orderByPlace gives them, made on the first call and kept
+// in the slot.
+template <typename Entry> std::span<const uint32_t> entriesByPlace(const FieldSlot<Entry> &slot) {
+  if (!slot.ByPlace) {
+    slot.ByPlace = orderByPlace(std::span<const PlacedEntry<Entry>>(slot.Entries));
+  }
+  return *slot.ByPlace;
 }
 
 // An entry sampled at a place, with the source that published it.
@@ -238,7 +276,7 @@ void publishResolved(World &world, EntityKey source,
     throw std::invalid_argument("source " + std::to_string(static_cast<uint64_t>(source)) +
                                 " has already published into field " + name);
   }
-  slots.insert(at, Slot{source, std::move(entries)});
+  slots.insert(at, Slot{.Source = source, .Entries = std::move(entries)});
 }
 
 // Gives a source's entries for this tick, readable after the swap that ends it. Systems only.
@@ -268,19 +306,62 @@ void publishStepped(World &world, EntityKey source,
     throw std::invalid_argument("source " + std::to_string(static_cast<uint64_t>(source)) +
                                 " has already published into field " + name + " this tick");
   }
-  slots.insert(at, Slot{source, std::move(entries)});
+  slots.insert(at, Slot{.Source = source, .Entries = std::move(entries)});
 }
 
-// Appends the source's entries whose places resolve to the node: exactly those among its stop
-// places.
+// The positions of the slot's entries at exactly the place, ascending.
+template <typename Entry>
+std::span<const uint32_t> positionsAt(const FieldSlot<Entry> &slot, const Place &place) {
+  const std::span<const uint32_t> order = entriesByPlace(slot);
+  const auto placeOf = [&slot](uint32_t i) -> const Place & { return slot.Entries[i].At; };
+  const auto found = std::ranges::equal_range(order, place, placeBefore, placeOf);
+  return {found.begin(), found.end()};
+}
+
+// Appends the positions of the slot's entries on the carrier strictly between the two distances.
+template <typename Entry>
+void positionsInside(const FieldSlot<Entry> &slot, EntityKey carrier, double from, double to,
+                     std::vector<uint32_t> &positions) {
+  const std::span<const uint32_t> order = entriesByPlace(slot);
+  const auto placeOf = [&slot](uint32_t i) -> const Place & { return slot.Entries[i].At; };
+  const auto first = std::ranges::upper_bound(order, Place{carrier, from}, placeBefore, placeOf);
+  const auto last = std::ranges::lower_bound(order, Place{carrier, to}, placeBefore, placeOf);
+  if (first < last) {
+    positions.insert(positions.end(), first, last);
+  }
+}
+
+// Clears positions and fills it with those of the slot's entries at any of the places, ascending
+// and once each, so entries come out in the source's order.
+template <typename Entry>
+void positionsAtAny(const FieldSlot<Entry> &slot, std::span<const Place> places,
+                    std::vector<uint32_t> &positions) {
+  positions.clear();
+  for (const Place &place : places) {
+    const std::span<const uint32_t> found = positionsAt(slot, place);
+    positions.insert(positions.end(), found.begin(), found.end());
+  }
+  std::ranges::sort(positions);
+  const auto repeats = std::ranges::unique(positions);
+  positions.erase(repeats.begin(), repeats.end());
+}
+
+// The working lists a sample reuses for each of its sources, so its sources' lookups allocate only
+// while the lists grow.
+template <typename Entry> struct SampleScratch {
+  std::vector<uint32_t> Positions;
+  std::vector<uint32_t> Inside;
+  EdgeSample<Entry> Edge;
+};
+
+// Appends the source's entries whose places resolve to the node: exactly those at its stop
+// places, found through the slot's order by place.
 template <typename Entry>
 void sampleSlotAtNode(const Network &network, const FieldSlot<Entry> &slot, uint32_t node,
-                      std::vector<SampledEntry<Entry>> &sampled) {
-  const std::span<const Place> stops = network.stopPlaces(node);
-  for (const PlacedEntry<Entry> &entry : slot.Entries) {
-    if (std::ranges::find(stops, entry.At) != stops.end()) {
-      sampled.push_back({slot.Source, entry.Value});
-    }
+                      SampleScratch<Entry> &scratch, std::vector<SampledEntry<Entry>> &sampled) {
+  positionsAtAny(slot, network.stopPlaces(node), scratch.Positions);
+  for (const uint32_t i : scratch.Positions) {
+    sampled.push_back({slot.Source, slot.Entries[i].Value});
   }
 }
 
@@ -290,32 +371,43 @@ template <FieldDefinition F>
 void sampleSlotInEdge(const Network &network, const FieldSlot<typename F::Entry> &slot,
                       [[maybe_unused]] const Place &place,
                       [[maybe_unused]] const EdgePosition &position,
+                      [[maybe_unused]] SampleScratch<typename F::Entry> &scratch,
                       std::vector<SampledEntry<typename F::Entry>> &sampled) {
   using Entry = typename F::Entry;
   if constexpr (HasEdgeRule<F>) {
     const NetworkEdge &edge = network.edges()[position.Edge];
     const std::span<const Place> fromStops = network.stopPlaces(edge.From);
     const std::span<const Place> toStops = network.stopPlaces(edge.To);
-    EdgeSample<Entry> sample;
+    EdgeSample<Entry> &sample = scratch.Edge;
+    sample.AtFrom.clear();
+    sample.AtTo.clear();
+    sample.Along.clear();
     sample.Edge = edge;
     sample.FromOffset = position.FromOffset;
     sample.ToOffset = position.ToOffset;
     // An entry resolves strictly inside the edge exactly when it is on the edge's carrier strictly
-    // between its stops, and to one of its nodes exactly when it is among that node's stop places,
-    // so no entry is resolved. The offsets are resolve's own subtractions.
-    for (const PlacedEntry<Entry> &entry : slot.Entries) {
-      const Place &at = entry.At;
-      if (at.Carrier == edge.Carrier && at.Distance > edge.FromDistance &&
-          at.Distance < edge.ToDistance) {
-        sample.Along.push_back(
-            {at.Distance - edge.FromDistance, edge.ToDistance - at.Distance, entry.Value});
-        continue;
+    // between its stops, and to one of its nodes exactly when it is at one of that node's stop
+    // places, so no entry is resolved. The offsets are resolve's own subtractions.
+    std::vector<uint32_t> &inside = scratch.Inside;
+    inside.clear();
+    positionsInside(slot, edge.Carrier, edge.FromDistance, edge.ToDistance, inside);
+    std::ranges::sort(inside);
+    for (const uint32_t i : inside) {
+      const PlacedEntry<Entry> &entry = slot.Entries[i];
+      sample.Along.push_back({entry.At.Distance - edge.FromDistance,
+                              edge.ToDistance - entry.At.Distance, entry.Value});
+    }
+    // An entry inside the edge is not also at an end, as resolving it gives the inside.
+    positionsAtAny(slot, fromStops, scratch.Positions);
+    for (const uint32_t i : scratch.Positions) {
+      if (!std::ranges::binary_search(inside, i)) {
+        sample.AtFrom.push_back(slot.Entries[i].Value);
       }
-      if (std::ranges::find(fromStops, at) != fromStops.end()) {
-        sample.AtFrom.push_back(entry.Value);
-      }
-      if (std::ranges::find(toStops, at) != toStops.end()) {
-        sample.AtTo.push_back(entry.Value);
+    }
+    positionsAtAny(slot, toStops, scratch.Positions);
+    for (const uint32_t i : scratch.Positions) {
+      if (!std::ranges::binary_search(inside, i)) {
+        sample.AtTo.push_back(slot.Entries[i].Value);
       }
     }
     if (sample.AtFrom.empty() && sample.AtTo.empty() && sample.Along.empty()) {
@@ -325,10 +417,8 @@ void sampleSlotInEdge(const Network &network, const FieldSlot<typename F::Entry>
       sampled.push_back({slot.Source, value});
     }
   } else {
-    for (const PlacedEntry<Entry> &entry : slot.Entries) {
-      if (entry.At == place) {
-        sampled.push_back({slot.Source, entry.Value});
-      }
+    for (const uint32_t i : positionsAt(slot, place)) {
+      sampled.push_back({slot.Source, slot.Entries[i].Value});
     }
   }
 }
@@ -396,11 +486,13 @@ sampleSlots(const Network &network, const Place &place,
   if (!position) {
     return sampled;
   }
+  SampleScratch<typename F::Entry> scratch;
   for (const FieldSlot<typename F::Entry> *slot : slots) {
     if (const auto *node = std::get_if<NodePosition>(&*position)) {
-      sampleSlotAtNode(network, *slot, node->Node, sampled);
+      sampleSlotAtNode(network, *slot, node->Node, scratch, sampled);
     } else {
-      sampleSlotInEdge<F>(network, *slot, place, std::get<EdgePosition>(*position), sampled);
+      sampleSlotInEdge<F>(network, *slot, place, std::get<EdgePosition>(*position), scratch,
+                          sampled);
     }
   }
   return sampled;
@@ -419,7 +511,8 @@ std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world, con
 }
 
 // The first of the source's entries that sampleField gives at the node's nodePlace, or none.
-// Throws std::out_of_range for a node not below the node count. Allocates nothing.
+// Throws std::out_of_range for a node not below the node count. Allocates nothing but the slot's
+// order by place, when it is the slot's first reader.
 template <FieldDefinition F>
 std::optional<typename F::Entry> sourceEntryAtNode(const World &world, const Network &network,
                                                    uint32_t node, EntityKey source) {
@@ -429,12 +522,19 @@ std::optional<typename F::Entry> sourceEntryAtNode(const World &world, const Net
   if (slot == nullptr) {
     return std::nullopt;
   }
-  for (const PlacedEntry<typename F::Entry> &entry : slot->Entries) {
-    if (std::ranges::find(stops, entry.At) != stops.end()) {
-      return entry.Value;
+  // Each place's positions ascend, so the least first position among the stops is the source's
+  // first entry at the node.
+  std::optional<uint32_t> first;
+  for (const Place &stop : stops) {
+    const std::span<const uint32_t> found = positionsAt(*slot, stop);
+    if (!found.empty() && (!first || found.front() < *first)) {
+      first = found.front();
     }
   }
-  return std::nullopt;
+  if (!first) {
+    return std::nullopt;
+  }
+  return slot->Entries[*first].Value;
 }
 
 // The field's entries at the place, as sampleField gives them, but choosing each source's resolved
