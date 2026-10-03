@@ -38,5 +38,5 @@ next-key 9
 [food-offer-stepped]
 12622604716256766672 readable=[] pending=[]
 
-[hungry-footfall-stepped]
-11741940842860801778 readable=[] pending=[]
+[hungry-footfall-kept]
+11741940842860801778 slots=[] pending=[]

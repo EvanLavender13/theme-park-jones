@@ -78,8 +78,5 @@ next-key 47
 45 at={carrier=2 distance=1.1633333333333362} forward=true activity=wandering hunger=0.12487377908948684 hunger-rate=0.0005359736378161165 stay-until=5715 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
 46 at={carrier=17125955698113728469 distance=0.5633333333333334} forward=true activity=wandering hunger=0.3918645849941421 hunger-rate=0.0004247945515830667 stay-until=5001 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
 
-[hungry-footfall-stepped]
-11741940842860801778 readable=[{source=11741940842860801778 entries=[{at={carrier=2 distance=10} value=2.8978077801097375} {at={carrier=19 distance=769.383830696159} value=20.888207751468794} {at={carrier=19 distance=1544.4187670325641} value=0} {at={carrier=12679026346331887652 distance=1.2280910631190496} value=0} {at={carrier=17125955698113728469 distance=1} value=0.15933326179316046} {at={carrier=2 distance=0} value=1.528570520951449} {at={carrier=2 distance=20} value=11.893007765789266} {at={carrier=19 distance=1538.767661392318} value=6.962735917156265} {at={carrier=19 distance=1550.0698726728103} value=0} {at={carrier=12679026346331887652 distance=0} value=0} {at={carrier=17125955698113728469 distance=0} value=0.15933326179316046}]}] pending=[]
-
-[footfall]
-11741940842860801778 stretches=[{at={carrier=2 distance=10} value=2.8978077801097375} {at={carrier=19 distance=769.383830696159} value=20.888207751468794} {at={carrier=19 distance=1544.4187670325641} value=0} {at={carrier=12679026346331887652 distance=1.2280910631190496} value=0} {at={carrier=17125955698113728469 distance=1} value=0.15933326179316046}]
+[hungry-footfall-kept]
+11741940842860801778 slots=[{source=11741940842860801778 entries=[{at={carrier=2 distance=10} value=2.8978077801097375 tick=2413} {at={carrier=19 distance=769.383830696159} value=20.888207751468794 tick=2413} {at={carrier=19 distance=1544.4187670325641} value=0 tick=2413} {at={carrier=12679026346331887652 distance=1.2280910631190496} value=0 tick=2413} {at={carrier=17125955698113728469 distance=1} value=0.15933326179316046 tick=2413}]}] pending=[]

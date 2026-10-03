@@ -4,7 +4,7 @@
 #include "sim/entity_key.h"
 #include "sim/guests/footfall.h"
 #include "sim/guests/guests.h"
-#include "sim/medium/field.h"
+#include "sim/medium/kept_field.h"
 #include "sim/medium/network.h"
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
@@ -44,32 +44,32 @@ World gatesWorld() {
 
 EntityKey keyAt(uint64_t value) { return EntityKey{value}; }
 
-TEST_CASE("addGuests registers guest, hungry footfall's field types, and footfall, then stepGuests "
-          "and the footfall system, then carryGuests, the field's finisher, and the footfall "
-          "finisher, and makeParkSchema's component types and systems end with them") {
+TEST_CASE("addGuests registers guest and hungry footfall's kept field, then stepGuests and the "
+          "footfall system, then carryGuests and the footfall finisher, and makeParkSchema's "
+          "component types and systems end with them") {
   WorldSchema guestsAlone;
   addGuests(guestsAlone);
   CHECK(HungryFootfall::Name == "hungry-footfall");
-  WorldSchema fieldAlone;
-  addField<HungryFootfall>(fieldAlone);
-  REQUIRE(fieldAlone.components().size() == 2);
-  REQUIRE(fieldAlone.finishers().size() == 1);
+  WorldSchema keptAlone;
+  addKeptField<HungryFootfall>(keptAlone);
+  REQUIRE(keptAlone.components().size() == 1);
+  REQUIRE(keptAlone.resolvers().size() == 1);
+  REQUIRE(keptAlone.swaps().size() == 1);
 
   const std::vector<ComponentType> &types = guestsAlone.components();
-  REQUIRE(types.size() == 4);
+  REQUIRE(types.size() == 2);
   CHECK(types[0].Name == "guest");
   CHECK(types[0].Kind == DataKind::State);
-  for (std::size_t index = 0; index < 2; ++index) {
-    CAPTURE(index);
-    CHECK(types[index + 1].Name == fieldAlone.components()[index].Name);
-    CHECK(types[index + 1].Kind == fieldAlone.components()[index].Kind);
-    CHECK(types[index + 1].TypeId == fieldAlone.components()[index].TypeId);
-  }
-  CHECK(types[3].Name == "footfall");
-  CHECK(types[3].Kind == DataKind::State);
+  CHECK(types[1].Name == keptAlone.components().front().Name);
+  CHECK(types[1].Kind == keptAlone.components().front().Kind);
+  CHECK(types[1].TypeId == keptAlone.components().front().TypeId);
+  REQUIRE(guestsAlone.resolvers().size() == 1);
+  CHECK(guestsAlone.resolvers().front().Name == keptAlone.resolvers().front().Name);
+  CHECK(guestsAlone.resolvers().front().Resolve == keptAlone.resolvers().front().Resolve);
+  REQUIRE(guestsAlone.swaps().size() == 1);
+  CHECK(guestsAlone.swaps().front() == keptAlone.swaps().front());
   CHECK(guestsAlone.systems().size() == 2);
-  REQUIRE(guestsAlone.finishers().size() == 3);
-  CHECK(guestsAlone.finishers()[1] == fieldAlone.finishers().front());
+  CHECK(guestsAlone.finishers().size() == 2);
 
   const std::shared_ptr<const WorldSchema> park = makeParkSchema();
   REQUIRE(park != nullptr);

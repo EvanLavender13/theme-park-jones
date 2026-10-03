@@ -8,11 +8,13 @@
 #include "sim/medium/network.h"
 #include "sim/routes/networks.h"
 #include "sim/schema.h"
+#include "sim/sim_math.h"
 #include "sim/world.h"
 
 #include <algorithm>
 #include <iterator>
 #include <optional>
+#include <span>
 #include <stddef.h>
 #include <stdint.h>
 #include <utility>
@@ -22,7 +24,7 @@ namespace tpj {
 
 namespace {
 
-// The field's entity, which holds the footfall and is the source of its entries.
+// The field's entity, the source of its kept entries.
 constexpr EntityKey FOOTFALL_SOURCE = fieldKey(HungryFootfall::Name);
 
 // The index in edges() of the stretch the place lies in: the one of its own carrier whose
@@ -42,67 +44,90 @@ std::optional<size_t> stretchOf(const Network &network, const Place &place) {
   return static_cast<size_t>(std::prev(after) - edges.begin());
 }
 
-// Moves each stretch's value toward the summed hunger of the guests on it, holds the new values
-// at the stretches' midpoints, and publishes them with each node's mean of its stretches.
+// The place of the stretch's carrier halfway between its stops, where its value is kept.
+Place midpointOf(const NetworkEdge &edge) {
+  return Place{edge.Carrier, (edge.FromDistance + edge.ToDistance) / 2.0};
+}
+
+// A guest's stretch, as its index in edges(), and its hunger.
+struct GuestOnStretch {
+  size_t Stretch = 0;
+  double Hunger = 0.0;
+};
+
+// A kept entry carried to a stretch of the new network, as its index in edges().
+struct CarriedEntry {
+  size_t Stretch = 0;
+  const KeptEntry *Entry = nullptr;
+};
+
+// One entry at the stretch's midpoint for the entries carried into it: a lone entry keeps its
+// value and tick, and several hold their values read at the tick, added in held order, with the
+// tick.
+KeptEntry combineCarried(std::span<const CarriedEntry> group, const Place &midpoint,
+                         uint64_t tick) {
+  if (group.size() == 1) {
+    return {.At = midpoint, .Value = group.front().Entry->Value, .Tick = group.front().Entry->Tick};
+  }
+  double sum = 0.0;
+  for (const CarriedEntry &carried : group) {
+    sum += readKeptEntry<HungryFootfall>(*carried.Entry, tick);
+  }
+  return {.At = midpoint, .Value = sum, .Tick = tick};
+}
+
+// Moves the value of each stretch some guest stands in toward the summed hunger of the guests
+// there, and visits no other stretch.
 void stepFootfall(World &world) {
   const Network &network = parkNetwork(world, PathKind::Guest);
-  const std::vector<NetworkEdge> &edges = network.edges();
-  Footfall &footfall = world.Registry.get_or_emplace<Footfall>(world.findEntity(FOOTFALL_SOURCE));
-  std::vector<double> held(edges.size(), 0.0);
-  for (const PlacedEntry<double> &entry : footfall.Stretches) {
-    if (const std::optional<size_t> stretch = stretchOf(network, entry.At)) {
-      held[*stretch] += entry.Value;
-    }
-  }
-  std::vector<double> hunger(edges.size(), 0.0);
+  // In ascending key order, then grouped by stretch with that order kept within each.
+  std::vector<GuestOnStretch> onStretches;
   for (const EntityKey key : parkGuests(world)) {
     const Guest &guest = world.Registry.get<Guest>(world.findEntity(key));
     if (const std::optional<size_t> stretch = stretchOf(network, guest.At)) {
-      hunger[*stretch] += guest.Hunger;
+      onStretches.push_back({.Stretch = *stretch, .Hunger = guest.Hunger});
     }
   }
-  std::vector<PlacedEntry<double>> stretches;
-  stretches.reserve(edges.size());
-  std::vector<double> nodeSums(network.nodeCount(), 0.0);
-  std::vector<uint32_t> nodeEnds(network.nodeCount(), 0);
-  for (size_t i = 0; i < edges.size(); ++i) {
-    const NetworkEdge &edge = edges[i];
-    const double value = held[i] + ((hunger[i] - held[i]) / static_cast<double>(FOOTFALL_TIME));
-    stretches.push_back({Place{edge.Carrier, (edge.FromDistance + edge.ToDistance) / 2.0}, value});
-    nodeSums[edge.From] += value;
-    ++nodeEnds[edge.From];
-    nodeSums[edge.To] += value;
-    ++nodeEnds[edge.To];
+  std::ranges::stable_sort(onStretches, {}, &GuestOnStretch::Stretch);
+  for (auto group = onStretches.begin(); group != onStretches.end();) {
+    const size_t stretch = group->Stretch;
+    double hunger = 0.0;
+    for (; group != onStretches.end() && group->Stretch == stretch; ++group) {
+      hunger += group->Hunger;
+    }
+    const Place midpoint = midpointOf(network.edges()[stretch]);
+    const double held = keptValue<HungryFootfall>(world, FOOTFALL_SOURCE, midpoint).value_or(0.0);
+    keepEntry<HungryFootfall>(world, FOOTFALL_SOURCE, midpoint,
+                              held + ((hunger - held) / static_cast<double>(FOOTFALL_TIME)));
   }
-  footfall.Stretches = stretches;
-  std::vector<PlacedEntry<double>> entries = std::move(stretches);
-  for (uint32_t node = 0; node < network.nodeCount(); ++node) {
-    entries.push_back(
-        {network.nodePlace(node), nodeSums[node] / static_cast<double>(nodeEnds[node])});
-  }
-  publishStepped<HungryFootfall>(world, FOOTFALL_SOURCE, std::move(entries));
 }
 
-// Carries each held value's place from the guest network before the resolution to the new one,
-// dropping those whose places are retired.
+// Carries each kept value from the guest network before the resolution to the new one, holding
+// one entry per stretch at its midpoint and dropping values whose places are retired.
 void carryFootfall(World &world) {
   const Network *before = previousNetwork(world, PathKind::Guest);
-  const entt::entity entity = world.findEntity(FOOTFALL_SOURCE);
-  auto *footfall = before == nullptr || entity == entt::null
-                       ? nullptr
-                       : world.Registry.try_get<Footfall>(entity);
-  if (footfall == nullptr) {
+  if (before == nullptr) {
     return;
   }
   const Network &after = parkNetwork(world, PathKind::Guest);
-  std::vector<PlacedEntry<double>> carried;
-  carried.reserve(footfall->Stretches.size());
-  for (const PlacedEntry<double> &entry : footfall->Stretches) {
-    if (const std::optional<Place> at = carryOver(entry.At, *before, after)) {
-      carried.push_back({*at, entry.Value});
+  std::vector<CarriedEntry> carried;
+  for (const KeptEntry &entry : keptEntries<HungryFootfall>(world, FOOTFALL_SOURCE)) {
+    const std::optional<Place> at = carryOver(entry.At, *before, after);
+    if (const std::optional<size_t> stretch = at ? stretchOf(after, *at) : std::nullopt) {
+      carried.push_back({.Stretch = *stretch, .Entry = &entry});
     }
   }
-  footfall->Stretches = std::move(carried);
+  std::ranges::stable_sort(carried, {}, &CarriedEntry::Stretch);
+  std::vector<KeptEntry> entries;
+  for (auto group = carried.begin(); group != carried.end();) {
+    const size_t stretch = group->Stretch;
+    const auto next = std::ranges::find_if(
+        group, carried.end(), [stretch](const CarriedEntry &c) { return c.Stretch != stretch; });
+    entries.push_back(combineCarried(std::span<const CarriedEntry>(group, next),
+                                     midpointOf(after.edges()[stretch]), world.Tick));
+    group = next;
+  }
+  replaceKeptEntries<HungryFootfall>(world, FOOTFALL_SOURCE, std::move(entries));
 }
 
 } // namespace
@@ -116,9 +141,25 @@ std::vector<double> HungryFootfall::sampleEdge(const EdgeSample<double> &sample)
   return values;
 }
 
+double HungryFootfall::readKept(double value, uint64_t ticks) {
+  const double perTick = 1.0 - (1.0 / static_cast<double>(FOOTFALL_TIME));
+  return value * simExp(static_cast<double>(ticks) * simLog(perTick));
+}
+
+std::vector<double> HungryFootfall::sampleNode(const NodeSample &sample) {
+  double sum = 0.0;
+  for (const NodeEnd &end : sample.Ends) {
+    double stretch = 0.0;
+    for (const EdgeEntry<double> &entry : end.Along) {
+      stretch += entry.Value;
+    }
+    sum += stretch;
+  }
+  return {sum / static_cast<double>(sample.Ends.size())};
+}
+
 void addFootfall(WorldSchema &schema) {
-  addField<HungryFootfall>(schema);
-  schema.addComponent<Footfall>("footfall", DataKind::State);
+  addKeptField<HungryFootfall>(schema);
   schema.addSystem(&stepFootfall);
   schema.addFinisher(&carryFootfall);
 }

@@ -140,7 +140,6 @@ template <KeptFieldDefinition F> void applyKeptChanges(World &world) {
       at = kept->Slots.insert(at, KeptSlot{.Source = change.Source, .Entries = {}});
     }
     KeptSlot &slot = *at;
-    // Makes the slot's order when it has none, so the order exists below.
     const std::span<const uint32_t> found = positionsAt(slot, change.At);
     if (!found.empty()) {
       KeptEntry &entry = slot.Entries[found.front()];
@@ -150,9 +149,11 @@ template <KeptFieldDefinition F> void applyKeptChanges(World &world) {
     }
     const auto position = static_cast<uint32_t>(slot.Entries.size());
     slot.Entries.push_back({.At = change.At, .Value = change.Value, .Tick = world.Tick});
-    std::vector<uint32_t> &order = *slot.ByPlace;
-    const auto placeOf = [&slot](uint32_t i) -> const Place & { return slot.Entries[i].At; };
-    order.insert(std::ranges::upper_bound(order, change.At, placeBefore, placeOf), position);
+    // An order made is kept; one not yet made is made from the entries when next needed.
+    if (std::optional<std::vector<uint32_t>> &order = slot.ByPlace; order.has_value()) {
+      const auto placeOf = [&slot](uint32_t i) -> const Place & { return slot.Entries[i].At; };
+      order->insert(std::ranges::upper_bound(*order, change.At, placeBefore, placeOf), position);
+    }
   }
   kept->Pending.clear();
 }
