@@ -274,6 +274,9 @@ sim/medium/flow_test.cpp
 sim/medium/kept_field_test.cpp
 
 - rewrite: "a kept entry reads as its owner's rule of its held value and…" Property: A kept entry reads as its owner's rule of elapsed ticks, clamped at 0. Reaches the later-tick case by editing the save text ("\ntick 3\n"), so it breaks when the save layout changes (S1).
+- rewrite: "sampleField and fieldValue of a kept field without node or e…" Property: sampleField of a kept field without node or edge rules gives the read values of each source's entries at the place, sources in ascending key order. Its fieldValue clause re-proves the generic scalar sum that field_test's "fieldValue of a scalar field is 0.0 with each entry sampleField gives added in turn" owns (S2).
+- rewrite: "a kept field's edge rule is given the read values of the sou…" Property: a kept field's edge rule is given the read values of the source's entries. Its FromOffset and ToOffset checks re-prove the generic edge sample offsets that field_test's "sampleEdge is given the edge, the place's offsets as resolve gives them, …" owns (S2).
+- rewrite: "in a world loaded from a save, a change at a held place leav…" Property: a source holds one entry at each place it has changed, with the last value and the tick of the swap that applied it. Shows that property again on a loaded world (S4). Rewritten as one test with "a source holds one entry at each place it has changed, in t…", with the loaded world as a stated input, since the order by place is rebuilt after a load.
 - held: "a saved world holding kept entries, loaded and resolved, rea…" Property: S2 (save laws, sim root: save_test.cpp), S3. Re-proves that a save loads back equal and saves again identically for kept state; that reading leaves the save unchanged is const-guaranteed.
 
 sim/medium/network_test.cpp

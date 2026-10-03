@@ -17,8 +17,8 @@ Two reasons.
 ## Checklist
 
 1. Identify the artifact: One file, a set of files, a commit range, or the staged diff. Ask the user if ambiguous.
-2. Identify the artifact type: Plan document, implementation plan, code change, or other. The subagent applies a different lens to each.
-3. Identify required context: Parent artifacts the reviewer must read. A `MILESTONE.md` review requires its `CAPABILITY.md`, plus its `SLICE.md` when it is a slice member. A `SLICE.md` review requires docs/vision.md and the CAPABILITY.md and MILESTONE.md of every existing member. A `FEATURE.md` and `PLAN.md` review requires its `MILESTONE.md`, the SPEC.md of every module the feature touches, and docs/principles.md. A code change requires FEATURE.md when one exists, the SPEC.md of every module it touches, and docs/principles.md. Do not summarize these for the reviewer; pass paths so the reviewer reads them itself.
+2. Identify the artifact type: Plan document, implementation plan, code change, test audit, or other. The subagent applies a different lens to each.
+3. Identify required context: Parent artifacts the reviewer must read. A `MILESTONE.md` review requires its `CAPABILITY.md`, plus its `SLICE.md` when it is a slice member. A `SLICE.md` review requires docs/vision.md and the CAPABILITY.md and MILESTONE.md of every existing member. A `FEATURE.md` and `PLAN.md` review requires its `MILESTONE.md`, the SPEC.md of every module the feature touches, and docs/principles.md. A code change requires FEATURE.md when one exists, the SPEC.md of every module it touches, and docs/principles.md. A test audit requires its milestone's MILESTONE.md, and nothing else. Do not summarize these for the reviewer; pass paths so the reviewer reads them itself.
 4. Dispatch via the Agent tool: Use `subagent_type: reviewer`. The dispatch prompt contains only:
     - The artifact path or paths.
     - The artifact type.
@@ -37,7 +37,7 @@ Planning briefs are the exception. When a planning skill dispatches the review o
 - Report the rest in one line, for example "review fixed A, B, and C".
 - Dispatch the follow-up review only when a Major fix changed a core definition that other plans rely on. Before dispatching it, check the fix against every kind of edit or case the definition covers.
 
-Code reviews and reviews the user asks for directly still follow steps 6 and 7.
+Code reviews, test audits, and reviews the user asks for directly still follow steps 6 and 7.
 
 ## Dispatch hygiene
 
@@ -89,6 +89,22 @@ Full review report:
 <verbatim report>
 
 Follow your follow-up procedure. Return findings in the standard format.
+```
+
+## Test audit dispatch template
+
+A test audit's scope is the merges named for the milestone's features. For each feature directory under the milestone, find its merge with `git log --format='%h %s' --grep='^Merge: <feature-slug>$' main`. A feature with no merge contributes nothing. Pass each merge as its abbreviated hash and subject, one per line.
+
+```
+Audit the tests of this milestone.
+
+Artifact: the test cases added or changed by these merges:
+<hash> Merge: <feature-slug>
+<hash> Merge: <feature-slug>
+Type: test-audit
+Required context (read these before reviewing): plans/<capability-slug>/<milestone-slug>/MILESTONE.md
+
+Follow your test-audit procedure. Return findings in the standard format.
 ```
 
 ## After the review
