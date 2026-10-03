@@ -52,7 +52,6 @@ stage-runner, because it produces numbers on its own. On winding-path.park and t
 Unordered pool this milestone draws later features from.
 
 - Paired runs: the script builds two commits side by side and alternates their launches, so a drift in the machine cannot pass for a change. Gated on: a comparison that sequential reports leave unclear.
-- A readable view of one report: the script prints a report in microseconds with its columns aligned, as the comparison does, rather than leaving the nanoseconds of the file to be read. Gated on: reading single reports often enough that comparing one with itself is a nuisance.
 - Upkeep over ticks: the runner drives the scene sync over a run of ticks and times what keeping the meshes current costs per tick, not one build of each. Gated on: a milestone whose change is how often a mesh is rebuilt, as affordable-overlay's is.
 
 ## Open questions
