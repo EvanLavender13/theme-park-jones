@@ -433,6 +433,22 @@ TEST_CASE("nodeAnchor and anchoredNodes find the anchors given, and nothing wher
   REQUIRE(Network().anchoredNodes(FIRST_OWNER).empty());
 }
 
+TEST_CASE("firstAnchoredNode gives the first node anchoredNodes gives, and none when the entity "
+          "anchors no node") {
+  const Network sample = sampleInputs().build();
+  const Network empty;
+  // FIRST_OWNER's anchors are given as node 3 before node 1, and it anchors two nodes.
+  for (const Network *network : {&sample, &empty}) {
+    for (const EntityKey entity : {FIRST_OWNER, SECOND_OWNER, EntityKey{9}, NULL_KEY}) {
+      CAPTURE(network == &sample, entity);
+      const std::vector<uint32_t> anchored = network->anchoredNodes(entity);
+      const std::optional<uint32_t> expected =
+          anchored.empty() ? std::nullopt : std::optional<uint32_t>(anchored.front());
+      CHECK(network->firstAnchoredNode(entity) == expected);
+    }
+  }
+}
+
 TEST_CASE("nodePlace and nodeAnchor refuse a node not below the node count") {
   const Network network = sampleInputs().build();
   REQUIRE_THROWS_AS(network.nodePlace(5), std::out_of_range);

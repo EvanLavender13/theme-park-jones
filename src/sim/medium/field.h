@@ -362,6 +362,29 @@ std::vector<const FieldSlot<typename F::Entry> *> layeredSlots(const World &worl
   return slots;
 }
 
+// The source's slot as the layer rule chooses it: its readable stepped slot when it has one, and
+// otherwise its resolved one, or none. Allocates nothing.
+template <FieldDefinition F>
+const FieldSlot<typename F::Entry> *sourceSlot(const World &world, EntityKey source) {
+  using Slot = FieldSlot<typename F::Entry>;
+  const entt::entity entity = world.findEntity(fieldKey(F::Name));
+  if (entity == entt::null) {
+    return nullptr;
+  }
+  // Both lists keep their slots in ascending source order.
+  const auto find = [source](const std::vector<Slot> &slots) -> const Slot * {
+    const auto at = std::ranges::lower_bound(slots, source, {}, &Slot::Source);
+    return at != slots.end() && at->Source == source ? &*at : nullptr;
+  };
+  if (const auto *stepped = world.Registry.try_get<SteppedEntries<F>>(entity)) {
+    if (const Slot *slot = find(stepped->Readable)) {
+      return slot;
+    }
+  }
+  const auto *resolved = world.Registry.try_get<ResolvedEntries<F>>(entity);
+  return resolved != nullptr ? find(resolved->Slots) : nullptr;
+}
+
 // The entries of the slots at the place on the network, in the slots' order, by the default rule
 // or the field's sampleEdge.
 template <FieldDefinition F>
@@ -393,6 +416,25 @@ std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world, con
     return {};
   }
   return sampleSlots<F>(network, place, layeredSlots<F>(world, entity));
+}
+
+// The first of the source's entries that sampleField gives at the node's nodePlace, or none.
+// Throws std::out_of_range for a node not below the node count. Allocates nothing.
+template <FieldDefinition F>
+std::optional<typename F::Entry> sourceEntryAtNode(const World &world, const Network &network,
+                                                   uint32_t node, EntityKey source) {
+  // The stops come first, so a node out of range throws whatever the world holds.
+  const std::span<const Place> stops = network.stopPlaces(node);
+  const FieldSlot<typename F::Entry> *slot = sourceSlot<F>(world, source);
+  if (slot == nullptr) {
+    return std::nullopt;
+  }
+  for (const PlacedEntry<typename F::Entry> &entry : slot->Entries) {
+    if (std::ranges::find(stops, entry.At) != stops.end()) {
+      return entry.Value;
+    }
+  }
+  return std::nullopt;
 }
 
 // The field's entries at the place, as sampleField gives them, but choosing each source's resolved

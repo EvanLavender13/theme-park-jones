@@ -8,8 +8,10 @@
 #include <functional>
 #include <optional>
 #include <queue>
+#include <span>
 #include <stdint.h>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace tpj {
@@ -80,29 +82,82 @@ void resolveRouteDistance(World &world) {
   publishRouteDistance<PathKind::Backstage>(world);
 }
 
+// The entry a place inside the edge takes from an entry at the edge's From end, the place's offset
+// from that end added.
+RouteEntry viaFrom(const NetworkEdge &edge, const RouteEntry &entry, double offset) {
+  return {entry.Distance + offset, {edge.Carrier, edge.ToDistance, edge.FromDistance}};
+}
+
+// The entry a place inside the edge takes from an entry at the edge's To end.
+RouteEntry viaTo(const NetworkEdge &edge, const RouteEntry &entry, double offset) {
+  return {entry.Distance + offset, {edge.Carrier, edge.FromDistance, edge.ToDistance}};
+}
+
+// Keeps the candidate when it is the first or strictly less, so the earlier of equals stays.
+void keepLeast(std::optional<RouteEntry> &best, const RouteEntry &candidate) {
+  if (!best || candidate.Distance < best->Distance) {
+    best = candidate;
+  }
+}
+
+template <PathKind Kind>
+std::optional<RouteEntry> routeEntryOn(const World &world, const Network &network,
+                                       const Place &place, EntityKey source) {
+  using Field = RouteDistance<Kind>;
+  const std::optional<NetworkPosition> position = network.resolve(place);
+  if (!position) {
+    return std::nullopt;
+  }
+  if (const auto *node = std::get_if<NodePosition>(&*position)) {
+    return sourceEntryAtNode<Field>(world, network, node->Node, source);
+  }
+  const FieldSlot<RouteEntry> *slot = sourceSlot<Field>(world, source);
+  if (slot == nullptr) {
+    return std::nullopt;
+  }
+  const EdgePosition &inside = std::get<EdgePosition>(*position);
+  const NetworkEdge &edge = network.edges()[inside.Edge];
+  std::optional<RouteEntry> best;
+  // The source's entries at one end, in its order, as the medium's edge sample lists them: an
+  // entry strictly inside the edge is at neither end.
+  const auto atEnd = [&edge, slot](std::span<const Place> stops, const auto &take) {
+    for (const PlacedEntry<RouteEntry> &entry : slot->Entries) {
+      const Place &at = entry.At;
+      const bool within = at.Carrier == edge.Carrier && at.Distance > edge.FromDistance &&
+                          at.Distance < edge.ToDistance;
+      if (!within && std::ranges::find(stops, at) != stops.end()) {
+        take(entry.Value);
+      }
+    }
+  };
+  atEnd(network.stopPlaces(edge.From),
+        [&](const RouteEntry &entry) { keepLeast(best, viaFrom(edge, entry, inside.FromOffset)); });
+  atEnd(network.stopPlaces(edge.To),
+        [&](const RouteEntry &entry) { keepLeast(best, viaTo(edge, entry, inside.ToOffset)); });
+  return best;
+}
+
 } // namespace
 
 std::vector<RouteEntry> sampleRouteEdge(const EdgeSample<RouteEntry> &sample) {
-  const NetworkEdge &edge = sample.Edge;
   std::optional<RouteEntry> best;
-  // Strictly less keeps the earlier candidate, and the From end's come first.
-  const auto consider = [&best](const RouteEntry &candidate) {
-    if (!best || candidate.Distance < best->Distance) {
-      best = candidate;
-    }
-  };
+  // The From end's entries come first, so it wins ties.
   for (const RouteEntry &entry : sample.AtFrom) {
-    consider(
-        {entry.Distance + sample.FromOffset, {edge.Carrier, edge.ToDistance, edge.FromDistance}});
+    keepLeast(best, viaFrom(sample.Edge, entry, sample.FromOffset));
   }
   for (const RouteEntry &entry : sample.AtTo) {
-    consider(
-        {entry.Distance + sample.ToOffset, {edge.Carrier, edge.FromDistance, edge.ToDistance}});
+    keepLeast(best, viaTo(sample.Edge, entry, sample.ToOffset));
   }
   if (!best) {
     return {};
   }
   return {*best};
+}
+
+std::optional<RouteEntry> routeEntryAt(const World &world, PathKind kind, const Network &network,
+                                       const Place &place, EntityKey source) {
+  return kind == PathKind::Guest ? routeEntryOn<PathKind::Guest>(world, network, place, source)
+                                 : routeEntryOn<PathKind::Backstage>(world, network, place, source);
 }
 
 std::vector<std::optional<RouteEntry>> routeEntries(const Network &network, EntityKey source) {

@@ -227,6 +227,16 @@ std::vector<uint32_t> Network::anchoredNodes(EntityKey entity) const {
   return nodes;
 }
 
+std::optional<uint32_t> Network::firstAnchoredNode(EntityKey entity) const {
+  std::optional<uint32_t> first;
+  for (const NodeAnchor &anchor : Anchors) {
+    if (anchor.Entity == entity && (!first || anchor.Node < *first)) {
+      first = anchor.Node;
+    }
+  }
+  return first;
+}
+
 std::optional<GroundPoint> Network::groundPoint(const Place &place) const {
   const std::optional<size_t> index = findCarrierOf(place);
   if (!index) {

@@ -18,6 +18,7 @@ add_executable(tpj_sim_tests
     medium/field_test.cpp
     medium/flow_test.cpp
     medium/network_test.cpp
+    medium/source_sample_test.cpp
     medium/stepped_field_test.cpp
     operations/food_offer_test.cpp
     operations/operations_edits_test.cpp
@@ -38,6 +39,7 @@ add_executable(tpj_sim_tests
     routes/route_distance_test.cpp
     routes/networks_test.cpp
     routes/previous_networks_test.cpp
+    routes/route_entry_test.cpp
     routes/routes_park_test.cpp
     save_test.cpp
     schema_test.cpp

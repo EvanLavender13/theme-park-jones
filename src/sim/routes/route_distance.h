@@ -60,6 +60,12 @@ template <PathKind NetworkKind> struct RouteDistance {
   }
 };
 
+// The source's entry in the kind's route distance field at the place on the network: exactly the
+// entry sampleField of that field gives the source there, or none. Reads only the source's
+// entries and allocates nothing.
+std::optional<RouteEntry> routeEntryAt(const World &world, PathKind kind, const Network &network,
+                                       const Place &place, EntityKey source);
+
 // The source's entry at each node of the network, indexed by node, none where no route joins the
 // node to one the source anchors. Distances are least route lengths added from the source's end,
 // and each next step is the lowest by carrier key, then toward lower distances, then From, of
