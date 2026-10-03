@@ -2,6 +2,8 @@
 
 Slice: none
 
+Status: planned
+
 ## Summary
 
 affordable-overlay makes the food overlay cheap enough to rebuild at every tick on the full park, and makes the way it does so the standard way to build any overlay of its type: one that shades each place by how well the sources reachable from it serve a need, each source's relief discounted by the time it takes to reach and be served. On windows-release the full park's overlay build costs 37.4 ms, over the 33 ms a frame has, and the app rebuilds it at every tick while it is shown. A profile puts about 53% of a build in sampling guest route distance at each of about 7,000 places, and about 37% in finding every shop's offer again at each of them, though only the offsets along an edge differ between the places on it and an offer does not vary by place. The milestone has an availability overlay find each source's offer once per build and ask for its values over many places at once, and gives the shared medium a sample of a field at many places that shares each source's lookups among the places on one edge. Food is the first availability overlay; a later one, such as thirst, supplies its offer field, its discount curve, and its ramp's scale, and inherits both speedups without new sampling or band code. The report also gains the app's frames with the overlay shown, since a build at every tick is what the player feels.
