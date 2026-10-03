@@ -41,7 +41,7 @@ The foundation is the closing audit, the law suite over registered types, and th
 ## Milestones
 
 1. `closing-audit`: closing a milestone dispatches a fresh-context audit of the tests it added or changed against docs/testing.md, and its findings are fixed or filed before the close. Depends on: none.
-2. `registered-laws`: the sim root proves the world-as-value laws once over the park files and edits chosen for a reason, fails on a registered type no checked world holds, folds in its synthetic-schema law tests, and deletes the 39 re-proofs RESEARCH.md lists as held. Depends on: milestone 1.
+2. `shared-world-checks`: the sim root runs the copy, save, hash, candidate, and repeat-run checks once over the park files and edits chosen for a reason, fails on a registered type no checked world holds, folds in its tests of those checks on synthetic schemas, and deletes the 39 tests RESEARCH.md lists as held, which repeat those checks for their own state. Depends on: milestone 1.
 3. `reshaped-tests`: module by module, each SPEC.md is trimmed to properties and the tests RESEARCH.md lists as rewrite are rewritten by the test-writer, and each repository check keeps its run and one planted violation. Depends on: milestone 2.
 
 ## Deepening candidates

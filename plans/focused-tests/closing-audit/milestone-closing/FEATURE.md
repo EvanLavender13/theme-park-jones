@@ -45,7 +45,7 @@ None. Skills, agents, and docs/testing.md have no SPEC.md.
 
 ## Out of scope
 
-- Rewriting the cases following-footfall's findings name. Each is already in the inventory, so it is filed in reshaped-tests or registered-laws.
+- Rewriting the cases following-footfall's findings name. Each is already in the inventory, so it is filed in reshaped-tests or shared-world-checks.
 - Pushing main, which this feature makes possible once tidy is clean.
 
 ## Open questions
