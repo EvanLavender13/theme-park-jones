@@ -1,6 +1,10 @@
 # Research: indexed-sampling
 
-## Where does a full-park tick's time go?
+## Where does a full-park tick's time really go?
+
+A Very Sleepy profile of tpj_bench stepping tests/parks/stress/full.park 600 ticks on windows-release, built with -g and frame pointers, covers the whole run and attributes time in ntdll and ucrt to its callers. stepWorld costs 23.5 ms a tick, and sampleField of guest route distance, all of it under walk, 19.5 ms of that: about 36% RtlAllocateHeap and RtlFreeHeap for layeredSlots' list and each sample's and EdgeSample's vectors, about 33% comparing places in the slot scans, and about 20% loops and copies. stepShops costs 2.7 ms, in findEntity, parkBoxes, and tree lookups. Walk samples every source at every pass, yet between choices it reads one entry: its target's, or the least of the entrances'. Reading that source's slot alone, without building a sample, removes about thirty slot scans and every allocation from a pass, while a choice, made at nodes, still samples every source. This supersedes the gprof finding below, which could not see heap time; the index it motivated took the tick only to about 28 ms.
+
+## Where did gprof put a full-park tick's time? (superseded)
 
 A gprof profile of tpj_bench stepping tests/parks/stress/full.park 600 ticks on a windows-release build with -pg puts 78% of the run in sampleSlots for the guest route distance field and 75% in stepGuests, which calls it. Ticks are about nine tenths of that run; the food overlay's builds are most of the rest. Guests sample the field about 2,760 times a tick, more than once each for the ~2,000 guests, because walk samples again at every node it passes. Each sample costs about 7 microseconds of its own time and calls sampleRouteEdge about 31 times, once for each source with an entry at the edge, so nearly every one of the 31 sources reaches every place. The next cost, World::findEntity, is 6%, almost all from the overlay's parkBoxes.
 
