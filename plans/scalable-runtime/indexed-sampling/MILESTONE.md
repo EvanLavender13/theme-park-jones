@@ -4,7 +4,7 @@ Slice: none
 
 ## Summary
 
-indexed-sampling makes the full park hold one tick per frame in the app, and makes the runtime report say whether it does, over minutes of play. On windows-release a full-park tick costs about 42 ms, so the park can never run in real time, and the frame clock's tick cap only turns the 3 FPS spiral into steady slow motion at about 10 FPS. A Very Sleepy profile of the tick puts 19.5 of its 23.5 ms in guests sampling route distance while they walk: each walking guest samples every source's entries at its place on every pass of its walk, scanning each slot and allocating the sample's vectors, though between choices it needs only its target's entry or the entrances'. The milestone has walking guests read only the one source they follow, without allocating, and sample every source only when they choose. It also fixes the measuring that let the overrun pass unremarked: the report steps minutes of game time, marks every stage over its budget, and times the app's frames on every stress park. It comes before affordable-overlay because ticks run whenever the park runs, while the overlay costs only when shown.
+indexed-sampling makes the full park hold one tick per frame in the app, and makes the runtime report say whether it does, over minutes of play. On windows-release a full-park tick costs about 42 ms, so the park can never run in real time, and the frame clock's tick cap only turns the 3 FPS spiral into steady slow motion at about 10 FPS. A Very Sleepy profile of the tick puts 19.5 of its 23.5 ms in guests sampling route distance while they walk: each walking guest samples every source's entries at its place on every pass of its walk, scanning each slot and allocating the sample's vectors, though between choices it needs only its target's entry or the entrances'. The milestone has walking guests read only the one source they follow, without allocating, and sample every source only when they choose. It also fixes the measuring that let the overrun pass unremarked: the report steps minutes of game time, marks every stage over its budget, and times the app's frames on every stress park. Then, since every sample still scans each source's entries, about one per network node, and the food overlay samples every source at every metre of guest path, each slot's entries are indexed by place, so a sample finds them by binary search. It comes before affordable-overlay because ticks run whenever the park runs, while the overlay costs only when shown.
 
 ## Acceptance criteria
 
@@ -34,14 +34,14 @@ The milestone changes how guests read the medium, not what any field or flow car
 ## Features
 
 1. `budgeted-report`: tpj_bench steps sustained runs, the report keeps each stage's worst call across launches and marks every stage over its budget, and the script times the app's frames on every stress park on windows-release. Depends on: none. Done.
-2. `targeted-route-samples`: one source's slot, its entry at a node, and its route entry at a place, each found without allocating, and walking guests reading route distance and the food offer through them, sampling every source only when they choose, with the report's comparison before and after. Depends on: feature 1.
+2. `targeted-route-samples`: one source's slot, its entry at a node, and its route entry at a place, each found without allocating, and walking guests reading route distance and the food offer through them, sampling every source only when they choose, with the report's comparison before and after. Depends on: feature 1. Done.
+3. `place-indexed-entries`: each field slot's entries indexed by place, kept beside the entries, and every sample, and one source's entry at a node, finding entries through it by binary search instead of scanning, with each sample reusing its working lists across its sources. Depends on: feature 2, and a Windows profile putting most of the full park's food overlay build in route distance samples' slot scans.
 
 ## Deepening candidates
 
 Unordered pool this milestone draws later features from.
 
-- Entries indexed by place: each slot's entries ordered by place, so a sample finds a source's entries by binary search instead of scanning its slot. Gated on: a Windows profile after targeted-route-samples showing slot scans, rather than allocation, a large share of the tick.
-- Fewer samples per walk: walk reads route distance again at every node it passes in one tick. Gated on: the same.
+- Fewer samples per walk: walk reads route distance again at every node it passes in one tick. Gated on: a Windows profile after place-indexed-entries showing walking guests' route distance reads a large share of the tick.
 
 ## Open questions
 
@@ -50,6 +50,7 @@ None.
 ## Research notes
 
 - A Very Sleepy profile of 600 full-park ticks on windows-release puts 19.5 of 23.5 ms a tick in sampleField of guest route distance under walk: about a third heap allocation and free, a third comparing places, and the rest loops and copies. An earlier gprof profile, blind to time in ntdll's heap, put 78% of the run in sampling's own code and led to an index by place that took the tick only from about 42 to 28 ms; it was discarded.
+- After targeted-route-samples and the overlay's offers read one shop each, a Very Sleepy profile puts 84% of the full park's 103 ms overlay build in the route distance sample's own time: about 6,000 samples a build, each scanning 31 sources' entries, one per reached node.
 - Between choices a walking guest uses one source's entry from a sample of every source, so reading that source alone removes about thirty slot scans and every allocation from each pass.
 - The report's 300 ticks were ten seconds of game time with no budget beside them, which is how a 44 ms tick and the app's 3 FPS went unremarked.
 
