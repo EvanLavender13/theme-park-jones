@@ -13,6 +13,14 @@
 
 namespace tpj {
 
+// A stage of a report: the launches' medians summarized, and the slowest call of any launch.
+struct ReportStage {
+  StageResult Stage;
+  int64_t Worst = 0;
+
+  bool operator==(const ReportStage &) const = default;
+};
+
 // One park on one build in a report: the launches summarized, and each stage with the summary of
 // the launches' medians as its times.
 struct ReportPark {
@@ -22,7 +30,7 @@ struct ReportPark {
   uint64_t Ticks = 0;
   size_t WarmUps = 0;
   size_t Repetitions = 0;
-  std::vector<StageResult> Stages;
+  std::vector<ReportStage> Stages;
 
   bool operator==(const ReportPark &) const = default;
 };
@@ -32,7 +40,7 @@ struct ReportPark {
 std::vector<ReportPark> summarizeLaunches(std::span<const Launch> launches);
 
 // Each park as `park <build> <path> launches <n> ticks <t> warm-ups <w> repetitions <r>`, then
-// its stage lines, every line ending with a line feed.
+// its stage lines, each ending with ` worst <w>`, every line ending with a line feed.
 std::string reportText(std::span<const ReportPark> report);
 
 // Reads what reportText writes. Throws ReportError, its message beginning `line <n>: `, at the

@@ -2,6 +2,7 @@
 #define TPJ_APP_APPLICATION_H
 
 #include "app/frame_clock.h"
+#include "app/frame_times.h"
 #include "app/input/interaction.h"
 #include "app/input/orbit_camera.h"
 #include "app/options.h"
@@ -45,6 +46,8 @@ private:
   ParkDialogs Dialogs;
   int FrameLimit;
   const char *CapturePath;
+  bool WriteFrameTimes;
+  FrameTimes Frames;
 };
 
 } // namespace tpj

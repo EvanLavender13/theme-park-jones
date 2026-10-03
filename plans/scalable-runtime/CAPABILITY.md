@@ -55,6 +55,7 @@ Unordered pool this capability draws later milestones from.
 - Sampling without allocation: sampleField builds its list of slots and each EdgeSample's vectors on every sample. Gated on: the report attributing a large share of sampling to allocation.
 - Drawing measured: the GPU's share of a frame, from the app's --frames runs. Gated on: a slow frame the CPU stages do not explain.
 - Faster stepping: parallel or batched systems that keep bit-identical results. Gated on: the report showing ticks costly on the full park.
+- Instanced guests: draw every guest from one shared mesh with a small per-guest instance buffer, instead of rebuilding and re-uploading one mesh of all guests whenever the world ticks. Gated on: the report showing the guest mesh and its upload a real share of the app's frame after indexed-sampling, or guests drawn as models rather than simple shapes.
 
 ## Open questions
 

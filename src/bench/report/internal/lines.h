@@ -37,7 +37,7 @@ int64_t readTime(const TextLine &line, size_t index);
 // The field at index as 16 lowercase hexadecimal digits, or refuses the line.
 uint64_t readHash(const TextLine &line, size_t index);
 
-// A line as stageLine writes it, or refuses the line.
+// The first 12 fields of a line as stageLine writes them, or refuses the line.
 StageResult readStageLine(const TextLine &line);
 
 } // namespace tpj

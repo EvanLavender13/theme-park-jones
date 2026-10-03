@@ -19,13 +19,19 @@ std::optional<ReportOptions> parseReportOptions(std::span<const std::string> arg
   } else if (command == "compare") {
     options.Command = ReportCommandKind::Compare;
     files = 2;
+  } else if (command == "show") {
+    options.Command = ReportCommandKind::Show;
+    files = 1;
+  } else if (command == "frames") {
+    options.Command = ReportCommandKind::Frames;
+    files = 2;
   } else {
     error = "unknown command " + command;
     return std::nullopt;
   }
   options.Paths.assign(arguments.begin() + 2, arguments.end());
   if (options.Paths.size() != files) {
-    error = command + (files == 1 ? " takes one file" : " takes two files");
+    error = command + (files == 1 ? " takes one argument" : " takes two arguments");
     return std::nullopt;
   }
   return options;

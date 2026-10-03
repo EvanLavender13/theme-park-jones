@@ -122,11 +122,21 @@ std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
 }
 
 std::string stageLine(const StageResult &stage) {
-  const bool isHash = stage.Kind == ResultKind::Hash;
+  std::string result;
+  switch (stage.Kind) {
+  case ResultKind::Hash:
+    result = " hash " + hex16(stage.Result);
+    break;
+  case ResultKind::Vertices:
+    result = " vertices " + std::to_string(stage.Result);
+    break;
+  case ResultKind::Frames:
+    result = " frames " + std::to_string(stage.Result);
+    break;
+  }
   return "stage " + stage.Name + " count " + std::to_string(stage.Times.Count) + " median " +
          std::to_string(stage.Times.Median) + " least " + std::to_string(stage.Times.Least) +
-         " greatest " + std::to_string(stage.Times.Greatest) + (isHash ? " hash " : " vertices ") +
-         (isHash ? hex16(stage.Result) : std::to_string(stage.Result));
+         " greatest " + std::to_string(stage.Times.Greatest) + result;
 }
 
 std::string parkLine(std::string_view path, uint64_t ticks) {

@@ -12,15 +12,15 @@
 
 namespace tpj {
 
-// The ticks tpj_bench steps without --ticks.
-inline constexpr uint64_t DEFAULT_TICKS = 300;
+// The ticks tpj_bench steps without --ticks: two minutes of game time.
+inline constexpr uint64_t DEFAULT_TICKS = 3600;
 // The untimed calls a repeated stage makes before its counted ones.
 inline constexpr size_t WARM_UPS = 2;
 // The counted calls of every stage but ticks.
 inline constexpr size_t REPETITIONS = 11;
 
-// What a stage's result is: a world's hash, or a mesh's vertex count.
-enum class ResultKind { Hash, Vertices };
+// What a stage's result is: a world's hash, a mesh's vertex count, or a count of frames.
+enum class ResultKind { Hash, Vertices, Frames };
 
 // One stage's times and the result of its work.
 struct StageResult {
@@ -38,8 +38,8 @@ struct StageResult {
 // moving the lowest-keyed box to its own pose has no candidate.
 std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks);
 
-// stage <name> count <c> median <m> least <l> greatest <g> <hash|vertices> <result>, with a hash
-// as 16 lowercase hexadecimal digits and a vertex count in decimal, and no line feed.
+// stage <name> count <c> median <m> least <l> greatest <g> <hash|vertices|frames> <result>, with
+// a hash as 16 lowercase hexadecimal digits and a count in decimal, and no line feed.
 std::string stageLine(const StageResult &stage);
 
 // park <path> ticks <t> warm-ups <w> repetitions <r>, with no line feed.

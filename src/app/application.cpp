@@ -10,6 +10,7 @@
 
 #include <exception>
 #include <stdint.h>
+#include <stdio.h>
 #include <utility>
 
 namespace tpj {
@@ -25,7 +26,8 @@ Application::Application(const Options &options, World start)
     : Window(Video), Gui(Window), Gpu(Window, Gui, PARK_SIZE_METERS), Session(std::move(start)),
       Interactions(Session.generation()), Ui({options.ShowGraph, options.ShowFoodOverlay}),
       Clock(SDL_GetPerformanceCounter(), SDL_GetPerformanceFrequency()), Dialogs(Window.get()),
-      FrameLimit(options.FrameLimit), CapturePath(options.CapturePath) {}
+      FrameLimit(options.FrameLimit), CapturePath(options.CapturePath),
+      WriteFrameTimes(options.FrameTimes) {}
 
 // What the loop throws, such as a world invariant the simulation checks, is logged here, inside
 // the owners' lifetime, so they are still released.
@@ -34,7 +36,13 @@ bool Application::run() {
     return false;
   }
   try {
-    return runFrames();
+    if (!runFrames()) {
+      return false;
+    }
+    if (WriteFrameTimes) {
+      (void)printf("%s\n", Frames.line().c_str());
+    }
+    return true;
   } catch (const std::exception &error) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Main loop: %s", error.what());
     return false;
@@ -52,6 +60,7 @@ bool Application::runFrames() {
     Interactions.follow(Session.generation());
 
     const FrameStep step = Clock.advance(SDL_GetPerformanceCounter());
+    Frames.add(step.Nanoseconds);
 
     // The buttons act on the world and pointer the ghost on screen was built from, and a Look
     // press picks from the view on screen, before the camera moves.

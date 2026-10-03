@@ -22,15 +22,19 @@ struct Options {
   bool ShowGraph = false;
   // Check the Debug panel's Food overlay checkbox at start.
   bool ShowFoodOverlay = false;
+  // Write each frame's cost after the last frame.
+  bool FrameTimes = false;
 };
 
 // Reads the command line, argv[0] being the program's name. --park PATH starts from a park file,
 // --ticks N steps it N ticks before the first frame, and --hash prints the state hash after them
 // and exits. --frames N exits after N frames. --graph starts with the graph view on, and --overlay
-// food with the food overlay on. --capture PATH writes the last frame to PATH as a BMP and implies
-// a limit of 3 frames when --frames gives none that is positive. None, after logging the usage,
-// for an unknown option, an option missing its value, a --ticks value that is not a decimal count,
-// an --overlay value other than food, or --hash with --frames, --capture, --graph, or --overlay.
+// food with the food overlay on. --frame-times writes each frame's cost after the last frame.
+// --capture PATH writes the last frame to PATH as a BMP and implies a limit of 3 frames when
+// --frames gives none that is positive. None, after logging the usage, for an unknown option, an
+// option missing its value, a --ticks value that is not a decimal count, an --overlay value other
+// than food, --frame-times without a positive --frames, or --hash with --frames, --capture,
+// --graph, or --overlay.
 std::optional<Options> parseOptions(int argc, const char *const *argv);
 
 } // namespace tpj

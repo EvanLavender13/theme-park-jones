@@ -70,5 +70,30 @@ TEST_CASE("A frame over MAX_FRAME_TICKS drops the whole ticks beyond it and carr
   CHECK(clock.advance(420'000).Ticks == 1);
 }
 
+TEST_CASE("Each FrameStep's Nanoseconds is the whole nanoseconds between its reading and the "
+          "previous one, rounded down") {
+  SECTION("a frequency whose readings are not whole nanoseconds") {
+    // One reading is 333.3 ns, so two are 666.7, which rounding to nearest would make 667.
+    FrameClock clock(1'000, 3'000'000);
+    CHECK(clock.advance(1'001).Nanoseconds == 333);
+    CHECK(clock.advance(1'003).Nanoseconds == 666);
+    CHECK(clock.advance(1'006).Nanoseconds == 1'000);
+    CHECK(clock.advance(1'006).Nanoseconds == 0);
+  }
+  SECTION("a counter far from zero, as a performance counter is after days of uptime") {
+    // A reading times 10^9 overflows 64 bits, though the readings between two frames' does not.
+    constexpr uint64_t START = 123'456'789'012'345;
+    FrameClock clock(START, 10'000'000);
+    CHECK(clock.advance(START + 166'667).Nanoseconds == 16'666'700);
+  }
+}
+
+TEST_CASE("A frame whose Dt is clamped to MAX_FRAME_SECONDS still gives its full Nanoseconds") {
+  FrameClock clock(0, 1'000);
+  const FrameStep step = clock.advance(1'500);
+  CHECK_THAT(step.Dt, WithinAbs(MAX_FRAME_SECONDS, SECONDS_TOLERANCE));
+  CHECK(step.Nanoseconds == 1'500'000'000);
+}
+
 } // namespace
 } // namespace tpj

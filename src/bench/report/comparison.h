@@ -19,8 +19,8 @@ struct StageComparison {
   std::string Build;
   std::string Park;
   std::string Stage;
-  std::optional<StageResult> Before;
-  std::optional<StageResult> After;
+  std::optional<ReportStage> Before;
+  std::optional<ReportStage> After;
   // Faster when After's Greatest is less than Before's Least, Slower when After's Least is greater
   // than Before's Greatest, and Unclear otherwise or when either is empty.
   ChangeKind Change = ChangeKind::Unclear;
