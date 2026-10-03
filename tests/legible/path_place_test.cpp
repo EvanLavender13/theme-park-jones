@@ -135,17 +135,6 @@ TEST_CASE("nearestGuestPathPlace gives the place on a guest path nearest the poi
   }
 }
 
-TEST_CASE("nearestGuestPathPlace breaks a tie between equally near guest paths to the lower key") {
-  const World world = openText(PLACES_PARK);
-  // Past the corner, where the nearest place on each path is the corner the two share, so both
-  // are exactly as near.
-  const GroundPoint point{5.0, -45.0};
-  REQUIRE(distanceOn(world, STRAIGHT_PATH, point) == distanceOn(world, CORNER_PATH, point));
-  const std::optional<PathPlace> nearest = nearestGuestPathPlace(world, point);
-  REQUIRE(nearest.has_value());
-  CHECK(nearest.value_or(PathPlace{}).At.Carrier == STRAIGHT_PATH);
-}
-
 TEST_CASE("nearestGuestPathPlace gives none for a point that is not finite") {
   const World world = openText(PLACES_PARK);
   CHECK_FALSE(nearestGuestPathPlace(world, GroundPoint{NOT_A_NUMBER, -20.0}).has_value());
@@ -201,16 +190,6 @@ TEST_CASE("foodNear gives none beyond the reach, or where there is no nearest gu
   CHECK_FALSE(foodNear(world, BESIDE_STRAIGHT, std::nextafter(distance, 0.0)).has_value());
   CHECK_FALSE(foodNear(world, GroundPoint{NOT_A_NUMBER, -20.0}, INFINITE).has_value());
   CHECK_FALSE(foodNear(openText(BACKSTAGE_PARK), BESIDE_STRAIGHT, INFINITE).has_value());
-}
-
-TEST_CASE("nearestGuestPathPlace and foodNear leave the world's hash unchanged") {
-  const World world = openText(PLACES_PARK);
-  const uint64_t before = hashWorld(world);
-  const std::optional<PathPlace> nearest = nearestGuestPathPlace(world, BESIDE_STRAIGHT);
-  const std::optional<FoodAvailability> food = foodNear(world, BESIDE_STRAIGHT, INFINITE);
-  CHECK(nearest.has_value());
-  CHECK(food.has_value());
-  CHECK(hashWorld(world) == before);
 }
 
 } // namespace

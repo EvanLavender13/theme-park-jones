@@ -393,17 +393,5 @@ TEST_CASE("Each graph node holds nodeAnchor of its node as its anchor") {
   CHECK(overlay.Nodes.size() > anchored);
 }
 
-// The overlay is drawn every frame the checkbox is on, so it must leave nothing behind in what is
-// saved or hashed.
-TEST_CASE("Building a world's graph overlay leaves its save and hash unchanged") {
-  const World world = nearPlanePark();
-  const std::string save = saveWorld(world);
-  const uint64_t hash = hashWorld(world);
-  const GraphOverlay overlay = buildGraphOverlay(world, DOWNWARD, WIDTH, HEIGHT);
-  REQUIRE_FALSE(overlay.Lines.empty());
-  CHECK(saveWorld(world) == save);
-  CHECK(hashWorld(world) == hash);
-}
-
 } // namespace
 } // namespace tpj

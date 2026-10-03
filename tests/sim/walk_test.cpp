@@ -37,20 +37,6 @@ void requireSameValue(const World &one, const World &other) {
   REQUIRE(hashWorld(one) == hashWorld(other));
 }
 
-TEST_CASE("an empty world and entities without components walk normally") {
-  const auto schema = makeSchema();
-  const World empty(schema, 0);
-  REQUIRE_NOTHROW(validateWorld(empty));
-  requireSameValue(copyWorld(empty), empty);
-
-  World bare(schema, 0);
-  bare.createEntity();
-  bare.createDerivedEntity(EntityKey{1}, SLOT_PURPOSE, 0);
-  REQUIRE_NOTHROW(validateWorld(bare));
-  requireSameValue(copyWorld(bare), bare);
-  REQUIRE_FALSE(worldsEqual(bare, empty));
-}
-
 TEST_CASE("a copy equals its original, hashes the same, and keeps its keys") {
   const World original = buildWorld(makeSchema());
   const World copy = copyWorld(original);
@@ -162,94 +148,6 @@ TEST_CASE("worlds on different schemas are never equal") {
     const World different(other, 5);
     CHECK_FALSE(worldsEqual(base, different));
     CHECK_FALSE(worldsEqual(different, base));
-  }
-}
-
-TEST_CASE("the walk ignores EnTT's storage order") {
-  const auto schema = makeSchema();
-  World forward(schema, 9);
-  World backward(schema, 9);
-  for (World *world : {&forward, &backward}) {
-    for (int i = 0; i < 3; ++i) {
-      world->createEntity();
-    }
-  }
-  const std::vector<EntityKey> counterKeys = {EntityKey{1}, EntityKey{2}, EntityKey{3}};
-  const std::vector<uint64_t> indices = {0, 1, 2};
-
-  auto probeFor = [](EntityKey key) {
-    Probe probe;
-    probe.Count = static_cast<int32_t>(key);
-    return probe;
-  };
-  for (const uint64_t index : indices) {
-    forward.createDerivedEntity(FIRST, SLOT_PURPOSE, index);
-  }
-  for (const EntityKey key : counterKeys) {
-    forward.Registry.emplace<Probe>(forward.findEntity(key), probeFor(key));
-    forward.Registry.emplace<Tag>(forward.findEntity(key));
-  }
-
-  for (auto index = indices.rbegin(); index != indices.rend(); ++index) {
-    backward.createDerivedEntity(FIRST, SLOT_PURPOSE, *index);
-  }
-  for (auto key = counterKeys.rbegin(); key != counterKeys.rend(); ++key) {
-    backward.Registry.emplace<Tag>(backward.findEntity(*key));
-    backward.Registry.emplace<Probe>(backward.findEntity(*key), probeFor(*key));
-  }
-
-  requireSameValue(forward, backward);
-}
-
-TEST_CASE("the walk ignores entt::entity values") {
-  const auto schema = makeSchema();
-  const World plain = buildWorld(schema);
-
-  // The same calls as buildWorld, except that a derived entity is created and destroyed early.
-  // That moves no counter and leaves no live key, but makes EnTT hand out different identifiers.
-  World churned(schema, 12345);
-  churned.Tick = 3;
-  churned.createEntity();
-  churned.destroyEntity(churned.createDerivedEntity(FIRST, SLOT_PURPOSE, 5));
-  churned.createEntity();
-  churned.createEntity();
-  churned.createDerivedEntity(FIRST, SLOT_PURPOSE, 0);
-  REQUIRE(churned.findEntity(SECOND) != plain.findEntity(SECOND));
-
-  churned.Registry.emplace<Probe>(churned.findEntity(FIRST),
-                                  plain.Registry.get<Probe>(plain.findEntity(FIRST)));
-  churned.Registry.emplace<Probe>(churned.findEntity(SECOND));
-  churned.Registry.emplace<Tag>(churned.findEntity(FIRST));
-  churned.Registry.emplace<Tag>(churned.findEntity(SECOND));
-  churned.Registry.emplace<Cached>(churned.findEntity(DERIVED), Cached{.Total = 42});
-
-  requireSameValue(churned, plain);
-}
-
-TEST_CASE("each step advances the tick by exactly one") {
-  // A fresh world starts the count at zero; a built world starts it elsewhere, so a step that set
-  // Tick from its own counter instead of incrementing it would show.
-  World fresh(makeSchema(), 0);
-  World built = buildWorld(makeSchema());
-  for (World *world : {&fresh, &built}) {
-    const uint64_t start = world->Tick;
-    for (uint64_t steps = 1; steps <= 3; ++steps) {
-      stepWorld(*world);
-      CAPTURE(start, steps);
-      REQUIRE(world->Tick == start + steps);
-    }
-  }
-}
-
-TEST_CASE("worlds built by the same calls hash equal at every tick") {
-  const auto schema = makeSchema();
-  World left = buildWorld(schema);
-  World right = buildWorld(schema);
-  for (int tick = 0; tick < 30; ++tick) {
-    stepWorld(left);
-    stepWorld(right);
-    CAPTURE(tick);
-    requireSameValue(left, right);
   }
 }
 

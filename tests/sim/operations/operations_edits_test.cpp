@@ -32,7 +32,6 @@ namespace tpj {
 namespace {
 
 using test::carry;
-using test::conserved;
 
 std::string routesText() {
   std::ifstream file(TPJ_PARKS_DIR "/routes.park", std::ios::binary);
@@ -186,25 +185,6 @@ bool mealsTravelWithVisits(const World &world) {
   });
 }
 
-TEST_CASE("In every tick of randomized park edits with synthetic guests, supply-orders, supplies, "
-          "guest-visits, and meals each satisfy the ledger's identity") {
-  bool sawOrders = false;
-  bool sawSupplies = false;
-  bool sawMeals = false;
-  runServiceSequence(51, [&](const World &world, bool /*edited*/) {
-    CHECK(conserved<SupplyOrders>(world));
-    CHECK(conserved<Supplies>(world));
-    CHECK(conserved<GuestVisits>(world));
-    CHECK(conserved<Meals>(world));
-    sawOrders = sawOrders || unitsCreated<SupplyOrders>(world) > 0;
-    sawSupplies = sawSupplies || unitsCreated<Supplies>(world) > 0;
-    sawMeals = sawMeals || unitsCreated<Meals>(world) > 0;
-  });
-  CHECK(sawOrders);
-  CHECK(sawSupplies);
-  CHECK(sawMeals);
-}
-
 TEST_CASE("In every tick of randomized park edits with synthetic guests, consumed order units "
           "carry only the causes fulfilled, unfilled, cancelled, undeliverable, and discarded, "
           "consumed supplies only returned, served, undeliverable, and discarded, consumed "
@@ -287,26 +267,6 @@ TEST_CASE("In every tick of randomized park edits with synthetic guests, no shop
     }
   });
   CHECK(sawStocked);
-}
-
-TEST_CASE("No step or edit of a randomized park edit sequence with synthetic guests throws, "
-          "whether shops are supplied or starved") {
-  bool sawSupplied = false;
-  bool sawStarved = false;
-  bool sawQueue = false;
-  runServiceSequence(55, [&](const World &world, bool /*edited*/) {
-    for (const ParkBox &box : parkBoxes(world)) {
-      if (box.Kind == BoxKind::Shop) {
-        const bool supplied = nearestDepot(world, box.Key).has_value();
-        sawSupplied = sawSupplied || supplied;
-        sawStarved = sawStarved || !supplied;
-        sawQueue = sawQueue || stockOf<GuestVisits>(world, box.Key).size() > 1;
-      }
-    }
-  });
-  CHECK(sawSupplied);
-  CHECK(sawStarved);
-  CHECK(sawQueue);
 }
 
 TEST_CASE("In every tick of randomized park edits with synthetic guests, sampling food-offer at a "

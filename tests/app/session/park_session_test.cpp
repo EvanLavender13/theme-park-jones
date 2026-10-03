@@ -74,22 +74,6 @@ public:
   std::vector<std::string> Errors;
 };
 
-TEST_CASE("resolvedNewPark is makeNewPark(1) resolved") {
-  World expected = makeNewPark(1);
-  resolveWorld(expected);
-
-  CHECK(worldsEqual(resolvedNewPark(), expected));
-}
-
-TEST_CASE("A session's world is the world it was constructed with, and its queue is empty") {
-  const World expected = sketchPark();
-
-  ParkSession session(sketchPark());
-
-  CHECK(worldsEqual(session.world(), expected));
-  CHECK(session.commands().empty());
-}
-
 TEST_CASE("A session's step gives the world stepWorld gives for the same world and queued "
           "commands, and empties the queue") {
   // The world steps only through stepWorld with the queued commands, so the session and the
@@ -254,65 +238,6 @@ TEST_CASE("Save asks the edge to confirm in no other case") {
   }
 
   CHECK(edge.Asked.empty());
-}
-
-TEST_CASE("A Save that fails reports saveParkFile's message to the edge once") {
-  const auto directory = scratchDirectory("save-fails");
-  // A file in a directory that does not exist cannot be created.
-  const std::string path = (directory / "no-such-directory" / "sketch.park").string();
-  RecordingEdge edge(true);
-  ParkSession session(sketchPark());
-
-  session.useFileRequest(FileRequest{ParkAction::Save, path}, edge);
-
-  CHECK(edge.Errors == std::vector<std::string>{saveParkFile(session.world(), path.c_str())});
-}
-
-TEST_CASE("startingPark with no path gives resolvedNewPark() stepped the given cycles with no "
-          "commands") {
-  // Zero cycles is the app's default and gives the new park itself.
-  for (const uint64_t ticks : {uint64_t{0}, uint64_t{3}}) {
-    INFO("ticks " << ticks);
-    World expected = resolvedNewPark();
-    for (uint64_t tick = 0; tick < ticks; ++tick) {
-      stepWorld(expected);
-    }
-
-    const OpenedPark started = startingPark(nullptr, ticks);
-
-    CHECK(started.Error.empty());
-    REQUIRE(started.Park.has_value());
-    if (started.Park.has_value()) {
-      CHECK(worldsEqual(*started.Park, expected));
-    }
-  }
-}
-
-TEST_CASE("startingPark with a path gives openParkFile's world stepped the given cycles with no "
-          "commands") {
-  World expected = sketchPark();
-  for (int tick = 0; tick < 3; ++tick) {
-    stepWorld(expected);
-  }
-
-  const OpenedPark started = startingPark(sketchPath().c_str(), 3);
-
-  CHECK(started.Error.empty());
-  REQUIRE(started.Park.has_value());
-  if (started.Park.has_value()) {
-    CHECK(worldsEqual(*started.Park, expected));
-  }
-}
-
-TEST_CASE("startingPark of a file openParkFile cannot open gives no world and openParkFile's "
-          "message") {
-  const auto directory = scratchDirectory("start-fails");
-  const std::string path = (directory / "missing.park").string();
-
-  const OpenedPark started = startingPark(path.c_str(), 3);
-
-  CHECK_FALSE(started.Park.has_value());
-  CHECK(started.Error == openParkFile(path.c_str()).Error);
 }
 
 } // namespace

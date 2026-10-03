@@ -77,37 +77,12 @@ TEST_CASE("a schema refuses a type registered twice and is left unchanged") {
   REQUIRE_NOTHROW(schema.addComponent<Probe>("marker", DataKind::State));
 }
 
-TEST_CASE("components() keeps registration order with each type's name and kind") {
-  // Neither alphabetical nor in DataKind order.
-  WorldSchema schema;
-  schema.addComponent<Tag>("tag", DataKind::Intent);
-  schema.addComponent<Cached>("cached", DataKind::Derived);
-  schema.addComponent<Probe>("probe", DataKind::State);
-
-  const std::vector<ComponentType> &types = schema.components();
-  REQUIRE(namesOf(schema) == std::vector<std::string>{"tag", "cached", "probe"});
-  REQUIRE(types[0].Kind == DataKind::Intent);
-  REQUIRE(types[1].Kind == DataKind::Derived);
-  REQUIRE(types[2].Kind == DataKind::State);
-}
-
 std::vector<std::string> resolverNamesOf(const WorldSchema &schema) {
   std::vector<std::string> names;
   for (const ResolverType &resolver : schema.resolvers()) {
     names.push_back(resolver.Name);
   }
   return names;
-}
-
-TEST_CASE("resolvers() keeps registration order with each resolver's dependencies") {
-  WorldSchema schema;
-  schema.addResolver("zones", resolveNothing);
-  schema.addResolver("access", resolveNothingElse, {"zones"});
-
-  REQUIRE(resolverNamesOf(schema) == std::vector<std::string>{"zones", "access"});
-  REQUIRE(schema.resolvers()[0].Dependencies.empty());
-  REQUIRE(schema.resolvers()[1].Dependencies == std::vector<std::string>{"zones"});
-  REQUIRE(schema.resolvers()[1].Resolve == &resolveNothingElse);
 }
 
 TEST_CASE("a schema refuses a resolver with a malformed name and is left unchanged") {

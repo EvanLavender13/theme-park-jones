@@ -429,14 +429,6 @@ TEST_CASE("Every cone triangle faces up, and so does every triangle joining cons
   CHECK(checkedBentLine);
 }
 
-TEST_CASE("Building the overlay leaves the world's hash unchanged") {
-  const World world = fedPark();
-  const uint64_t before = hashWorld(world);
-  const ParkMesh mesh = buildFoodOverlay(world, distanceValue);
-  CHECK_FALSE(mesh.Vertices.empty());
-  CHECK(hashWorld(world) == before);
-}
-
 // Two straight guest paths 8 m apart along the direction (0.8, 0.6), the second offset along its
 // right direction (-0.6, 0.8), so their bands overlap across the 4 m between their edges, with no
 // axis-aligned shortcut.

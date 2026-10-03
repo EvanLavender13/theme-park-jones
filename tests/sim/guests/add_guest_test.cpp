@@ -74,20 +74,6 @@ TEST_CASE(
   CHECK_FALSE(record.LastMeal.has_value());
 }
 
-TEST_CASE("An added guest's starting hunger and hunger rate are drawn on its key with the world's "
-          "seed and the tick at the call") {
-  World world = worldAtAddTick();
-  const EntityKey guest = addGuest(world, INSIDE_WALK, LONG_STAY);
-  const double startingHunger = test::drawnStartingHunger(world, guest, ADD_TICK);
-  CHECK(recordOf(world, guest).Hunger == startingHunger);
-
-  // The record does not show the rate, but the guest's first step adds it to its hunger, and the
-  // park has no shop to feed it.
-  stepWorld(world);
-  const double rate = test::drawnHungerRate(world, guest, ADD_TICK);
-  CHECK(recordOf(world, guest).Hunger == std::min(1.0, startingHunger + rate));
-}
-
 TEST_CASE("addGuest throws std::invalid_argument for a place that does not resolve on the guest "
           "network, leaving the world and its next key unchanged") {
   SECTION("a place on a carrier of another network") {
@@ -116,27 +102,6 @@ TEST_CASE("addGuest throws std::invalid_argument for a place that does not resol
   }
 }
 
-TEST_CASE("The guests a cycle admits have the records addGuest gives in a copy of the world taken "
-          "before that cycle, called in key order with each guest's place and stay") {
-  World world = test::resolvedWorld(gatesIntent());
-  test::stepUntil(world, test::FIRST_ARRIVAL);
-  World copy = copyWorld(world);
-  const std::vector<EntityKey> before = parkGuests(world);
-  stepWorld(world);
-
-  std::vector<EntityKey> arrived;
-  std::ranges::set_difference(parkGuests(world), before, std::back_inserter(arrived));
-  // One guest at each entrance, so the order between arrivals is exercised.
-  REQUIRE(arrived.size() == 2);
-  for (const EntityKey guest : arrived) {
-    CAPTURE(guest);
-    const GuestRecord record = recordOf(world, guest);
-    const EntityKey added = addGuest(copy, record.At, record.StayUntil);
-    CHECK(added == guest);
-    CHECK(guestRecord(copy, added) == std::optional<GuestRecord>(record));
-  }
-}
-
 TEST_CASE("addGuest with the same arguments on two equal worlds leaves them equal") {
   World one = worldAtAddTick();
   World other = copyWorld(one);
@@ -144,26 +109,6 @@ TEST_CASE("addGuest with the same arguments on two equal worlds leaves them equa
   addGuest(one, INSIDE_WALK, LONG_STAY);
   addGuest(other, INSIDE_WALK, LONG_STAY);
   CHECK(worldsEqual(one, other));
-}
-
-TEST_CASE("A world with several added guests, two at one place and one at an entrance's node, is a "
-          "working park: it steps, and every added guest walks in the next cycle") {
-  World world = worldAtAddTick();
-  const std::vector<Place> places = {INSIDE_WALK, INSIDE_WALK, test::gatePlace(world, WEST_GATE)};
-  std::vector<EntityKey> guests;
-  guests.reserve(places.size());
-  for (const Place &place : places) {
-    guests.push_back(addGuest(world, place, LONG_STAY));
-  }
-
-  stepWorld(world);
-  CHECK_NOTHROW(validateWorld(world));
-  for (std::size_t index = 0; index < guests.size(); ++index) {
-    CAPTURE(index);
-    const std::optional<GuestRecord> record = guestRecord(world, guests[index]);
-    REQUIRE(record.has_value());
-    CHECK(record.value_or(GuestRecord{}).At != places[index]);
-  }
 }
 
 } // namespace

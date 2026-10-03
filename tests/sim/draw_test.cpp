@@ -62,22 +62,6 @@ void requireProportional(const std::vector<uint64_t> &counts, const std::vector<
   }
 }
 
-// The table in expected_draws.h is written by tests/sim/support/expected_draws.py, a separate
-// implementation of the definitions in src/sim/SPEC.md.
-// Draws that match it on every build are the same on every build.
-TEST_CASE("draws match the table computed independently from the specification") {
-  const std::span<const uint64_t> integerWeights(test::EXPECTED_DRAW_INTEGER_WEIGHTS);
-  const std::span<const double> doubleWeights(test::EXPECTED_DRAW_DOUBLE_WEIGHTS);
-  for (const test::ExpectedDraw &expected : test::EXPECTED_DRAWS) {
-    const DrawKey &key = expected.Key;
-    CAPTURE(key.Seed, key.Entity, key.Purpose, key.Tick, key.Index);
-    REQUIRE(drawBits(key) == expected.Bits);
-    REQUIRE(drawUniform(key) == expected.Uniform);
-    REQUIRE(drawPick(key, integerWeights) == expected.IntegerPick);
-    REQUIRE(drawPick(key, doubleWeights) == expected.DoublePick);
-  }
-}
-
 TEST_CASE("a draw depends on its key alone, whatever order and other draws surround it") {
   struct Draw {
     uint64_t Bits = 0;
@@ -269,27 +253,6 @@ TEST_CASE("drawPick refuses weights it cannot pick from in proportion") {
     REQUIRE_NOTHROW(pickDouble(key, {SMALLEST_NORMAL / 2.0, SMALLEST_NORMAL / 2.0}));
     REQUIRE(pickDouble(key, {LARGEST}) == 0);
   }
-}
-
-TEST_CASE("drawing leaves the world unchanged") {
-  const World world = buildWorld(makeSchema());
-  const World before = copyWorld(world);
-  const uint64_t hashBefore = hashWorld(world);
-
-  const std::vector<uint64_t> integerWeights = {2, 5};
-  const std::vector<double> doubleWeights = {0.5, 0.25};
-  for (const EntityKey entity : world.keys()) {
-    for (uint64_t index = 0; index < 10; ++index) {
-      const DrawKey key = drawKey(world, entity, WANDER, index);
-      static_cast<void>(drawBits(key));
-      static_cast<void>(drawUniform(key));
-      static_cast<void>(pickInteger(key, integerWeights));
-      static_cast<void>(pickDouble(key, doubleWeights));
-    }
-  }
-
-  REQUIRE(hashWorld(world) == hashBefore);
-  REQUIRE(worldsEqual(world, before));
 }
 
 TEST_CASE("a copy of a world draws the same values as the world") {

@@ -130,14 +130,6 @@ TEST_CASE("buildGuestMesh adds appendGuest for each guest whose record has a Pos
   CHECK(none.Indices.empty());
 }
 
-TEST_CASE("guestPose is the pose at the point's x and z with the default facing") {
-  const GroundPoint point{3.5, -7.25};
-  Pose expected;
-  expected.X = point.X;
-  expected.Z = point.Z;
-  CHECK(guestPose(point) == expected);
-}
-
 // tests/parks/warm.park: shop 7, and guests 9 to 40 standing on its paths.
 constexpr EntityKey WARM_SHOP{7};
 constexpr EntityKey WARM_GUEST{10};

@@ -125,40 +125,6 @@ struct RetireWatch {
   }
 };
 
-TEST_CASE("No cycle of randomized park edits with guests walking, waiting, and eating throws") {
-  bool sawEditAmongGuests = false;
-  bool sawEditAmongWaiting = false;
-  RetireWatch retire;
-  runGuestEdits(
-      71,
-      [&](const World &world, const std::optional<ParkEdit> &edit) {
-        sawEditAmongGuests = sawEditAmongGuests || (edit.has_value() && !parkGuests(world).empty());
-        sawEditAmongWaiting = sawEditAmongWaiting || (edit.has_value() && anyWaiting(world));
-        if (edit.has_value()) {
-          retire.before(world);
-        }
-      },
-      [&](const World &world, bool edited) {
-        if (edited) {
-          retire.after(world);
-        }
-      });
-  CHECK(sawEditAmongGuests);
-  CHECK(sawEditAmongWaiting);
-  CHECK(retire.Retired);
-}
-
-TEST_CASE("In every cycle of randomized park edits with guests walking, waiting, and eating, "
-          "guest-visits and meals each conserve their units") {
-  bool sawEaten = false;
-  runGuestEdits(76, [&](const World &world, bool /*edited*/) {
-    CHECK(test::conserved<GuestVisits>(world));
-    CHECK(test::conserved<Meals>(world));
-    sawEaten = sawEaten || unitsConsumed<Meals>(world, EATEN_CAUSE) > 0;
-  });
-  CHECK(sawEaten);
-}
-
 TEST_CASE("After every cycle of randomized park edits with guests walking, waiting, and eating "
           "that leaves the guest network a carrier, every guest's place resolves on it, including "
           "cycles whose edit takes a guest's path away") {

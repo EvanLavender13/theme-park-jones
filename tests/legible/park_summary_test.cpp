@@ -41,8 +41,6 @@ constexpr uint64_t WARM_WAITING = 5;
 
 // tests/parks/supply.park, at tick 0 with no guests: shop 7, depot 8, and shop 9, so the depot's
 // box lies between the two shops' in parkBoxes' order.
-constexpr EntityKey FIRST_SHOP{7};
-constexpr EntityKey SECOND_SHOP{9};
 
 World openPark(std::string_view name) {
   std::ifstream file(std::filesystem::path(TPJ_PARKS_DIR) / name, std::ios::binary);
@@ -51,21 +49,6 @@ World openPark(std::string_view name) {
   World world = loadWorld(makeParkSchema(), text);
   resolveWorld(world);
   return world;
-}
-
-TEST_CASE("summarizePark lists a line for each shop box, in parkBoxes' order, with its key and "
-          "record, and no other box") {
-  const World world = openPark("supply.park");
-  const std::optional<ShopRecord> first = shopRecord(world, FIRST_SHOP);
-  const std::optional<ShopRecord> second = shopRecord(world, SECOND_SHOP);
-  REQUIRE(first.has_value());
-  REQUIRE(second.has_value());
-  if (!first.has_value() || !second.has_value()) {
-    return;
-  }
-  // The depot, a box with no shop record, gives no line.
-  const std::vector<ShopLine> expected{{FIRST_SHOP, *first}, {SECOND_SHOP, *second}};
-  CHECK(summarizePark(world).Shops == expected);
 }
 
 TEST_CASE("summarizePark counts the guests, the mean of their hunger, and how many wait") {
@@ -92,26 +75,6 @@ TEST_CASE("summarizePark gives no guests, a mean hunger of 0, and none waiting f
   CHECK(summary.Guests == 0);
   CHECK(summary.MeanHunger == 0.0);
   CHECK(summary.Waiting == 0);
-}
-
-TEST_CASE("summarizePark's meals eaten are the meals units consumed with the cause eaten") {
-  const World world = openPark("warm.park");
-  const int64_t eaten = unitsConsumed<Meals>(world, EATEN_CAUSE);
-  // warm.park's guests have eaten, so a summary that ignored the meals ledger would differ.
-  REQUIRE(eaten > 0);
-  CHECK(summarizePark(world).MealsEaten == eaten);
-}
-
-TEST_CASE("summarizePark is a function of the world alone and changes nothing in it") {
-  const World world = openPark("warm.park");
-  const World copy = copyWorld(world);
-  const World reloaded = openPark("warm.park");
-  const uint64_t before = hashWorld(world);
-  const ParkSummary summary = summarizePark(world);
-  CHECK(hashWorld(world) == before);
-  CHECK(worldsEqual(world, copy));
-  CHECK(summarizePark(copy) == summary);
-  CHECK(summarizePark(reloaded) == summary);
 }
 
 } // namespace

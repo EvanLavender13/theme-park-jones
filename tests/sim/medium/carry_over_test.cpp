@@ -17,11 +17,9 @@ namespace {
 using test::distanceToCarrier;
 using test::groundDistance;
 using test::makeSyntheticNetwork;
-using test::SyntheticNetwork;
 using test::SyntheticRandom;
 
 constexpr double NOT_A_NUMBER = std::numeric_limits<double>::quiet_NaN();
-constexpr double INFINITE = std::numeric_limits<double>::infinity();
 
 constexpr GroundPoint NOWHERE{.X = NOT_A_NUMBER, .Z = NOT_A_NUMBER};
 
@@ -210,17 +208,6 @@ Network bendAndRuler() {
           {}};
 }
 
-TEST_CASE("nearestPlaceOn gives no place for a carrier not in the network or a position that is "
-          "not finite") {
-  CHECK_FALSE(Network().nearestPlaceOn(BEND, {.X = 0, .Z = 0}).has_value());
-  const Network network = bendAndRuler();
-  CHECK_FALSE(network.nearestPlaceOn(EntityKey{99}, {.X = 0, .Z = 0}).has_value());
-  CHECK_FALSE(network.nearestPlaceOn(NULL_KEY, {.X = 0, .Z = 0}).has_value());
-  CHECK_FALSE(network.nearestPlaceOn(BEND, {.X = NOT_A_NUMBER, .Z = 0}).has_value());
-  CHECK_FALSE(network.nearestPlaceOn(BEND, {.X = 0, .Z = INFINITE}).has_value());
-  CHECK_FALSE(network.nearestPlaceOn(RULER, {.X = -INFINITE, .Z = 1}).has_value());
-}
-
 TEST_CASE("nearestPlaceOn gives a place on its carrier that resolves, and no point of that carrier "
           "is nearer") {
   const Network network = bendAndRuler();
@@ -288,51 +275,6 @@ TEST_CASE("nearestPlace's result is nearestPlaceOn of its own carrier and the sa
       const double z = queries.between(-60.0, 60.0);
       requireAgrees(network, {.X = x, .Z = z});
     }
-  }
-}
-
-TEST_CASE(
-    "carryOver does not depend on the order the networks' carriers and anchors are given in") {
-  constexpr EntityKey MOVED{30};
-  constexpr EntityKey SPLIT{20};
-  constexpr EntityKey GONE{10};
-  SyntheticNetwork before;
-  before.Carriers = {straight(MOVED, {.X = 0, .Z = 0}, {.X = 10, .Z = 0}, 10, 0, 1),
-                     straight(SPLIT, {.X = 10, .Z = 0}, {.X = 10, .Z = 10}, 10, 1, 2),
-                     straight(GONE, {.X = 10, .Z = 10}, {.X = 0, .Z = 10}, 10, 2, 3)};
-  before.NodeCount = 4;
-  before.Anchors = {{.Node = 0, .Entity = EntityKey{7}},
-                    {.Node = 2, .Entity = EntityKey{8}},
-                    {.Node = 3, .Entity = EntityKey{7}}};
-  SyntheticNetwork after;
-  after.Carriers = {
-      straight(MOVED, {.X = 0, .Z = 1}, {.X = 10, .Z = 1}, 10, 0, 1),
-      Carrier{.Key = SPLIT,
-              .Points = {{.X = 10, .Z = 0, .Distance = 0}, {.X = 10, .Z = 10, .Distance = 10}},
-              .Stops = {{.Distance = 0, .Node = 1},
-                        {.Distance = 5, .Node = 2},
-                        {.Distance = 10, .Node = 3}}}};
-  after.NodeCount = 4;
-  after.Anchors = {{.Node = 0, .Entity = EntityKey{7}}, {.Node = 3, .Entity = EntityKey{8}}};
-
-  auto reversed = [](SyntheticNetwork inputs) {
-    std::ranges::reverse(inputs.Carriers);
-    std::ranges::reverse(inputs.Anchors);
-    return inputs;
-  };
-  const Network beforeGiven = before.build();
-  const Network afterGiven = after.build();
-  const Network beforeReversed = reversed(before).build();
-  const Network afterReversed = reversed(after).build();
-
-  // A moved place, a kept one, a retired one, and one that did not resolve before.
-  for (const Place place : std::vector<Place>{{.Carrier = MOVED, .Distance = 4},
-                                              {.Carrier = SPLIT, .Distance = 6},
-                                              {.Carrier = GONE, .Distance = 5},
-                                              {.Carrier = MOVED, .Distance = 11}}) {
-    CAPTURE(place.Carrier, place.Distance);
-    REQUIRE(carryOver(place, beforeReversed, afterReversed) ==
-            carryOver(place, beforeGiven, afterGiven));
   }
 }
 

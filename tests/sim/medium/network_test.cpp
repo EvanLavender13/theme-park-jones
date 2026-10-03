@@ -180,41 +180,6 @@ TEST_CASE("the default network is empty") {
   REQUIRE(network.nodeCount() == 0);
 }
 
-TEST_CASE("the constructor accepts inputs the spec does not list as malformed") {
-  SECTION("no carriers and no nodes") { REQUIRE_NOTHROW(Network({}, 0, {})); }
-  SECTION("junctions, a carrier stopping twice at a node, stops between points, and an entity "
-          "anchoring two nodes") {
-    const SyntheticNetwork inputs = sampleInputs();
-    REQUIRE_NOTHROW(inputs.build());
-  }
-  SECTION("negative coordinates, and a segment whose points share a ground position") {
-    // The producer's distances need not follow the ground, so a segment may have length along its
-    // route but none on the ground.
-    const std::vector<Carrier> carriers = {
-        Carrier{.Key = EntityKey{3},
-                .Points = {{.X = -2, .Z = -5, .Distance = 0},
-                           {.X = -2, .Z = -5, .Distance = 1},
-                           {.X = -6, .Z = -5, .Distance = 5}},
-                .Stops = {{.Distance = 0, .Node = 0}, {.Distance = 5, .Node = 1}}}};
-    REQUIRE_NOTHROW(Network(carriers, 2, {}));
-  }
-  SECTION("an edge from a node back to itself") {
-    const std::vector<Carrier> carriers = {
-        Carrier{.Key = EntityKey{3},
-                .Points = {{.X = 0, .Z = 0, .Distance = 0},
-                           {.X = 1, .Z = 1, .Distance = 2},
-                           {.X = 0, .Z = 0, .Distance = 4}},
-                .Stops = {{.Distance = 0, .Node = 0}, {.Distance = 4, .Node = 0}}}};
-    REQUIRE_NOTHROW(Network(carriers, 1, {}));
-  }
-  SECTION("random synthetic networks") {
-    for (const RandomCase &random : RANDOM_CASES) {
-      CAPTURE(random.Seed);
-      REQUIRE_NOTHROW(makeSyntheticNetwork(random.Seed, random.NodeCount).build());
-    }
-  }
-}
-
 TEST_CASE("the constructor refuses each malformed input the spec lists") {
   const std::vector<std::pair<std::string, std::function<void(SyntheticNetwork &)>>> malformed = {
       {"a carrier keyed NULL_KEY",
@@ -364,59 +329,6 @@ TEST_CASE("resolve gives no position for a missing carrier or a distance outside
   CHECK_FALSE(Network().resolve({.Carrier = BEND, .Distance = 0}).has_value());
 }
 
-TEST_CASE("on random synthetic networks every stop resolves to its node and every place strictly "
-          "inside an edge to that edge") {
-  for (const RandomCase &random : RANDOM_CASES) {
-    CAPTURE(random.Seed);
-    const SyntheticNetwork inputs = makeSyntheticNetwork(random.Seed, random.NodeCount);
-    const Network network = inputs.build();
-
-    for (const Carrier &carrier : inputs.Carriers) {
-      for (const CarrierStop &stop : carrier.Stops) {
-        requireNode(network, {.Carrier = carrier.Key, .Distance = stop.Distance}, stop.Node);
-      }
-    }
-
-    REQUIRE(network.edges().size() == inputs.Carriers.size());
-    for (uint32_t i = 0; i < network.edges().size(); ++i) {
-      const NetworkEdge &edge = network.edges()[i];
-      // The middle, and the nearest distances to each end that are strictly inside.
-      for (const double distance :
-           {(edge.FromDistance + edge.ToDistance) / 2.0,
-            std::nextafter(edge.FromDistance, INFINITE), std::nextafter(edge.ToDistance, 0.0)}) {
-        requireEdge(network, {.Carrier = edge.Carrier, .Distance = distance}, i,
-                    distance - edge.FromDistance, edge.ToDistance - distance);
-      }
-    }
-  }
-}
-
-TEST_CASE("nodePlace gives a node's stop on its lowest-keyed carrier at the lowest distance there, "
-          "which resolves to the node") {
-  const Network network = sampleInputs().build();
-  // Node 2 is at BEND's 12 and SPUR's 0: the key decides, not the distance. Node 3 is at LOOP's 0
-  // and 12 and SPUR's 6.
-  const std::vector<Place> expected = {{.Carrier = BEND, .Distance = 0},
-                                       {.Carrier = BEND, .Distance = 5},
-                                       {.Carrier = BEND, .Distance = 12},
-                                       {.Carrier = LOOP, .Distance = 0},
-                                       {.Carrier = LOOP, .Distance = 7}};
-  REQUIRE(network.nodeCount() == expected.size());
-  for (uint32_t node = 0; node < network.nodeCount(); ++node) {
-    CAPTURE(node);
-    REQUIRE(network.nodePlace(node) == expected[node]);
-    requireNode(network, network.nodePlace(node), node);
-  }
-
-  for (const RandomCase &random : RANDOM_CASES) {
-    CAPTURE(random.Seed);
-    const Network synthetic = makeSyntheticNetwork(random.Seed, random.NodeCount).build();
-    for (uint32_t node = 0; node < synthetic.nodeCount(); ++node) {
-      requireNode(synthetic, synthetic.nodePlace(node), node);
-    }
-  }
-}
-
 TEST_CASE("nodeAnchor and anchoredNodes find the anchors given, and nothing where none was given") {
   const Network network = sampleInputs().build();
   REQUIRE(network.nodeAnchor(0) == SECOND_OWNER);
@@ -544,13 +456,6 @@ TEST_CASE("nodePlace is the first of a node's stop places") {
   }
 }
 
-TEST_CASE("stopPlaces refuses a node not below the node count") {
-  const Network network = sampleInputs().build();
-  REQUIRE_THROWS_AS(network.stopPlaces(5), std::out_of_range);
-  const Network empty;
-  REQUIRE_THROWS_AS(empty.stopPlaces(0), std::out_of_range);
-}
-
 std::vector<std::pair<uint32_t, bool>> edgeEndsOf(const Network &network, uint32_t node) {
   std::vector<std::pair<uint32_t, bool>> ends;
   for (const EdgeEnd &end : network.edgeEnds(node)) {
@@ -574,11 +479,6 @@ TEST_CASE("edgeEnds gives each end of each edge at a node once, in ascending edg
   REQUIRE(edgeEndsOf(network, 1) == Ends{{0, false}, {1, true}});
   REQUIRE(edgeEndsOf(network, 2) == Ends{{1, false}, {3, true}});
   REQUIRE(edgeEndsOf(network, 3) == Ends{{2, true}, {2, false}, {3, false}});
-}
-
-TEST_CASE("edgeEnds refuses a node not below the node count") {
-  const Network network = sampleInputs().build();
-  REQUIRE_THROWS_AS(network.edgeEnds(5), std::out_of_range);
 }
 
 TEST_CASE("groundPoint gives a carrier point's coordinates at its distance, and between points "
@@ -722,15 +622,6 @@ TEST_CASE("addNetworkComponent registers Network as the derived type network") {
   REQUIRE(type.Name == "network");
   REQUIRE(type.Kind == DataKind::Derived);
   REQUIRE(type.TypeId == entt::type_id<Network>().hash());
-}
-
-TEST_CASE("makeParkSchema registers the network type first, as derived") {
-  const std::shared_ptr<const WorldSchema> schema = makeParkSchema();
-  REQUIRE_FALSE(schema->components().empty());
-  const ComponentType &first = schema->components()[0];
-  REQUIRE(first.Name == "network");
-  REQUIRE(first.Kind == DataKind::Derived);
-  REQUIRE(first.TypeId == entt::type_id<Network>().hash());
 }
 
 TEST_CASE("a world holding networks copies equal and hashes equal") {

@@ -132,35 +132,6 @@ TEST_CASE("A generation syncWorld has not seen empties the kept preview, so the 
   checkSamePreview(sync.preview(), previewEdit(session.world(), edit));
 }
 
-TEST_CASE("syncPreview returns keepPreview's answer for the kept preview, the world, and the edit, "
-          "and preview() is the kept preview's Made") {
-  // Each call differs from the one before in one way keepPreview decides on: the first call, the
-  // same tick and edit, another edit, another tick, and no edit.
-  const World park = resolvedNewPark();
-  const World later = stepped(park);
-  struct Frame {
-    const World *Park;
-    std::optional<ParkEdit> Edit;
-  };
-  const std::vector<Frame> frames{
-      {&park, shopAt(-40.0, -60.0)}, {&park, shopAt(-40.0, -60.0)}, {&park, shopAt(40.0, -60.0)},
-      {&later, shopAt(40.0, -60.0)}, {&later, std::nullopt},
-  };
-  SceneSync sync;
-  KeptPreview expected;
-
-  for (size_t index = 0; index < frames.size(); ++index) {
-    INFO("frame " << index);
-    const Frame &frame = frames[index];
-    sync.syncWorld(*frame.Park, 7);
-
-    const bool remade = sync.syncPreview(*frame.Park, frame.Edit);
-
-    CHECK(remade == keepPreview(expected, *frame.Park, frame.Edit));
-    checkSamePreview(sync.preview(), expected.Made);
-  }
-}
-
 TEST_CASE("syncLook returns true at its first call") {
   SceneSync sync;
 

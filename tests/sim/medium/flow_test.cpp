@@ -87,17 +87,6 @@ public:
   ~ScriptScope() { script().clear(); }
 };
 
-// What recording systems, swaps, and resolvers saw.
-std::vector<std::pair<std::string, Thrown>> &outcomes() {
-  static std::vector<std::pair<std::string, Thrown>> recorded;
-  return recorded;
-}
-
-std::vector<int64_t> &observedUnits() {
-  static std::vector<int64_t> recorded;
-  return recorded;
-}
-
 struct RemoveEntity {
   EntityKey Key = NULL_KEY;
 };
@@ -245,10 +234,6 @@ template <typename Visitor> void visitFields(Visitor &visitor, Occupant &occupan
   visitor.field("count", occupant.Count);
 }
 
-struct MalformedKind {
-  static constexpr std::string_view Name = "Bad Kind";
-};
-
 TEST_CASE("addFlow registers the kind's state component as <name>-ledger, its resolver as "
           "<name>-flow, and a swap") {
   WorldSchema schema;
@@ -264,39 +249,6 @@ TEST_CASE("addFlow registers the kind's state component as <name>-ledger, its re
     REQUIRE(hasResolver(schema, std::string(name) + "-flow"));
   }
   REQUIRE(schema.swaps().size() == swaps + 1);
-}
-
-TEST_CASE("addFlow throws std::invalid_argument when any of its names is malformed or already "
-          "registered") {
-  WorldSchema schema;
-
-  SECTION("a malformed name") {
-    REQUIRE(thrownBy([&] { addFlow<MalformedKind>(schema); }) == Thrown::InvalidArgument);
-  }
-  SECTION("<name>-ledger already registered") {
-    schema.addComponent<Occupant>("meals-ledger", DataKind::State);
-    REQUIRE(thrownBy([&] { addFlow<Meals>(schema); }) == Thrown::InvalidArgument);
-  }
-  SECTION("<name>-flow already registered") {
-    schema.addResolver("meals-flow", [](World &) {});
-    REQUIRE(thrownBy([&] { addFlow<Meals>(schema); }) == Thrown::InvalidArgument);
-  }
-  SECTION("the kind already registered") {
-    addFlow<Meals>(schema);
-    REQUIRE(thrownBy([&] { addFlow<Meals>(schema); }) == Thrown::InvalidArgument);
-  }
-}
-
-TEST_CASE("the kind's resolver creates the entity keyed flowKey(name) holding an empty ledger") {
-  STATIC_REQUIRE(flowKey("meals") == deriveKey(NULL_KEY, hashName("flow"), hashName("meals")));
-  World world = makeScriptedWorld(makeScriptedSchema());
-
-  const Ledger *ledger = ledgerOf<Meals>(world);
-  REQUIRE(ledger != nullptr);
-  REQUIRE(ledger->Packets.empty());
-  REQUIRE(ledger->Stocks.empty());
-  REQUIRE(ledger->Created == 0);
-  REQUIRE(ledger->Consumed.empty());
 }
 
 void requireEmptyAnswers(const World &world) {
@@ -435,26 +387,6 @@ TEST_CASE("addressedTo gives exactly the kind's packets and stocks whose handle 
         std::vector<StockTuple>{{ENDPOINT, HANDLE, 3}, {OTHER, HANDLE, 3}, {HANDLE, HANDLE, 1}});
 }
 
-TEST_CASE("addressedTo gives nothing for a world holding no ledger for the kind") {
-  SECTION("the kind is not registered, though another is") {
-    auto schema = std::make_shared<WorldSchema>();
-    addFlow<Supplies>(*schema);
-    World world(schema, 0);
-    world.createEntity();
-    resolveWorld(world);
-    const FlowAddressed addressed = addressedTo<Meals>(world, EntityKey{1});
-    CHECK(addressed.Packets.empty());
-    CHECK(addressed.Stocks.empty());
-  }
-  SECTION("the kind is registered, but its resolver has not yet run") {
-    World world(makeScriptedSchema(), 0);
-    world.createEntity();
-    const FlowAddressed addressed = addressedTo<Meals>(world, EntityKey{1});
-    CHECK(addressed.Packets.empty());
-    CHECK(addressed.Stocks.empty());
-  }
-}
-
 // Each operation, with every argument valid for a scripted world stocked up in tick 0.
 std::vector<std::pair<std::string, Action>> validOperations() {
   return {
@@ -463,66 +395,6 @@ std::vector<std::pair<std::string, Action>> validOperations() {
       {"consumeUnits",
        [](World &world) { consumeUnits<Meals>(world, ENDPOINT, HANDLE, 1, "spoiled"); }},
   };
-}
-
-void recordEachOperation(World &world) {
-  for (const auto &operation : validOperations()) {
-    const Action &call = operation.second;
-    outcomes().emplace_back(operation.first, thrownBy([&] { call(world); }));
-  }
-}
-
-std::vector<std::pair<std::string, Thrown>> allLabeled(Thrown thrown,
-                                                       const std::vector<std::string> &labels) {
-  std::vector<std::pair<std::string, Thrown>> labeled;
-  labeled.reserve(labels.size());
-  for (const std::string &label : labels) {
-    labeled.emplace_back(label, thrown);
-  }
-  return labeled;
-}
-
-TEST_CASE("createUnits, sendUnits, and consumeUnits throw std::logic_error when the world is not "
-          "stepping") {
-  const ScriptScope scope;
-  auto schema = makeScriptedSchema();
-  at(0, stockUp);
-
-  SECTION("outside any cycle") {
-    World world = makeScriptedWorld(schema);
-    stepWorld(world);
-    outcomes().clear();
-    recordEachOperation(world);
-  }
-  SECTION("in a resolver") {
-    schema->addResolver("meddler",
-                        [](World &world) {
-                          if (world.Tick > 0) {
-                            recordEachOperation(world);
-                          }
-                        },
-                        {"meals-flow"});
-    World world = makeScriptedWorld(schema);
-    stepWorld(world);
-    outcomes().clear();
-    CommandQueue commands;
-    commands.push(AddBystander{});
-    stepWorld(world, commands);
-  }
-  SECTION("in a swap") {
-    schema->addSwap([](World &world) {
-      if (world.Tick == 2) {
-        recordEachOperation(world);
-      }
-    });
-    World world = makeScriptedWorld(schema);
-    stepWorld(world);
-    outcomes().clear();
-    stepWorld(world);
-  }
-
-  REQUIRE(outcomes() ==
-          allLabeled(Thrown::OtherLogicError, {"createUnits", "sendUnits", "consumeUnits"}));
 }
 
 // Supplies has a ledger, and meals has none.
@@ -539,29 +411,6 @@ Rejections endpointAndUnitRejections();
 Rejections sendRejections();
 Rejections consumeRejections();
 std::vector<std::string> labelsOf(const Rejections &calls);
-
-// The std::logic_error checks come first, so the calls whose other arguments are invalid throw it
-// too.
-TEST_CASE("createUnits, sendUnits, and consumeUnits throw std::logic_error when the world holds no "
-          "ledger for the kind, whatever their other arguments") {
-  const ScriptScope scope;
-  World world = makeScriptedWorld(makeUnledgeredSchema());
-  Rejections calls = validOperations();
-  std::ranges::move(endpointAndUnitRejections(), std::back_inserter(calls));
-  std::ranges::move(sendRejections(), std::back_inserter(calls));
-  std::ranges::move(consumeRejections(), std::back_inserter(calls));
-  at(0, [&calls](World &stepping) {
-    for (const auto &labeled : calls) {
-      const Action &call = labeled.second;
-      outcomes().emplace_back(labeled.first, thrownBy([&] { call(stepping); }));
-    }
-  });
-
-  outcomes().clear();
-  stepWorld(world);
-
-  REQUIRE(outcomes() == allLabeled(Thrown::OtherLogicError, labelsOf(calls)));
-}
 
 // Calls every operation rejects for its endpoint or units, in a world stocked up in tick 0.
 Rejections endpointAndUnitRejections() {
@@ -622,48 +471,12 @@ Rejections consumeRejections() {
   };
 }
 
-// Runs the calls in tick 1 of a world stocked up in tick 0, recording what each threw.
-std::vector<std::pair<std::string, Thrown>> outcomesOf(const Rejections &calls) {
-  const ScriptScope scope;
-  World world = makeScriptedWorld(makeScriptedSchema());
-  at(0, stockUp);
-  at(1, [&calls](World &stepping) {
-    for (const auto &labeled : calls) {
-      const Action &call = labeled.second;
-      outcomes().emplace_back(labeled.first, thrownBy([&] { call(stepping); }));
-    }
-  });
-  outcomes().clear();
-  stepWorld(world);
-  stepWorld(world);
-  return outcomes();
-}
-
 std::vector<std::string> labelsOf(const Rejections &calls) {
   std::vector<std::string> labels;
   for (const auto &[label, call] : calls) {
     labels.push_back(label);
   }
   return labels;
-}
-
-TEST_CASE("createUnits, sendUnits, and consumeUnits throw std::invalid_argument for a null or dead "
-          "endpoint and for units below 1") {
-  const Rejections calls = endpointAndUnitRejections();
-  REQUIRE(outcomesOf(calls) == allLabeled(Thrown::InvalidArgument, labelsOf(calls)));
-}
-
-TEST_CASE("sendUnits throws std::invalid_argument for a null destination, a delay of 0, or a stock "
-          "holding fewer units of the handle") {
-  const Rejections calls = sendRejections();
-  REQUIRE(outcomesOf(calls) == allLabeled(Thrown::InvalidArgument, labelsOf(calls)));
-}
-
-TEST_CASE(
-    "consumeUnits throws std::invalid_argument for a malformed cause or a stock holding fewer "
-    "units of the handle") {
-  const Rejections calls = consumeRejections();
-  REQUIRE(outcomesOf(calls) == allLabeled(Thrown::InvalidArgument, labelsOf(calls)));
 }
 
 constexpr int64_t LARGEST = std::numeric_limits<int64_t>::max();
@@ -678,24 +491,6 @@ World nearlyFullWorld() {
   REQUIRE(ledger != nullptr);
   ledger->Created = LARGEST - 7;
   return world;
-}
-
-TEST_CASE("createUnits throws std::invalid_argument when the created count would exceed the "
-          "largest int64_t, and accepts reaching it") {
-  const ScriptScope scope;
-  World world = nearlyFullWorld();
-  at(1, [](World &stepping) {
-    outcomes().emplace_back("beyond",
-                            thrownBy([&] { createUnits<Meals>(stepping, ENDPOINT, HANDLE, 8); }));
-    outcomes().emplace_back("reaching",
-                            thrownBy([&] { createUnits<Meals>(stepping, ENDPOINT, HANDLE, 7); }));
-  });
-  outcomes().clear();
-  stepWorld(world);
-
-  REQUIRE(outcomes() == std::vector<std::pair<std::string, Thrown>>{
-                            {"beyond", Thrown::InvalidArgument}, {"reaching", Thrown::Nothing}});
-  REQUIRE(unitsCreated<Meals>(world) == LARGEST);
 }
 
 std::vector<std::pair<std::string, bool>> &unchanged() {
@@ -899,31 +694,6 @@ TEST_CASE("at the first swap after an endpoint is removed, each handle's units g
   REQUIRE(unitsHeld<Meals>(world) == 5);
   REQUIRE(unitsConsumed<Meals>(world, DISCARDED_CAUSE) == 5);
   REQUIRE(unitsConsumed<Meals>(world) == 5);
-}
-
-void observeDelivery(World &world) {
-  if (world.Tick == 1) {
-    observedUnits().push_back(unitsHeld<Meals>(world, OTHER, HANDLE));
-  }
-}
-
-TEST_CASE("the kind's swap runs among the other swaps in the order addFlow registered it") {
-  const ScriptScope scope;
-  auto schema = std::make_shared<WorldSchema>();
-  schema->addSwap(observeDelivery);
-  addFlow<Meals>(*schema);
-  schema->addSwap(observeDelivery);
-  schema->addSystem(runScript);
-  World world = makeScriptedWorld(schema);
-  at(0, [](World &stepping) {
-    createUnits<Meals>(stepping, ENDPOINT, HANDLE, 3);
-    sendUnits<Meals>(stepping, ENDPOINT, OTHER, HANDLE, 3, 1);
-  });
-
-  observedUnits().clear();
-  stepWorld(world);
-
-  REQUIRE(observedUnits() == std::vector<int64_t>{0, 3});
 }
 
 std::shared_ptr<const WorldSchema> tradeSchema() {

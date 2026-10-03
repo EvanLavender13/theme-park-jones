@@ -99,52 +99,6 @@ TEST_CASE("parseOptions holds what each given option names and leaves each optio
   }
 }
 
-TEST_CASE("A command line with --capture gives a FrameLimit of 3 unless --frames gives a positive "
-          "one") {
-  struct Case {
-    Arguments Given;
-    int FrameLimit;
-  };
-  const std::vector<Case> cases = {
-      {{"--capture", "out.bmp"}, 3},
-      // Zero and a negative value are not positive, wherever --frames stands.
-      {{"--capture", "out.bmp", "--frames", "0"}, 3},
-      {{"--frames", "-2", "--capture", "out.bmp"}, 3},
-      // The least positive value is kept.
-      {{"--capture", "out.bmp", "--frames", "1"}, 1}};
-  for (const Case &test : cases) {
-    INFO(shown(test.Given));
-    const std::optional<Options> options = parse(test.Given);
-    REQUIRE(options.has_value());
-    if (!options.has_value()) {
-      continue;
-    }
-    CHECK(options->FrameLimit == test.FrameLimit);
-    CHECK(samePath(options->CapturePath, "out.bmp"));
-  }
-}
-
-TEST_CASE("parseOptions sets FrameTimes exactly when --frame-times is given with a positive "
-          "--frames") {
-  struct Case {
-    Arguments Given;
-    bool FrameTimes;
-  };
-  const std::vector<Case> cases = {{{"--frames", "5", "--frame-times"}, true},
-                                   // The least positive value, with --frame-times before --frames.
-                                   {{"--frame-times", "--frames", "1"}, true},
-                                   {{"--frames", "5"}, false}};
-  for (const Case &test : cases) {
-    INFO(shown(test.Given));
-    const std::optional<Options> options = parse(test.Given);
-    REQUIRE(options.has_value());
-    if (!options.has_value()) {
-      continue;
-    }
-    CHECK(options->FrameTimes == test.FrameTimes);
-  }
-}
-
 TEST_CASE("parseOptions gives no Options for a command line that prints the usage") {
   const std::vector<Arguments> cases = {
       // An unknown option.

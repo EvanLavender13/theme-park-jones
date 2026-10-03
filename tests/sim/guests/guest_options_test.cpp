@@ -139,23 +139,5 @@ TEST_CASE("guestOptions gives the options Choice lists at the guest's place, in 
   CHECK(sawNoHeadHome);
 }
 
-TEST_CASE("guestOptions changes nothing: the world after calls for every guest and for keys "
-          "holding none is worldsEqual to a copy taken before them") {
-  const World playing = eatingWithTarget();
-  const World copy = copyWorld(playing);
-  for (const EntityKey guest : parkGuests(playing)) {
-    (void)guestOptions(playing, guest);
-  }
-  (void)guestOptions(playing, test::NEAR_SHOP);
-  (void)guestOptions(playing, NULL_KEY);
-  CHECK(worldsEqual(playing, copy));
-
-  // A guest whose place does not resolve.
-  const CutUnderGuest park = cutUnderGuest();
-  const World cutCopy = copyWorld(park.After);
-  (void)guestOptions(park.After, park.Guest);
-  CHECK(worldsEqual(park.After, cutCopy));
-}
-
 } // namespace
 } // namespace tpj

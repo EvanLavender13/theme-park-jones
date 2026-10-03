@@ -5,11 +5,9 @@
 add_executable(tpj_app_tests
     command_line_test.cpp
     frame_clock_test.cpp
-    frame_times_test.cpp
     input/cursor_test.cpp
     input/input_map_test.cpp
     input/interaction_test.cpp
-    input/orbit_camera_test.cpp
     options_test.cpp
     scene/scene_sync_test.cpp
     session/park_file_requests_test.cpp

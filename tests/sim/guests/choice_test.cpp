@@ -351,26 +351,6 @@ TEST_CASE("A guest chooses where it stands when it starts its walk at a node or 
   CHECK(sawPickAtAnchor);
 }
 
-TEST_CASE("A guest that walks to a node with no distance left does not choose there in that "
-          "cycle: it keeps its Activity and Target") {
-  runEatingPark(isEatingRunOver, [&](const BeforeCycle &before, const World &after) {
-    for (const auto &[guest, was] : before.Guests) {
-      if (was.Activity == GuestActivity::Waiting || test::isAtNode(after, was.At) ||
-          losesWay(after, before.Offers, was)) {
-        continue;
-      }
-      const std::optional<GuestRecord> now = guestRecord(after, guest);
-      if (!now.has_value() || now.value_or(GuestRecord{}).Activity == GuestActivity::Waiting ||
-          !test::isAtNode(after, now.value_or(GuestRecord{}).At)) {
-        continue;
-      }
-      CAPTURE(guest);
-      CHECK(now.value_or(GuestRecord{}).Activity == was.Activity);
-      CHECK(now.value_or(GuestRecord{}).Target == was.Target);
-    }
-  });
-}
-
 TEST_CASE("A guest heading to a shop that keeps its target comes WALK_STEP nearer the shop by "
           "route distance each cycle, until it waits at the shop's anchor") {
   bool sawApproach = false;

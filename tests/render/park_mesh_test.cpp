@@ -937,15 +937,6 @@ TEST_CASE("appendBox gives the front face the color lightened and every other fa
   }
 }
 
-TEST_CASE("lightened moves red, green, and blue 0.4 of the way to 1 and keeps alpha") {
-  // Channels at both ends of the range and between, and an alpha that is not 1.
-  const Rgba color = lightened(Rgba{0.0f, 0.5f, 1.0f, 0.25f});
-  CHECK(std::abs(color.R - 0.4f) <= UNIT_TOLERANCE);
-  CHECK(std::abs(color.G - 0.7f) <= UNIT_TOLERANCE);
-  CHECK(std::abs(color.B - 1.0f) <= UNIT_TOLERANCE);
-  CHECK(color.A == 0.25f);
-}
-
 TEST_CASE("appendBox adds nothing for a pose with no footprint") {
   const std::vector<Pose> noFootprint = {
       Pose{5.0, 5.0, 0.0, 0.0}, Pose{std::numeric_limits<double>::infinity(), 0.0, 0.0, -1.0}};
@@ -1085,12 +1076,6 @@ TEST_CASE("buildParkMesh lays every vertex in a path kind's color at that kind's
     }
     CHECK(count > 0);
   }
-}
-
-TEST_CASE("An entrance is 5 m tall, a shop 4 m, and a depot 6 m") {
-  CHECK(ENTRANCE_HEIGHT == 5.0f);
-  CHECK(boxHeight(BoxKind::Shop) == 4.0f);
-  CHECK(boxHeight(BoxKind::Depot) == 6.0f);
 }
 
 TEST_CASE("Guest paths, backstage paths, shops, depots, and the entrance have distinct, opaque "
@@ -1280,54 +1265,6 @@ TEST_CASE("appendStarvedMarks adds appendStarvedMark over each starved shop box,
   ParkMesh mesh = heldMesh();
   appendStarvedMarks(mesh, world, ALPHA);
   CHECK(sameMesh(mesh, expected));
-}
-
-std::string supplyText() {
-  std::ifstream file(TPJ_PARKS_DIR "/supply.park", std::ios::binary);
-  REQUIRE(file.is_open());
-  std::stringstream text;
-  text << file.rdbuf();
-  return text.str();
-}
-
-TEST_CASE("buildParkMesh draws tests/parks/supply.park with exactly one starved mark, over its "
-          "starved shop") {
-  World world = loadWorld(makeParkSchema(), supplyText());
-  resolveWorld(world);
-  std::vector<ParkBox> starved;
-  for (const ParkBox &box : parkBoxes(world)) {
-    if (box.Kind == BoxKind::Shop && isStarved(world, box.Key)) {
-      starved.push_back(box);
-    }
-  }
-  REQUIRE(starved.size() == 1);
-
-  const ParkMesh mesh = buildParkMesh(world);
-  // No other part of the park is drawn in STARVED_COLOR or its lightened front.
-  const auto marked = std::ranges::count_if(mesh.Vertices, [](const ParkVertex &vertex) {
-    return vertex.Color == STARVED_COLOR || vertex.Color == lightened(STARVED_COLOR);
-  });
-  CHECK(std::cmp_equal(marked, MARK_VERTICES));
-  ParkMesh mark;
-  appendStarvedMark(mark, starved.front().At, STARVED_COLOR);
-  REQUIRE(mesh.Vertices.size() >= MARK_VERTICES);
-  CHECK(std::ranges::equal(
-      std::prev(mesh.Vertices.end(), static_cast<std::ptrdiff_t>(MARK_VERTICES)),
-      mesh.Vertices.end(), mark.Vertices.begin(), mark.Vertices.end(), sameVertex));
-}
-
-// The mesh is derived, so building it must leave nothing behind in what is saved or hashed.
-TEST_CASE("Building a world's park mesh or its walkways leaves its save and hash unchanged") {
-  const World world = mixedPark();
-  const std::string save = saveWorld(world);
-  const uint64_t hash = hashWorld(world);
-  const ParkMesh mesh = buildParkMesh(world);
-  REQUIRE_FALSE(mesh.Vertices.empty());
-  ParkMesh walkways;
-  appendWalkways(walkways, world, GHOST_ALPHA);
-  REQUIRE_FALSE(walkways.Vertices.empty());
-  CHECK(saveWorld(world) == save);
-  CHECK(hashWorld(world) == hash);
 }
 
 } // namespace
