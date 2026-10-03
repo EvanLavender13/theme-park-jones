@@ -1,34 +1,34 @@
 # Research: focused-tests
 
-## Why does the suite keep growing tests that enumerate cases or re-prove laws?
+## Why does the suite keep growing tests that enumerate cases or re-prove standards?
 
-An audit read all 761 test cases against the rules now in docs/testing.md. 292 passed as written, 198 asserted a real property in the wrong shape, 231 were deleted, and 40 more re-prove a world-as-value law over real park state and wait for the law suite. Of the deletions, about 65 re-proved a law another module owns, about 65 enumerated inputs, error conditions, or entry points, about 56 pinned tuning, display text, vertex order, or a formula copied from the code, about 47 checked that one function forwards to another, about 20 tested test utilities, and about 14 checked that a function taking `const World &` leaves the world unchanged.
+An audit read all 761 test cases against the rules now in docs/testing.md. 292 passed as written, 198 asserted a real property in the wrong shape, 231 were deleted, and 40 more re-prove a world-as-value standard over real park state and wait for the shared world checks. Of the deletions, about 65 re-proved a standard another module owns, about 65 enumerated inputs, error conditions, or entry points, about 56 pinned tuning, display text, vertex order, or a formula copied from the code, about 47 checked that one function forwards to another, about 20 tested test utilities, and about 14 checked that a function taking `const World &` leaves the world unchanged.
 
-The causes sit upstream of the tests. The sim root proved copy, save, hash, candidate, and determinism laws only on hand-made synthetic schemas, never over the types makeParkSchema registers, so every feature that added state had a real reason to re-prove them for that state. planning-features asked each feature to name a test for every principle it could break, which for principles 1, 8, and 10 is always the same law. Specs fixed tessellation, formulas, and constants as their contract, so tests of them could only be change-detectors. The test-writer sees one feature at a time and cannot know what the suite already proves. Each problem found was answered with a new shape rule in whichever file was nearest, and a shape rule moves enumeration into another shape rather than removing it: the two-section limit pushed lists into separate TEST_CASEs.
+The causes sit upstream of the tests. The sim root proved copy, save, hash, candidate, and determinism standards only on hand-made synthetic schemas, never over the types makeParkSchema registers, so every feature that added state had a real reason to re-prove them for that state. planning-features asked each feature to name a test for every principle it could break, which for principles 1, 8, and 10 is always the same standard. Specs fixed tessellation, formulas, and constants as their contract, so tests of them could only be change-detectors. The test-writer sees one feature at a time and cannot know what the suite already proves. Each problem found was answered with a new shape rule in whichever file was nearest, and a shape rule moves enumeration into another shape rather than removing it: the two-section limit pushed lists into separate TEST_CASEs.
 
-No law can catch a field that a type's visitFields leaves out, since copy, equality, hash, and save all read through visitFields; that field is invisible to every law at once.
+No check can catch a field that a type's visitFields leaves out, since copy, equality, hash, and save all read through visitFields; that field is invisible to every check at once.
 
 Rejected: adding more shape rules to the agent prompts — each closes one shape and the enumeration moves to another, as the section limit showed. A hard cap on test count — arbitrary, and a ratchet against a baseline does the same job without punishing growth that is earned.
 
-## How can a law be proven once and inherited by everything that registers state?
+## How can a standard be proven once and inherited by everything that registers state?
 
-Law libraries write each law once and check it against every instance: quickcheck-classes checks a typeclass's laws for any type with one call, and Meszaros's abstract test case, now usually called a contract test, runs one suite against every implementation of an interface. Hypothesis's stateful testing replaces matrices of example tests with one invariant checked over generated operation sequences. The project already has both halves: the walk's registry knows every component type, and tests/sim/support/route_edits.h generates randomized park edit sequences. What is missing is a law test that builds worlds from makeParkSchema, so that every registered type is filled and stepped, and checks each law there once. A feature that registers state is then covered by registering it, and adds to the edit generator when it adds commands.
+Libraries such as quickcheck-classes write each property once and check it against every instance: quickcheck-classes checks a typeclass's properties for any type with one call, and Meszaros's abstract test case, now usually called a contract test, runs one suite against every implementation of an interface. Hypothesis's stateful testing replaces matrices of example tests with one invariant checked over generated operation sequences. The project already has both halves: the walk's registry knows every component type, and tests/sim/support/route_edits.h generates randomized park edit sequences. What is missing is a standard test that builds worlds from makeParkSchema, so that every registered type is filled and stepped, and checks each standard there once. A feature that registers state is then covered by registering it, and adds to the edit generator when it adds commands.
 
-Rejected: a templated or macro-generated test per component type — still enumeration, when the registry can drive it. Keeping per-feature randomized law runs — they are what the audit removed, and they multiply with every feature.
+Rejected: a templated or macro-generated test per component type — still enumeration, when the registry can drive it. Keeping per-feature randomized runs of the standards — they are what the audit removed, and they multiply with every feature.
 
 ## How can the suite be kept from regrowing these shapes?
 
-A ratchet commits a snapshot of a few metrics and fails any change that makes one worse, while allowing improvement; existing debt is grandfathered and only shrinks. Candidate metrics are test cases per module, test names longer than a threshold, and calls to the world-law functions outside the law suite. Mutation testing measures redundancy properly: a test is redundant when removing it leaves no mutant surviving that it alone killed. Mull is the C++ tool, but it needs Clang and LLVM IR, and the project builds with GCC, so it is a later option. Studies of LLM-written tests find redundant, verbose tests with duplicate assertions are characteristic of them, which argues for mechanical checks over another agent's judgment as the guard.
+A ratchet commits a snapshot of a few metrics and fails any change that makes one worse, while allowing improvement; existing debt is grandfathered and only shrinks. Candidate metrics are test cases per module, test names longer than a threshold, and calls to the world-standard functions outside the shared world checks. Mutation testing measures redundancy properly: a test is redundant when removing it leaves no mutant surviving that it alone killed. Mull is the C++ tool, but it needs Clang and LLVM IR, and the project builds with GCC, so it is a later option. Studies of LLM-written tests find redundant, verbose tests with duplicate assertions are characteristic of them, which argues for mechanical checks over another agent's judgment as the guard.
 
 Rejected: a ratchet on suite metrics — Evan rejected it: the agents that write tests game a numeric check, as the two-section limit was gamed by splitting lists, and counts such as tests per module rightly grow as the game matures, so a ratchet either blocks honest growth or is worked around. Line coverage as the redundancy measure — it cannot tell a test that asserts from one that merely runs the code. An unaided agent review — it shares the bias of the agents that wrote the tests.
 
 The guard adopted is an audit at each milestone's close, accepted with that risk in view. It differs from an unaided review in three ways: it applies written rules and cites one for every finding, so a judgment can be checked against the text; the auditing agent has fresh context and wrote none of the tests; and its report goes to Evan, who decides what is fixed. A shape the rules did not foresee is answered by changing docs/testing.md through a decision record, not by a new rule in whichever file is nearest.
 
-Sources: https://www.stackage.org/package/quickcheck-classes — laws written once, checked for every instance; https://blog.thecodewhisperer.com/permalink/abstract-test-cases-20-years-later — abstract test cases as contract tests; https://zalas.pl/contract-test/ — contract tests versus test superclasses; https://hypothesis.works/articles/rule-based-stateful-testing/ — invariants over generated operation sequences; https://testing.googleblog.com/2015/01/testing-on-toilet-change-detector-tests.html — tests that mirror the implementation; https://arxiv.org/abs/2410.10628 — test smells in LLM-generated tests; https://arxiv.org/pdf/1809.02435 — mutant subsumption and redundant tests; https://mull.readthedocs.io/en/latest/Features.html — Mull requires Clang; https://github.com/leonkacowicz/ratchet — a metrics ratchet in CI.
+Sources: https://www.stackage.org/package/quickcheck-classes — properties written once, checked for every instance; https://blog.thecodewhisperer.com/permalink/abstract-test-cases-20-years-later — abstract test cases as contract tests; https://zalas.pl/contract-test/ — contract tests versus test superclasses; https://hypothesis.works/articles/rule-based-stateful-testing/ — invariants over generated operation sequences; https://testing.googleblog.com/2015/01/testing-on-toilet-change-detector-tests.html — tests that mirror the implementation; https://arxiv.org/abs/2410.10628 — test smells in LLM-generated tests; https://arxiv.org/pdf/1809.02435 — mutant subsumption and redundant tests; https://mull.readthedocs.io/en/latest/Features.html — Mull requires Clang; https://github.com/leonkacowicz/ratchet — a metrics ratchet in CI.
 
 ## Which existing tests are in the wrong shape?
 
-Each entry is a test the audit judged against docs/testing.md, named by the start of its name. A rewrite is a real property in the wrong shape: the entry gives the property the test should assert, why its present shape breaks the rules, and the tests it merges with. A held entry re-proves a world-as-value law over real park state, and is deleted once the law suite covers that state. A code S1 to S7 cites the rule of the same number in docs/testing.md.
+Each entry is a test the audit judged against docs/testing.md, named by the start of its name. A rewrite is a real property in the wrong shape: the entry gives the property the test should assert, why its present shape breaks the rules, and the tests it merges with. A held entry re-proves a world-as-value standard over real park state, and is deleted once the shared world checks covers that state. A code S1 to S7 cites the rule of the same number in docs/testing.md.
 
 app/command_line_test.cpp
 
@@ -66,20 +66,20 @@ integration/food_loop_test.cpp
 
 - rewrite: "Once warm.park has served a guest that cut.park does not, mea…" Property: Cutting a shop's supply route leaves guests hungrier than the same park uncut. The right S7 consequence, but it runs a fixed HUNGER_TICKS (S1). Run until the uncut park has served a guest the cut one has not, and cut in the test from warm.park.
 
-integration/park_laws_test.cpp
+integration/park_standards_test.cpp
 
-- held: "Every park file loads and saves back to identical text…" Property: S2. The "saving again gives identical text" law, owned by the sim root (save_test).
-- held: "A world stepped from every park file equals the world regener…" Property: S2. The "save loads back and resolves equal" law, owned by the sim root.
-- held: "Two runs of every park file, stepped side by side, end with t…" Property: S2. The "two runs give the same state" law, owned by the sim root. The cross-build check covers determinism across builds.
+- held: "Every park file loads and saves back to identical text…" Property: S2. The "saving again gives identical text" standard, owned by the sim root (save_test).
+- held: "A world stepped from every park file equals the world regener…" Property: S2. The "save loads back and resolves equal" standard, owned by the sim root.
+- held: "Two runs of every park file, stepped side by side, end with t…" Property: S2. The "two runs give the same state" standard, owned by the sim root. The cross-build check covers determinism across builds.
 
 integration/preview_test.cpp
 
-- held: "In warm.park, the preview of a second shop touching both path…" Property: S2, S1. The main assert is the candidate-equals-commit law (sim root). The availability rise is one hand-built placement, composed of that law and legible/food's contribution rule.
+- held: "In warm.park, the preview of a second shop touching both path…" Property: S2, S1. The main assert is the candidate-equals-commit standard (sim root). The availability rise is one hand-built placement, composed of that standard and legible/food's contribution rule.
 
 legible/food_test.cpp
 
 - rewrite: "Each contribution holds its shop's route distance and offer,…" Property: A contribution's distance is the guest route distance. Time and Term restate the formula (S1), and it sweeps two parks
-- rewrite: "A place with no contributions, including one that does not r…" Property: A place off the guest network has no contributions. Enumerates four error conditions (S4); empty-sum-is-0 is already the sum law
+- rewrite: "A place with no contributions, including one that does not r…" Property: A place off the guest network has no contributions. Enumerates four error conditions (S4); empty-sum-is-0 is already the sum standard
 - rewrite: "foodDiscount is the curve's Y at each of its points…" Property: foodDiscount never rises with time and stays within [0, 1]. Restates the authored curve's points (S1) Rewritten as one test with "foodDiscount interpolates linearly strictly between consecut…", "foodDiscount is 1 before the curve's first point, 0 beyond i…".
 - rewrite: "foodDiscount interpolates linearly strictly between consecut…" Property: foodDiscount never rises with time and stays within [0, 1]. Restates the interpolation formula (S1 change-detector) Rewritten as one test with "foodDiscount is the curve's Y at each of its points…", "foodDiscount is 1 before the curve's first point, 0 beyond i…".
 - rewrite: "foodDiscount is 1 before the curve's first point, 0 beyond i…" Property: foodDiscount never rises with time and stays within [0, 1]. ; NaN gives 0 may stay The 1 and 0 ends are the curve's tuned endpoints (S1) Rewritten as one test with "foodDiscount is the curve's Y at each of its points…", "foodDiscount interpolates linearly strictly between consecut…".
@@ -102,7 +102,7 @@ legible/path_place_test.cpp
 
 legible/preview_test.cpp
 
-- rewrite: "A preview's candidate is the candidate of its edit when the…" Property: A preview has a candidate exactly when the edit is accepted. Equality with makeCandidate is S5; the candidate law is the sim root's
+- rewrite: "A preview's candidate is the candidate of its edit when the…" Property: A preview has a candidate exactly when the edit is accepted. Equality with makeCandidate is S5; the candidate standard is the sim root's
 - rewrite: "shopContext of an AddBox of a shop gives a context for the l…" Property: An AddBox context names the added shop. The two-shop section pins the arbitrary lowest-key choice (S1)
 - rewrite: "shopContext gives none for an edit that neither adds a shop…" Property: An edit that places no shop has no context. Adds enumerated inconsistent-input cases (S4)
 - rewrite: "A shop context's connection is the first guest path place at…" Property: Connection is where the shop's connector meets the guest path. The junction section pins the arbitrary first-place order (S1)
@@ -174,7 +174,7 @@ sim/cycle_test.cpp
 
 - rewrite: "a new world is pending until resolveWorld calls every resolv…" Property: one test, "a resolution runs every resolver, then every finisher, once each in registration order". Same resolver-order assertion as another test's resolveWorld section, and another test already shows a new world resolving first. Rewritten as one test with "every resolution runs each finisher once, after all of its r…".
 - rewrite: "a queue holding an unregistered command type is refused, nam…" Property: S4: unregistered command refused before any change. Sections repeat the test per entry point (stepWorld, makeCandidate).
-- rewrite: "makeCandidate applies the commands in submission order and r…" Property: a candidate equals the world that commits the same commands, shown with commands whose order matters, which also shows they apply in submission order. The candidate law with order-sensitive commands proves this. The journal pins call order.
+- rewrite: "makeCandidate applies the commands in submission order and r…" Property: a candidate equals the world that commits the same commands, shown with commands whose order matters, which also shows they apply in submission order. The candidate standard with order-sensitive commands proves this. The journal pins call order.
 - rewrite: "isStepping is true while a system runs and false otherwise…" Property: one test, "isStepping, isResolving, and isFinishing are each true exactly while their stage runs". isResolving has no test today. Same shape as another test, one flag per test. Rewritten as one test with "isFinishing is true while a finisher runs and false otherwise…".
 - rewrite: "isFinishing is true while a finisher runs and false otherwise…" Property: one test, "isStepping, isResolving, and isFinishing are each true exactly while their stage runs". isResolving has no test today. Same shape as another test. Rewritten as one test with "isStepping is true while a system runs and false otherwise…".
 - rewrite: "every resolution runs each finisher once, after all of its r…" Property: one test, "a resolution runs every resolver, then every finisher, once each in registration order". Sections repeat the test per entry point (resolveWorld, cycle, candidate, load). Rewritten as one test with "a new world is pending until resolveWorld calls every resolv…".
@@ -183,8 +183,8 @@ sim/draw_test.cpp
 
 - rewrite: "drawUniform is the draw's top 53 bits times 2^-53, in [0, 1)…" Property: drawUniform lies in [0, 1). Restates the bit formula (S1). Keep only the range.
 - rewrite: "drawPick refuses weights it cannot pick from in proportion…" Property: drawPick refuses weights with no proportional pick. About 12 hand-listed error conditions and boundaries (S4).
-- held: "a copy of a world draws the same values as the world…" Property: S2. Follows from the copy law and key-only draws.
-- held: "a candidate draws the same values as the world its commands…" Property: S2. Re-proves the candidate law for draws.
+- held: "a copy of a world draws the same values as the world…" Property: S2. Follows from the copy standard and key-only draws.
+- held: "a candidate draws the same values as the world its commands…" Property: S2. Re-proves the candidate standard for draws.
 
 sim/fp_environment_test.cpp
 
@@ -196,7 +196,7 @@ sim/fp_environment_test.cpp
 sim/guests/add_guest_test.cpp
 
 - rewrite: "addGuest throws std::invalid_argument for a place that does…" Property: addGuest refuses a place off the guest network, changing nothing. Three sections, one per way of not resolving (S4). Keep one input.
-- held: "addGuest with the same arguments on two equal worlds leaves…" Property: S2. Re-proves the law that two runs give the same state, owned by the sim root (cycle_test).
+- held: "addGuest with the same arguments on two equal worlds leaves…" Property: S2. Re-proves the standard that two runs give the same state, owned by the sim root (cycle_test).
 
 sim/guests/arrivals_test.cpp
 
@@ -220,9 +220,9 @@ sim/guests/footfall_test.cpp
 
 sim/guests/guest_edits_test.cpp
 
-- held: "Every world randomized park edits with guests walking, waitin…" Property: S2. The copy-equals-world law, owned by the sim root.
-- held: "Every world randomized park edits with guests walking, waitin…" Property: S2. The save-loads-back-equal law, owned by the sim root (save_test).
-- held: "A candidate made with an edit from a world of randomized park…" Property: S2. The candidate-equals-commit law, owned by the sim root (cycle_test).
+- held: "Every world randomized park edits with guests walking, waitin…" Property: S2. The copy-equals-world standard, owned by the sim root.
+- held: "Every world randomized park edits with guests walking, waitin…" Property: S2. The save-loads-back-equal standard, owned by the sim root (save_test).
+- held: "A candidate made with an edit from a world of randomized park…" Property: S2. The candidate-equals-commit standard, owned by the sim root (cycle_test).
 - rewrite: "A candidate holds exactly its world's guests, each carried ov…" Property: An edit changes nothing of a guest but its place, and a surviving carrier keeps its ground point. Restates the carry rule's fallback chain (S1), and has four sections, one per edit (S4).
 
 sim/guests/guest_options_test.cpp
@@ -262,7 +262,7 @@ sim/medium/field_test.cpp
 - rewrite: "at a place that resolves to a node, a source's sampled entri…" Property: At a node, entries at the node's stop places, source order. add field_index's -0.0, repeated-place and NaN inputs.
 - rewrite: "at a place strictly inside an edge, a field without sampleEd…" Property: Inside an edge, entries at exactly the place. add the nextafter-of-a-stop inputs from another test.
 - rewrite: "sampleEdge is given the edge, the place's offsets as resolve…" Property: What sampleEdge is given: edge, offsets, From/To/inside entries. add field_index's entries nearest each end.
-- held: "a candidate made with makeCandidate samples every field as t…" Property: S2. Candidate-equals-commit is a world-as-value law (cycle_test ).
+- held: "a candidate made with makeCandidate samples every field as t…" Property: S2. Candidate-equals-commit is a world-as-value standard (cycle_test ).
 
 sim/medium/flow_test.cpp
 
@@ -277,7 +277,7 @@ sim/medium/kept_field_test.cpp
 - rewrite: "sampleField and fieldValue of a kept field without node or e…" Property: sampleField of a kept field without node or edge rules gives the read values of each source's entries at the place, sources in ascending key order. Its fieldValue clause re-proves the generic scalar sum that field_test's "fieldValue of a scalar field is 0.0 with each entry sampleField gives added in turn" owns (S2).
 - rewrite: "a kept field's edge rule is given the read values of the sou…" Property: a kept field's edge rule is given the read values of the source's entries. Its FromOffset and ToOffset checks re-prove the generic edge sample offsets that field_test's "sampleEdge is given the edge, the place's offsets as resolve gives them, …" owns (S2).
 - rewrite: "in a world loaded from a save, a change at a held place leav…" Property: a source holds one entry at each place it has changed, with the last value and the tick of the swap that applied it. Shows that property again on a loaded world (S4). Rewritten as one test with "a source holds one entry at each place it has changed, in t…", with the loaded world as a stated input, since the order by place is rebuilt after a load.
-- held: "a saved world holding kept entries, loaded and resolved, rea…" Property: S2 (save laws, sim root: save_test.cpp), S3. Re-proves that a save loads back equal and saves again identically for kept state; that reading leaves the save unchanged is const-guaranteed.
+- held: "a saved world holding kept entries, loaded and resolved, rea…" Property: S2 (save standards, sim root: save_test.cpp), S3. Re-proves that a save loads back equal and saves again identically for kept state; that reading leaves the save unchanged is const-guaranteed.
 
 sim/medium/network_test.cpp
 
@@ -304,8 +304,8 @@ sim/operations/food_offer_test.cpp
 
 sim/operations/operations_edits_test.cpp
 
-- held: "Every world a randomized park edit sequence with synthetic g…" Property: S2. Re-proves save-load-resolve and lockstep laws; owner sim root (save_test).
-- held: "A candidate made with an edit from a world of a randomized p…" Property: S2. Re-proves the candidate law; owner sim root (cycle_test).
+- held: "Every world a randomized park edit sequence with synthetic g…" Property: S2. Re-proves save-load-resolve and lockstep standards; owner sim root (save_test).
+- held: "A candidate made with an edit from a world of a randomized p…" Property: S2. Re-proves the candidate standard; owner sim root (cycle_test).
 
 sim/operations/operations_test.cpp
 
@@ -324,7 +324,7 @@ sim/operations/service_test.cpp
 
 sim/park/edit_sequences_test.cpp
 
-- rewrite: "Random command sequences from the new park leave a physicall…" Property: one randomized test, "on a valid world, a command is accepted exactly when the world it describes is valid, so every cycle leaves the park valid". It drops the copy and save assertions. A command whose kind is not an enum value describes nothing and must count as refused. Re-proves the copy, round-trip, and re-save laws, owned by walk_test and save_test (S2). Keep only physical validity.
+- rewrite: "Random command sequences from the new park leave a physicall…" Property: one randomized test, "on a valid world, a command is accepted exactly when the world it describes is valid, so every cycle leaves the park valid". It drops the copy and save assertions. A command whose kind is not an enum value describes nothing and must count as refused. Re-proves the copy, round-trip, and re-save standards, owned by walk_test and save_test (S2). Keep only physical validity.
 
 sim/park/edits_test.cpp
 
@@ -332,7 +332,7 @@ sim/park/edits_test.cpp
 - rewrite: "An accepted AddBox gives the next key an entity holding a bo…" Property: one test, "an accepted command leaves exactly the intent it describes, with new keys from the counter". Same. Rewritten as one test with "An accepted AddPath gives the next key an entity holding a p…", "An accepted MoveBox replaces the box's pose exactly with the…", "An accepted DeletePath or DeleteBox destroys the entity it n…".
 - rewrite: "An accepted MoveBox replaces the box's pose exactly with the…" Property: one test, "an accepted command leaves exactly the intent it describes, with new keys from the counter". Same. Rewritten as one test with "An accepted AddPath gives the next key an entity holding a p…", "An accepted AddBox gives the next key an entity holding a bo…", "An accepted DeletePath or DeleteBox destroys the entity it n…".
 - rewrite: "An accepted DeletePath or DeleteBox destroys the entity it n…" Property: one test, "an accepted command leaves exactly the intent it describes, with new keys from the counter". Same. Rewritten as one test with "An accepted AddPath gives the next key an entity holding a p…", "An accepted AddBox gives the next key an entity holding a bo…", "An accepted MoveBox replaces the box's pose exactly with the…".
-- held: "Commands given to makeCandidate are each applied exactly whe…" Property: S2. Follows from another test and the candidate law.
+- held: "Commands given to makeCandidate are each applied exactly whe…" Property: S2. Follows from another test and the candidate standard.
 - rewrite: "On a physically valid world, a command naming what it acts o…" Property: one randomized test, "on a valid world, a command is accepted exactly when the world it describes is valid, so every cycle leaves the park valid". It drops the copy and save assertions. A command whose kind is not an enum value describes nothing and must count as refused. Hand-picked expected validity depends on boxSize and pathWidth literals (S1). Assert the equivalence over random commands.
 
 sim/park/geometry_test.cpp
@@ -345,12 +345,12 @@ sim/park/geometry_test.cpp
 
 sim/park/intent_test.cpp
 
-- held: "A save of finite intent of every kind loads, saves to identi…" Property: S2. Re-proves the round-trip and re-save laws for park types, using exact text.
-- held: "A world of degenerate finite intent copies and hashes as a l…" Property: S2. Re-proves the copy law for park types.
+- held: "A save of finite intent of every kind loads, saves to identi…" Property: S2. Re-proves the round-trip and re-save standards for park types, using exact text.
+- held: "A world of degenerate finite intent copies and hashes as a l…" Property: S2. Re-proves the copy standard for park types.
 
 sim/park/sketch_park_test.cpp
 
-- held: "tests/parks/sketch.park loads with makeParkSchema and saves…" Property: S2/S7. Re-runs the re-save law over a park file.
+- held: "tests/parks/sketch.park loads with makeParkSchema and saves…" Property: S2/S7. Re-runs the re-save standard over a park file.
 
 sim/park/validity_test.cpp
 
@@ -380,8 +380,8 @@ sim/routes/route_distance_test.cpp
 - rewrite: "Among steps achieving a node's distance on one carrier, Next…" Property: Next is the least achieving step by key, direction, then From. Second member of the tie-break family. Rewritten as one test with "Among steps achieving a node's distance on one carrier in on…".
 - rewrite: "Among steps achieving a node's distance on one carrier in on…" Property: Next is the least achieving step by key, direction, then From. Third member of the tie-break family. Rewritten as one test with "Among steps achieving a node's distance on one carrier, Next…".
 - rewrite: "sampleRouteEdge gives one entry, the least of each end's ent…" Property: Edge sample is the least end entry plus offset, stepping toward it. Four sections enumerate inputs of one rule; assert it once over drawn end entries.
-- held: "Every world a random edit sequence reaches equals its save l…" Property: S2. Re-proves the save-load-resolve law (even calls worldsEqual); owner sim root (save_test).
-- held: "A candidate made with an edit has the route distance of the…" Property: S2. Re-proves the candidate law for route distance; owner sim root (cycle_test).
+- held: "Every world a random edit sequence reaches equals its save l…" Property: S2. Re-proves the save-load-resolve standard (even calls worldsEqual); owner sim root (save_test).
+- held: "A candidate made with an edit has the route distance of the…" Property: S2. Re-proves the candidate standard for route distance; owner sim root (cycle_test).
 
 sim/routes/routes_park_test.cpp
 

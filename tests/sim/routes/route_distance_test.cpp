@@ -175,10 +175,10 @@ TEST_CASE("routeEntries gives one element per node, with an entry exactly at the
   }
 }
 
-// These three laws make each distance the least route length: an anchored node's is 0.0, every
-// other node's is its neighbor's along some edge plus the edge's length, so it is the length of a
-// route walked back to an anchored node, and no edge shortens a node's distance, so no route is
-// shorter.
+// These three properties make each distance the least route length: an anchored node's is 0.0,
+// every other node's is its neighbor's along some edge plus the edge's length, so it is the length
+// of a route walked back to an anchored node, and no edge shortens a node's distance, so no route
+// is shorter.
 TEST_CASE("routeEntries gives a source's anchored nodes distance 0.0 and every other node with an "
           "entry the least length of a route from an anchored node, added from the anchored end") {
   for (const auto &[name, network] : routeNetworks()) {

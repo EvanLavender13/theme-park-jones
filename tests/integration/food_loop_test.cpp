@@ -1,7 +1,7 @@
 // The food loop on the checked-in parks: tests/parks/fed.park feeds its guests, and cutting the
 // backstage path, which turns warm.park into cut.park, withdraws the shop's offer, stops guests
 // picking it, empties its queue, and leaves guests hungrier. These name parks and compare runs, so
-// they are not laws that park_laws_test.cpp could check over every park file.
+// they are not standards that park_standards_test.cpp could check over every park file.
 
 #include "support/park_files.h"
 

@@ -29,7 +29,7 @@ Create a task for each item. Complete in order.
 5. Research implementation patterns via the `researching` skill. It writes findings to plans/<capability-slug>/<milestone-slug>/<feature-slug>/RESEARCH.md.
 6. Ask clarifying questions, one at a time. Cover acceptance criteria, edge cases, and integration boundaries.
 7. Name the simplest version that works. Strip polish, edge cases, and nice-to-haves and send them to `maintaining-backlog`.
-8. Map the medium: the fields and flows the feature samples, emits, draws, or supplies. For each principle the feature can violate in code (1 to 6, 8, 10), name the criterion that shows the feature keeps it, or the existing law that already covers it (docs/testing.md rule 2); never restate an owned law as a criterion. Apply the principles gate from `planning-overview`.
+8. Map the medium: the fields and flows the feature samples, emits, draws, or supplies. For each principle the feature can violate in code (1 to 6, 8, 10), name the criterion that shows the feature keeps it, or the existing standard that already covers it (docs/testing.md rule 2); never restate an owned standard as a criterion. Apply the principles gate from `planning-overview`.
 9. Draft the spec change: the exact sentences to add or change in each affected SPEC.md, and the public interface (header declarations) the feature exposes.
 10. Place each behavior the feature adds, under decision 0027: the module and component that own it, and why. A behavior that fits no existing component gets a new one. src/app/main.cpp and src/scenarios/main.cpp take no new concern until sound-architecture restructures them; a feature that must touch one says what it adds there, and that it is composition only.
 11. List files to touch, with specific paths, each marked create or modify.
@@ -48,7 +48,7 @@ Tests come from a separate pass. The implementer does not write the feature's te
 
 Test utilities get no tests (docs/testing.md rule 6). Their acceptance criteria are checks the implementer runs, each naming the command and the output that shows it holds. Their PLAN.md has no interface stubs written for tests and no test pass task, and its confirming task runs the tool and puts the output in the feature's report. Do not specify a tool's edge cases, such as every malformed input, merely so they can be tested.
 
-Criteria follow docs/testing.md. Each states one lasting property the feature owns, as a law or invariant of the public interface, with concrete values only where the value is the contract. What a function refuses is a rule the spec states; the criterion is the one property behind it. A feature needs a handful; more than about eight means the feature is too big or its criteria are listing examples. PLAN.md contains no test code.
+Criteria follow docs/testing.md. Each states one lasting property the feature owns, as a standard or invariant of the public interface, with concrete values only where the value is the contract. What a function refuses is a rule the spec states; the criterion is the one property behind it. A feature needs a handful; more than about eight means the feature is too big or its criteria are listing examples. PLAN.md contains no test code.
 
 Order of work inside PLAN.md: spec tasks first (update SPEC.md), then interface tasks (public headers with stub definitions that compile, so tests can be written against them), then the test pass (one task that says to run it, no content; none for a test utility), then implementation tasks, then the commit.
 

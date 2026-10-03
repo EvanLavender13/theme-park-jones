@@ -1,5 +1,5 @@
-// Laws that hold with every capability running together, checked over every park file in
-// tests/parks/. Each module's tests prove its laws on synthetic worlds; these run the park as the
+// Standards that hold with every capability running together, checked over every park file in
+// tests/parks/. Each module's tests prove its standards on synthetic worlds; these run the park as the
 // player and the cross-build check see it, with intent, networks, shops, depots, and guests all
 // interacting, and a park checked in to tests/parks/ is covered with no code change.
 

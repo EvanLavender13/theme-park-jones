@@ -1,8 +1,8 @@
 // Previews on a checked-in park: placing a shop in tests/parks/warm.park, the preview shows the
 // park its commit makes, with every capability resolving the candidate, and the food availability
-// it shows rises beside the new shop. It names a park and an edit, so it is not a law that
-// park_laws_test.cpp could check over every park file, and it is not a food loop consequence of
-// food_loop_test.cpp.
+// it shows rises beside the new shop. It names a park and an edit, so it is not a standard that
+// park_standards_test.cpp could check over every park file, and it is not a food loop consequence
+// of food_loop_test.cpp.
 
 #include "support/park_files.h"
 
