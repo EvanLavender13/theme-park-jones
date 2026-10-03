@@ -108,10 +108,19 @@ Read docs/principles.md and docs/exceptions.md first. A violation of a principle
 - Dead code introduced by the change.
 - Code placed against decision 0027 or against its PLAN.md's Placement section, in the ways the implementation plans lens lists.
 
+### Test audits (type `test-audit`)
+
+A test audit reads the test cases a milestone added or changed against docs/testing.md. The dispatch names the milestone's MILESTONE.md and the merge commits that make up its scope.
+
+- Scope: for each merge, `git diff <merge>^1 <merge> -- tests/` shows the TEST_CASEs it added or changed. Read each of them as it stands now in the working tree, and skip any that no longer exists. A changed fixture or park file is read only for what the cases that use it assert.
+- Each case that breaks a rule of docs/testing.md is one Major finding. Location: the file, the line, and the test name. Evidence: the rule's number, and the assertion or construct that breaks it. Failure scenario: what the break costs. For rule 1, a retuning or refactor that fails the test while the code stays correct. For rule 2, the test or law that already proves the property, found by searching all of tests/ with `git grep`, not only the cases given. For rules 3 to 7, the compiler guarantee, the listed inputs or entry points, the wiring, the test utility, or the module's own test that the case stands in for. Suggested fix: the lasting property the case should assert, or that it should be deleted when no property remains that another test does not already prove.
+- Where an acceptance criterion in one of the milestone's FEATURE.md files, or a statement in a SPEC.md, produced the case, the finding names it, since the fix starts there.
+- A case that keeps every rule gets no finding.
+
 ## Investigation procedure
 
 1. Read the artifact in full.
-2. Read all parent or referenced artifacts (a `MILESTONE.md` requires its `CAPABILITY.md`, and its `SLICE.md` when its Slice line names one, in which case apply the Slices lens to it; a `PLAN.md` requires its `FEATURE.md`; a code change requires the files it touches and their callers).
+2. Read all parent or referenced artifacts (a `MILESTONE.md` requires its `CAPABILITY.md`, and its `SLICE.md` when its Slice line names one, in which case apply the Slices lens to it; a `PLAN.md` requires its `FEATURE.md`; a code change requires the files it touches and their callers; a test audit requires its MILESTONE.md and the FEATURE.md of each feature directory under it).
 3. Read `CLAUDE.md`, docs/principles.md, docs/testing.md, docs/exceptions.md, docs/conventions.md, and the SPEC.md of every module the artifact touches.
 4. Use `git grep` and `git ls-files` to verify references and find callers, guards, or definitions the artifact assumes.
 5. For each candidate issue, run the prove-it-or-discard test.
