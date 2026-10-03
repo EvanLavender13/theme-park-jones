@@ -63,6 +63,8 @@ public:
   [[nodiscard]] bool isResolving() const { return Resolving; }
   // True only while the systems step.
   [[nodiscard]] bool isStepping() const { return Stepping; }
+  // True only while the finishers run.
+  [[nodiscard]] bool isFinishing() const { return Finishing; }
 
   // A new entity keyed from the counter.
   EntityKey createEntity();

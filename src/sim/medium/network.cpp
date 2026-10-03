@@ -167,6 +167,7 @@ Network::Network(std::vector<Carrier> carriers, uint32_t nodeCount, std::vector<
       ++filled[stop.Node];
     }
   }
+  buildEdgeEnds();
 }
 
 std::optional<size_t> Network::findCarrierOf(const Place &place) const {
@@ -199,6 +200,25 @@ std::optional<NetworkPosition> Network::resolve(const Place &place) const {
                       Edges[edge].ToDistance - place.Distance};
 }
 
+void Network::buildEdgeEnds() {
+  // Edges in index order leave each node's run in ascending edge index, From before To.
+  EdgeEndStarts.assign(static_cast<size_t>(NodeCount) + 1, 0);
+  for (const NetworkEdge &edge : Edges) {
+    ++EdgeEndStarts[static_cast<size_t>(edge.From) + 1];
+    ++EdgeEndStarts[static_cast<size_t>(edge.To) + 1];
+  }
+  for (size_t node = 0; node < NodeCount; ++node) {
+    EdgeEndStarts[node + 1] += EdgeEndStarts[node];
+  }
+  EdgeEnds.resize(EdgeEndStarts.back());
+  std::vector<size_t> endsFilled(EdgeEndStarts.begin(), EdgeEndStarts.end() - 1);
+  for (size_t i = 0; i < Edges.size(); ++i) {
+    const auto index = static_cast<uint32_t>(i);
+    EdgeEnds[endsFilled[Edges[i].From]++] = EdgeEnd{.Edge = index, .AtFrom = true};
+    EdgeEnds[endsFilled[Edges[i].To]++] = EdgeEnd{.Edge = index, .AtFrom = false};
+  }
+}
+
 Place Network::nodePlace(uint32_t node) const { return stopPlaces(node).front(); }
 
 std::span<const Place> Network::stopPlaces(uint32_t node) const {
@@ -207,6 +227,14 @@ std::span<const Place> Network::stopPlaces(uint32_t node) const {
   }
   return std::span<const Place>(StopPlaces)
       .subspan(StopStarts[node], StopStarts[node + 1] - StopStarts[node]);
+}
+
+std::span<const EdgeEnd> Network::edgeEnds(uint32_t node) const {
+  if (node >= NodeCount) {
+    throw std::out_of_range("node " + std::to_string(node) + " is not below the node count");
+  }
+  return std::span<const EdgeEnd>(EdgeEnds).subspan(EdgeEndStarts[node],
+                                                    EdgeEndStarts[node + 1] - EdgeEndStarts[node]);
 }
 
 EntityKey Network::nodeAnchor(uint32_t node) const {

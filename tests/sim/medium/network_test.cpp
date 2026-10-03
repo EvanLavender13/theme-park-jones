@@ -551,6 +551,36 @@ TEST_CASE("stopPlaces refuses a node not below the node count") {
   REQUIRE_THROWS_AS(empty.stopPlaces(0), std::out_of_range);
 }
 
+std::vector<std::pair<uint32_t, bool>> edgeEndsOf(const Network &network, uint32_t node) {
+  std::vector<std::pair<uint32_t, bool>> ends;
+  for (const EdgeEnd &end : network.edgeEnds(node)) {
+    ends.emplace_back(end.Edge, end.AtFrom);
+  }
+  return ends;
+}
+
+TEST_CASE("edgeEnds gives each end of each edge at a node once, in ascending edge index with an "
+          "edge's From end before its To end") {
+  // LOOP stops only at its two ends, so its one edge has node 3 at both ends. The edges are
+  // 0 BEND 0 to 1, 1 BEND 1 to 2, 2 LOOP 3 to 3, and 3 SPUR 2 to 3.
+  SyntheticNetwork inputs = sampleInputs();
+  carrierOf(inputs, LOOP).Stops = {{.Distance = 0, .Node = 3}, {.Distance = 12, .Node = 3}};
+  inputs.NodeCount = 4;
+  const Network network = inputs.build();
+  REQUIRE(network.edges().size() == 4);
+
+  using Ends = std::vector<std::pair<uint32_t, bool>>;
+  REQUIRE(edgeEndsOf(network, 0) == Ends{{0, true}});
+  REQUIRE(edgeEndsOf(network, 1) == Ends{{0, false}, {1, true}});
+  REQUIRE(edgeEndsOf(network, 2) == Ends{{1, false}, {3, true}});
+  REQUIRE(edgeEndsOf(network, 3) == Ends{{2, true}, {2, false}, {3, false}});
+}
+
+TEST_CASE("edgeEnds refuses a node not below the node count") {
+  const Network network = sampleInputs().build();
+  REQUIRE_THROWS_AS(network.edgeEnds(5), std::out_of_range);
+}
+
 TEST_CASE("groundPoint gives a carrier point's coordinates at its distance, and between points "
           "interpolates by distance") {
   const Network network = sampleInputs().build();

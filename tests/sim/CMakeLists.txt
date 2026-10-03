@@ -18,6 +18,7 @@ add_executable(tpj_sim_tests
     medium/field_sampling_test.cpp
     medium/field_test.cpp
     medium/flow_test.cpp
+    medium/kept_field_test.cpp
     medium/network_test.cpp
     medium/source_sample_test.cpp
     medium/stepped_field_test.cpp
