@@ -76,5 +76,6 @@ Stamps beyond a square, saved or user-made stamps, and stamps that stay grouped.
 - Planet Coaster 2's fusing, seams, and lost strokes come from saving merged results, its hidden snaps from snaps the toggle misses, and its stalled guests from plazas with no structure; intent here stays the strokes and outlines, merges are derived, and every snap is visible.
 - Width belongs on the path, never as parallel paths (Parkitect's distance inflation); plazas are drawn areas, never tiled path pieces.
 - Plazas join the graph through portals and shortest-walk edges between them, so route distance stays exact; navmeshes, flow fields, and medial axes would make distance an artifact of the derivation.
+- Cities: Skylines saves networks as nodes and segments, with every piece of surface owned by one of them and stamps (intersection assets) ordinary once placed, so nothing fuses; its middle nodes show why the simulation graph should contract shaping nodes rather than route on every one.
 
 Depth is in RESEARCH.md.
