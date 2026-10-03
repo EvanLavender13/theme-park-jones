@@ -110,6 +110,12 @@ struct EdgePosition {
   double ToOffset = 0.0;
 };
 
+// An end of an edge at a node: the edge's index in edges(), and whether the end is its From.
+struct EdgeEnd {
+  uint32_t Edge = 0;
+  bool AtFrom = true;
+};
+
 using NetworkPosition = std::variant<NodePosition, EdgePosition>;
 
 // Carriers, nodes, and anchors, as a value. Derived data: producers build networks in resolution.
@@ -137,6 +143,10 @@ public:
   // The place of each stop at the node, in ascending carrier key and then distance: exactly the
   // places resolve gives the node for. Throws std::out_of_range as nodePlace does.
   [[nodiscard]] std::span<const Place> stopPlaces(uint32_t node) const;
+  // The ends at the node of the edges meeting it, in ascending edge index with an edge's From end
+  // before its To end, so an edge whose two ends are the node appears twice. Throws
+  // std::out_of_range as nodePlace does.
+  [[nodiscard]] std::span<const EdgeEnd> edgeEnds(uint32_t node) const;
   // The node's anchored entity, or NULL_KEY. Throws std::out_of_range as nodePlace does.
   [[nodiscard]] EntityKey nodeAnchor(uint32_t node) const;
   // The nodes anchored to the entity, ascending.
@@ -154,8 +164,8 @@ public:
   // distance. None when the carrier is not in the network or the point is not finite.
   [[nodiscard]] std::optional<Place> nearestPlaceOn(EntityKey carrier, GroundPoint point) const;
 
-  // Lists the inputs. The edges and stop places are rebuilt from them only by the constructor, so
-  // Network is never loaded: it is derived, and saves never hold it.
+  // Lists the inputs. The edges, stop places, and edge ends are rebuilt from them only by the
+  // constructor, so Network is never loaded: it is derived, and saves never hold it.
   template <typename Visitor> friend void visitFields(Visitor &visitor, Network &network) {
     visitor.field("carriers", network.Carriers);
     visitor.field("nodes", network.NodeCount);
@@ -165,6 +175,8 @@ public:
 private:
   // The index in Carriers of the carrier holding the place, when the place lies on it.
   [[nodiscard]] std::optional<size_t> findCarrierOf(const Place &place) const;
+  // Builds EdgeEnds and EdgeEndStarts from Edges. Called once, by the constructor.
+  void buildEdgeEnds();
 
   std::vector<Carrier> Carriers;
   uint32_t NodeCount = 0;
@@ -177,6 +189,10 @@ private:
   // Each node's stop places, node by node: node n's run from StopStarts[n] up to StopStarts[n + 1].
   std::vector<Place> StopPlaces;
   std::vector<size_t> StopStarts;
+  // Each node's edge ends, node by node: node n's run from EdgeEndStarts[n] up to
+  // EdgeEndStarts[n + 1].
+  std::vector<EdgeEnd> EdgeEnds;
+  std::vector<size_t> EdgeEndStarts;
 };
 
 // Moves a place held across a re-derivation from the network before to the network after: kept

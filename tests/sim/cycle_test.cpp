@@ -469,6 +469,49 @@ TEST_CASE("isStepping is true while a system runs and false otherwise") {
   REQUIRE_FALSE(world.isStepping());
 }
 
+// A command that records whether the world is finishing when it is applied.
+struct Glance {
+  int Id = 0;
+};
+
+void recordFinishing(const std::string &stage, const World &world) {
+  journal().push_back(stage + (world.isFinishing() ? " finishing" : " not finishing"));
+}
+
+[[maybe_unused]] void applyCommand(World &world, const Glance & /*glance*/) {
+  recordFinishing("command", world);
+}
+
+TEST_CASE("isFinishing is true while a finisher runs and false otherwise") {
+  auto schema = std::make_shared<WorldSchema>();
+  schema->addSystem([](World &world) { recordFinishing("system", world); });
+  schema->addSwap([](World &world) { recordFinishing("swap", world); });
+  schema->addResolver("watch", [](World &world) { recordFinishing("resolver", world); });
+  schema->addFinisher([](World &world) { recordFinishing("finisher 1", world); });
+  schema->addFinisher([](World &world) { recordFinishing("finisher 2", world); });
+  schema->addCommand<Glance>();
+  World world(schema, 0);
+  REQUIRE_FALSE(world.isFinishing());
+
+  journal().clear();
+  CommandQueue queue;
+  queue.push(Glance{});
+  stepWorld(world, queue);
+
+  REQUIRE(journal() == std::vector<std::string>{
+                           "resolver not finishing",
+                           "finisher 1 finishing",
+                           "finisher 2 finishing",
+                           "system not finishing",
+                           "swap not finishing",
+                           "command not finishing",
+                           "resolver not finishing",
+                           "finisher 1 finishing",
+                           "finisher 2 finishing",
+                       });
+  REQUIRE_FALSE(world.isFinishing());
+}
+
 // Finishers are registered between resolvers, so that only running them after every resolver
 // explains the calls.
 std::shared_ptr<const WorldSchema> makeFinishingSchema() {

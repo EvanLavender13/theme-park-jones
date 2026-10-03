@@ -416,7 +416,7 @@ Expected: `status 0`.
 
 ### Task 5: Test pass
 
-Dispatch the test-writer for criteria 1 to 7 against src/sim/medium/kept_field.h, src/sim/medium/field.h, src/sim/medium/network.h, src/sim/world.h, src/sim/medium/SPEC.md, src/sim/SPEC.md, and docs/principles.md: criteria 1 to 4, 6, and 7 in a new tests/sim/medium/kept_field_test.cpp, and criterion 5 in tests/sim/medium/network_test.cpp, with the new file registered in tests/sim/CMakeLists.txt. Criterion 8 is a check.
+Dispatch the test-writer for criteria 1 to 9 against src/sim/medium/kept_field.h, src/sim/medium/field.h, src/sim/medium/network.h, src/sim/world.h, src/sim/medium/SPEC.md, src/sim/SPEC.md, and docs/principles.md: criterion 6 in tests/sim/medium/network_test.cpp, and the rest in a new tests/sim/medium/kept_field_test.cpp registered in tests/sim/CMakeLists.txt. Criterion 10 is a check.
 
 ### Task 6: Edge ends
 
@@ -478,7 +478,7 @@ template <KeptFieldDefinition F> void applyKeptChanges(World &world) {
   for (const KeptChange &change : kept->Pending) {
     auto at = std::ranges::lower_bound(kept->Slots, change.Source, {}, &KeptSlot::Source);
     if (at == kept->Slots.end() || at->Source != change.Source) {
-      at = kept->Slots.insert(at, KeptSlot{.Source = change.Source});
+      at = kept->Slots.insert(at, KeptSlot{.Source = change.Source, .Entries = {}});
     }
     KeptSlot &slot = *at;
     // Makes the slot's order when it has none, so the order exists below.
@@ -592,7 +592,7 @@ void replaceKeptEntries(World &world, EntityKey source, std::vector<KeptEntry> e
     return;
   }
   if (!held) {
-    at = kept->Slots.insert(at, KeptSlot{.Source = source});
+    at = kept->Slots.insert(at, KeptSlot{.Source = source, .Entries = {}});
   }
   at->Entries = std::move(entries);
   at->ByPlace = std::move(order);
@@ -617,7 +617,7 @@ template <KeptFieldDefinition F, typename Read>
 void sampleKeptSlotAtNode(const Network &network, const KeptSlot &slot, uint32_t node,
                           SampleScratch<double> &scratch,
                           std::vector<SampledEntry<double>> &sampled, Read read) {
-  NodeSample sample{.Node = node};
+  NodeSample sample{.Node = node, .AtNode = {}, .Ends = {}};
   positionsAtAny(slot, network.stopPlaces(node), scratch.Positions);
   for (const uint32_t i : scratch.Positions) {
     sample.AtNode.push_back(read(i));
@@ -625,7 +625,7 @@ void sampleKeptSlotAtNode(const Network &network, const KeptSlot &slot, uint32_t
   bool any = !sample.AtNode.empty();
   for (const EdgeEnd &end : network.edgeEnds(node)) {
     const NetworkEdge &edge = network.edges()[end.Edge];
-    NodeEnd &nodeEnd = sample.Ends.emplace_back(NodeEnd{.Edge = edge, .AtFrom = end.AtFrom});
+    NodeEnd &nodeEnd = sample.Ends.emplace_back(NodeEnd{.Edge = edge, .AtFrom = end.AtFrom, .Along = {}});
     std::vector<uint32_t> &inside = scratch.Inside;
     inside.clear();
     positionsInside(slot, edge.Carrier, edge.FromDistance, edge.ToDistance, inside);
@@ -682,10 +682,10 @@ Expected: all tpj_sim_tests pass.
 
 ### Task 9: Confirm the criteria
 
-Step 1 (criteria 1 to 8): Run: `cmake.exe --build --preset windows-debug 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; ctest.exe --preset windows-debug 2>&1 | tail -3; scripts/tidy.sh 2>&1 | tail -1`
+Step 1 (criteria 1 to 10): Run: `cmake.exe --build --preset windows-debug 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; ctest.exe --preset windows-debug 2>&1 | tail -3; scripts/tidy.sh 2>&1 | tail -1`
 Expected: no diagnostics, `100% tests passed`, `tidy: clean.` When tidy names an include to add or remove in a file this feature touched, make that change and run it again.
 
-Step 2 (criterion 8): Run: `build/windows-debug/tpj_scenarios.exe tests/parks/*.park 2>/dev/null | tr -d '\r' > build/kept-entries/after.txt; build/windows-debug/tpj_scenarios.exe --compare "$(wslpath -w build/kept-entries/before.txt)" "$(wslpath -w build/kept-entries/after.txt)"; echo status $?`
+Step 2 (criterion 10): Run: `build/windows-debug/tpj_scenarios.exe tests/parks/*.park 2>/dev/null | tr -d '\r' > build/kept-entries/after.txt; build/windows-debug/tpj_scenarios.exe --compare "$(wslpath -w build/kept-entries/before.txt)" "$(wslpath -w build/kept-entries/after.txt)"; echo status $?`
 Expected: `status 0`.
 
 ### Task 10: Commit

@@ -60,29 +60,34 @@ inline bool placeBefore(const Place &a, const Place &b) {
   return a.Carrier != b.Carrier ? a.Carrier < b.Carrier : a.Distance < b.Distance;
 }
 
+// The positions of the items whose place's distance is not NaN, each once, ordered by carrier key,
+// then distance, then position. Items are field entries or kept entries.
+template <typename Item> std::vector<uint32_t> orderItemsByPlace(std::span<const Item> items) {
+  std::vector<uint32_t> order;
+  order.reserve(items.size());
+  for (uint32_t i = 0; i < items.size(); ++i) {
+    // A NaN distance equals no place and lies inside no edge, and would break the ordering.
+    if (!std::isnan(items[i].At.Distance)) {
+      order.push_back(i);
+    }
+  }
+  std::ranges::stable_sort(
+      order, [items](uint32_t a, uint32_t b) { return placeBefore(items[a].At, items[b].At); });
+  return order;
+}
+
 // The positions of the entries whose distance is not NaN, each once, ordered by carrier key, then
 // distance, then position.
 template <typename Entry>
 std::vector<uint32_t> orderByPlace(std::span<const PlacedEntry<Entry>> entries) {
-  std::vector<uint32_t> order;
-  order.reserve(entries.size());
-  for (uint32_t i = 0; i < entries.size(); ++i) {
-    // A NaN distance equals no place and lies inside no edge, and would break the ordering.
-    if (!std::isnan(entries[i].At.Distance)) {
-      order.push_back(i);
-    }
-  }
-  std::ranges::stable_sort(order, [entries](uint32_t a, uint32_t b) {
-    return placeBefore(entries[a].At, entries[b].At);
-  });
-  return order;
+  return orderItemsByPlace(entries);
 }
 
-// The slot's entries ordered by place, as orderByPlace gives them, made on the first call and kept
-// in the slot.
-template <typename Entry> std::span<const uint32_t> entriesByPlace(const FieldSlot<Entry> &slot) {
+// The slot's entries ordered by place, as orderItemsByPlace gives them, made on the first call and
+// kept in the slot. A slot is a field slot or a kept slot.
+template <typename Slot> std::span<const uint32_t> entriesByPlace(const Slot &slot) {
   if (!slot.ByPlace) {
-    slot.ByPlace = orderByPlace(std::span<const PlacedEntry<Entry>>(slot.Entries));
+    slot.ByPlace = orderItemsByPlace(std::span(slot.Entries));
   }
   return *slot.ByPlace;
 }
@@ -130,6 +135,16 @@ template <typename F>
 concept HasEdgeRule = FieldDefinition<F> && requires(const EdgeSample<typename F::Entry> &sample) {
   { F::sampleEdge(sample) } -> std::same_as<std::vector<typename F::Entry>>;
 };
+
+// A kept field: a scalar field whose owner reads a kept entry by its own rule, given the entry's
+// value and the ticks since it last changed:
+//   static double readKept(double value, uint64_t ticks);
+// It registers with addKeptField, in sim/medium/kept_field.h, which holds the rest of it.
+template <typename F>
+concept KeptFieldDefinition =
+    FieldDefinition<F> && (F::Kind == FieldKind::Scalar) && requires(double value, uint64_t ticks) {
+      { F::readKept(value, ticks) } -> std::same_as<double>;
+    };
 
 inline constexpr uint64_t FIELD_PURPOSE = hashName("field");
 
@@ -241,6 +256,7 @@ template <FieldDefinition F> void settleSteppedEntries(World &world) {
 template <FieldDefinition F> void addField(WorldSchema &schema) {
   static_assert(F::Kind != FieldKind::Scalar || std::is_same_v<typename F::Entry, double>,
                 "a scalar field's entries are doubles");
+  static_assert(!KeptFieldDefinition<F>, "a kept field registers with addKeptField");
   const std::string name(F::Name);
   schema.addComponent<ResolvedEntries<F>>(name + "-resolved", DataKind::Derived);
   schema.addComponent<SteppedEntries<F>>(name + "-stepped", DataKind::State);
@@ -310,8 +326,8 @@ void publishStepped(World &world, EntityKey source,
 }
 
 // The positions of the slot's entries at exactly the place, ascending.
-template <typename Entry>
-std::span<const uint32_t> positionsAt(const FieldSlot<Entry> &slot, const Place &place) {
+template <typename Slot>
+std::span<const uint32_t> positionsAt(const Slot &slot, const Place &place) {
   const std::span<const uint32_t> order = entriesByPlace(slot);
   const auto placeOf = [&slot](uint32_t i) -> const Place & { return slot.Entries[i].At; };
   const auto found = std::ranges::equal_range(order, place, placeBefore, placeOf);
@@ -319,8 +335,8 @@ std::span<const uint32_t> positionsAt(const FieldSlot<Entry> &slot, const Place 
 }
 
 // Appends the positions of the slot's entries on the carrier strictly between the two distances.
-template <typename Entry>
-void positionsInside(const FieldSlot<Entry> &slot, EntityKey carrier, double from, double to,
+template <typename Slot>
+void positionsInside(const Slot &slot, EntityKey carrier, double from, double to,
                      std::vector<uint32_t> &positions) {
   const std::span<const uint32_t> order = entriesByPlace(slot);
   const auto placeOf = [&slot](uint32_t i) -> const Place & { return slot.Entries[i].At; };
@@ -333,8 +349,8 @@ void positionsInside(const FieldSlot<Entry> &slot, EntityKey carrier, double fro
 
 // Clears positions and fills it with those of the slot's entries at any of the places, ascending
 // and once each, so entries come out in the source's order.
-template <typename Entry>
-void positionsAtAny(const FieldSlot<Entry> &slot, std::span<const Place> places,
+template <typename Slot>
+void positionsAtAny(const Slot &slot, std::span<const Place> places,
                     std::vector<uint32_t> &positions) {
   positions.clear();
   for (const Place &place : places) {
@@ -355,24 +371,24 @@ template <typename Entry> struct SampleScratch {
 };
 
 // Appends the source's entries whose places resolve to the node: exactly those at its stop
-// places, found through the slot's order by place.
-template <typename Entry>
-void sampleSlotAtNode(const Network &network, const FieldSlot<Entry> &slot, uint32_t node,
-                      SampleScratch<Entry> &scratch, std::vector<SampledEntry<Entry>> &sampled) {
+// places, found through the slot's order by place, each with the value read gives its position.
+template <typename Entry, typename Slot, typename Read>
+void sampleSlotAtNode(const Network &network, const Slot &slot, uint32_t node,
+                      SampleScratch<Entry> &scratch, std::vector<SampledEntry<Entry>> &sampled,
+                      Read read) {
   positionsAtAny(slot, network.stopPlaces(node), scratch.Positions);
   for (const uint32_t i : scratch.Positions) {
-    sampled.push_back({slot.Source, slot.Entries[i].Value});
+    sampled.push_back({slot.Source, read(i)});
   }
 }
 
-// Appends the source's entries at a place strictly inside an edge: those at the same place, or
-// what the field's own rule gives when it has one.
-template <FieldDefinition F>
-void sampleSlotInEdge(const Network &network, const FieldSlot<typename F::Entry> &slot,
-                      [[maybe_unused]] const Place &place,
+// Appends the source's entries at a place strictly inside an edge, each with the value read gives
+// its position: those at the same place, or what the field's own rule gives when it has one.
+template <FieldDefinition F, typename Slot, typename Read>
+void sampleSlotInEdge(const Network &network, const Slot &slot, [[maybe_unused]] const Place &place,
                       [[maybe_unused]] const EdgePosition &position,
                       [[maybe_unused]] SampleScratch<typename F::Entry> &scratch,
-                      std::vector<SampledEntry<typename F::Entry>> &sampled) {
+                      std::vector<SampledEntry<typename F::Entry>> &sampled, Read read) {
   using Entry = typename F::Entry;
   if constexpr (HasEdgeRule<F>) {
     const NetworkEdge &edge = network.edges()[position.Edge];
@@ -393,21 +409,21 @@ void sampleSlotInEdge(const Network &network, const FieldSlot<typename F::Entry>
     positionsInside(slot, edge.Carrier, edge.FromDistance, edge.ToDistance, inside);
     std::ranges::sort(inside);
     for (const uint32_t i : inside) {
-      const PlacedEntry<Entry> &entry = slot.Entries[i];
-      sample.Along.push_back({entry.At.Distance - edge.FromDistance,
-                              edge.ToDistance - entry.At.Distance, entry.Value});
+      const Place &at = slot.Entries[i].At;
+      sample.Along.push_back(
+          {at.Distance - edge.FromDistance, edge.ToDistance - at.Distance, read(i)});
     }
     // An entry inside the edge is not also at an end, as resolving it gives the inside.
     positionsAtAny(slot, fromStops, scratch.Positions);
     for (const uint32_t i : scratch.Positions) {
       if (!std::ranges::binary_search(inside, i)) {
-        sample.AtFrom.push_back(slot.Entries[i].Value);
+        sample.AtFrom.push_back(read(i));
       }
     }
     positionsAtAny(slot, toStops, scratch.Positions);
     for (const uint32_t i : scratch.Positions) {
       if (!std::ranges::binary_search(inside, i)) {
-        sample.AtTo.push_back(slot.Entries[i].Value);
+        sample.AtTo.push_back(read(i));
       }
     }
     if (sample.AtFrom.empty() && sample.AtTo.empty() && sample.Along.empty()) {
@@ -418,7 +434,7 @@ void sampleSlotInEdge(const Network &network, const FieldSlot<typename F::Entry>
     }
   } else {
     for (const uint32_t i : positionsAt(slot, place)) {
-      sampled.push_back({slot.Source, slot.Entries[i].Value});
+      sampled.push_back({slot.Source, read(i)});
     }
   }
 }
@@ -488,26 +504,37 @@ sampleSlots(const Network &network, const Place &place,
   }
   SampleScratch<typename F::Entry> scratch;
   for (const FieldSlot<typename F::Entry> *slot : slots) {
+    const auto read = [slot](uint32_t i) { return slot->Entries[i].Value; };
     if (const auto *node = std::get_if<NodePosition>(&*position)) {
-      sampleSlotAtNode(network, *slot, node->Node, scratch, sampled);
+      sampleSlotAtNode(network, *slot, node->Node, scratch, sampled, read);
     } else {
       sampleSlotInEdge<F>(network, *slot, place, std::get<EdgePosition>(*position), scratch,
-                          sampled);
+                          sampled, read);
     }
   }
   return sampled;
 }
+
+// A kept field's entries at the place on the network, as sampleField gives them. Defined in
+// sim/medium/kept_field.h, which a kept field's definition includes.
+template <KeptFieldDefinition F>
+std::vector<SampledEntry<double>> sampleKeptField(const World &world, const Network &network,
+                                                  const Place &place);
 
 // The field's entries at the place on the network, each with its source, sources in ascending key
 // order, by the default rule or the field's sampleEdge.
 template <FieldDefinition F>
 std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world, const Network &network,
                                                          const Place &place) {
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  if (entity == entt::null) {
-    return {};
+  if constexpr (KeptFieldDefinition<F>) {
+    return sampleKeptField<F>(world, network, place);
+  } else {
+    const entt::entity entity = world.findEntity(fieldKey(F::Name));
+    if (entity == entt::null) {
+      return {};
+    }
+    return sampleSlots<F>(network, place, layeredSlots<F>(world, entity));
   }
-  return sampleSlots<F>(network, place, layeredSlots<F>(world, entity));
 }
 
 // The first of the source's entries that sampleField gives at the node's nodePlace, or none.
