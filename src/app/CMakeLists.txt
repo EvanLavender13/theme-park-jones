@@ -1,6 +1,7 @@
 # The app's components that need no window, so the app's tests call them through their headers.
 add_library(tpj_app_core STATIC
     frame_clock.cpp
+    frame_times.cpp
     input/cursor.cpp
     input/input_map.cpp
     input/interaction.cpp

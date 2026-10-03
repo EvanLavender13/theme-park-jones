@@ -43,6 +43,8 @@ std::optional<Options> parseOptions(int argc, const char *const *argv) {
       // food is the only overlay.
       valid = strcmp(argv[++i], "food") == 0;
       options.ShowFoodOverlay = valid;
+    } else if (strcmp(argv[i], "--frame-times") == 0) {
+      options.FrameTimes = true;
     } else {
       valid = false;
     }
@@ -51,9 +53,12 @@ std::optional<Options> parseOptions(int argc, const char *const *argv) {
                             options.ShowFoodOverlay)) {
     valid = false;
   }
+  if (options.FrameTimes && options.FrameLimit <= 0) {
+    valid = false;
+  }
   if (!valid) {
     SDL_Log("Usage: %s [--park PATH] [--ticks N] [--hash] [--frames N] [--capture PATH] [--graph] "
-            "[--overlay food]",
+            "[--overlay food] [--frame-times]",
             argv[0]);
     return std::nullopt;
   }

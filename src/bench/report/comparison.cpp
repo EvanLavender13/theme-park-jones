@@ -1,5 +1,7 @@
 #include "bench/report/comparison.h"
 
+#include "bench/report/internal/columns.h"
+
 #include "bench/timing.h"
 
 #include <algorithm>
@@ -13,11 +15,12 @@ namespace tpj {
 namespace {
 
 // The stage of that name in that park on that build, or null.
-const StageResult *findStage(std::span<const ReportPark> report, const std::string &build,
+const ReportStage *findStage(std::span<const ReportPark> report, const std::string &build,
                              const std::string &park, const std::string &stage) {
   for (const ReportPark &read : report) {
     if (read.Build == build && read.Park == park) {
-      const auto found = std::ranges::find(read.Stages, stage, &StageResult::Name);
+      const auto found = std::ranges::find_if(
+          read.Stages, [&stage](const ReportStage &held) { return held.Stage.Name == stage; });
       return found == read.Stages.end() ? nullptr : &*found;
     }
   }
@@ -32,16 +35,6 @@ ChangeKind changeBetween(const TimeSummary &before, const TimeSummary &after) {
     return ChangeKind::Slower;
   }
   return ChangeKind::Unclear;
-}
-
-std::string microseconds(int64_t nanoseconds) {
-  return std::format("{:.1f}", static_cast<double>(nanoseconds) / 1000.0);
-}
-
-void appendTimes(std::vector<std::string> &fields, const TimeSummary &times) {
-  fields.push_back(microseconds(times.Median));
-  fields.push_back("[" + microseconds(times.Least));
-  fields.push_back(microseconds(times.Greatest) + "]");
 }
 
 std::string changeText(const TimeSummary &before, const TimeSummary &after) {
@@ -68,8 +61,8 @@ std::string_view changeWord(ChangeKind change) {
 std::vector<std::string> comparisonFields(const StageComparison &comparison) {
   std::vector<std::string> fields{comparison.Build, comparison.Park, comparison.Stage};
   if (comparison.Before.has_value() && comparison.After.has_value()) {
-    const TimeSummary &before = comparison.Before->Times;
-    const TimeSummary &after = comparison.After->Times;
+    const TimeSummary &before = comparison.Before->Stage.Times;
+    const TimeSummary &after = comparison.After->Stage.Times;
     fields.emplace_back(changeWord(comparison.Change));
     fields.emplace_back("before");
     appendTimes(fields, before);
@@ -80,11 +73,11 @@ std::vector<std::string> comparisonFields(const StageComparison &comparison) {
       fields.emplace_back("result-changed");
     }
   } else if (comparison.Before.has_value()) {
-    const TimeSummary &before = comparison.Before->Times;
+    const TimeSummary &before = comparison.Before->Stage.Times;
     fields.emplace_back("only-before");
     appendTimes(fields, before);
   } else if (comparison.After.has_value()) {
-    const TimeSummary &after = comparison.After->Times;
+    const TimeSummary &after = comparison.After->Stage.Times;
     fields.emplace_back("only-after");
     appendTimes(fields, after);
   }
@@ -97,22 +90,23 @@ std::vector<StageComparison> compareReports(std::span<const ReportPark> before,
                                             std::span<const ReportPark> after) {
   std::vector<StageComparison> comparisons;
   for (const ReportPark &park : before) {
-    for (const StageResult &stage : park.Stages) {
-      StageComparison comparison{park.Build,   park.Park,           stage.Name, stage,
-                                 std::nullopt, ChangeKind::Unclear, false};
-      const StageResult *other = findStage(after, park.Build, park.Park, stage.Name);
+    for (const ReportStage &stage : park.Stages) {
+      StageComparison comparison{
+          park.Build, park.Park, stage.Stage.Name, stage, std::nullopt, ChangeKind::Unclear, false};
+      const ReportStage *other = findStage(after, park.Build, park.Park, stage.Stage.Name);
       if (other != nullptr) {
         comparison.After = *other;
-        comparison.Change = changeBetween(stage.Times, other->Times);
-        comparison.ResultChanged = stage.Kind != other->Kind || stage.Result != other->Result;
+        comparison.Change = changeBetween(stage.Stage.Times, other->Stage.Times);
+        comparison.ResultChanged =
+            stage.Stage.Kind != other->Stage.Kind || stage.Stage.Result != other->Stage.Result;
       }
       comparisons.push_back(std::move(comparison));
     }
   }
   for (const ReportPark &park : after) {
-    for (const StageResult &stage : park.Stages) {
-      if (findStage(before, park.Build, park.Park, stage.Name) == nullptr) {
-        comparisons.push_back(StageComparison{park.Build, park.Park, stage.Name, std::nullopt,
+    for (const ReportStage &stage : park.Stages) {
+      if (findStage(before, park.Build, park.Park, stage.Stage.Name) == nullptr) {
+        comparisons.push_back(StageComparison{park.Build, park.Park, stage.Stage.Name, std::nullopt,
                                               stage, ChangeKind::Unclear, false});
       }
     }
@@ -122,7 +116,6 @@ std::vector<StageComparison> compareReports(std::span<const ReportPark> before,
 
 std::string comparisonText(std::span<const StageComparison> comparisons) {
   std::vector<std::vector<std::string>> lines;
-  std::vector<size_t> widths;
   size_t compared = 0;
   size_t clear = 0;
   for (const StageComparison &comparison : comparisons) {
@@ -133,24 +126,9 @@ std::string comparisonText(std::span<const StageComparison> comparisons) {
       }
     }
     lines.push_back(comparisonFields(comparison));
-    const std::vector<std::string> &fields = lines.back();
-    widths.resize(std::max(widths.size(), fields.size()), 0);
-    for (size_t i = 0; i < fields.size(); ++i) {
-      widths[i] = std::max(widths[i], fields[i].size());
-    }
   }
-  std::string text;
-  for (const std::vector<std::string> &fields : lines) {
-    for (size_t i = 0; i < fields.size(); ++i) {
-      text += fields[i];
-      if (i + 1 < fields.size()) {
-        text += std::string(widths[i] - fields[i].size() + 1, ' ');
-      }
-    }
-    text += '\n';
-  }
-  text += "clear " + std::to_string(clear) + " of " + std::to_string(compared) + "\n";
-  return text;
+  return alignedText(lines) + "clear " + std::to_string(clear) + " of " + std::to_string(compared) +
+         "\n";
 }
 
 } // namespace tpj

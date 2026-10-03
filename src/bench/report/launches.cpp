@@ -43,6 +43,9 @@ std::vector<Launch> parseLaunches(std::string_view text) {
       ++i;
       launches.push_back(readLaunchHead(line, lines[i]));
     } else if (line.Fields.front() == "stage" && !launches.empty()) {
+      if (line.Fields.size() != 12) {
+        refuseLine(line, "a stage line has 12 fields");
+      }
       StageResult stage = readStageLine(line);
       std::vector<StageResult> &stages = launches.back().Stages;
       if (std::ranges::any_of(

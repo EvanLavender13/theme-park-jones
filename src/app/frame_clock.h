@@ -16,6 +16,8 @@ inline constexpr uint32_t MAX_FRAME_TICKS = 2;
 struct FrameStep {
   double Dt = 0.0;
   uint32_t Ticks = 0;
+  // The whole nanoseconds since the previous reading, rounded down and never clamped.
+  int64_t Nanoseconds = 0;
 
   bool operator==(const FrameStep &) const = default;
 };

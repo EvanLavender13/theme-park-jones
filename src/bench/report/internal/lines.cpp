@@ -98,8 +98,8 @@ uint64_t readHash(const TextLine &line, size_t index) {
 }
 
 StageResult readStageLine(const TextLine &line) {
-  if (line.Fields.size() != 12) {
-    refuseLine(line, "a stage line has 12 fields");
+  if (line.Fields.size() < 12) {
+    refuseLine(line, "a stage line has at least 12 fields");
   }
   expectWord(line, 0, "stage");
   expectWord(line, 2, "count");
@@ -116,8 +116,11 @@ StageResult readStageLine(const TextLine &line) {
   } else if (line.Fields[10] == "vertices") {
     stage.Kind = ResultKind::Vertices;
     stage.Result = readCount(line, 11);
+  } else if (line.Fields[10] == "frames") {
+    stage.Kind = ResultKind::Frames;
+    stage.Result = readCount(line, 11);
   } else {
-    refuseLine(line, "expected 'hash' or 'vertices' as " + fieldName(10));
+    refuseLine(line, "expected 'hash', 'vertices', or 'frames' as " + fieldName(10));
   }
   return stage;
 }

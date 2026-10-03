@@ -4,10 +4,13 @@
 add_library(tpj_bench_lib STATIC
     options.cpp
     report/comparison.cpp
+    report/frames.cpp
+    report/internal/columns.cpp
     report/internal/lines.cpp
     report/launches.cpp
     report/report.cpp
     report/report_options.cpp
+    report/show.cpp
     stages.cpp
     text_file.cpp
     timing.cpp)

@@ -7,8 +7,12 @@ namespace tpj {
 
 FrameStep FrameClock::advance(uint64_t counter) {
   FrameStep step;
-  step.Dt = std::min(static_cast<double>(counter - Last) / static_cast<double>(Frequency),
-                     MAX_FRAME_SECONDS);
+  const uint64_t elapsed = counter - Last;
+  // Whole seconds and the rest apart, so a long gap cannot overflow.
+  step.Nanoseconds = static_cast<int64_t>((elapsed / Frequency) * 1'000'000'000 +
+                                          (elapsed % Frequency) * 1'000'000'000 / Frequency);
+  step.Dt =
+      std::min(static_cast<double>(elapsed) / static_cast<double>(Frequency), MAX_FRAME_SECONDS);
   Last = counter;
   Unstepped += step.Dt;
   while (Unstepped >= SIM_TICK_SECONDS) {

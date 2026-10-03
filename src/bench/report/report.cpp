@@ -47,12 +47,14 @@ ReportPark summarizeGroup(const std::vector<const Launch *> &group) {
   for (size_t s = 0; s < first.Stages.size(); ++s) {
     std::vector<int64_t> medians;
     medians.reserve(group.size());
+    int64_t worst = 0;
     for (const Launch *launch : group) {
       medians.push_back(launch->Stages[s].Times.Median);
+      worst = std::max(worst, launch->Stages[s].Times.Greatest);
     }
     StageResult stage = first.Stages[s];
     stage.Times = summarizeTimes(medians);
-    park.Stages.push_back(std::move(stage));
+    park.Stages.push_back(ReportStage{std::move(stage), worst});
   }
   return park;
 }
@@ -103,8 +105,8 @@ std::string reportText(std::span<const ReportPark> report) {
     text += "park " + park.Build + " " + park.Park + " launches " + std::to_string(park.Launches) +
             " ticks " + std::to_string(park.Ticks) + " warm-ups " + std::to_string(park.WarmUps) +
             " repetitions " + std::to_string(park.Repetitions) + "\n";
-    for (const StageResult &stage : park.Stages) {
-      text += stageLine(stage) + "\n";
+    for (const ReportStage &stage : park.Stages) {
+      text += stageLine(stage.Stage) + " worst " + std::to_string(stage.Worst) + "\n";
     }
   }
   return text;
@@ -123,11 +125,16 @@ std::vector<ReportPark> parseReport(std::string_view text) {
       }
       report.push_back(std::move(park));
     } else if (line.Fields.front() == "stage" && !report.empty()) {
-      StageResult stage = readStageLine(line);
-      std::vector<StageResult> &stages = report.back().Stages;
-      if (std::ranges::any_of(
-              stages, [&stage](const StageResult &read) { return read.Name == stage.Name; })) {
-        refuseLine(line, "repeats the stage " + stage.Name);
+      if (line.Fields.size() != 14) {
+        refuseLine(line, "a report's stage line has 14 fields");
+      }
+      expectWord(line, 12, "worst");
+      ReportStage stage{readStageLine(line), readTime(line, 13)};
+      std::vector<ReportStage> &stages = report.back().Stages;
+      if (std::ranges::any_of(stages, [&stage](const ReportStage &read) {
+            return read.Stage.Name == stage.Stage.Name;
+          })) {
+        refuseLine(line, "repeats the stage " + stage.Stage.Name);
       }
       stages.push_back(std::move(stage));
     } else {
