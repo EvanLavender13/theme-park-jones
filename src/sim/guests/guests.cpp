@@ -43,16 +43,6 @@ std::vector<EntityKey> entranceKeys(const World &world) {
   return keys;
 }
 
-// The source's entry in the sample, or none.
-const RouteEntry *entryOf(const RouteSample &routes, EntityKey source) {
-  for (const SampledEntry<RouteEntry> &entry : routes) {
-    if (entry.Source == source) {
-      return &entry.Value;
-    }
-  }
-  return nullptr;
-}
-
 // The least entrance entry in the sample, ties to the lower key, or none.
 const RouteEntry *homeEntry(const RouteSample &routes, const std::vector<EntityKey> &entrances) {
   const RouteEntry *nearest = nullptr;
@@ -67,25 +57,38 @@ const RouteEntry *homeEntry(const RouteSample &routes, const std::vector<EntityK
   return nearest;
 }
 
+// The least entrance entry at the place, ties to the lower key, or none, as homeEntry finds it in a
+// sample there.
+std::optional<RouteEntry> homeEntryAt(const World &world, const Network &network,
+                                      const Place &place, const std::vector<EntityKey> &entrances) {
+  std::optional<RouteEntry> nearest;
+  // Entrances come in ascending key order, so keeping only a strictly less distance breaks ties
+  // to the lower key.
+  for (const EntityKey entrance : entrances) {
+    const std::optional<RouteEntry> entry =
+        routeEntryAt(world, PathKind::Guest, network, place, entrance);
+    if (entry && (!nearest || entry->Distance < nearest->Distance)) {
+      nearest = entry;
+    }
+  }
+  return nearest;
+}
+
 // The source's offer when it says meals are supplied: its first food-offer entry at the place of
 // its lowest anchored node, or none. With an entry in route distance at the guest's place, the
 // offer is reachable.
 std::optional<OfferEntry> suppliedOffer(const World &world, const Network &network,
                                         EntityKey source) {
-  const std::vector<uint32_t> anchored = network.anchoredNodes(source);
-  if (anchored.empty()) {
+  const std::optional<uint32_t> anchor = network.firstAnchoredNode(source);
+  if (!anchor) {
     return std::nullopt;
   }
-  for (const SampledEntry<OfferEntry> &entry :
-       sampleField<FoodOffer>(world, network, network.nodePlace(anchored.front()))) {
-    if (entry.Source == source) {
-      if (!entry.Value.Supplied) {
-        return std::nullopt;
-      }
-      return entry.Value;
-    }
+  const std::optional<OfferEntry> offer =
+      sourceEntryAtNode<FoodOffer>(world, network, *anchor, source);
+  if (!offer || !offer->Supplied) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  return offer;
 }
 
 // The steps out of the node, in edge order: each edge starting at it walked forward, then each
@@ -202,9 +205,11 @@ std::vector<double> softmaxWeights(std::span<ChoiceOption> options) {
   return weights;
 }
 
-// Scores the guest's options where it stands, picks one by softmax, and takes it up.
+// Samples route distance where the guest stands, scores its options there, picks one by softmax,
+// and takes it up.
 void choose(const World &world, EntityKey key, Guest &guest, const Network &network,
-            const RouteSample &routes, const std::vector<EntityKey> &entrances, uint64_t &choices) {
+            const std::vector<EntityKey> &entrances, uint64_t &choices) {
+  const RouteSample routes = sampleField<GuestRouteDistance>(world, network, guest.At);
   ScoredOptions scored = scoreOptions(world, guest, network, routes, entrances);
   const size_t picked =
       softmaxPick(drawKey(world, key, hashName("guest-choice"), choices++), scored.Options);
@@ -252,26 +257,26 @@ void walkStep(Guest &guest, const RouteStep &step, bool atNode, double &left) {
 // reach drops the target, and one heading home with no entrance entry stops, each becoming
 // wandering; Dropped says it must choose.
 struct Heading {
-  const RouteEntry *Target = nullptr;
-  const RouteEntry *Home = nullptr;
+  std::optional<RouteEntry> Target;
+  std::optional<RouteEntry> Home;
   bool Dropped = false;
 };
 
 Heading headingOf(const World &world, Guest &guest, const Network &network,
-                  const RouteSample &routes, const std::vector<EntityKey> &entrances) {
+                  const std::vector<EntityKey> &entrances) {
   Heading heading;
   if (guest.Activity == GuestActivity::HeadingToShop) {
-    heading.Target = entryOf(routes, guest.Target);
-    if (heading.Target == nullptr || !suppliedOffer(world, network, guest.Target)) {
+    heading.Target = routeEntryAt(world, PathKind::Guest, network, guest.At, guest.Target);
+    if (!heading.Target || !suppliedOffer(world, network, guest.Target)) {
       guest.Activity = GuestActivity::Wandering;
       guest.Target = NULL_KEY;
-      heading.Target = nullptr;
+      heading.Target.reset();
       heading.Dropped = true;
     }
   }
   if (guest.Activity == GuestActivity::HeadingHome) {
-    heading.Home = homeEntry(routes, entrances);
-    if (heading.Home == nullptr) {
+    heading.Home = homeEntryAt(world, network, guest.At, entrances);
+    if (!heading.Home) {
       guest.Activity = GuestActivity::Wandering;
       heading.Dropped = true;
     }
@@ -295,20 +300,19 @@ bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
     if (!position) {
       return false;
     }
-    const RouteSample routes = sampleField<GuestRouteDistance>(world, network, guest.At);
-    const Heading heading = headingOf(world, guest, network, routes, entrances);
+    const Heading heading = headingOf(world, guest, network, entrances);
     mustChoose = mustChoose || heading.Dropped;
-    if (heading.Target != nullptr && heading.Target->Next.Carrier == NULL_KEY) {
+    if (heading.Target && heading.Target->Next.Carrier == NULL_KEY) {
       sendVisit(world, key, guest.Target);
       guest.Activity = GuestActivity::Waiting;
       return true;
     }
-    if (heading.Home != nullptr && heading.Home->Next.Carrier == NULL_KEY) {
+    if (heading.Home && heading.Home->Next.Carrier == NULL_KEY) {
       return false;
     }
     const bool atNode = std::holds_alternative<NodePosition>(*position);
     if (!chosen && (mustChoose || (atNode && left > 0.0))) {
-      choose(world, key, guest, network, routes, entrances, choices);
+      choose(world, key, guest, network, entrances, choices);
       chosen = true;
       mustChoose = false;
       continue;
@@ -317,9 +321,9 @@ bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
       return true;
     }
     RouteStep step;
-    if (heading.Target != nullptr) {
+    if (heading.Target) {
       step = heading.Target->Next;
-    } else if (heading.Home != nullptr) {
+    } else if (heading.Home) {
       step = heading.Home->Next;
     } else {
       step = wanderStep(world, key, guest, network, *position, picks);
