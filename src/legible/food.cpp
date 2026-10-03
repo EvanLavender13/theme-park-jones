@@ -20,20 +20,16 @@ namespace {
 // entry at the place of its lowest anchored node, or none.
 std::optional<OfferEntry> suppliedOffer(const World &world, const Network &network,
                                         EntityKey source) {
-  const std::vector<uint32_t> anchored = network.anchoredNodes(source);
-  if (anchored.empty()) {
+  const std::optional<uint32_t> anchor = network.firstAnchoredNode(source);
+  if (!anchor) {
     return std::nullopt;
   }
-  for (const SampledEntry<OfferEntry> &entry :
-       sampleField<FoodOffer>(world, network, network.nodePlace(anchored.front()))) {
-    if (entry.Source == source) {
-      if (!entry.Value.Supplied) {
-        return std::nullopt;
-      }
-      return entry.Value;
-    }
+  const std::optional<OfferEntry> offer =
+      sourceEntryAtNode<FoodOffer>(world, network, *anchor, source);
+  if (!offer || !offer->Supplied) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  return offer;
 }
 
 } // namespace
