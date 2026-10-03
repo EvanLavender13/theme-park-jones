@@ -1,0 +1,31 @@
+# Research: shared-world-checks
+
+## What must the shared world checks cover before the held tests can go?
+
+makeParkSchema registers the medium's network; the park intent types entrance, path, and box; previous-network; a resolved and a stepped type for each of the fields guest route distance, backstage route distance, and food offer; a ledger for each of the flows supply orders, supplies, guest visits, and meals; shop-service; guest; and hungry-footfall-kept. The intent and state types appear in a save, so a park file holds them; warm.park and cut.park hold every one of them, and new.park, routes.park, sketch.park, and supply.park hold intent alone. The derived types appear once a world is resolved, except previous-network. A resolution moves each network it replaces there, so finishers can carry places onto the new network, and the routes module's last finisher then drops it, so no resolution ends holding one (sim/routes/SPEC.md): no world between cycles, no copy, no save, and no candidate. The checks can see a world only through those, so they can never find previous-network held, and name it with that reason. A new registered type is covered by a park or an edit, or named with such a reason, never silently skipped.
+
+The 39 held entries check five standards, over state the park files and a handful of edits reach. Their reasons for existing were states no synthetic schema held, and each maps to an edit or a park that holds it:
+
+- Guests walking, waiting, and carried when the path under them is deleted (guest_edits_test, network_test's place in registered state): deleting the guest path a walking guest of warm.park stands on.
+- Shipments in transit when their backstage route is cut (park_standards_test's stranded shipment, operations_edits_test): cut.park holds it as a file.
+- A second shop's food offer and route distance in a candidate (preview_test, field_test, stepped_field_test): adding a shop to warm.park beside its paths.
+- Networks re-derived over junctions and connectors, with previous-network held (network_edits_test, route_distance_test): any path edit after the first resolution; the path-deletion edit above already does it.
+- Degenerate but finite intent, such as a path of one point, a zero facing, a position outside the park, and numbers a save spells unusually (intent_test): no command makes it, since AddPath keeps only distinct points and refuses fewer than two, and sim/park/SPEC.md says only a hand-written save holds it. A park file checked in to tests/parks/ holding it covers it, which the cross-build check then compares too.
+- Ledgers, stepped entries, and kept entries mid-run (flow_test, stepped_field_test, kept_field_test): warm.park, stepped.
+- Draws in a copy or candidate (draw_test), commands applied as a candidate (edits_test), and pure functions computed twice (geometry_test): follow from the copy and candidate standards and key-only draws, and need no state of their own.
+
+So a few edits, each on one park and each with one of the reasons above, and one park file of degenerate intent, cover what the held tests cover. Applying every edit to every park would multiply cases without adding a reason, which rule 4 forbids.
+
+Rejected: keeping the randomized edit sequences of tests/sim/support/route_edits.h and guest_parks.h as the source of edited worlds — rule 4 allows random inputs only for a statistical property, and the standards are not statistical; the held tests that use them are the ones being deleted. Running the checks over the stress parks in tests/parks/stress/ as well — they hold no type the smaller parks lack, and only add time. A park file written to hold every registered type at once — previous-network cannot be saved, so an edit is needed anyway, and warm.park already holds every saved type.
+
+## Which of the sim root's synthetic tests stay?
+
+The sim root proves the standards today on synthetic schemas: walk_test's "a copy equals its original, hashes the same, and keeps its keys", save_test's "loading the save of a resolved world and resolving gives the world saved" and "a loaded and resolved world steps in lockstep with the world saved" (held), and cycle_test's "a candidate made just after a cycle equals the world" and "worlds built by the same calls and cycled with the same commands". Over the park schema each of these is the same standard over real types, so the shared world checks replace them.
+
+What only a synthetic schema can show stays: that the walk refuses an unregistered type and a NaN, that a change to any one kind of thing the walk covers changes equality and the hash (a park cannot be changed one field at a time without reaching each module's internals), that a copy is independent of its original, that equal worlds however built give identical saves, that a save holds no derived data, and the load's refusals. Hash coverage over real types is shown only as far as equal worlds hashing equal; hash coverage of each kind of field stays synthetic, as CAPABILITY.md says. The rewrite entries among the sim root's tests, such as cycle_test's "makeCandidate applies the commands in submission order", are reshaped-tests' work, not this milestone's.
+
+Rejected: rewriting the synthetic standard tests to run on both schemas — two proofs of one property, which rule 2 forbids.
+
+## Where do the shared world checks live?
+
+In tpj_sim_tests, beside the sim root's other tests, since the standards are the sim root's (rule 2) and rule 7 forbids an integration test from re-running them. tpj_sim_tests already defines TPJ_PARKS_DIR. tests/integration/support/park_files.h lists and opens the park files; the integration tests that remain still open parks by name, so listing the parks moves to where the sim's tests can use it and opening a named park stays available to both.
