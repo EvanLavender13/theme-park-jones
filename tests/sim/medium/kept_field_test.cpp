@@ -420,6 +420,27 @@ struct ExpectedEnd {
   std::vector<EdgeEntry<double>> Along;
 };
 
+void requireAlong(const std::vector<EdgeEntry<double>> &along,
+                  const std::vector<EdgeEntry<double>> &expected) {
+  REQUIRE(along.size() == expected.size());
+  for (size_t j = 0; j < expected.size(); ++j) {
+    CAPTURE(j);
+    REQUIRE(along[j].FromOffset == expected[j].FromOffset);
+    REQUIRE(along[j].ToOffset == expected[j].ToOffset);
+    REQUIRE(along[j].Value == expected[j].Value);
+  }
+}
+
+void requireNodeEnd(const NodeEnd &end, const NetworkEdge &edge, const ExpectedEnd &expected) {
+  REQUIRE(end.Edge.Carrier == edge.Carrier);
+  REQUIRE(end.Edge.From == edge.From);
+  REQUIRE(end.Edge.To == edge.To);
+  REQUIRE(end.Edge.FromDistance == edge.FromDistance);
+  REQUIRE(end.Edge.ToDistance == edge.ToDistance);
+  REQUIRE(end.AtFrom == expected.AtFrom);
+  requireAlong(end.Along, expected.Along);
+}
+
 void requireNodeSample(const NodeSample &sample, const Network &network, uint32_t node,
                        const std::vector<double> &atNode, const std::vector<ExpectedEnd> &ends) {
   REQUIRE(sample.Node == node);
@@ -427,21 +448,7 @@ void requireNodeSample(const NodeSample &sample, const Network &network, uint32_
   REQUIRE(sample.Ends.size() == ends.size());
   for (size_t i = 0; i < ends.size(); ++i) {
     CAPTURE(i);
-    const NodeEnd &end = sample.Ends[i];
-    const NetworkEdge &edge = network.edges()[ends[i].Edge];
-    REQUIRE(end.Edge.Carrier == edge.Carrier);
-    REQUIRE(end.Edge.From == edge.From);
-    REQUIRE(end.Edge.To == edge.To);
-    REQUIRE(end.Edge.FromDistance == edge.FromDistance);
-    REQUIRE(end.Edge.ToDistance == edge.ToDistance);
-    REQUIRE(end.AtFrom == ends[i].AtFrom);
-    REQUIRE(end.Along.size() == ends[i].Along.size());
-    for (size_t j = 0; j < ends[i].Along.size(); ++j) {
-      CAPTURE(j);
-      REQUIRE(end.Along[j].FromOffset == ends[i].Along[j].FromOffset);
-      REQUIRE(end.Along[j].ToOffset == ends[i].Along[j].ToOffset);
-      REQUIRE(end.Along[j].Value == ends[i].Along[j].Value);
-    }
+    requireNodeEnd(sample.Ends[i], network.edges()[ends[i].Edge], ends[i]);
   }
 }
 

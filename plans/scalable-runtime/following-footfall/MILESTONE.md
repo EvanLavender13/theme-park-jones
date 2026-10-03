@@ -2,6 +2,8 @@
 
 Slice: none
 
+Status: complete
+
 ## Summary
 
 following-footfall makes hungry footfall's tick work grow with the guests rather than with the guest network, as decision 0031 requires. Today stepFootfall visits every stretch of the guest network every tick, recomputes its moving average, and republishes one entry per stretch and one per node, because the medium's stepped layer drops any entry a source does not republish each tick. On today's stress parks that cost is likely a small share of a tick, since their guest networks have a few hundred stretches. It is the only per-tick work that grows with the network, though, and paths-and-plazas derives networks several times larger from paved ground, so it is rebuilt before that slice grows them. The milestone gives the shared medium a third kind of field entry, a kept entry, which a field opts into: a system changes it at one place, and it stays readable until changed, carrying the tick it last changed so its owner can decay it when it is read. Hungry footfall then moves onto kept entries: each tick, only the stretches guests stand on change, and an empty stretch's value decays by a stated rule when it is read or next changed. Nothing in the simulation reads hungry footfall; its one reader is the shop ghost's tooltip, so no guest or shop behaves differently. Its values differ from today's only in their last bits after a stretch sits empty, and its saved form changes, so world hashes and the parks that hold footfall change with it.

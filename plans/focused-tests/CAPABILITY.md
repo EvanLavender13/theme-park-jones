@@ -55,6 +55,8 @@ The foundation is the closing audit, the law suite over registered types, and th
 
 - Whether the closing audit reads only test cases, or also the acceptance criteria and spec statements that produced them. The first closing audits will show whether failures trace back to criteria often enough to audit them too.
 
+- Whether one audit run at a close is enough. Two runs of the same audit on following-footfall's tests each reported findings the other missed, eight in all, so a single run is a backstop for Evan's reading rather than a complete check. Further closes will show whether misses are common enough to need a second run or a narrower audit.
+
 ## Research notes
 
 The suite regrew enumerations and law re-proofs because the laws were proven only on synthetic schemas, planning asked every feature to restate them, specs fixed layouts as contracts, and shape rules moved enumeration rather than removing it. Laws written once and checked for every instance, as quickcheck-classes and contract tests do, are the fix the registry already allows. A numeric ratchet is rejected: it is gamed and suite size rightly grows. The guard is instead a closing audit against the written rules by an agent that wrote none of the tests, reporting to Evan. Depth and the audit's inventory of tests to rewrite are in RESEARCH.md.

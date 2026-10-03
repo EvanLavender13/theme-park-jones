@@ -47,7 +47,7 @@ Plans are the route to a change. The long-lived contract is each module's SPEC.m
 | --- | --- |
 | Plan, check, or close a goal that spans capabilities | `planning-slices` |
 | Plan a capability | `planning-capabilities` |
-| Plan a milestone inside an existing capability | `planning-milestones` |
+| Plan or close a milestone inside an existing capability | `planning-milestones` |
 | Plan a feature inside an existing milestone | `planning-features` |
 | Build an existing feature plan | `implementing-features` |
 | Add, select, or drop a speculative idea | `maintaining-backlog` |

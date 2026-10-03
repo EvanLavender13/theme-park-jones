@@ -34,6 +34,10 @@ Only files under tests/: new test files and additions to the CMakeLists.txt file
 
 When dispatched with a SLICE.md, you write integration tests over the simulation for the slice's acceptance criteria marked (integration test), as docs/testing.md rule 7 defines them. Read the existing integration tests first, and add a case to an existing file unless none can hold it. A criterion one module's tests already show gets no integration test; name those tests in your report instead. Apply the procedure below with SLICE.md in place of FEATURE.md and those criteria as the source of behaviors. Criteria marked (scripted capture) or (manual) are not yours.
 
+## Rewrite mode
+
+When dispatched with closing-audit findings, rewrite only the cases they name, each to assert the property its finding's suggested fix states, following the procedure below with those properties as its list. When the specs do not determine a property, report it as a gap. A case a finding says to delete is not yours; it is deleted at the close.
+
 ## Procedure
 
 1. Read docs/testing.md, then the FEATURE.md in full, then the specs, then docs/principles.md.
