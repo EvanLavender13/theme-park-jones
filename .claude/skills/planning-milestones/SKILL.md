@@ -23,7 +23,7 @@ Create a task for each item. Complete in order.
 
 1. Read the parent CAPABILITY.md in full and treat it as ground. Confirm which milestone you are planning and its dependency position.
 2. Read sibling milestones if present and note relationships. If the milestone is a slice member, read its SLICE.md in full: the milestone must deliver its share of the scenario and produce or consume exactly the cross-capability fields and flows the slice's medium map assigns to its capability. It may add fields and flows internal to its own capability. A needed change to cross-capability medium goes back to `planning-slices`, not into the milestone.
-3. Explore related context: docs/principles.md, the SPEC.md of modules the milestone touches, relevant decision records, and the code. Identify patterns to follow.
+3. Explore related context: docs/principles.md, the SPEC.md of modules the milestone touches, relevant decision records, and the code each acceptance criterion depends on, read rather than inferred from specs or plans. Identify patterns to follow.
 4. Reconcile the backlog: drop the item this milestone draws from, and any item it supersedes, via `maintaining-backlog`.
 5. Research tactical patterns via the `researching` skill. It writes findings to plans/<capability-slug>/<milestone-slug>/RESEARCH.md.
 6. Ask clarifying questions, one at a time. Cover scope boundaries, acceptance criteria, and feature granularity.
@@ -34,7 +34,7 @@ Create a task for each item. Complete in order.
 11. Separate committed from speculative. Commit only the features current evidence supports; send the rest to `maintaining-backlog`.
 12. Write MILESTONE.md at plans/<capability-slug>/<milestone-slug>/MILESTONE.md in the format below.
 13. Record the milestone in the parent CAPABILITY.md's Milestones list when it is not already there.
-14. Self-review for placeholders, contradictions, scope drift, vague acceptance criteria, and interactions that bypass the medium. Fix inline.
+14. Self-review for placeholders, contradictions, scope drift, vague acceptance criteria, and interactions that bypass the medium. Every claim about existing code, and every count or listing drawn from the repository, is checked by reading that code or running the read-only command. Fix inline.
 15. Review: stage MILESTONE.md and RESEARCH.md, then dispatch the reviewer via `reviewing`, with CAPABILITY.md and, for a slice member, SLICE.md as context. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
 16. Ask the user to approve.
 

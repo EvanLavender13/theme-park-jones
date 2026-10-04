@@ -24,7 +24,7 @@ Create a task for each item. Complete in order.
 
 1. Read the parent MILESTONE.md in full and confirm which feature you are planning.
 2. Read the grandparent CAPABILITY.md and confirm scope alignment.
-3. Explore related code: docs/principles.md, the SPEC.md of every module the feature touches, relevant decision records, and the files the feature will touch or depend on. Identify patterns to follow.
+3. Explore related code: docs/principles.md, the SPEC.md of every module the feature touches, and relevant decision records. Read in full every file the feature will modify, and the code each criterion's setup depends on. Identify patterns to follow.
 4. Reconcile the backlog: drop the item this feature draws from, and any item it supersedes, via `maintaining-backlog`.
 5. Research implementation patterns via the `researching` skill. It writes findings to plans/<capability-slug>/<milestone-slug>/<feature-slug>/RESEARCH.md.
 6. Ask clarifying questions, one at a time. Cover acceptance criteria, edge cases, and integration boundaries.
@@ -36,7 +36,7 @@ Create a task for each item. Complete in order.
 12. Decompose into bite-sized tasks, each one action of two to five minutes, in the task structure below.
 13. Write FEATURE.md at plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md.
 14. Write PLAN.md at the same path.
-15. Self-review: every acceptance criterion is testable from FEATURE.md and the specs alone and keeps docs/testing.md, or, for a test utility, is a check the implementer runs with its command and expected output; every spec statement the feature adds or changes is covered by a criterion; every task has exact paths, exact commands, and expected outputs; the Placement section places every behavior the tasks add. Fix inline.
+15. Self-review: every acceptance criterion is testable from FEATURE.md and the specs alone and keeps docs/testing.md, or, for a test utility, is a check the implementer runs with its command and expected output; every spec statement the feature adds or changes is covered by a criterion; every task has exact paths, exact commands, and expected outputs; the Placement section places every behavior the tasks add; every claim about existing code, such as what a function does, how a test reaches its state, or what a command prints, is checked by reading that code, and each read-only command is run, with its Expected line copied from what it printed. Fix inline.
 16. Review: stage FEATURE.md, PLAN.md, and RESEARCH.md, then dispatch the reviewer via `reviewing`, with MILESTONE.md, the SPEC.md of every module the feature touches, and docs/principles.md as context. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
 17. Ask the user to approve both artifacts.
 
