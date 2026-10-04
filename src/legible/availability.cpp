@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <span>
 #include <stddef.h>
 #include <utility>
 #include <vector>
@@ -49,15 +50,16 @@ std::optional<OfferEntry> suppliedOffer(const World &world,
   return offer;
 }
 
-// The availability at the place, with each source's supplied offer from offerOf. Every value an
-// availability gives is computed here, so a place's value is the same however it is asked for.
+// The availability given each reachable source's route entries, sources ascending, with each
+// source's supplied offer from offerOf. Every value an availability gives is computed here, so a
+// place's value is the same however it is asked for.
 template <typename OfferOf>
-Availability availabilityWith(const World &world, const AvailabilityDefinition &definition,
-                              const Network &network, const Place &place, const OfferOf &offerOf) {
+Availability availabilityWith(const AvailabilityDefinition &definition,
+                              std::span<const SampledEntry<RouteEntry>> routes,
+                              const OfferOf &offerOf) {
   Availability availability;
   EntityKey previous = NULL_KEY;
-  for (const SampledEntry<RouteEntry> &route :
-       sampleField<RouteDistance<PathKind::Guest>>(world, network, place)) {
+  for (const SampledEntry<RouteEntry> &route : routes) {
     // Sources come in ascending order, and only a source's first entry counts.
     if (route.Source == previous) {
       continue;
@@ -85,7 +87,9 @@ Availability availabilityWith(const World &world, const AvailabilityDefinition &
 Availability availabilityAt(const World &world, const AvailabilityDefinition &definition,
                             const Place &place) {
   const Network &network = parkNetwork(world, PathKind::Guest);
-  return availabilityWith(world, definition, network, place, [&](EntityKey source) {
+  const std::vector<SampledEntry<RouteEntry>> routes =
+      sampleField<RouteDistance<PathKind::Guest>>(world, network, place);
+  return availabilityWith(definition, routes, [&](EntityKey source) {
     return suppliedOffer(world, definition, network, source);
   });
 }
@@ -105,11 +109,11 @@ std::vector<double> availabilityValues(const World &world, const AvailabilityDef
     return found.insert(at, Found{source, suppliedOffer(world, definition, network, source)})
         ->second;
   };
-  std::vector<double> values;
-  values.reserve(places.size());
-  for (const Place &place : places) {
-    values.push_back(availabilityWith(world, definition, network, place, offerOf).Value);
-  }
+  std::vector<double> values(places.size(), 0.0);
+  sampleFieldAtPlaces<RouteDistance<PathKind::Guest>>(
+      world, network, places, [&](size_t index, std::span<const SampledEntry<RouteEntry>> routes) {
+        values[index] = availabilityWith(definition, routes, offerOf).Value;
+      });
   return values;
 }
 

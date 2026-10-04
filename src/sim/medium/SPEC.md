@@ -34,6 +34,8 @@ A source with readable stepped entries is sampled by them, and otherwise by its 
 
 sampleField gives a field's entries at a place on a network, each with its source, in ascending source order. At a node it gives each source's entries at that node, whatever carrier they name. Strictly inside an edge it gives the entries at exactly that place, or what the field's sampleEdge makes of the entries at and between the edge's ends. A place that does not resolve gives nothing, a legitimate sample (principle 2). fieldValue sums a scalar field's entries at a place, with 0.0 where it has none. sampleResolvedField samples the resolved layer alone, for resolvers, since stepped entries are state.
 
+sampleFieldAtPlaces gives a field's entries at each of a list of places in one call, exactly the entries sampleField gives at each, handing each place's entries to a visitor in the list's order. It holds for every field, resolved, stepped, or kept, with or without its own rules, and keeps nothing after it returns. For a field with its own rule for places inside an edge, consecutive places strictly inside one edge share each source's lookups of its entries at the edge's ends and along it, so sampling the places along a line costs lookups for each edge it crosses, and only the rule runs at each place.
+
 A sample costs a few binary searches per source, not a pass over the source's entries. sourceSlot and sourceEntryAtNode read one source's entries only and allocate nothing beyond an index built on first use, so a mover following one source pays for that source alone.
 
 ## Kept fields
