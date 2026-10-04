@@ -1,3 +1,4 @@
+#include "support/connected_parks.h"
 #include "support/park_worlds.h"
 #include "support/route_edits.h"
 #include "support/synthetic_network.h"
@@ -33,6 +34,7 @@
 namespace tpj {
 namespace {
 
+using test::gapWithinReach;
 using test::ParkIntent;
 using test::worldOf;
 
@@ -247,71 +249,55 @@ TEST_CASE("routeEntries gives Next RouteStep{} at a source's anchored nodes, and
 
 constexpr EntityKey SOURCE{5};
 
-TEST_CASE("Among steps achieving a node's distance, Next is on the lowest carrier key, even when "
-          "that step walks toward higher distances") {
-  // Carriers 10 and 20 both join node 1 to the source's node 0 over 5, running opposite ways, so
-  // carrier 10's step walks toward higher distances and carrier 20's toward lower.
+TEST_CASE("Among steps achieving a node's distance, Next is the least by carrier key, then toward "
+          "lower distances before higher, then by lowest From") {
+  // The source anchors node 0. Carriers 10 and 20 both join node 1 to it over 5, running opposite
+  // ways, so carrier 10's step walks toward higher distances and carrier 20's toward lower.
+  // Carrier 30 stops at node 2 at 0 and 8, with node 0 at 4 between them, so node 2 has a step
+  // toward higher distances from 0 and one toward lower from 8. Carrier 40 stops at node 3 at 3
+  // and 9, with node 0 at 0 and 6, so node 3 has two steps toward lower distances, from 3 and from
+  // 9, and one toward higher, all of length 3.
   const Network network{
       {carrierOf(10, {{.Distance = 0.0, .Node = 1}, {.Distance = 5.0, .Node = 0}}),
-       carrierOf(20, {{.Distance = 0.0, .Node = 0}, {.Distance = 5.0, .Node = 1}})},
-      2,
+       carrierOf(20, {{.Distance = 0.0, .Node = 0}, {.Distance = 5.0, .Node = 1}}),
+       carrierOf(30, {{.Distance = 0.0, .Node = 2},
+                      {.Distance = 4.0, .Node = 0},
+                      {.Distance = 8.0, .Node = 2}}),
+       carrierOf(40, {{.Distance = 0.0, .Node = 0},
+                      {.Distance = 3.0, .Node = 3},
+                      {.Distance = 6.0, .Node = 0},
+                      {.Distance = 9.0, .Node = 3}})},
+      4,
       {{.Node = 0, .Entity = SOURCE}}};
   const std::vector<std::optional<RouteEntry>> entries = routeEntries(network, SOURCE);
-  REQUIRE(entries.size() == 2);
-  REQUIRE(entries[1].has_value());
+  REQUIRE(entries.size() == 4);
   CHECK(entries[1] ==
         std::optional<RouteEntry>{RouteEntry{
             .Distance = 5.0, .Next = {.Carrier = EntityKey{10}, .From = 0.0, .To = 5.0}}});
-}
-
-TEST_CASE("Among steps achieving a node's distance on one carrier, Next walks toward lower "
-          "distances before higher, even from a higher stop") {
-  // Carrier 10 stops at node 1 twice, at 0 and 8, with the source's node 0 at 4 between them, so
-  // node 1 has a step toward higher distances from 0 and one toward lower from 8.
-  const Network network{{carrierOf(10, {{.Distance = 0.0, .Node = 1},
-                                        {.Distance = 4.0, .Node = 0},
-                                        {.Distance = 8.0, .Node = 1}})},
-                        2,
-                        {{.Node = 0, .Entity = SOURCE}}};
-  const std::vector<std::optional<RouteEntry>> entries = routeEntries(network, SOURCE);
-  REQUIRE(entries.size() == 2);
-  REQUIRE(entries[1].has_value());
-  CHECK(entries[1] ==
+  CHECK(entries[2] ==
         std::optional<RouteEntry>{RouteEntry{
-            .Distance = 4.0, .Next = {.Carrier = EntityKey{10}, .From = 8.0, .To = 4.0}}});
-}
-
-TEST_CASE("Among steps achieving a node's distance on one carrier in one direction, Next leaves "
-          "from the lowest stop") {
-  // Carrier 10 stops at node 1 at 3 and 9, with the source's nodes 0 and 2 at 0 and 6, so node 1
-  // has two steps toward lower distances, from 3 and from 9, and one toward higher, all of length
-  // 3.
-  const Network network{{carrierOf(10, {{.Distance = 0.0, .Node = 0},
-                                        {.Distance = 3.0, .Node = 1},
-                                        {.Distance = 6.0, .Node = 2},
-                                        {.Distance = 9.0, .Node = 1}})},
-                        3,
-                        {{.Node = 0, .Entity = SOURCE}, {.Node = 2, .Entity = SOURCE}}};
-  const std::vector<std::optional<RouteEntry>> entries = routeEntries(network, SOURCE);
-  REQUIRE(entries.size() == 3);
-  REQUIRE(entries[1].has_value());
-  CHECK(entries[1] ==
+            .Distance = 4.0, .Next = {.Carrier = EntityKey{30}, .From = 8.0, .To = 4.0}}});
+  CHECK(entries[3] ==
         std::optional<RouteEntry>{RouteEntry{
-            .Distance = 3.0, .Next = {.Carrier = EntityKey{10}, .From = 3.0, .To = 0.0}}});
+            .Distance = 3.0, .Next = {.Carrier = EntityKey{40}, .From = 3.0, .To = 0.0}}});
 }
 
 // sampleRouteEdge.
 
 constexpr EntityKey EDGE_CARRIER{7};
 
-// A place 3 from the From end and 5 from the To end of the edge on carrier 7 from 2 to 10.
+constexpr double FROM_OFFSET = 3.0;
+constexpr double TO_OFFSET = 5.0;
+
+// A place FROM_OFFSET from the From end and TO_OFFSET from the To end of the edge on carrier 7 from
+// 2 to 10.
 EdgeSample<RouteEntry> sampleWith(const std::vector<double> &atFrom,
                                   const std::vector<double> &atTo) {
   EdgeSample<RouteEntry> sample;
   sample.Edge = NetworkEdge{
       .Carrier = EDGE_CARRIER, .From = 0, .To = 1, .FromDistance = 2.0, .ToDistance = 10.0};
-  sample.FromOffset = 3.0;
-  sample.ToOffset = 5.0;
+  sample.FromOffset = FROM_OFFSET;
+  sample.ToOffset = TO_OFFSET;
   // Each end's own step, which the sample never gives, since a place inside the edge steps along
   // it.
   const RouteStep elsewhere{.Carrier = EntityKey{99}, .From = 1.0, .To = 0.0};
@@ -329,22 +315,14 @@ constexpr RouteStep TOWARD_TO{.Carrier = EDGE_CARRIER, .From = 2.0, .To = 10.0};
 
 TEST_CASE("sampleRouteEdge gives one entry, the least of each end's entries with that end's "
           "offset added, stepping along the edge toward that end") {
-  SECTION("the To end nearer") {
-    CHECK(sampleRouteEdge(sampleWith({4.0}, {1.0})) ==
-          std::vector<RouteEntry>{{.Distance = 6.0, .Next = TOWARD_TO}});
-  }
-  SECTION("the From end nearer") {
-    CHECK(sampleRouteEdge(sampleWith({1.0}, {4.0})) ==
-          std::vector<RouteEntry>{{.Distance = 4.0, .Next = TOWARD_FROM}});
-  }
-  SECTION("the least of several entries at one end") {
-    CHECK(sampleRouteEdge(sampleWith({9.0, 1.0}, {4.0})) ==
-          std::vector<RouteEntry>{{.Distance = 4.0, .Next = TOWARD_FROM}});
-  }
-  SECTION("an entry at one end only") {
-    CHECK(sampleRouteEdge(sampleWith({}, {4.0})) ==
-          std::vector<RouteEntry>{{.Distance = 9.0, .Next = TOWARD_TO}});
-  }
+  // The To end wins; the From end wins, with the least of several entries there; and only the To
+  // end has an entry.
+  CHECK(sampleRouteEdge(sampleWith({4.0}, {1.0})) ==
+        std::vector<RouteEntry>{{.Distance = 1.0 + TO_OFFSET, .Next = TOWARD_TO}});
+  CHECK(sampleRouteEdge(sampleWith({9.0, 1.0}, {4.0})) ==
+        std::vector<RouteEntry>{{.Distance = 1.0 + FROM_OFFSET, .Next = TOWARD_FROM}});
+  CHECK(sampleRouteEdge(sampleWith({}, {4.0})) ==
+        std::vector<RouteEntry>{{.Distance = 4.0 + TO_OFFSET, .Next = TOWARD_TO}});
 }
 
 TEST_CASE("sampleRouteEdge breaks a tie between the two ends toward the From end") {
@@ -390,25 +368,27 @@ constexpr EntityKey FAR_SHOP{3};
 constexpr EntityKey DEPOT{7};
 
 // Each box faces -x, so its front door lies half its depth toward -x and its back door half its
-// depth toward +x. The near shop's front door is 2 m from guest path 2 and its back door 2 m from
-// backstage path 6. The far shop's front door is 2 m from guest path 4, apart from path 2, and its
-// back door has no backstage line near. The depot's front door is 2 m from backstage path 8, apart
-// from path 6. Guest path 5 is alone and anchors nothing.
+// depth toward +x. The near shop's front door is within reach of guest path 2 and its back door
+// within reach of backstage path 6. The far shop's front door is within reach of guest path 4,
+// apart from path 2, and its back door has no backstage line near. The depot's front door is
+// within reach of backstage path 8, apart from path 6. Guest path 5 is alone and anchors nothing.
 World separatedWorld() {
   const Pose facingWest{.X = 0.0, .Z = 0.0, .FacingX = -1.0, .FacingZ = 0.0};
   const double shopHalf = boxSize(BoxKind::Shop).Depth / 2.0;
   const double depotHalf = boxSize(BoxKind::Depot).Depth / 2.0;
+  const double guestGap = gapWithinReach(PathKind::Guest);
+  const double backstageGap = gapWithinReach(PathKind::Backstage);
   Pose farPose = facingWest;
   farPose.Z = 100.0;
   Pose depotPose = facingWest;
   depotPose.Z = -60.0;
   World world = worldOf(
       ParkIntent{.Entrances = {},
-                 .Paths = {pathOf(2, PathKind::Guest, -shopHalf - 2.0, -10.0, 10.0),
-                           pathOf(4, PathKind::Guest, -shopHalf - 2.0, 90.0, 110.0),
+                 .Paths = {pathOf(2, PathKind::Guest, -shopHalf - guestGap, -10.0, 10.0),
+                           pathOf(4, PathKind::Guest, -shopHalf - guestGap, 90.0, 110.0),
                            pathOf(5, PathKind::Guest, 60.0, 40.0, 60.0),
-                           pathOf(6, PathKind::Backstage, shopHalf + 2.0, -10.0, 10.0),
-                           pathOf(8, PathKind::Backstage, -depotHalf - 2.0, -70.0, -50.0)},
+                           pathOf(6, PathKind::Backstage, shopHalf + backstageGap, -10.0, 10.0),
+                           pathOf(8, PathKind::Backstage, -depotHalf - backstageGap, -70.0, -50.0)},
                  .Boxes = {ParkBox{.Key = NEAR_SHOP, .Kind = BoxKind::Shop, .At = facingWest},
                            ParkBox{.Key = FAR_SHOP, .Kind = BoxKind::Shop, .At = farPose},
                            ParkBox{.Key = DEPOT, .Kind = BoxKind::Depot, .At = depotPose}}});
@@ -598,15 +578,15 @@ constexpr int CYCLES = 60;
 
 // The first edits of every sequence, which reach each case the sequences claim in a corner of the
 // park away from the middle, where the random edits gather. A lone guest path comes first. A
-// second guest path follows, 40 m from it, and then a shop facing the second across a 1 m gap, so
-// its front door is 2.5 m from the line: the shop is a source whose entries reach the second
-// path's nodes and never the first's. A depot with no backstage line near is a box with no
-// connector.
+// second guest path follows, 40 m from it, and then a shop facing the second, clear of it and with
+// its front door within reach of it: the shop is a source whose entries reach the second path's
+// nodes and never the first's. A depot with no backstage line near is a box with no connector.
 std::vector<ParkEdit> openingEdits() {
+  constexpr double SECOND_Z = -60.0;
   return {AddPath{PathKind::Guest, {{-100.0, -100.0}, {-80.0, -100.0}}},
-          AddPath{PathKind::Guest, {{-100.0, -60.0}, {-80.0, -60.0}}},
+          AddPath{PathKind::Guest, {{-100.0, SECOND_Z}, {-80.0, SECOND_Z}}},
           AddBox{BoxKind::Shop, Pose{.X = -90.0,
-                                     .Z = -60.0 + (pathWidth(PathKind::Guest) / 2.0) + 1.0 +
+                                     .Z = SECOND_Z + gapWithinReach(PathKind::Guest) +
                                           (boxSize(BoxKind::Shop).Depth / 2.0),
                                      .FacingX = 0.0,
                                      .FacingZ = -1.0}},

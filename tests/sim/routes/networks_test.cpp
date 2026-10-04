@@ -1,3 +1,4 @@
+#include "support/connected_parks.h"
 #include "support/park_worlds.h"
 
 #include "sim/entity_key.h"
@@ -26,17 +27,13 @@
 namespace tpj {
 namespace {
 
+using test::findCarrier;
+using test::nodesNear;
 using test::ParkIntent;
+using test::pathOf;
+using test::resolvedWorld;
+using test::SLACK;
 using test::worldOf;
-
-// Ground-line distances are sums of rounded steps, so a distance stated from the geometry may
-// differ from the carrier's by rounding, far below the tolerance.
-constexpr double SLACK = 1e-9;
-constexpr double REACH = JUNCTION_TOLERANCE + SLACK;
-
-ParkPath pathOf(uint64_t key, PathKind kind, std::vector<ParkPoint> points) {
-  return ParkPath{.Key = EntityKey{key}, .Kind = kind, .Points = std::move(points)};
-}
 
 ParkPath guest(uint64_t key, std::vector<ParkPoint> points) {
   return pathOf(key, PathKind::Guest, std::move(points));
@@ -44,29 +41,6 @@ ParkPath guest(uint64_t key, std::vector<ParkPoint> points) {
 
 ParkIntent pathsOnly(std::vector<ParkPath> paths) {
   return ParkIntent{.Entrances = {}, .Paths = std::move(paths), .Boxes = {}};
-}
-
-World resolvedWorld(ParkIntent intent) {
-  World world = worldOf(std::move(intent));
-  resolveWorld(world);
-  return world;
-}
-
-const Carrier *findCarrier(const Network &network, EntityKey key) {
-  const auto found = std::ranges::find_if(
-      network.carriers(), [key](const Carrier &carrier) { return carrier.Key == key; });
-  return found == network.carriers().end() ? nullptr : &*found;
-}
-
-// The nodes of the carrier's stops within the tolerance of the distance.
-std::set<uint32_t> nodesNear(const Carrier &carrier, double distance) {
-  std::set<uint32_t> nodes;
-  for (const CarrierStop &stop : carrier.Stops) {
-    if (std::abs(stop.Distance - distance) <= REACH) {
-      nodes.insert(stop.Node);
-    }
-  }
-  return nodes;
 }
 
 // Where two segments meet: a carrier and a distance on each, which may be the same carrier.
@@ -89,40 +63,60 @@ constexpr EntityKey SECOND{2};
 
 // A two-point path's ground line is its chord, since both phantom neighbors lie on it, so a point
 // on it lies at its ground distance from the first point. FIRST runs along z = 0 from x = -10 to
-// x = 10, with a line point at every whole x, so a point (x, 0) is at distance x + 10 on it.
-ParkPath firstLine() { return guest(1, {{-10.0, 0.0}, {10.0, 0.0}}); }
+// x = 10, so a point (x, 0) is at distance x + 10 on it.
+constexpr double FIRST_START = -10.0;
+constexpr double FIRST_END = 10.0;
+ParkPath firstLine() { return guest(1, {{FIRST_START, 0.0}, {FIRST_END, 0.0}}); }
 
-// Its segments cross between line points of both.
+// Its segments cross.
 MeetingCase crossing() {
   return {"a crossing",
           pathsOnly({firstLine(), guest(2, {{0.3, -10.0}, {0.3, 10.0}})}),
           {{FIRST, 10.3, SECOND, 10.0}}};
 }
 
-// The second path's first point was snapped onto the first's line, between its line points.
+// The second path's first point was snapped onto the first's line.
 MeetingCase snapped() {
   return {"a snapped point",
           pathsOnly({firstLine(), guest(2, {{2.5, 0.0}, {2.5, 10.0}})}),
           {{FIRST, 12.5, SECOND, 0.0}}};
 }
 
-// The second line passes through the first's line point (2, 0) between two of its own, so the
-// meeting is at an end of the first's segments that touches the second's without crossing it.
+// The second line passes through one of the first's line points midway between two of its own, so
+// the meeting is at an end of the first's segments that touches the second's without crossing it.
 MeetingCase throughLinePoint() {
+  const std::vector<CarrierPoint> first = groundLine(firstLine().Points);
+  REQUIRE(first.size() >= 3);
+  const CarrierPoint &point = first[first.size() / 2];
+  // The second line laid from the point, and then moved back along itself so that the point falls
+  // midway between two of its line points.
+  const std::vector<ParkPoint> laid{{point.X, point.Z}, {point.X, point.Z + 10.0}};
+  const std::vector<CarrierPoint> second = groundLine(laid);
+  REQUIRE(second.size() >= 3);
+  const std::size_t before = (second.size() / 2) - 1;
+  const double midway = (second[before].Distance + second[before + 1].Distance) / 2.0;
   return {"a line through another's line point",
-          pathsOnly({firstLine(), guest(2, {{2.0, -5.5}, {2.0, 4.5}})}),
-          {{FIRST, 12.0, SECOND, 5.5}}};
+          pathsOnly({firstLine(),
+                     guest(2, {{point.X, point.Z - midway}, {point.X, point.Z + 10.0 - midway}})}),
+          {{FIRST, point.Distance, SECOND, midway}}};
 }
 
 // The second line runs along z = 0 from x = 0.5 to x = 20.5, sharing the stretch from 0.5 to 10
-// with the first. Every line point of either along that stretch lies on the other's line: the
-// first's at whole x and the second's at half x, including the stretch's two ends.
+// with the first. Every line point of either along that stretch lies on the other's line,
+// including the stretch's two ends.
 MeetingCase collinearOverlap() {
-  MeetingCase overlap{
-      "a collinear overlap", pathsOnly({firstLine(), guest(2, {{0.5, 0.0}, {20.5, 0.0}})}), {}};
-  for (int half = 1; half <= 20; ++half) {
-    const double x = 0.5 * half;
-    overlap.Meetings.push_back({FIRST, x + 10.0, SECOND, x - 0.5});
+  constexpr double SECOND_START = 0.5;
+  const ParkPath second = guest(2, {{SECOND_START, 0.0}, {20.5, 0.0}});
+  MeetingCase overlap{"a collinear overlap", pathsOnly({firstLine(), second}), {}};
+  for (const CarrierPoint &point : groundLine(firstLine().Points)) {
+    if (point.X >= SECOND_START) {
+      overlap.Meetings.push_back({FIRST, point.Distance, SECOND, point.X - SECOND_START});
+    }
+  }
+  for (const CarrierPoint &point : groundLine(second.Points)) {
+    if (point.X <= FIRST_END) {
+      overlap.Meetings.push_back({FIRST, point.X - FIRST_START, SECOND, point.Distance});
+    }
   }
   return overlap;
 }
@@ -232,32 +226,60 @@ TEST_CASE("Where two segments meet, each carrier has a stop within the tolerance
   }
 }
 
-TEST_CASE("Every stop but a carrier's first and last lies within the tolerance of a meeting's "
-          "distance on that carrier") {
+// A park and the distances on each path where some line or connector meets it.
+struct KnownStops {
+  const char *Name = "";
+  ParkIntent Intent;
+  std::vector<test::PathMeeting> Meetings;
+};
+
+std::vector<KnownStops> knownStops() {
+  std::vector<KnownStops> parks;
   for (const MeetingCase &meetingCase : meetingCases()) {
-    INFO(meetingCase.Name);
-    const World world = resolvedWorld(meetingCase.Intent);
-    const Network &network = parkNetwork(world, PathKind::Guest);
-    REQUIRE(network.carriers().size() == meetingCase.Intent.Paths.size());
-    for (const Carrier &carrier : network.carriers()) {
-      INFO("carrier " << static_cast<uint64_t>(carrier.Key));
+    KnownStops park{meetingCase.Name, meetingCase.Intent, {}};
+    for (const Meeting &meeting : meetingCase.Meetings) {
+      park.Meetings.push_back({meeting.First, meeting.FirstDistance});
+      park.Meetings.push_back({meeting.Second, meeting.SecondDistance});
+    }
+    parks.push_back(std::move(park));
+  }
+  for (const test::ConnectedPark &connected : test::connectedParks()) {
+    KnownStops park{connected.Name, connected.Intent, connected.Meetings};
+    for (const test::Connection &connection : connected.Connections) {
+      park.Meetings.push_back({connection.Path, connection.PathDistance});
+    }
+    parks.push_back(std::move(park));
+  }
+  return parks;
+}
+
+TEST_CASE("Every stop of a path carrier other than its first and last lies within the tolerance "
+          "of a meeting's or a connection's distance on it") {
+  int interiorStops = 0;
+  for (const KnownStops &park : knownStops()) {
+    INFO(park.Name);
+    const World world = resolvedWorld(park.Intent);
+    for (const ParkPath &path : park.Intent.Paths) {
+      INFO("path " << static_cast<uint64_t>(path.Key));
       std::vector<double> distances;
-      for (const Meeting &meeting : meetingCase.Meetings) {
-        if (meeting.First == carrier.Key) {
-          distances.push_back(meeting.FirstDistance);
-        }
-        if (meeting.Second == carrier.Key) {
-          distances.push_back(meeting.SecondDistance);
+      for (const test::PathMeeting &meeting : park.Meetings) {
+        if (meeting.Path == path.Key) {
+          distances.push_back(meeting.Distance);
         }
       }
-      for (std::size_t index = 1; index + 1 < carrier.Stops.size(); ++index) {
-        const double stop = carrier.Stops[index].Distance;
+      const Carrier *carrier = findCarrier(parkNetwork(world, path.Kind), path.Key);
+      REQUIRE(carrier != nullptr);
+      for (std::size_t index = 1; index + 1 < carrier->Stops.size(); ++index) {
+        ++interiorStops;
+        const double stop = carrier->Stops[index].Distance;
         INFO("stop at " << stop);
-        CHECK(std::ranges::any_of(
-            distances, [stop](double distance) { return std::abs(stop - distance) <= REACH; }));
+        CHECK(std::ranges::any_of(distances, [stop](double distance) {
+          return std::abs(stop - distance) <= JUNCTION_TOLERANCE + SLACK;
+        }));
       }
     }
   }
+  CHECK(interiorStops > 0);
 }
 
 TEST_CASE("A path whose line meets no line of its kind, nor itself, stops only at its two ends, "
@@ -285,13 +307,17 @@ TEST_CASE("A path whose line meets no line of its kind, nor itself, stops only a
   }
 }
 
-// FIRST is crossed by lines 0.5 mm from its start and from its end, which fall into its end stops,
-// and by three lines 0.8 mm apart, whose meetings with it chain past the tolerance from the first.
-// The three lie within the tolerance of each other, so they meet along their whole length too.
+// FIRST is crossed by lines half the tolerance from its start and from its end, which fall into its
+// end stops, and by three lines 0.8 of the tolerance apart, whose meetings with it chain past the
+// tolerance from the first. The three lie within the tolerance of each other, so they meet along
+// their whole length too.
 ParkIntent clusteredMeetings() {
+  constexpr double NEAR_END = JUNCTION_TOLERANCE / 2.0;
+  constexpr double CHAINED = 0.8 * JUNCTION_TOLERANCE;
   ParkIntent intent = pathsOnly({firstLine()});
   uint64_t key = 2;
-  for (const double x : {-9.9995, 0.3, 0.3008, 0.3016, 9.9995}) {
+  for (const double x :
+       {FIRST_START + NEAR_END, 0.3, 0.3 + CHAINED, 0.3 + (2.0 * CHAINED), FIRST_END - NEAR_END}) {
     intent.Paths.push_back(guest(key++, {{x, -5.0}, {x, 5.0}}));
   }
   return intent;

@@ -1,3 +1,4 @@
+#include "support/connected_parks.h"
 #include "support/same_networks.h"
 
 #include "sim/command_queue.h"
@@ -20,6 +21,7 @@
 namespace tpj {
 namespace {
 
+using test::gapWithinReach;
 using test::sameNetwork;
 
 TEST_CASE("A world made with makeParkSchema that has stepped a cycle, and every candidate made "
@@ -80,12 +82,17 @@ std::shared_ptr<const WorldSchema> readingSchema() {
   return schema;
 }
 
-// A guest path, a backstage path, and a shop between them whose doors reach both, so both networks
-// have carriers, junctions, and anchors.
+// A guest path, a shop facing it whose front door reaches it, and a backstage path its back door
+// reaches, each line clear of the shop by more than its half width, so both networks have carriers,
+// junctions, and anchors.
 void queueNetworks(CommandQueue &queue) {
-  queue.push(AddPath{PathKind::Guest, {{0.0, 100.0}, {0.0, 60.0}}});
-  queue.push(AddPath{PathKind::Backstage, {{12.0, 90.0}, {12.0, 70.0}}});
-  queue.push(AddBox{BoxKind::Shop, Pose{6.5, 80.0, -1.0, 0.0}});
+  constexpr double GUEST_X = 0.0;
+  const double shopHalf = boxSize(BoxKind::Shop).Depth / 2.0;
+  const double shopX = GUEST_X + gapWithinReach(PathKind::Guest) + shopHalf;
+  const double backstageX = shopX + shopHalf + gapWithinReach(PathKind::Backstage);
+  queue.push(AddPath{PathKind::Guest, {{GUEST_X, 100.0}, {GUEST_X, 60.0}}});
+  queue.push(AddPath{PathKind::Backstage, {{backstageX, 90.0}, {backstageX, 70.0}}});
+  queue.push(AddBox{BoxKind::Shop, Pose{shopX, 80.0, -1.0, 0.0}});
 }
 
 TEST_CASE("A finisher registered between addRoutes and addDropPreviousNetworks reads no previous "
@@ -149,6 +156,7 @@ TEST_CASE("A finisher registered between addRoutes and addDropPreviousNetworks r
   stepWorld(world, build);
   checkReadIs(before);
   REQUIRE_FALSE(parkNetwork(world, PathKind::Guest).anchoredNodes(EntityKey{3}).empty());
+  REQUIRE_FALSE(parkNetwork(world, PathKind::Backstage).anchoredNodes(EntityKey{3}).empty());
 
   // A path crossing the guest path, which splits its edge, from networks with anchors.
   before = networksOf(world);

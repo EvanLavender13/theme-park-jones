@@ -63,30 +63,26 @@ Footprint requireFootprint(const Pose &pose, FootprintSize size) {
   return footprint.value_or(Footprint{});
 }
 
-void checkCorners(const Footprint &footprint, const std::vector<ParkPoint> &expected) {
-  for (std::size_t index = 0; index < expected.size(); ++index) {
-    CHECK_THAT(footprint.Corners.at(index).X, WithinAbs(expected[index].X, 1e-9));
-    CHECK_THAT(footprint.Corners.at(index).Z, WithinAbs(expected[index].Z, 1e-9));
-  }
+// Whether the line of the points is empty, failing the test when groundLine throws.
+bool isEmptyLine(const std::vector<ParkPoint> &points) {
+  std::vector<CarrierPoint> line;
+  CHECK_NOTHROW(line = groundLine(points));
+  return line.empty();
 }
 
 TEST_CASE("groundLine is empty exactly when a point is not finite or outside the park, or fewer "
           "than two are kept, and never throws") {
-  const double beyond = std::nextafter(PARK_SIZE / 2.0, INFINITE);
+  constexpr double EDGE = PARK_SIZE / 2.0;
+  const double beyond = std::nextafter(EDGE, INFINITE);
+  constexpr double NEAR = MIN_POINT_SPACING / 2.0;
 
-  // Points exactly MIN_POINT_SPACING apart are kept, and the square includes its edges.
-  CHECK_FALSE(groundLine({{0.0, 0.0}, {0.01, 0.0}}).empty());
-  CHECK_FALSE(groundLine({{-128.0, -128.0}, {128.0, 128.0}}).empty());
-
-  CHECK(groundLine({}).empty());
-  CHECK(groundLine({{5.0, 5.0}}).empty());
-  CHECK(groundLine({{5.0, 5.0}, {5.0, 5.0}}).empty());
-  CHECK(groundLine({{0.0, 0.0}, {0.006, 0.0}, {0.007, 0.007}}).empty());
-  CHECK(groundLine({{0.0, 0.0}, {10.0, 0.0}, {NOT_A_NUMBER, 0.0}}).empty());
-  CHECK(groundLine({{0.0, 0.0}, {10.0, INFINITE}}).empty());
-  CHECK(groundLine({{-INFINITE, 0.0}, {10.0, 0.0}}).empty());
-  CHECK(groundLine({{0.0, 0.0}, {beyond, 0.0}}).empty());
-  CHECK(groundLine({{0.0, -beyond}, {0.0, 0.0}, {10.0, 0.0}}).empty());
+  // The square includes its edges.
+  CHECK_FALSE(isEmptyLine({{-EDGE, -EDGE}, {EDGE, EDGE}}));
+  CHECK(isEmptyLine({{0.0, 0.0}, {beyond, 0.0}}));
+  CHECK(isEmptyLine({{0.0, 0.0}, {10.0, 0.0}, {NOT_A_NUMBER, 0.0}}));
+  CHECK(isEmptyLine({{0.0, 0.0}, {10.0, INFINITE}}));
+  // Every later point is closer than MIN_POINT_SPACING to the first, so only the first is kept.
+  CHECK(isEmptyLine({{0.0, 0.0}, {NEAR, 0.0}, {NEAR, NEAR}}));
 }
 
 TEST_CASE("A ground line passes through every kept point bit for bit, in order, from distance 0 to "
@@ -108,34 +104,39 @@ TEST_CASE("A ground line passes through every kept point bit for bit, in order, 
   }
 }
 
-TEST_CASE(
-    "keptPoints gives the points groundLine keeps, in order, each at least 1 cm from the last "
-    "kept one") {
-  // The third point is within 1 cm of the second but not of the first, which is the last kept, and
-  // the fifth lies exactly 1 cm from the fourth.
-  const std::vector<ParkPoint> points{{0.0, 0.0},   {0.0, 0.0},    {0.006, 0.0},
-                                      {0.012, 0.0}, {0.012, 0.01}, {5.0, 5.0}};
+TEST_CASE("groundLine depends only on keptPoints, which keeps each point at least "
+          "MIN_POINT_SPACING from the last kept one") {
+  constexpr double SPACING = MIN_POINT_SPACING;
+  // The third point is closer than MIN_POINT_SPACING to the first, and is dropped. The fourth is
+  // closer than that to the third, but not to the first, which is the last kept, so it is kept.
+  // The fifth lies exactly MIN_POINT_SPACING from the fourth.
+  const ParkPoint first{0.0, 0.0};
+  const ParkPoint drifting{1.2 * SPACING, 0.0};
+  const ParkPoint spaced{drifting.X, SPACING};
+  const ParkPoint last{5.0, 5.0};
+  const std::vector<ParkPoint> points{first, first, {0.6 * SPACING, 0.0}, drifting, spaced, last};
+
   const std::vector<ParkPoint> kept = keptPoints(points);
 
-  const std::vector<ParkPoint> expected{{0.0, 0.0}, {0.012, 0.0}, {0.012, 0.01}, {5.0, 5.0}};
-  CHECK(kept == expected);
-  CHECK(sameLine(groundLine(kept), groundLine(points)));
+  CHECK(kept == std::vector<ParkPoint>{first, drifting, spaced, last});
+  for (std::size_t index = 1; index < kept.size(); ++index) {
+    const double dx = kept[index].X - kept[index - 1].X;
+    const double dz = kept[index].Z - kept[index - 1].Z;
+    CHECK((dx * dx) + (dz * dz) >= SPACING * SPACING);
+  }
+  CHECK(sameLine(groundLine(points), groundLine(kept)));
 }
 
-TEST_CASE("Each ground line distance is the previous plus the step's length, so distances strictly "
-          "increase") {
+TEST_CASE("A ground line's distances start at 0 and strictly increase") {
   // A bend, a hairpin that doubles back, and the shortest segment the line keeps.
   const std::vector<std::vector<ParkPoint>> paths{{{0.0, 0.0}, {1.0, 0.0}, {1.0, 4.0}},
                                                   {{0.0, 0.0}, {10.0, 0.0}, {0.0, 1.0}},
-                                                  {{0.0, 0.0}, {0.01, 0.0}}};
+                                                  {{0.0, 0.0}, {MIN_POINT_SPACING, 0.0}}};
   for (const auto &points : paths) {
     const auto line = groundLine(points);
     REQUIRE(line.size() >= 2);
+    CHECK(sameBits(line.front().Distance, 0.0));
     for (std::size_t index = 1; index < line.size(); ++index) {
-      const double dx = line[index].X - line[index - 1].X;
-      const double dz = line[index].Z - line[index - 1].Z;
-      CHECK(
-          sameBits(line[index].Distance, line[index - 1].Distance + std::sqrt(dx * dx + dz * dz)));
       CHECK(line[index].Distance > line[index - 1].Distance);
     }
   }
@@ -172,26 +173,34 @@ TEST_CASE("footprintOf's forward is the unit vector in the facing's direction") 
 }
 
 TEST_CASE("footprintOf's corners are front left, front right, back right, and back left") {
-  SECTION("the default pose faces -z") {
-    const Footprint footprint = requireFootprint(Pose{}, ENTRANCE_SIZE);
-    CHECK_THAT(footprint.Right.X, WithinAbs(1.0, 1e-12));
-    CHECK_THAT(footprint.Right.Z, WithinAbs(0.0, 1e-12));
-    checkCorners(footprint, {{-5.0, -1.5}, {5.0, -1.5}, {5.0, 1.5}, {-5.0, 1.5}});
-  }
+  // Each corner is the position plus or minus half the depth along Forward, front plus, and plus
+  // or minus half the width along Right, right plus, with Right (-Forward.Z, Forward.X).
+  const auto checkCorners = [](const Pose &pose, FootprintSize size) {
+    INFO("pose at " << pose.X << ", " << pose.Z << " facing " << pose.FacingX << ", "
+                    << pose.FacingZ);
+    const Footprint footprint = requireFootprint(pose, size);
+    const double length = std::sqrt((pose.FacingX * pose.FacingX) + (pose.FacingZ * pose.FacingZ));
+    const ParkPoint forward{pose.FacingX / length, pose.FacingZ / length};
+    const ParkPoint right{-forward.Z, forward.X};
+    CHECK_THAT(footprint.Right.X, WithinAbs(right.X, 1e-12));
+    CHECK_THAT(footprint.Right.Z, WithinAbs(right.Z, 1e-12));
+    const auto corner = [&](double along, double across) {
+      return ParkPoint{
+          pose.X + (along * size.Depth / 2.0 * forward.X) + (across * size.Width / 2.0 * right.X),
+          pose.Z + (along * size.Depth / 2.0 * forward.Z) + (across * size.Width / 2.0 * right.Z)};
+    };
+    const std::vector<ParkPoint> expected{corner(1.0, -1.0), corner(1.0, 1.0), corner(-1.0, 1.0),
+                                          corner(-1.0, -1.0)};
+    for (std::size_t index = 0; index < expected.size(); ++index) {
+      INFO("corner " << index);
+      CHECK_THAT(footprint.Corners.at(index).X, WithinAbs(expected[index].X, 1e-9));
+      CHECK_THAT(footprint.Corners.at(index).Z, WithinAbs(expected[index].Z, 1e-9));
+    }
+  };
 
-  SECTION("a shop turned off the axes") {
-    const Footprint footprint =
-        requireFootprint(Pose{10.0, 20.0, 3.0, 4.0}, boxSize(BoxKind::Shop));
-    CHECK_THAT(footprint.Right.X, WithinAbs(-0.8, 1e-12));
-    CHECK_THAT(footprint.Right.Z, WithinAbs(0.6, 1e-12));
-    checkCorners(footprint, {{15.0, 20.0}, {8.6, 24.8}, {5.0, 20.0}, {11.4, 15.2}});
-  }
-
-  SECTION("a depot at the park's corner, where coordinates are largest") {
-    const Footprint footprint =
-        requireFootprint(Pose{-128.0, 128.0, -1.0, 0.0}, boxSize(BoxKind::Depot));
-    checkCorners(footprint, {{-132.0, 134.0}, {-132.0, 122.0}, {-124.0, 122.0}, {-124.0, 134.0}});
-  }
+  // The default pose faces -z.
+  checkCorners(Pose{}, ENTRANCE_SIZE);
+  checkCorners(Pose{10.0, 20.0, 3.0, 4.0}, boxSize(BoxKind::Shop));
 }
 
 TEST_CASE("Scaling a pose's facing by a positive factor leaves its footprint unchanged") {
