@@ -159,27 +159,25 @@ struct ChosenEdit {
   ParkEdit Edit;
 };
 
-// The edits of warm.park, made from the world as a cycle leaves it. Each requires the state it was
-// chosen for, so a change to warm.park that loses that state fails here rather than quietly
-// checking less.
-std::vector<ChosenEdit> chosenEdits(const World &before) {
-  std::vector<ChosenEdit> edits;
-
-  // Guests standing on the path, some heading to the shop, are carried off a network that loses a
-  // carrier, and route distance and the networks are derived again.
+// Guests standing on the path, some heading to the shop, are carried off a network that loses a
+// carrier, and route distance and the networks are derived again.
+ChosenEdit deletingGuestPath(const World &before) {
   const EntityKey path = guestPathUnderGuestHeadingToShop(before);
   REQUIRE(path != NULL_KEY);
-  edits.push_back(
-      ChosenEdit{"deleting a guest path guests stand on, heading to the shop", DeletePath{path}});
+  return {"deleting a guest path guests stand on, heading to the shop", DeletePath{path}};
+}
 
-  // A new shop is connected to both networks, supplied, and offered.
+// A new shop is connected to both networks, supplied, and offered.
+ChosenEdit addingShop(const World &before) {
   const AddBox add{BoxKind::Shop, SECOND_SHOP};
   const EntityKey added{before.nextKey()};
   REQUIRE(nearestDepot(makeCandidate(before, queueOf(ParkEdit{add})), added).has_value());
-  edits.push_back(ChosenEdit{"adding a shop touching both a guest and the backstage path", add});
+  return {"adding a shop touching both a guest and the backstage path", add};
+}
 
-  // The guests waiting at the shop and heading to it, and the supplies addressed to it, held and
-  // in transit, outlive the box.
+// The guests waiting at the shop and heading to it, and the supplies addressed to it, held and in
+// transit, outlive the box.
+ChosenEdit deletingShop(const World &before) {
   const EntityKey shop = firstShop(before);
   REQUIRE(shop != NULL_KEY);
   REQUIRE(someGuest(before, GuestActivity::Waiting, shop));
@@ -187,8 +185,15 @@ std::vector<ChosenEdit> chosenEdits(const World &before) {
   const FlowAddressed supplies = addressedTo<Supplies>(before, shop);
   REQUIRE_FALSE(supplies.Packets.empty());
   REQUIRE_FALSE(supplies.Stocks.empty());
-  edits.push_back(ChosenEdit{"deleting the shop", DeleteBox{shop}});
+  return {"deleting the shop", DeleteBox{shop}};
+}
 
+// The edits of warm.park, made from the world as a cycle leaves it. Each requires the state it was
+// chosen for, so a change to warm.park that loses that state fails here rather than quietly
+// checking less.
+std::vector<ChosenEdit> chosenEdits(const World &before) {
+  std::vector<ChosenEdit> edits{deletingGuestPath(before), addingShop(before),
+                                deletingShop(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);
     REQUIRE(isAccepted(before, chosen.Edit));
