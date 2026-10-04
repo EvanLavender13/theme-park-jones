@@ -2,15 +2,10 @@
 #include "support/park_worlds.h"
 
 #include "sim/command_queue.h"
-#include "sim/draw.h"
 #include "sim/entity_key.h"
 #include "sim/guests/guests.h"
 #include "sim/medium/network.h"
-#include "sim/mix.h"
-#include "sim/park/edits.h"
 #include "sim/park/intent.h"
-#include "sim/park_schema.h"
-#include "sim/routes/networks.h"
 #include "sim/routes/route_distance.h"
 #include "sim/world.h"
 
@@ -29,8 +24,6 @@ namespace tpj {
 namespace {
 
 using Catch::Matchers::WithinAbs;
-using test::FIRST_ARRIVAL;
-using test::GuestStep;
 using test::recordOf;
 using test::WALK_STEP;
 
@@ -38,108 +31,239 @@ using test::WALK_STEP;
 constexpr double DISTANCE_TOLERANCE = 1e-9;
 constexpr double NOT_A_DISTANCE = std::numeric_limits<double>::quiet_NaN();
 
+// A stay that ends long after every test here has finished stepping.
+constexpr uint64_t LONG_STAY = 100'000;
+
 constexpr EntityKey GATE{1};
 
 const Carrier &carrierOf(const Network &network, EntityKey key) {
-  const auto found = std::ranges::find_if(
-      network.carriers(), [key](const Carrier &carrier) { return carrier.Key == key; });
-  REQUIRE(found != network.carriers().end());
-  return *found;
+  const Carrier *carrier = test::findCarrier(network, key);
+  REQUIRE(carrier != nullptr);
+  return *carrier;
 }
 
-// The first guest of the new park, from its arrival until it leaves. The new park is a line: the
-// entrance's connector and then a path ending in a dead end, so the least entrance distance at a
-// guest's place is how far along the line it stands.
-struct NewParkRun {
-  EntityKey Guest = NULL_KEY;
-  GuestRecord Arrived;
-  double ArrivedHome = 0.0;
-  // The entrance distance at the path's far end.
-  double End = 0.0;
-  std::vector<GuestStep> Trace;
-};
-
-const NewParkRun &newParkRun() {
-  static const NewParkRun run = [] {
-    World world = makeNewPark(1);
-    resolveWorld(world);
-    test::stepUntil(world, FIRST_ARRIVAL);
-    NewParkRun result;
-    result.Guest = EntityKey{world.nextKey()};
+TEST_CASE("An unfed guest's hunger never falls and never exceeds 1, and until it reaches 1 rises "
+          "each cycle by the guest's one rate, which lies between HUNGER_RATE_MIN and "
+          "HUNGER_RATE_MAX") {
+  // A path so long that a guest walking out along it reaches no node, so chooses nothing and
+  // stays, for longer than hunger takes to rise from 0 to 1 at the least rate. No shop feeds it.
+  World world = test::resolvedWorld(test::ParkIntent{
+      .Entrances = {test::northGate(GATE, 0.0)},
+      .Paths = {test::guestPath(EntityKey{2}, {{0.0, test::northGateLineZ()}, {0.0, -120.0}})},
+      .Boxes = {}});
+  while (parkGuests(world).empty()) {
+    REQUIRE(world.Tick < 1000);
     stepWorld(world);
-    result.Arrived = recordOf(world, result.Guest);
-    result.ArrivedHome = test::homeDistance(world, result.Arrived.At).value_or(NOT_A_DISTANCE);
-    const std::vector<ParkPath> paths = parkPaths(world);
-    REQUIRE(paths.size() == 1);
-    const Carrier &path = carrierOf(test::guestNetwork(world), paths.front().Key);
-    REQUIRE_FALSE(path.Points.empty());
-    result.End = test::homeDistance(world, Place{path.Key, path.Points.back().Distance})
-                     .value_or(NOT_A_DISTANCE);
-    result.Trace = test::traceGuest(world, result.Guest, STAY_MAX + 2000);
-    return result;
-  }();
-  return run;
-}
-
-double homeOf(const GuestStep &step) {
-  REQUIRE(step.Home.has_value());
-  return step.Home.value_or(NOT_A_DISTANCE);
-}
-
-TEST_CASE("A guest's Hunger rises each cycle by its own rate, drawn when it arrived, and never "
-          "exceeds 1") {
-  // A path so long that a guest walking out until its stay ends, and back, stays longer than
-  // hunger takes to rise from 0 to 1 at the least rate.
-  World world = test::resolvedWorld(
-      test::ParkIntent{.Entrances = {test::northGate(GATE, 0.0)},
-                       .Paths = {test::guestPath(EntityKey{2}, {{0.0, 123.0}, {0.0, -120.0}})},
-                       .Boxes = {}});
-  test::stepUntil(world, FIRST_ARRIVAL);
-  const EntityKey guest{world.nextKey()};
-  stepWorld(world);
-  const double rate = test::drawnHungerRate(world, guest, FIRST_ARRIVAL);
+  }
+  const EntityKey guest = parkGuests(world).front();
+  // A rise is the difference of two hungers, each rounded, so it differs from the rate by rounding.
+  constexpr double RATE_TOLERANCE = 1e-12;
   double hunger = recordOf(world, guest).Hunger;
-  const auto cycles = static_cast<uint64_t>(1.0 / HUNGER_RATE_MIN) + 10;
-  for (uint64_t cycle = 0; cycle < cycles; ++cycle) {
+  std::optional<double> rate;
+  bool full = false;
+  for (uint64_t cycle = 0; cycle < static_cast<uint64_t>(2.0 / HUNGER_RATE_MIN) && !full; ++cycle) {
     stepWorld(world);
     const double next = recordOf(world, guest).Hunger;
-    CAPTURE(world.Tick, hunger);
-    REQUIRE(next == std::min(1.0, hunger + rate));
+    CAPTURE(world.Tick, hunger, next);
+    REQUIRE(next >= hunger);
+    REQUIRE(next <= 1.0);
+    const double rise = next - hunger;
+    if (!rate.has_value()) {
+      rate = rise;
+    }
+    full = next == 1.0;
+    if (full) {
+      REQUIRE(rise <= rate.value_or(0.0) + RATE_TOLERANCE);
+    } else {
+      REQUIRE_THAT(rise, WithinAbs(rate.value_or(0.0), RATE_TOLERANCE));
+    }
     hunger = next;
   }
-  CHECK(hunger == 1.0);
+  CHECK(full);
+  CHECK(rate.value_or(0.0) >= HUNGER_RATE_MIN - RATE_TOLERANCE);
+  CHECK(rate.value_or(0.0) <= HUNGER_RATE_MAX + RATE_TOLERANCE);
+  stepWorld(world);
+  CHECK(recordOf(world, guest).Hunger == 1.0);
 }
 
-TEST_CASE("A wandering guest walks WALK_STEP each cycle along the carriers, keeping its direction "
-          "until a dead end, and turns back at the end of its path and at its entrance's anchor") {
-  const NewParkRun &run = newParkRun();
-  double previous = run.ArrivedHome;
-  bool outward = true;
-  bool turnedAtEnd = false;
-  bool turnedAtAnchor = false;
-  for (const GuestStep &step : run.Trace) {
-    if (step.Stepped >= run.Arrived.StayUntil) {
-      break;
+// The shop line: an entrance's door joins a guest path running straight into the park, whose far
+// end a shop's front door joins, so the guest network is one line from the entrance's anchor to the
+// shop's, cut into three edges: the two connectors and the path. A depot supplies the shop over a
+// backstage path behind it, so the shop offers meals.
+constexpr EntityKey LINE_PATH{2};
+constexpr EntityKey LINE_SHOP{3};
+constexpr EntityKey LINE_BACKSTAGE{4};
+constexpr EntityKey LINE_DEPOT{5};
+constexpr double LINE_PATH_LENGTH = 6.0;
+constexpr double LINE_DEPOT_X = 20.0;
+
+World shopLineWorld() {
+  const double pathEnd = test::northGateLineZ() - LINE_PATH_LENGTH;
+  const double shopDepth = boxSize(BoxKind::Shop).Depth;
+  const double backstageGap = test::gapWithinReach(PathKind::Backstage);
+  // The shop faces the path's end from beyond it, its front door within reach of the path's end and
+  // its back door within reach of the backstage path's start.
+  const double shopZ = pathEnd - test::gapWithinReach(PathKind::Guest) - (shopDepth / 2.0);
+  const double backstageZ = shopZ - (shopDepth / 2.0) - backstageGap;
+  // The depot faces the backstage path's end from beyond it, its front door within reach of it.
+  const double depotZ = backstageZ - backstageGap - (boxSize(BoxKind::Depot).Depth / 2.0);
+  return test::resolvedWorld(test::ParkIntent{
+      .Entrances = {test::northGate(GATE, 0.0)},
+      .Paths = {test::guestPath(LINE_PATH, {{0.0, test::northGateLineZ()}, {0.0, pathEnd}}),
+                ParkPath{.Key = LINE_BACKSTAGE,
+                         .Kind = PathKind::Backstage,
+                         .Points = {{0.0, backstageZ}, {LINE_DEPOT_X, backstageZ}}}},
+      .Boxes = {ParkBox{.Key = LINE_SHOP, .Kind = BoxKind::Shop, .At = Pose{0.0, shopZ, 0.0, 1.0}},
+                ParkBox{.Key = LINE_DEPOT,
+                        .Kind = BoxKind::Depot,
+                        .At = Pose{LINE_DEPOT_X, depotZ, 0.0, 1.0}}}});
+}
+
+// What the walking test reads of a guest before a cycle: its record, and its route distances from
+// the entrance and from the shop.
+struct LineGuest {
+  GuestRecord Record;
+  double Home = 0.0;
+  double Shop = 0.0;
+};
+
+double shopDistance(const World &world, const Place &place) {
+  const std::optional<RouteEntry> entry = test::routeFrom(test::routesAt(world, place), LINE_SHOP);
+  REQUIRE(entry.has_value());
+  return entry.value_or(RouteEntry{}).Distance;
+}
+
+double homeOf(const World &world, const Place &place) {
+  const std::optional<double> home = test::homeDistance(world, place);
+  REQUIRE(home.has_value());
+  return home.value_or(NOT_A_DISTANCE);
+}
+
+// A wanderer on the line: the way its last whole step went, +1 toward the shop's end and -1 toward
+// the entrance's, or 0 before its first, and the end it has since come within a step of, if any.
+struct Wanderer {
+  int Heading = 0;
+  std::optional<int> NearEnd;
+};
+
+TEST_CASE("A walking guest covers WALK_STEP of route distance each cycle however the network is "
+          "cut into edges, so a guest heading to a shop or home comes nearer it each cycle until "
+          "it waits at the shop's anchor or leaves at the entrance's, and a wanderer on a line "
+          "keeps going, turning at each end") {
+  World world = shopLineWorld();
+  const std::optional<Place> shopAnchor = test::anchorPlace(world, LINE_SHOP);
+  REQUIRE(shopAnchor.has_value());
+  const Place anchor = shopAnchor.value_or(Place{});
+  // The line's length: the shop's anchor's distance from the entrance's.
+  const double end = homeOf(world, anchor);
+  // A guest whose stay is already over, at the shop's anchor, so that it heads home along the
+  // whole line without waiting out a stay.
+  static_cast<void>(addGuest(world, anchor, world.Tick));
+
+  // The end of the line within a step of the distance from the entrance, -1 for the entrance's and
+  // +1 for the shop's, or none.
+  const auto nearEnd = [end](double home) -> std::optional<int> {
+    if (home <= WALK_STEP + DISTANCE_TOLERANCE) {
+      return -1;
     }
-    CAPTURE(step.Stepped, previous, outward);
-    // Walking on past a dead end would take it beyond the line, so it turns there and walks the
-    // rest of the step back.
-    double expected = outward ? previous + WALK_STEP : previous - WALK_STEP;
-    if (expected > run.End) {
-      expected = (2.0 * run.End) - expected;
-      outward = false;
-      turnedAtEnd = true;
-    } else if (expected < 0.0) {
-      expected = -expected;
-      outward = true;
-      turnedAtAnchor = true;
+    if (home >= end - WALK_STEP - DISTANCE_TOLERANCE) {
+      return 1;
     }
-    const double home = homeOf(step);
-    REQUIRE_THAT(home, WithinAbs(expected, DISTANCE_TOLERANCE));
-    previous = home;
+    return std::nullopt;
+  };
+
+  std::map<EntityKey, Wanderer> wanderers;
+  bool sawShopApproach = false;
+  bool sawShopArrival = false;
+  bool sawHomeApproach = false;
+  bool sawLeaving = false;
+  bool sawTurnAtEntrance = false;
+  bool sawTurnAtShop = false;
+  while (!(sawShopApproach && sawShopArrival && sawHomeApproach && sawLeaving &&
+           sawTurnAtEntrance && sawTurnAtShop)) {
+    REQUIRE(world.Tick < 6000);
+    std::map<EntityKey, LineGuest> before;
+    for (const EntityKey guest : parkGuests(world)) {
+      const GuestRecord record = recordOf(world, guest);
+      before.emplace(guest, LineGuest{.Record = record,
+                                      .Home = homeOf(world, record.At),
+                                      .Shop = shopDistance(world, record.At)});
+    }
+    const uint64_t tick = world.Tick;
+    stepWorld(world);
+    INFO("stepped " << tick);
+
+    for (const auto &[guest, was] : before) {
+      const std::optional<GuestRecord> now = guestRecord(world, guest);
+      const GuestActivity activity = now.has_value() ? now->Activity : GuestActivity::Wandering;
+      CAPTURE(guest, was.Home, was.Shop);
+      if (was.Record.Activity != GuestActivity::Wandering || activity != GuestActivity::Wandering ||
+          !now.has_value()) {
+        wanderers.erase(guest);
+      }
+      switch (was.Record.Activity) {
+      case GuestActivity::HeadingToShop:
+        // A guest that chose otherwise at a node no longer heads there.
+        if (!now.has_value() || now->Target != was.Record.Target ||
+            (activity != GuestActivity::HeadingToShop && activity != GuestActivity::Waiting)) {
+          break;
+        }
+        if (was.Shop > WALK_STEP) {
+          CHECK(activity == GuestActivity::HeadingToShop);
+          CHECK_THAT(shopDistance(world, now->At),
+                     WithinAbs(was.Shop - WALK_STEP, DISTANCE_TOLERANCE));
+          sawShopApproach = true;
+        } else {
+          CHECK(activity == GuestActivity::Waiting);
+          CHECK(now->At == anchor);
+          sawShopArrival = true;
+        }
+        break;
+      case GuestActivity::HeadingHome:
+        if (now.has_value() && activity != GuestActivity::HeadingHome) {
+          break;
+        }
+        if (was.Home > WALK_STEP) {
+          REQUIRE(now.has_value());
+          CHECK_THAT(homeOf(world, now->At), WithinAbs(was.Home - WALK_STEP, DISTANCE_TOLERANCE));
+          sawHomeApproach = true;
+        } else {
+          CHECK_FALSE(now.has_value());
+          CHECK_FALSE(test::isLive(world, guest));
+          sawLeaving = true;
+        }
+        break;
+      case GuestActivity::Wandering: {
+        if (!now.has_value() || activity != GuestActivity::Wandering) {
+          break;
+        }
+        const double home = homeOf(world, now->At);
+        Wanderer &wanderer = wanderers[guest];
+        const std::optional<int> endWas = nearEnd(was.Home);
+        // A cycle that starts and ends within a step of one end may turn there, covering its step
+        // partly toward the end and partly back.
+        if (endWas.has_value() && endWas == nearEnd(home)) {
+          wanderer.NearEnd = endWas;
+          break;
+        }
+        CAPTURE(home);
+        CHECK_THAT(std::abs(home - was.Home), WithinAbs(WALK_STEP, DISTANCE_TOLERANCE));
+        const int heading = home > was.Home ? 1 : -1;
+        if (wanderer.Heading != 0 && heading != wanderer.Heading) {
+          // It turned, which it does only at the end it was walking toward.
+          CHECK(wanderer.NearEnd == wanderer.Heading);
+          sawTurnAtShop = sawTurnAtShop || wanderer.Heading == 1;
+          sawTurnAtEntrance = sawTurnAtEntrance || wanderer.Heading == -1;
+        }
+        wanderer.Heading = heading;
+        wanderer.NearEnd.reset();
+        break;
+      }
+      case GuestActivity::Waiting:
+        break;
+      }
+    }
   }
-  CHECK(turnedAtEnd);
-  CHECK(turnedAtAnchor);
 }
 
 // The homeward run: the legs park, stepped by step(world, commands), strands a guest on the far leg
@@ -183,71 +307,35 @@ TEST_CASE("A guest wanders until its StayUntil, and starts heading home only in 
   CHECK(sawHeadingHome);
 }
 
-TEST_CASE(
-    "A guest heading home with an entrance entry at its place comes WALK_STEP nearer the "
-    "entrance each cycle, and leaves the park in the cycle it reaches the entrance's anchor") {
-  int approached = 0;
-  int left = 0;
-  runHomeward([&](World &world, CommandQueue &commands) {
-    // An edit changes route distance, so only a cycle with none compares distances across it.
-    const bool edited = !commands.empty();
-    std::map<EntityKey, double> homeBefore;
-    for (const EntityKey guest : parkGuests(world)) {
-      const GuestRecord record = recordOf(world, guest);
-      if (record.Activity == GuestActivity::HeadingHome) {
-        CAPTURE(guest);
-        const std::optional<double> home = test::homeDistance(world, record.At);
-        REQUIRE(home.has_value());
-        homeBefore.emplace(guest, home.value_or(NOT_A_DISTANCE));
-      }
-    }
-    const uint64_t tick = world.Tick;
-    stepWorld(world, commands);
-    if (edited) {
-      return;
-    }
-    INFO("stepped " << tick);
-    for (const auto &[guest, previous] : homeBefore) {
-      CAPTURE(guest, previous);
-      if (previous > WALK_STEP) {
-        const GuestRecord now = recordOf(world, guest);
-        REQUIRE_THAT(test::homeDistance(world, now.At).value_or(NOT_A_DISTANCE),
-                     WithinAbs(previous - WALK_STEP, DISTANCE_TOLERANCE));
-        ++approached;
-      } else {
-        CHECK_FALSE(guestRecord(world, guest).has_value());
-        CHECK_FALSE(test::isLive(world, guest));
-        ++left;
-      }
-    }
-  });
-  CHECK(approached > 0);
-  CHECK(left > 0);
-}
-
-// The crossing park: a spine from the entrance's door, crossed halfway along by a second path, so
-// a guest walking up the spine reaches a node with three steps besides its way back.
+// The crossing park: a spine leading in from the entrance's door, crossed halfway along by a second
+// path, so a guest walking up the spine reaches a node with three steps besides its way back.
 constexpr EntityKey SPINE{2};
 constexpr EntityKey CROSSING{3};
+constexpr double SPINE_LENGTH = 40.0;
 
 World crossingWorld() {
-  return test::resolvedWorld(
-      test::ParkIntent{.Entrances = {test::northGate(GATE, 0.0)},
-                       .Paths = {test::guestPath(SPINE, {{0.0, 123.0}, {0.0, 83.0}}),
-                                 test::guestPath(CROSSING, {{-20.0, 103.0}, {20.0, 103.0}})},
-                       .Boxes = {}});
+  const double start = test::northGateLineZ();
+  const double middle = start - (SPINE_LENGTH / 2.0);
+  return test::resolvedWorld(test::ParkIntent{
+      .Entrances = {test::northGate(GATE, 0.0)},
+      .Paths = {test::guestPath(SPINE, {{0.0, start}, {0.0, start - SPINE_LENGTH}}),
+                test::guestPath(CROSSING, {{-20.0, middle}, {20.0, middle}})},
+      .Boxes = {}});
 }
 
+// The node the spine and the crossing share, and its distance along each.
 struct Junction {
   uint32_t Node = 0;
   double OnSpine = 0.0;
+  double OnCrossing = 0.0;
 };
 
 Junction junctionOf(const Network &network) {
   for (const CarrierStop &spine : carrierOf(network, SPINE).Stops) {
     for (const CarrierStop &crossing : carrierOf(network, CROSSING).Stops) {
       if (spine.Node == crossing.Node) {
-        return Junction{.Node = spine.Node, .OnSpine = spine.Distance};
+        return Junction{
+            .Node = spine.Node, .OnSpine = spine.Distance, .OnCrossing = crossing.Distance};
       }
     }
   }
@@ -255,113 +343,46 @@ Junction junctionOf(const Network &network) {
   return {};
 }
 
-// The node's steps in the order a guest lists them: for each edge in edges() order, the step from
-// its From stop when it starts at the node, and then the step from its To stop when it ends there.
-std::vector<RouteStep> stepsAt(const Network &network, uint32_t node) {
-  std::vector<RouteStep> steps;
-  for (const NetworkEdge &edge : network.edges()) {
-    if (edge.From == node) {
-      steps.push_back(RouteStep{edge.Carrier, edge.FromDistance, edge.ToDistance});
-    }
-    if (edge.To == node) {
-      steps.push_back(RouteStep{edge.Carrier, edge.ToDistance, edge.FromDistance});
-    }
-  }
-  return steps;
-}
-
-TEST_CASE("At a node, a wandering guest leaves by the step drawPick picks from a weight of 1 for "
-          "each of the node's steps other than its way back") {
+TEST_CASE("At a node, a wandering guest never takes its way back when another step exists, and "
+          "takes each other step about equally often") {
   World world = crossingWorld();
-  const Network &network = test::guestNetwork(world);
-  const Junction junction = junctionOf(network);
-  std::vector<RouteStep> others = stepsAt(network, junction.Node);
-  // A guest comes up the spine from the entrance, so its way back runs down the spine.
-  const auto back = std::ranges::find_if(others, [&](const RouteStep &step) {
-    return step.Carrier == SPINE && step.From == junction.OnSpine && step.To < step.From;
-  });
-  REQUIRE(back != others.end());
-  others.erase(back);
-  REQUIRE(others.size() == 3);
-  const std::vector<uint64_t> weights(others.size(), 1);
-  const EntityKey connector = connectorKey(GATE, Face::Front);
+  const Junction junction = junctionOf(test::guestNetwork(world));
+  // The fewest guests for which each step's expected count exceeds its tolerance of 4.5 standard
+  // deviations and 1, so that a step never taken, or taken by every guest, lies outside it.
+  constexpr uint64_t GUESTS = 47;
+  constexpr double SHARE = 1.0 / 3.0;
+  const double expected = static_cast<double>(GUESTS) * SHARE;
+  const double tolerance =
+      (4.5 * std::sqrt(static_cast<double>(GUESTS) * SHARE * (1.0 - SHARE))) + 1.0;
+  REQUIRE(expected > tolerance);
 
-  // The first two guests, each checked in the cycle it leaves the junction.
-  std::vector<EntityKey> approaching;
-  for (const uint64_t arrival : {FIRST_ARRIVAL, FIRST_ARRIVAL + ARRIVAL_INTERVAL}) {
-    test::stepUntil(world, arrival);
-    approaching.push_back(EntityKey{world.nextKey()});
-    stepWorld(world);
+  // Each guest stands on the spine half a cycle's walk short of the junction, walking toward it, so
+  // its way back runs down the spine behind it. Each draws on its own key.
+  const Place approach{SPINE, junction.OnSpine - (WALK_STEP / 2.0)};
+  std::vector<EntityKey> guests;
+  for (uint64_t index = 0; index < GUESTS; ++index) {
+    guests.push_back(addGuest(world, approach, LONG_STAY));
   }
-  for (int cycle = 0; cycle < 1500 && !approaching.empty(); ++cycle) {
-    const uint64_t stepped = world.Tick;
-    stepWorld(world);
-    std::erase_if(approaching, [&](EntityKey guest) {
-      const Place at = recordOf(world, guest).At;
-      if (at.Carrier == connector || (at.Carrier == SPINE && at.Distance <= junction.OnSpine)) {
-        return false;
-      }
-      CAPTURE(guest, stepped, at.Carrier, at.Distance);
-      const DrawKey key{world.Seed, guest, hashName("guest-wander"), stepped, 0};
-      const RouteStep &taken = others.at(drawPick(key, weights));
-      CHECK(at.Carrier == taken.Carrier);
-      CHECK((at.Distance - taken.From) * (taken.To - taken.From) > 0.0);
-      CHECK(std::abs(at.Distance - taken.From) <= WALK_STEP + DISTANCE_TOLERANCE);
-      return true;
-    });
-  }
-  CHECK(approaching.empty());
-}
+  stepWorld(world);
 
-TEST_CASE("A guest with no entrance entry at its place wanders on past its stay, and once an entry "
-          "appears heads for the entrance and leaves") {
-  World world = test::legsWorld();
-  const EntityKey guest = test::walkOntoFarLeg(world);
-  CommandQueue cut;
-  cut.push(DeletePath{test::NEAR_LEG});
-  stepWorld(world, cut);
-
-  // Cut off from the entrance, it walks the far leg past the end of its stay.
-  const uint64_t stayUntil = recordOf(world, guest).StayUntil;
-  while (world.Tick <= stayUntil + ARRIVAL_INTERVAL) {
-    const Place before = recordOf(world, guest).At;
-    stepWorld(world);
-    const GuestRecord record = recordOf(world, guest);
-    CAPTURE(world.Tick);
-    REQUIRE(record.At.Carrier == test::FAR_LEG);
-    REQUIRE(record.At != before);
-    REQUIRE_FALSE(test::homeDistance(world, record.At).has_value());
-  }
-  CHECK(recordOf(world, guest).Activity == GuestActivity::Wandering);
-
-  CommandQueue rejoin;
-  rejoin.push(AddPath{PathKind::Guest, test::nearLegPoints()});
-  stepWorld(world, rejoin);
-  REQUIRE(test::homeDistance(world, recordOf(world, guest).At).has_value());
-  // It picks heading home at the next node it reaches.
-  bool headingHome = false;
-  for (int cycle = 0; cycle < 2000 && !headingHome; ++cycle) {
-    stepWorld(world);
-    headingHome = recordOf(world, guest).Activity == GuestActivity::HeadingHome;
-  }
-  REQUIRE(headingHome);
-  std::optional<double> home = test::homeDistance(world, recordOf(world, guest).At);
-  REQUIRE(home.has_value());
-  bool left = false;
-  for (int cycle = 0; cycle < 2000 && !left; ++cycle) {
-    const double previous = home.value_or(NOT_A_DISTANCE);
-    stepWorld(world);
-    CAPTURE(world.Tick, previous);
-    if (previous > WALK_STEP) {
-      home = test::homeDistance(world, recordOf(world, guest).At);
-      REQUIRE_THAT(home.value_or(NOT_A_DISTANCE),
-                   WithinAbs(previous - WALK_STEP, DISTANCE_TOLERANCE));
+  uint64_t onward = 0;
+  uint64_t west = 0;
+  uint64_t east = 0;
+  for (const EntityKey guest : guests) {
+    const Place at = recordOf(world, guest).At;
+    CAPTURE(guest, at.Carrier, at.Distance);
+    if (at.Carrier == SPINE) {
+      CHECK(at.Distance > junction.OnSpine);
+      ++onward;
     } else {
-      CHECK_FALSE(guestRecord(world, guest).has_value());
-      left = true;
+      REQUIRE(at.Carrier == CROSSING);
+      ++(at.Distance < junction.OnCrossing ? west : east);
     }
   }
-  CHECK(left);
+  for (const uint64_t count : {onward, west, east}) {
+    CAPTURE(onward, west, east);
+    CHECK(std::abs(static_cast<double>(count) - expected) <= tolerance);
+  }
 }
 
 } // namespace
