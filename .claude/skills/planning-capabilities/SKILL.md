@@ -1,67 +1,80 @@
 ---
 name: planning-capabilities
-description: Use whenever the user wants to plan a capability, a durable quality, discipline, or principle implementation the game deepens over many milestones. Reads project context and the principles, researches prior art, brainstorms with the user one question at a time, names the foundation, maps dependencies and the shared medium the capability speaks, and writes CAPABILITY.md covering the foundation and first milestones. Stops at the brief; does not write milestones, features, or code. Use this even when the capability seems straightforward.
+description: Use whenever the user wants to plan a capability, a durable quality, discipline, or principle implementation the game deepens over many milestones. Reads project context and the principles, researches prior art, and brainstorms with the user one question at a time. Names the foundation, maps dependencies and the shared fields and flows the capability uses, and writes CAPABILITY.md covering the foundation and first milestones. Stops at the brief; does not write milestones, features, or code. Use this even when the capability seems straightforward.
 ---
 
 # Planning Capabilities
 
 ## Purpose
 
-Take a capability concept. Produce CAPABILITY.md defining the quality the capability deepens, its foundation, the fields and flows it speaks, and the first milestones that establish it.
+Take a capability concept. Produce CAPABILITY.md. It defines the quality the capability deepens, its foundation, the fields and flows it uses, and the first milestones that establish it.
 
-A capability is a durable domain, not a finite deliverable. It has a foundation, the first milestones that make it real, and then it deepens indefinitely as later milestones are drawn from the backlog. This skill plans the foundation and the first milestones, not the capability's whole future.
+A capability is a lasting domain, not a finite deliverable. It starts with a foundation, which the first milestones make real. After that it deepens indefinitely, as later milestones are drawn from the backlog. This skill plans the foundation and the first milestones, not the capability's whole future.
 
 ## Naming
 
-Name a capability after a quality it increases, a discipline it practices, or a principle it implements, never after a feature or an object it builds.
+Name a capability after a quality it increases, a discipline it practices, or a principle it implements. Don't name it after a feature or an object it builds.
 
-A quality deepens indefinitely and never reaches done: `legible-simulation`, `effortless-building`, `plausible-operations`. So does the implementation of a principle: `shared-medium` implements principles 3 and 6 and deepens with every new kind of field, flow, and network. A feature or object reaches a done state and then accumulates unrelated milestones: `food-shops`, `coaster-editor`. The first kind is a capability. The second is a feature wearing a capability's name, and it strains the structure by the third milestone added after it feels finished.
+A quality deepens indefinitely and is never done: `legible-simulation`, `effortless-building`, `plausible-operations`. The same is true of a principle's implementation. For example, `shared-medium` implements principles 3 and 6, and it deepens with every new kind of field, flow, and network. A feature or object, such as `food-shops` or `coaster-editor`, reaches a done state and then collects unrelated milestones. The first kind is a capability. The second is a feature named like a capability. It strains the structure by the third milestone added after it feels finished.
 
-A capability named for a principle cites the principle in its Summary, and its foundation criteria include the checks that back the principle (docs/principles.md says which principles can be violated by code).
+If a capability is named for a principle, cite the principle in its Summary. Its foundation criteria must include the checks that back the principle. docs/principles.md says which principles code can violate.
 
-An engineering capability deepens a property of the software that a player would not notice missing if the machine were infinitely fast and the code never changed again, such as performance or code structure: `sound-architecture` (decision 0028). It is named after that property. Its Medium section says it introduces no fields or flows. Its foundation criteria are checks it owns, and its work may change code in any module only if observable behavior does not change: existing tests pass unchanged, tpj_scenarios's output is identical before and after where the simulation is touched (decision 0030), and a public contract changes only with its module's SPEC.md.
+An engineering capability deepens a property of the software that a player would not miss if the machine were infinitely fast and the code never changed again. Performance and code structure are examples, as in `sound-architecture` (decision 0028). Name it after that property. Its Medium section says it introduces no fields or flows. Its foundation criteria are checks it owns. Its work may change code in any module, but only if observable behavior does not change:
 
-Test the name before committing it: can a tenth milestone land inside it two years from now without the name feeling wrong? If yes, the name is durable. If the name implies a finish line, rework it.
+- Existing tests pass unchanged.
+- Where the simulation is touched, tpj_scenarios's output is identical before and after (decision 0030).
+- A public contract changes only together with its module's SPEC.md.
 
-Content-heavy domains need the same treatment. A catalog of shops or rides grows by accreting instances, which is not the same as deepening a quality. Name the capability after the quality the content serves.
+Test the name before you commit to it. Ask whether a tenth milestone could land in it two years from now without the name feeling wrong. If yes, the name will last. If the name implies a finish line, rework it.
+
+Treat content-heavy domains the same way. A catalog of shops or rides grows by adding instances, which is not the same as deepening a quality. Name the capability after the quality the content serves.
 
 ## Hard gate
 
 Do not invoke a planning or implementing skill until the user has approved CAPABILITY.md. Do not write a MILESTONE.md, code, or scaffolding. Even a small capability gets a brief.
 
-`researching`, `maintaining-backlog`, and `reviewing` are the only callable skills from here: `researching` to retain research at this node, `maintaining-backlog` only to deposit speculative items, and `reviewing` for the review before approval.
+From here you may call only three skills:
+
+- `researching`, to keep research at this node.
+- `maintaining-backlog`, only to deposit speculative items.
+- `reviewing`, for the review before approval.
 
 ## Checklist
 
-Create a task for each item. Complete in order.
+Create a task for each item. Complete them in order.
 
-1. Explore project context: read docs/principles.md, related files in plans/ including any slice that names this capability as a member, the SPEC.md of modules the capability touches, relevant decision records, and recent commits. Check whether the concept deepens an existing capability rather than starting a new one.
+1. Explore the project context. Read docs/principles.md and the related files in plans/, including any slice that names this capability as a member. Also read the SPEC.md of the modules the capability touches, the relevant decision records, and recent commits. Check whether the concept deepens an existing capability instead of starting a new one.
 2. Ask clarifying questions, one at a time, preferring multiple choice. Cover purpose, constraints, foundation criteria, and the boundary of the quality this capability owns.
-3. Name the capability by the Naming rule above. The slug fixes the node's path, so name before researching.
-4. Research prior art via the `researching` skill. It writes findings to plans/<capability-slug>/RESEARCH.md. Return to step 2 if the findings raise new questions.
+3. Name the capability using the Naming rules above. The slug sets the node's path, so name it before researching.
+4. Research prior art with the `researching` skill. It writes findings to plans/<capability-slug>/RESEARCH.md. If the findings raise new questions, return to step 2.
 5. Propose two or three approaches, each with trade-offs and a recommendation.
-6. Map the medium: which fields and flows the capability introduces, which it samples or draws from other capabilities, and which it emits for others. Apply the principles gate from `planning-overview`.
-7. Name the foundation: the smallest version that establishes the domain and produces value. It becomes the first milestone or milestones. When a slice names this capability as a member, the member milestone is among them and delivers the share the slice assigns.
-8. Map dependencies. Order foundation milestones so the ones others build on come first.
-9. Separate foundation from backlog. Commit the milestones that establish the foundation; everything beyond goes to `maintaining-backlog`.
+6. Map the medium. List the fields and flows the capability introduces, the ones it samples or draws from other capabilities, and the ones it emits for others. Apply the principles gate from `planning-overview`.
+7. Name the foundation: the smallest version that establishes the domain and produces value. It becomes the first milestone or milestones. If a slice names this capability as a member, include the member milestone among them, delivering the share the slice assigns.
+8. Map dependencies. Order the foundation milestones so the ones others build on come first.
+9. Separate the foundation from the backlog. Commit the milestones that establish the foundation, and send everything beyond them to `maintaining-backlog`.
 10. Write CAPABILITY.md at plans/<capability-slug>/CAPABILITY.md in the format below.
-11. Self-review for placeholders, contradictions, foundation criteria that imply a finish line, scope that reaches into another quality, and interactions that bypass the medium. Fix inline.
-12. Review: stage CAPABILITY.md and RESEARCH.md, then dispatch the reviewer via `reviewing`, with SLICE.md as context when a slice names this capability. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
+11. Self-review, and fix problems inline. Look for:
+    - Placeholders.
+    - Contradictions.
+    - Foundation criteria that imply a finish line.
+    - Scope that reaches into another quality.
+    - Interactions that bypass the medium.
+12. Review. Stage CAPABILITY.md and RESEARCH.md, then dispatch the reviewer with `reviewing`. If a slice names this capability, give it SLICE.md as context. Handle the findings as `reviewing` describes for planning briefs. Fix Minor findings and settled Major findings yourself. Bring the user only the Major findings that need a design choice, and report the rest in one line.
 13. Ask the user to approve the brief.
 
 ## Process notes
 
-One question per message. Each answer changes which question comes next.
+Ask one question per message. Each answer changes which question comes next.
 
 Search by problem, not by skill name: "guest pathfinding in park simulations", "desire paths from foot traffic", "procedural building massing from context".
 
-Plan to the next loop only. Cascading uncertainty invalidates anything committed beyond the first one or two milestones.
+Plan only to the next loop. Uncertainty compounds, and it invalidates anything committed beyond the first one or two milestones.
 
-No completed state. Write foundation criteria that indicate the domain is established and ready to deepen, not success criteria that imply completion.
+Don't define a completed state. Write foundation criteria that show the domain is established and ready to deepen. Don't write success criteria that imply completion.
 
-Weak foundations fail the brief. A foundation that produces nothing on its own is too abstract; suggest splitting.
+A weak foundation fails the brief. If the foundation produces nothing on its own, it is too abstract; suggest splitting it.
 
-Stay inside the quality. Work that deepens a different quality belongs to a different capability; name it and hand it back rather than absorbing it.
+Stay inside the quality. Work that deepens a different quality belongs to a different capability. Name that capability and hand the work back instead of absorbing it.
 
 ## Output format
 
@@ -74,7 +87,7 @@ One paragraph. The quality, discipline, or principle this capability deepens, an
 
 ## Foundation criteria
 
-Concrete, observable conditions that indicate the foundation is established. They mark readiness to deepen, not a finish line.
+Concrete, observable conditions that show the foundation is established. They mark readiness to deepen, not a finish line.
 
 ## Medium
 
@@ -94,7 +107,7 @@ The smallest version of this capability that establishes the domain and produces
 
 ## Milestones
 
-The foundation milestones plus the first deepening milestones, ordered. Each entry: slug, one-sentence description, dependencies.
+The foundation milestones plus the first deepening milestones, in order. Each entry gives a slug, a one-sentence description, and dependencies.
 
 1. `<milestone-slug>`: One sentence. Depends on: none.
 2. `<milestone-slug>`: One sentence. Depends on: milestone 1.
@@ -111,7 +124,7 @@ Each with what could resolve it.
 
 ## Research notes
 
-Brief. Cite by URL or filename; depth lives in RESEARCH.md.
+Brief. Cite by URL or filename; the details go in RESEARCH.md.
 ```
 
 ## Next step

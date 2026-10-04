@@ -1,6 +1,6 @@
 ---
 name: planning-features
-description: Use whenever the user wants to plan a feature inside an approved milestone. Reads the parent MILESTONE.md, the principles, and the module specs the feature touches, explores the code, researches implementation patterns, brainstorms with the user one question at a time, and writes FEATURE.md (the contract: observable criteria and the few tests the feature adds) and PLAN.md (spec, interface, and implementation tasks the implementer follows without further design decisions). Stops at the plan; does not write code or invoke implementing-features. Use this even for small features.
+description: Use whenever the user wants to plan a feature inside an approved milestone. Reads the parent MILESTONE.md, the principles, and the module specs the feature touches, explores the code, researches implementation patterns, and brainstorms with the user one question at a time. Writes FEATURE.md (the contract: observable criteria and the few tests the feature adds) and PLAN.md (spec, interface, and implementation tasks the implementer can follow without making further design decisions). Stops at the plan; does not write code or invoke implementing-features. Use this even for small features.
 ---
 
 # Planning Features
@@ -9,56 +9,80 @@ description: Use whenever the user wants to plan a feature inside an approved mi
 
 Take one feature from a milestone brief. Produce two artifacts:
 
-- FEATURE.md, defining what the feature does as the player and other modules see it, how each criterion is confirmed, and the few tests it adds.
-- PLAN.md, with bite-sized tasks the implementer can follow without making design decisions.
+- FEATURE.md says what the feature does as the player and other modules see it, how each criterion is confirmed, and the few tests it adds.
+- PLAN.md has bite-sized tasks the implementer can follow without making design decisions.
 
 ## Hard gate
 
 Do not write code. Do not scaffold files. Do not invoke `implementing-features`. The parent MILESTONE.md must exist at plans/<capability-slug>/<milestone-slug>/MILESTONE.md.
 
-`researching`, `maintaining-backlog`, and `reviewing` are the only callable skills from here: `researching` to retain research at this node, `maintaining-backlog` to deposit speculative items and to drop items this feature draws from or supersedes, and `reviewing` for the review before approval.
+From here you may call only three skills:
+
+- `researching`, to keep research at this node.
+- `maintaining-backlog`, to deposit speculative items and to drop items this feature draws from or supersedes.
+- `reviewing`, for the review before approval.
 
 ## Checklist
 
-Create a task for each item. Complete in order.
+Create a task for each item. Complete them in order.
 
 1. Read the parent MILESTONE.md in full and confirm which feature you are planning.
-2. Read the grandparent CAPABILITY.md and confirm scope alignment.
-3. Explore related code: docs/principles.md, the SPEC.md of every module the feature touches, and relevant decision records. Read in full every file the feature will modify, and the code each criterion's setup depends on. Identify patterns to follow.
-4. Reconcile the backlog: drop the item this feature draws from, and any item it supersedes, via `maintaining-backlog`.
-5. Research implementation patterns via the `researching` skill. It writes findings to plans/<capability-slug>/<milestone-slug>/<feature-slug>/RESEARCH.md.
+2. Read the grandparent CAPABILITY.md and confirm the feature fits its scope.
+3. Explore related code. Read docs/principles.md, the SPEC.md of every module the feature touches, and the relevant decision records. Read in full every file the feature will modify, and the code that each criterion's setup depends on. Identify patterns to follow.
+4. Reconcile the backlog with `maintaining-backlog`. Drop the item this feature draws from, and any item it supersedes.
+5. Research implementation patterns with the `researching` skill. It writes findings to plans/<capability-slug>/<milestone-slug>/<feature-slug>/RESEARCH.md.
 6. Ask clarifying questions, one at a time. Cover acceptance criteria, edge cases, and integration boundaries.
-7. Name the simplest version that works. Strip polish, edge cases, and nice-to-haves and send them to `maintaining-backlog`.
-8. Map the medium: the fields and flows the feature samples, emits, draws, or supplies. State the feature registers is covered by the park world checks once a park file holds it; name that park file. Apply the principles gate from `planning-overview`.
-9. Draft the spec change: the exact sentences to add or change in each affected SPEC.md, stating observable behavior only in the shape docs/conventions.md gives, and the public interface (header declarations) the feature exposes. How the behavior is achieved goes in PLAN.md.
-10. Place each behavior the feature adds, under decision 0027: the module and component that own it, and why. A behavior that fits no existing component gets a new one. src/app/main.cpp and src/scenarios/main.cpp take no new concern until sound-architecture restructures them; a feature that must touch one says what it adds there, and that it is composition only.
-11. List files to touch, with specific paths, each marked create or modify.
-12. Decompose into bite-sized tasks, each one action of two to five minutes, in the task structure below.
+7. Name the simplest version that works. Strip polish, edge cases, and nice-to-haves, and send them to `maintaining-backlog`.
+8. Map the medium: the fields and flows the feature samples, emits, draws, or supplies. Any state the feature registers is covered by the park world checks once a park file holds it. Name that park file. Apply the principles gate from `planning-overview`.
+9. Draft the spec change. Write the exact sentences to add or change in each affected SPEC.md. State observable behavior only, in the shape docs/conventions.md gives. Also draft the public interface (header declarations) the feature exposes. How the behavior is achieved goes in PLAN.md.
+10. Place each behavior the feature adds, following decision 0027. Name the module and component that own it, and say why. If a behavior fits no existing component, give it a new one. Don't add a new concern to src/app/main.cpp or src/scenarios/main.cpp until sound-architecture restructures them. If a feature must touch one of them, say what it adds there and that it is composition only.
+11. List the files to touch, with specific paths. Mark each one create or modify.
+12. Break the work into bite-sized tasks, each one action of two to five minutes, using the task structure below.
 13. Write FEATURE.md at plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md.
 14. Write PLAN.md at the same path.
-15. Self-review: every acceptance criterion is observable and names how it is confirmed; every listed test is one docs/testing.md allows a feature to add; every spec statement the feature adds is observable behavior, not implementation; every task has exact paths, exact commands, and expected outputs; the Placement section places every behavior the tasks add; every claim about existing code, such as what a function does, how a test reaches its state, or what a command prints, is checked by reading that code, and each read-only command is run, with its Expected line copied from what it printed. Fix inline.
-16. Review: stage FEATURE.md, PLAN.md, and RESEARCH.md, then dispatch the reviewer via `reviewing`, with MILESTONE.md, the SPEC.md of every module the feature touches, and docs/principles.md as context. Handle the findings as `reviewing` describes for planning briefs: fix Minor ones and settled Major ones directly, bring the user only Major findings that need a design choice, and report the rest in one line.
+15. Self-review, and fix problems inline. Check that:
+    - Every acceptance criterion is observable and names how it is confirmed.
+    - Every listed test is one that docs/testing.md allows a feature to add.
+    - Every spec statement the feature adds is observable behavior, not implementation.
+    - Every task has exact paths, exact commands, and expected outputs.
+    - The Placement section places every behavior the tasks add.
+    - Every claim about existing code has been checked by reading that code. This includes what a function does, how a test reaches its state, and what a command prints. Run each read-only command, and copy its Expected line from what it printed.
+16. Review. Stage FEATURE.md, PLAN.md, and RESEARCH.md, then dispatch the reviewer with `reviewing`. Give it MILESTONE.md, the SPEC.md of every module the feature touches, and docs/principles.md as context. Handle the findings as `reviewing` describes for planning briefs. Fix Minor findings and settled Major findings yourself. Bring the user only the Major findings that need a design choice, and report the rest in one line.
 17. Ask the user to approve both artifacts.
 
 ## Process notes
 
-Assume the implementer has no project context. Write paths and commands in full. Do not say "add validation" when you can write the validation itself.
+Assume the implementer has no project context. Write paths and commands in full. Don't write "add validation" when you can write the validation itself.
 
-Criteria state what the feature does as the player or another module observes it, each with how it is confirmed: by playing (say what to do and what to see), by a `--capture` run, by `tpj_scenarios --compare` showing the simulation unchanged, by a check the implementer runs with its command and expected output, or by a listed test. A feature needs a handful; more than about eight means the feature is too big or its criteria are listing examples.
+Write each criterion as what the feature does as the player or another module observes it. Say how each one is confirmed:
 
-Tests follow docs/testing.md. A feature lists a test only to reproduce a bug it fixes, or as an integration test of a consequence across modules it exists to make, stated as cause and effect, and most features list none. The `test-writer` agent writes the listed tests in a separate pass without reading PLAN.md, so each entry in the Tests section says what to set up, what to change, and what difference to expect. PLAN.md contains no test code.
+- By playing. Say what to do and what to see.
+- By a `--capture` run.
+- By `tpj_scenarios --compare` showing the simulation unchanged.
+- By a check the implementer runs. Give its command and expected output.
+- By a listed test.
 
-Order of work inside PLAN.md: spec tasks first (update SPEC.md), then interface tasks (public headers with stub definitions that compile, so any listed tests can be written against them), then the test pass (one task that says to run it, no content; none when no tests are listed), then implementation tasks, then the commit.
+A feature needs a handful of criteria. More than about eight means the feature is too big, or its criteria are listing examples.
 
-Every PLAN.md has a Placement section. The pre-commit hook refuses a commit that adds a PLAN.md without a line reading "## Placement", and the reviewer judges what the section says.
+Tests follow docs/testing.md. List a test only to reproduce a bug the feature fixes, or as an integration test of a cross-module consequence the feature exists to make. State that test as cause and effect. Most features list no tests. The `test-writer` agent writes the listed tests in a separate pass without reading PLAN.md. So each entry in the Tests section must say what to set up, what to change, and what difference to expect. Don't put test code in PLAN.md.
 
-Graybox first. When a feature combines mechanics and presentation, deliver mechanics first and add presentation in later tasks.
+Order the work in PLAN.md like this:
 
-One commit per feature. The final task ends with the feature's single commit via the `commit-hygiene` skill. No other task commits.
+1. Spec tasks, which update SPEC.md.
+2. Interface tasks. These add public headers with stub definitions that compile, so the listed tests can be written against them.
+3. The test pass. This is one task that says to run it, with no content. Leave it out when no tests are listed.
+4. Implementation tasks.
+5. The commit.
 
-One concept per task. A task that combines two unrelated changes hides a dependency. Split it.
+Every PLAN.md has a Placement section. The pre-commit hook refuses a commit that adds a PLAN.md without a line reading "## Placement". The reviewer judges what the section says.
 
-Defer everything optional. Anything that does not contribute to acceptance criteria goes in FEATURE.md's Out of scope section and into the backlog.
+Graybox first. When a feature combines mechanics and presentation, deliver the mechanics first and add presentation in later tasks.
+
+Make one commit per feature. The final task ends with the feature's single commit, made with the `commit-hygiene` skill. No other task commits.
+
+Put one concept in each task. A task that combines two unrelated changes hides a dependency, so split it.
+
+Defer everything optional. Anything that doesn't contribute to the acceptance criteria goes in FEATURE.md's Out of scope section and into the backlog.
 
 ## Task structure
 
@@ -79,7 +103,7 @@ Run: `exact command`
 Expected: <exact expected output>
 ```
 
-Implementation tasks verify with the narrowest check that covers them: the windows-debug build of the targets the task changes, a run of the app or a `--capture`, a `tpj_scenarios --compare`, or the listed tests, run directly with a filter. The full windows-debug build, its ctest run, and `scripts/tidy.sh` run once, when the feature's acceptance criteria are confirmed (decision 0030).
+Verify each implementation task with the narrowest check that covers it. That is one of these: the windows-debug build of the targets the task changes, a run of the app or a `--capture`, a `tpj_scenarios --compare`, or the listed tests run directly with a filter. Run the full windows-debug build, its ctest run, and `scripts/tidy.sh` once, when you confirm the feature's acceptance criteria (decision 0030).
 
 ## FEATURE.md format
 
@@ -92,11 +116,11 @@ One paragraph. What this feature does.
 
 ## Acceptance criteria
 
-What the feature does as the player or another module observes it, each with how it is confirmed: play, capture, scenarios comparison, a check with its command, or a listed test.
+What the feature does as the player or another module observes it. Each criterion says how it is confirmed: play, capture, scenarios comparison, a check with its command, or a listed test.
 
 ## Tests
 
-The tests the feature adds, each a bug reproduction or an integration test of a consequence across modules, stated as setup, change, and expected difference. Usually "None."
+The tests the feature adds. Each is a bug reproduction or an integration test of a cross-module consequence, stated as setup, change, and expected difference. Usually "None."
 
 ## Medium
 
@@ -116,7 +140,7 @@ Code, libraries, content, or sibling features required.
 
 ## Out of scope
 
-What this feature deliberately does not do. Items that remain valuable belong in the backlog.
+What this feature deliberately does not do. Items that still have value go in the backlog.
 
 ## Open questions
 
@@ -130,7 +154,7 @@ Each with what could resolve it.
 
 ## Goal
 
-One sentence describing what this plan delivers.
+One sentence saying what this plan delivers.
 
 ## Approach
 
