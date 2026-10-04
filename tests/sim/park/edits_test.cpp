@@ -5,7 +5,6 @@
 #include "sim/park/edits.h"
 #include "sim/park/geometry.h"
 #include "sim/park/intent.h"
-#include "sim/park_schema.h"
 #include "sim/schema.h"
 #include "sim/world.h"
 
@@ -13,10 +12,7 @@
 #include <entt/core/type_info.hpp>
 
 #include <algorithm>
-#include <cstddef>
-#include <limits>
 #include <stdint.h>
-#include <string>
 #include <vector>
 
 namespace tpj {
@@ -175,15 +171,6 @@ TEST_CASE("An accepted DeletePath or DeleteBox destroys the entity it names, and
   CHECK(world.nextKey() == before.nextKey());
 }
 
-// Marking resolution pending belongs to the cycle and makeCandidate, which apply the command.
-template <typename Command>
-void checkLeavesResolutionAlone(const World &resolved, const Command &command) {
-  World world = copyWorld(resolved);
-  REQUIRE(isAccepted(world, command));
-  applyCommand(world, command);
-  CHECK_FALSE(world.isResolvePending());
-}
-
 template <typename Command>
 void checkRefusalChangesNothing(const World &before, const Command &command) {
   World world = copyWorld(before);
@@ -234,17 +221,6 @@ TEST_CASE("Commands queued for a cycle are each applied exactly when isAccepted 
   stepWorld(world, queue);
 
   checkJudgedInTurn(world, before);
-}
-
-TEST_CASE("Commands given to makeCandidate are each applied exactly when isAccepted is true on the "
-          "candidate as it is when they apply") {
-  World world = editedPark();
-  resolveWorld(world);
-  const CommandQueue queue = editsJudgedInTurn(world);
-
-  const World candidate = makeCandidate(world, queue);
-
-  checkJudgedInTurn(candidate, world);
 }
 
 TEST_CASE("A command naming no intent of the kind it acts on is refused, without throwing") {

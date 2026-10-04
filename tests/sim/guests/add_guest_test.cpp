@@ -9,13 +9,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
-#include <cstddef>
-#include <iterator>
-#include <optional>
 #include <stdexcept>
 #include <stdint.h>
-#include <vector>
 
 namespace tpj {
 namespace {
@@ -100,15 +95,6 @@ TEST_CASE("addGuest throws std::invalid_argument for a place that does not resol
     CHECK(worldsEqual(world, before));
     CHECK(world.nextKey() == before.nextKey());
   }
-}
-
-TEST_CASE("addGuest with the same arguments on two equal worlds leaves them equal") {
-  World one = worldAtAddTick();
-  World other = copyWorld(one);
-  REQUIRE(worldsEqual(one, other));
-  addGuest(one, INSIDE_WALK, LONG_STAY);
-  addGuest(other, INSIDE_WALK, LONG_STAY);
-  CHECK(worldsEqual(one, other));
 }
 
 } // namespace

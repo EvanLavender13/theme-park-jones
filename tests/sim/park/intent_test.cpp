@@ -10,7 +10,6 @@
 #include <bit>
 #include <cstddef>
 #include <stdint.h>
-#include <string>
 #include <string_view>
 #include <vector>
 
@@ -74,50 +73,6 @@ bool sameBoxes(const std::vector<ParkBox> &left, const std::vector<ParkBox> &rig
     }
   }
   return true;
-}
-
-// Intent of every kind, both path kinds and both box kinds, holding finite values a save spells
-// unusually (negative zero, the smallest subnormal, the largest double) and degenerate intent: a
-// path of repeated points leaving the park, a path of one point, a path of none, a box and an
-// entrance with a zero facing, and positions outside the park.
-constexpr std::string_view INTENT_SAVE = "tpj-park 1\n"
-                                         "seed 99\n"
-                                         "tick 12\n"
-                                         "next-key 9\n"
-                                         "\n"
-                                         "[entrance]\n"
-                                         "1 x=0 z=126.5 facing-x=0 facing-z=-1\n"
-                                         "8 x=-0 z=-129 facing-x=0 facing-z=0\n"
-                                         "\n"
-                                         "[path]\n"
-                                         "2 kind=guest points=[{x=0.1 z=-3.25} {x=17 z=4} "
-                                         "{x=17 z=4} {x=300 z=-128}]\n"
-                                         "3 kind=backstage points=[{x=5e-324 z=-0}]\n"
-                                         "4 kind=guest points=[]\n"
-                                         "\n"
-                                         "[box]\n"
-                                         "5 kind=shop x=-20.5 z=60 facing-x=3 facing-z=4\n"
-                                         "6 kind=depot x=1e+300 z=-128 facing-x=0 facing-z=0\n"
-                                         "7 kind=shop x=-0 z=0 facing-x=-1.7976931348623157e+308 "
-                                         "facing-z=1e-310\n";
-
-TEST_CASE("A save of finite intent of every kind loads, saves to identical text, and loads equal") {
-  const auto schema = makeParkSchema();
-  const World loaded = loadWorld(schema, INTENT_SAVE);
-  const std::string saved = saveWorld(loaded);
-  CHECK(saved == INTENT_SAVE);
-
-  const World reloaded = loadWorld(schema, saved);
-  CHECK(worldsEqual(reloaded, loaded));
-}
-
-TEST_CASE("A world of degenerate finite intent copies and hashes as a legitimate world") {
-  const World loaded = loadWorld(makeParkSchema(), INTENT_SAVE);
-  CHECK_NOTHROW(validateWorld(loaded));
-
-  const World copy = copyWorld(loaded);
-  CHECK(worldsEqual(copy, loaded));
-  CHECK(hashWorld(copy) == hashWorld(loaded));
 }
 
 // Three entities of each kind, so that removing the first reorders EnTT's storage, which swaps the

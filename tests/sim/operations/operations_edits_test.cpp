@@ -42,9 +42,6 @@ std::string routesText() {
 }
 
 constexpr int EDITS = 60;
-// Saving, loading, and stepping a second world every cycle is costly, so the save test runs fewer
-// edits.
-constexpr int SAVE_EDITS = 20;
 // Each edit is followed by fewer cycles than this with no command, so orders reach depots and
 // shipments reach shops between edits.
 constexpr uint64_t IDLE_CYCLES = 20;
@@ -64,12 +61,6 @@ struct GuestTurn {
   std::vector<EntityKey> Leaving;
   // Each new guest's shop and walking delay.
   std::vector<std::pair<EntityKey, uint32_t>> Visits;
-};
-
-// A cycle of the sequence: the guests' turn before it, and the edit it applies, if any.
-struct Cycle {
-  GuestTurn Turn;
-  std::optional<ParkEdit> Edit;
 };
 
 GuestTurn drawTurn(test::RouteEditDraws &draws, const World &world,
@@ -119,12 +110,9 @@ std::vector<EntityKey> takeTurn(World &world, const GuestTurn &turn) {
 // backstage path, so orders flow from the start, with synthetic guests taking a turn before every
 // cycle. The sequence first warms up with WARM_UP_CYCLES cycles of guests and no edits, then
 // applies each edit by one cycle, followed by a drawn number of cycles with no command.
-// beforeCycle sees the world after the guests' turn and the cycle about to step it. afterCycle
-// sees the resolved starting world and the world after every cycle, with whether that cycle
-// applied an edit. A test whose check is costly runs fewer edits.
-template <typename BeforeCycle, typename AfterCycle>
-void runServiceSequence(uint64_t seed, BeforeCycle beforeCycle, AfterCycle afterCycle,
-                        int edits = EDITS) {
+// afterCycle sees the resolved starting world and the world after every cycle, with whether that
+// cycle applied an edit.
+template <typename AfterCycle> void runServiceSequence(uint64_t seed, AfterCycle afterCycle) {
   test::RouteEditDraws draws(seed);
   // The guests draw apart from the edits, so the edit sequence is the one the seed gives without
   // them.
@@ -136,26 +124,24 @@ void runServiceSequence(uint64_t seed, BeforeCycle beforeCycle, AfterCycle after
   // One cycle: the guests' turn, then a step applying a drawn edit when edited.
   const auto runCycle = [&](bool edited) {
     INFO("tick " << world.Tick);
-    Cycle next{.Turn = drawTurn(guestDraws, world, guests), .Edit = std::nullopt};
+    const GuestTurn turn = drawTurn(guestDraws, world, guests);
     std::erase_if(guests, [&](EntityKey guest) {
-      return std::ranges::find(next.Turn.Leaving, guest) != next.Turn.Leaving.end();
+      return std::ranges::find(turn.Leaving, guest) != turn.Leaving.end();
     });
-    for (const EntityKey guest : takeTurn(world, next.Turn)) {
+    for (const EntityKey guest : takeTurn(world, turn)) {
       guests.push_back(guest);
     }
     CommandQueue queue;
     if (edited) {
-      next.Edit = test::routeEdit(draws, world);
-      queueEdit(queue, next.Edit.value());
+      queueEdit(queue, test::routeEdit(draws, world));
     }
-    beforeCycle(world, next);
     REQUIRE_NOTHROW(stepWorld(world, queue));
     afterCycle(world, edited);
   };
   for (uint64_t cycle = 0; cycle < WARM_UP_CYCLES; ++cycle) {
     runCycle(false);
   }
-  for (int edit = 0; edit < edits; ++edit) {
+  for (int edit = 0; edit < EDITS; ++edit) {
     INFO("edit " << edit);
     runCycle(true);
     const uint64_t idle = draws.below(IDLE_CYCLES);
@@ -163,10 +149,6 @@ void runServiceSequence(uint64_t seed, BeforeCycle beforeCycle, AfterCycle after
       runCycle(false);
     }
   }
-}
-
-template <typename AfterCycle> void runServiceSequence(uint64_t seed, AfterCycle afterCycle) {
-  runServiceSequence(seed, [](const World & /*world*/, const Cycle & /*cycle*/) {}, afterCycle);
 }
 
 // Whether every meals packet a shop sent has a guest-visits packet the same shop sent to the same
@@ -326,63 +308,6 @@ TEST_CASE("In every tick of randomized park edits with synthetic guests, every s
   });
   CHECK(sawSupplied);
   CHECK(sawStarved);
-}
-
-TEST_CASE("Every world a randomized park edit sequence with synthetic guests reaches equals its "
-          "save loaded and resolved, and the two stay equal as they step on") {
-  std::optional<World> loaded;
-  bool sawQueueSaved = false;
-  runServiceSequence(
-      56,
-      [&](const World & /*world*/, const Cycle &cycle) {
-        if (!cycle.Edit.has_value()) {
-          REQUIRE(loaded.has_value());
-          static_cast<void>(takeTurn(loaded.value(), cycle.Turn));
-          stepWorld(loaded.value());
-        }
-      },
-      [&](const World &world, bool edited) {
-        if (edited) {
-          loaded.emplace(loadWorld(makeParkSchema(), saveWorld(world)));
-          resolveWorld(loaded.value());
-          for (const ParkBox &box : parkBoxes(world)) {
-            sawQueueSaved = sawQueueSaved || (box.Kind == BoxKind::Shop &&
-                                              !stockOf<GuestVisits>(world, box.Key).empty());
-          }
-        }
-        REQUIRE(worldsEqual(loaded.value(), world));
-      },
-      SAVE_EDITS);
-  CHECK(sawQueueSaved);
-}
-
-TEST_CASE("A candidate made with an edit from a world of a randomized park edit sequence with "
-          "synthetic guests, once it has stepped a cycle, equals the world that queues the edit "
-          "for that cycle") {
-  std::optional<World> candidate;
-  bool sawChange = false;
-  int compared = 0;
-  runServiceSequence(
-      59,
-      [&](const World &world, const Cycle &cycle) {
-        if (cycle.Edit.has_value()) {
-          World previewed = copyWorld(world);
-          stepWorld(previewed);
-          CommandQueue queue;
-          queueEdit(queue, cycle.Edit.value());
-          candidate.emplace(makeCandidate(previewed, queue));
-          sawChange = sawChange || !worldsEqual(candidate.value(), previewed);
-        }
-      },
-      [&](const World &world, bool edited) {
-        if (edited && candidate.has_value()) {
-          REQUIRE(worldsEqual(candidate.value(), world));
-          candidate.reset();
-          ++compared;
-        }
-      });
-  CHECK(compared == EDITS);
-  CHECK(sawChange);
 }
 
 } // namespace

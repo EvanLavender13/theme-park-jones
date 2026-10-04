@@ -2,7 +2,7 @@
 
 ## Why does the suite keep growing tests that enumerate cases or re-prove standards?
 
-An audit read all 761 test cases against the rules now in docs/testing.md. 292 passed as written, 198 asserted a real property in the wrong shape, 231 were deleted, and 40 more re-prove a world-as-value standard over real park state and wait for the shared world checks. Of the deletions, about 65 re-proved a standard another module owns, about 65 enumerated inputs, error conditions, or entry points, about 56 pinned tuning, display text, vertex order, or a formula copied from the code, about 47 checked that one function forwards to another, about 20 tested test utilities, and about 14 checked that a function taking `const World &` leaves the world unchanged.
+An audit read all 761 test cases against the rules now in docs/testing.md. 292 passed as written, 198 asserted a real property in the wrong shape, 231 were deleted, and 40 more re-proved a world-as-value standard over real park state. Those the inventory held were deleted once the shared world checks proved the standards over the park schema, except one that also proved a medium property and became a rewrite. Of the deletions, about 65 re-proved a standard another module owns, about 65 enumerated inputs, error conditions, or entry points, about 56 pinned tuning, display text, vertex order, or a formula copied from the code, about 47 checked that one function forwards to another, about 20 tested test utilities, and about 14 checked that a function taking `const World &` leaves the world unchanged.
 
 The causes sit upstream of the tests. The sim root proved copy, save, hash, candidate, and determinism standards only on hand-made synthetic schemas, never over the types makeParkSchema registers, so every feature that added state had a real reason to re-prove them for that state. planning-features asked each feature to name a test for every principle it could break, which for principles 1, 8, and 10 is always the same standard. Specs fixed tessellation, formulas, and constants as their contract, so tests of them could only be change-detectors. The test-writer sees one feature at a time and cannot know what the suite already proves. Each problem found was answered with a new shape rule in whichever file was nearest, and a shape rule moves enumeration into another shape rather than removing it: the two-section limit pushed lists into separate TEST_CASEs.
 
@@ -28,7 +28,7 @@ Sources: https://www.stackage.org/package/quickcheck-classes — properties writ
 
 ## Which existing tests are in the wrong shape?
 
-Each entry is a test the audit judged against docs/testing.md, named by the start of its name. A rewrite is a real property in the wrong shape: the entry gives the property the test should assert, why its present shape breaks the rules, and the tests it merges with. A held entry re-proves a world-as-value standard over real park state, and is deleted once the shared world checks covers that state. A code S1 to S7 cites the rule of the same number in docs/testing.md.
+Each entry is a test the audit judged against docs/testing.md, named by the start of its name. A rewrite is a real property in the wrong shape: the entry gives the property the test should assert, why its present shape breaks the rules, and the tests it merges with. The entries the audit held, which re-proved a world-as-value standard over real park state, were deleted when the shared world checks landed. A code S1 to S7 cites the rule of the same number in docs/testing.md.
 
 app/command_line_test.cpp
 
@@ -52,7 +52,6 @@ app/scene/scene_sync_test.cpp
 
 app/session/park_file_test.cpp
 
-- held: "A park saved with saveParkFile and opened with openParkFile…" Property: S2. Re-proves save/load round-trip; owner: sim root (save)
 - rewrite: "openParkFile of a path it cannot read gives no world and a m…" Property: A failed file operation gives no world and names the path. Exact message prefix (S1); one test per error condition (S4) Rewritten as one test with "openParkFile of text loadWorld refuses gives no world and a…", "saveParkFile to a path it cannot write gives a message namin…".
 - rewrite: "openParkFile of text loadWorld refuses gives no world and a…" Property: A failed file operation gives no world and names the path. Another error condition Rewritten as one test with "openParkFile of a path it cannot read gives no world and a m…", "saveParkFile to a path it cannot write gives a message namin…".
 - rewrite: "saveParkFile to a path it cannot write gives a message namin…" Property: A failed file operation gives no world and names the path. Another error condition Rewritten as one test with "openParkFile of a path it cannot read gives no world and a m…", "openParkFile of text loadWorld refuses gives no world and a…".
@@ -65,16 +64,6 @@ app/session/park_session_test.cpp
 integration/food_loop_test.cpp
 
 - rewrite: "Once warm.park has served a guest that cut.park does not, mea…" Property: Cutting a shop's supply route leaves guests hungrier than the same park uncut. The right S7 consequence, but it runs a fixed HUNGER_TICKS (S1). Run until the uncut park has served a guest the cut one has not, and cut in the test from warm.park.
-
-integration/park_standards_test.cpp
-
-- held: "Every park file loads and saves back to identical text…" Property: S2. The "saving again gives identical text" standard, owned by the sim root (save_test).
-- held: "A world stepped from every park file equals the world regener…" Property: S2. The "save loads back and resolves equal" standard, owned by the sim root.
-- held: "Two runs of every park file, stepped side by side, end with t…" Property: S2. The "two runs give the same state" standard, owned by the sim root. The cross-build check covers determinism across builds.
-
-integration/preview_test.cpp
-
-- held: "In warm.park, the preview of a second shop touching both path…" Property: S2, S1. The main assert is the candidate-equals-commit standard (sim root). The availability rise is one hand-built placement, composed of that standard and legible/food's contribution rule.
 
 legible/food_test.cpp
 
@@ -183,8 +172,6 @@ sim/draw_test.cpp
 
 - rewrite: "drawUniform is the draw's top 53 bits times 2^-53, in [0, 1)…" Property: drawUniform lies in [0, 1). Restates the bit formula (S1). Keep only the range.
 - rewrite: "drawPick refuses weights it cannot pick from in proportion…" Property: drawPick refuses weights with no proportional pick. About 12 hand-listed error conditions and boundaries (S4).
-- held: "a copy of a world draws the same values as the world…" Property: S2. Follows from the copy standard and key-only draws.
-- held: "a candidate draws the same values as the world its commands…" Property: S2. Re-proves the candidate standard for draws.
 
 sim/fp_environment_test.cpp
 
@@ -196,7 +183,6 @@ sim/fp_environment_test.cpp
 sim/guests/add_guest_test.cpp
 
 - rewrite: "addGuest throws std::invalid_argument for a place that does…" Property: addGuest refuses a place off the guest network, changing nothing. Three sections, one per way of not resolving (S4). Keep one input.
-- held: "addGuest with the same arguments on two equal worlds leaves…" Property: S2. Re-proves the standard that two runs give the same state, owned by the sim root (cycle_test).
 
 sim/guests/arrivals_test.cpp
 
@@ -220,9 +206,6 @@ sim/guests/footfall_test.cpp
 
 sim/guests/guest_edits_test.cpp
 
-- held: "Every world randomized park edits with guests walking, waitin…" Property: S2. The copy-equals-world standard, owned by the sim root.
-- held: "Every world randomized park edits with guests walking, waitin…" Property: S2. The save-loads-back-equal standard, owned by the sim root (save_test).
-- held: "A candidate made with an edit from a world of randomized park…" Property: S2. The candidate-equals-commit standard, owned by the sim root (cycle_test).
 - rewrite: "A candidate holds exactly its world's guests, each carried ov…" Property: An edit changes nothing of a guest but its place, and a surviving carrier keeps its ground point. Restates the carry rule's fallback chain (S1), and has four sections, one per edit (S4).
 
 sim/guests/guest_options_test.cpp
@@ -257,19 +240,14 @@ sim/medium/field_test.cpp
 - rewrite: "addField registers the field's derived component as <name>-r…" Property: addField registers -resolved Derived, -stepped State, -field. absorb stepped_field_test's -stepped State check.
 - rewrite: "isResolving is true while a resolver runs and false otherwis…" Property: one test, "isStepping, isResolving, and isFinishing are each true exactly while their stage runs". isResolving has no test today. isResolving belongs with the cycle's stage flags, and nothing else tests it.
 - rewrite: "a publishResolved that throws leaves the field's entries unc…" Property: A refused field publication changes nothing. two SECTIONs with several refusals, show one refused call.
-- held: "resolved entries never appear in a save, and loading the sav…" Property: S2. Save holds no derived data (save_test ) and load-resolve equals (save_test ).
 - rewrite: "publishing the same sources in different orders gives the sa…" Property: Publication order does not change the stored field. cover both layers (absorb stepped ), compare worldsEqual only, drop the hash (S2).
 - rewrite: "at a place that resolves to a node, a source's sampled entri…" Property: At a node, entries at the node's stop places, source order. add field_index's -0.0, repeated-place and NaN inputs.
 - rewrite: "at a place strictly inside an edge, a field without sampleEd…" Property: Inside an edge, entries at exactly the place. add the nextafter-of-a-stop inputs from another test.
 - rewrite: "sampleEdge is given the edge, the place's offsets as resolve…" Property: What sampleEdge is given: edge, offsets, From/To/inside entries. add field_index's entries nearest each end.
-- held: "a candidate made with makeCandidate samples every field as t…" Property: S2. Candidate-equals-commit is a world-as-value standard (cycle_test ).
 
 sim/medium/flow_test.cpp
 
 - rewrite: "an operation that throws changes nothing…" Property: A refused flow operation changes nothing. three SECTIONs sweep every rejection, show one refused call.
-- held: "a save holds ledgers, and loading the save of a world with p…" Property: S2. Save/load/resolve equals, owned by another test.
-- held: "changing any packet, stock, created count, or consumed count…" Property: S2. Hash covers registered state, owned by another test; five SECTIONs too.
-- held: "a copy of a world with flows stepped forward equals the orig…" Property: S2. Copy-equals and lockstep runs, owned by another test and another test.
 
 sim/medium/kept_field_test.cpp
 
@@ -277,35 +255,21 @@ sim/medium/kept_field_test.cpp
 - rewrite: "sampleField and fieldValue of a kept field without node or e…" Property: sampleField of a kept field without node or edge rules gives the read values of each source's entries at the place, sources in ascending key order. Its fieldValue clause re-proves the generic scalar sum that field_test's "fieldValue of a scalar field is 0.0 with each entry sampleField gives added in turn" owns (S2).
 - rewrite: "a kept field's edge rule is given the read values of the sou…" Property: a kept field's edge rule is given the read values of the source's entries. Its FromOffset and ToOffset checks re-prove the generic edge sample offsets that field_test's "sampleEdge is given the edge, the place's offsets as resolve gives them, …" owns (S2).
 - rewrite: "in a world loaded from a save, a change at a held place leav…" Property: a source holds one entry at each place it has changed, with the last value and the tick of the swap that applied it. Shows that property again on a loaded world (S4). Rewritten as one test with "a source holds one entry at each place it has changed, in t…", with the loaded world as a stated input, since the order by place is rebuilt after a load.
-- held: "a saved world holding kept entries, loaded and resolved, rea…" Property: S2 (save standards, sim root: save_test.cpp), S3. Re-proves that a save loads back equal and saves again identically for kept state; that reading leaves the save unchanged is const-guaranteed.
 
 sim/medium/network_test.cpp
 
 - rewrite: "the constructor refuses each malformed input the spec lists…" Property: Malformed constructor input is refused with invalid_argument. Table of another test conditions; the spec lists them, the test shows one refused input.
 - rewrite: "resolve gives no position for a missing carrier or a distanc…" Property: A place off its carrier resolves to nothing. Ten enumerated places; keep the boundaries just past each end and one absent carrier.
 - rewrite: "nodePlace and nodeAnchor refuse a node not below the node co…" Property: Node queries throw out_of_range past the node count. four checks over two entry points, show one.
-- held: "a world holding networks copies equal and hashes equal…" Property: S2. Copy equals and hashes equal, owned by another test.
-- held: "changing a carrier point, stop, or anchor of a held network…" Property: S2. Hash covers registered state, owned by another test; enumerates seven fields (S4).
-- held: "a save holds no network…" Property: S2. A save holds no derived data, owned by another test.
-- held: "a place in a registered state component saves and loads back…" Property: S2. Save round trip over a registered type, owned by another test.
 
 sim/medium/stepped_field_test.cpp
 
 - rewrite: "sources are sampled in ascending key order across both layer…" Property: Sample order: ascending source across layers, then source order. give resolved sources several entries so field_test can go.
-- held: "a save holds stepped entries, and loading the save of a reso…" Property: S2. Save/load/resolve equals, owned by another test.
-- held: "changing any stepped entry changes the world's hash…" Property: S2. Hash covers registered state, owned by another test.
-- held: "a copy stepped forward equals the original stepped forward…" Property: S2. Copy equals and lockstep runs, owned by walk_test and cycle_test.
-- held: "systems that publish into fields give the same world and the…" Property: S4. the grouped property, fold into field_test ; its hash half is S2.
-- held: "a candidate made with makeCandidate samples every field, bot…" Property: S2. Candidate equals commit, owned by another test.
+- rewrite: "systems that publish into fields give the same world and the…" Property: Publication order does not change the stored field. Merged into field_test's "publishing the same sources in different orders gives the sa…", which covers both layers; its hash half re-proves a standard (S2).
 
 sim/operations/food_offer_test.cpp
 
 - rewrite: "After a resolution, food-offer's resolved entries hold one s…" Property: Each shop box offers one entry at its guest anchor, or none. Pins MEAL_RELIEF == 0.5 and restates the wait as ORDER_DELAY + D; keep the structure and state the wait as a prediction.
-
-sim/operations/operations_edits_test.cpp
-
-- held: "Every world a randomized park edit sequence with synthetic g…" Property: S2. Re-proves save-load-resolve and lockstep standards; owner sim root (save_test).
-- held: "A candidate made with an edit from a world of a randomized p…" Property: S2. Re-proves the candidate standard; owner sim root (cycle_test).
 
 sim/operations/operations_test.cpp
 
@@ -332,7 +296,6 @@ sim/park/edits_test.cpp
 - rewrite: "An accepted AddBox gives the next key an entity holding a bo…" Property: one test, "an accepted command leaves exactly the intent it describes, with new keys from the counter". Same. Rewritten as one test with "An accepted AddPath gives the next key an entity holding a p…", "An accepted MoveBox replaces the box's pose exactly with the…", "An accepted DeletePath or DeleteBox destroys the entity it n…".
 - rewrite: "An accepted MoveBox replaces the box's pose exactly with the…" Property: one test, "an accepted command leaves exactly the intent it describes, with new keys from the counter". Same. Rewritten as one test with "An accepted AddPath gives the next key an entity holding a p…", "An accepted AddBox gives the next key an entity holding a bo…", "An accepted DeletePath or DeleteBox destroys the entity it n…".
 - rewrite: "An accepted DeletePath or DeleteBox destroys the entity it n…" Property: one test, "an accepted command leaves exactly the intent it describes, with new keys from the counter". Same. Rewritten as one test with "An accepted AddPath gives the next key an entity holding a p…", "An accepted AddBox gives the next key an entity holding a bo…", "An accepted MoveBox replaces the box's pose exactly with the…".
-- held: "Commands given to makeCandidate are each applied exactly whe…" Property: S2. Follows from another test and the candidate standard.
 - rewrite: "On a physically valid world, a command naming what it acts o…" Property: one randomized test, "on a valid world, a command is accepted exactly when the world it describes is valid, so every cycle leaves the park valid". It drops the copy and save assertions. A command whose kind is not an enum value describes nothing and must count as refused. Hand-picked expected validity depends on boxSize and pathWidth literals (S1). Assert the equivalence over random commands.
 
 sim/park/geometry_test.cpp
@@ -341,16 +304,6 @@ sim/park/geometry_test.cpp
 - rewrite: "keptPoints gives the points groundLine keeps, in order, each…" Property: groundLine depends only on keptPoints, which keep MIN_POINT_SPACING apart. The expected list is hand-computed from 1 cm (S1).
 - rewrite: "Each ground line distance is the previous plus the step's le…" Property: Distances start at 0 and strictly increase. The bit-exact sum restates the formula (S1).
 - rewrite: "footprintOf's corners are front left, front right, back righ…" Property: Corners are in FL, FR, BR, BL order at plus or minus half size. Literal corners are tied to the ENTRANCE_SIZE and boxSize values (S1). Sections per pose.
-- held: "Ground lines and footprints computed twice from the same inp…" Property: S2. Re-proves determinism for stateless pure functions.
-
-sim/park/intent_test.cpp
-
-- held: "A save of finite intent of every kind loads, saves to identi…" Property: S2. Re-proves the round-trip and re-save standards for park types, using exact text.
-- held: "A world of degenerate finite intent copies and hashes as a l…" Property: S2. Re-proves the copy standard for park types.
-
-sim/park/sketch_park_test.cpp
-
-- held: "tests/parks/sketch.park loads with makeParkSchema and saves…" Property: S2/S7. Re-runs the re-save standard over a park file.
 
 sim/park/validity_test.cpp
 
@@ -365,11 +318,6 @@ sim/routes/connections_test.cpp
 - rewrite: "An entity none of whose doors has a connector leaves the net…" Property: An unconnected entity leaves the networks as they are without it. Real property, but its "just beyond reach" case hard-codes 7.01 m; state that case relative to CONNECTION_REACH.
 - rewrite: "Every stop of a path carrier other than its first and last l…" Property: Interior stops come only from meetings, connections included. Same property and shape as networks_test:235; merge into one test over parks with paths and connectors.
 
-sim/routes/network_edits_test.cpp
-
-- held: "Every world a random edit sequence reaches has the networks,…" Property: S2. Re-proves "a save loads back and resolves equal" for networks; owner sim root (save_test).
-- held: "A candidate made with an edit has the networks, anchors incl…" Property: S2. Re-proves "a candidate equals the committed world" for networks; owner sim root (cycle_test).
-
 sim/routes/networks_test.cpp
 
 - rewrite: "Every stop but a carrier's first and last lies within the to…" Property: Interior stops come only from meetings, connections included. Family with connections_test:428; collapse the two into one test.
@@ -380,16 +328,9 @@ sim/routes/route_distance_test.cpp
 - rewrite: "Among steps achieving a node's distance on one carrier, Next…" Property: Next is the least achieving step by key, direction, then From. Second member of the tie-break family. Rewritten as one test with "Among steps achieving a node's distance on one carrier in on…".
 - rewrite: "Among steps achieving a node's distance on one carrier in on…" Property: Next is the least achieving step by key, direction, then From. Third member of the tie-break family. Rewritten as one test with "Among steps achieving a node's distance on one carrier, Next…".
 - rewrite: "sampleRouteEdge gives one entry, the least of each end's ent…" Property: Edge sample is the least end entry plus offset, stepping toward it. Four sections enumerate inputs of one rule; assert it once over drawn end entries.
-- held: "Every world a random edit sequence reaches equals its save l…" Property: S2. Re-proves the save-load-resolve standard (even calls worldsEqual); owner sim root (save_test).
-- held: "A candidate made with an edit has the route distance of the…" Property: S2. Re-proves the candidate standard for route distance; owner sim root (cycle_test).
-
-sim/routes/routes_park_test.cpp
-
-- held: "tests/parks/routes.park loads with makeParkSchema and saves…" Property: S2. Re-proves "saving again gives identical text" on a park file; owner sim root (save_test).
 
 sim/save_test.cpp
 
-- held: "a loaded and resolved world steps in lockstep with the world…" Property: S2/S4. Follows from round trip and determinism. Its order-free synthetic system cannot expose hidden state.
 - rewrite: "a loaded world holds the saved seed, tick, and next key, wit…" Property: A loaded world is pending resolution. The header values repeat the round trip. The edge-values section enumerates boundaries (S4).
 - rewrite: "a save holds no derived data…" Property: A save is independent of derived data. Sections enumerate mutation kinds (change, add, remove).
 - rewrite: "text that is not a save fails the load naming the first line…" Property: A failed load names the first unreadable line. About 40 hand-listed error conditions (S4).

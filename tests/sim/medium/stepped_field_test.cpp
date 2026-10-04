@@ -4,20 +4,14 @@
 #include "sim/entity_key.h"
 #include "sim/medium/field.h"
 #include "sim/medium/network.h"
-#include "sim/save.h"
 #include "sim/schema.h"
 #include "sim/world.h"
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
 #include <bit>
 #include <memory>
-#include <stddef.h>
-#include <stdexcept>
 #include <stdint.h>
-#include <string>
-#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -33,8 +27,6 @@ using test::CARRIER_B;
 using test::Emits;
 using test::entryAt;
 using test::Footfall;
-using test::Layout;
-using test::LAYOUT_KEY;
 using test::makeFieldWorld;
 using test::makeSteppedFieldSchema;
 using test::networkOf;
@@ -44,7 +36,6 @@ using test::publishSteppedSources;
 using test::publishSteppedSourcesWhere;
 using test::Reach;
 using test::setSteps;
-using test::standardLayout;
 using test::Steps;
 
 using Sampled = std::vector<std::pair<EntityKey, double>>;
@@ -77,33 +68,9 @@ void requireSameValue(const World &one, const World &other) {
   REQUIRE(hashWorld(one) == hashWorld(other));
 }
 
-// What a call threw. std::invalid_argument is itself a std::logic_error, so the two are told apart.
-enum class Thrown : uint8_t { Nothing, InvalidArgument, OtherLogicError, Other };
-
-template <typename Call> Thrown thrownBy(Call call) {
-  try {
-    call();
-  } catch (const std::invalid_argument &) {
-    return Thrown::InvalidArgument;
-  } catch (const std::logic_error &) {
-    return Thrown::OtherLogicError;
-  } catch (...) {
-    return Thrown::Other;
-  }
-  return Thrown::Nothing;
-}
-
 std::vector<Sampled> &observed() {
   static std::vector<Sampled> recorded;
   return recorded;
-}
-
-struct Occupant {
-  int64_t Count = 0;
-};
-
-template <typename Visitor> void visitFields(Visitor &visitor, Occupant &occupant) {
-  visitor.field("count", occupant.Count);
 }
 
 // Commands that change the sources' resolved entries and the layout.
@@ -125,19 +92,10 @@ struct DropFootfall {
   world.Registry.remove<Emits<Footfall>>(world.findEntity(command.Source));
 }
 
-struct ReplaceLayout {
-  Layout Replacement;
-};
-
-[[maybe_unused]] void applyCommand(World &world, const ReplaceLayout &command) {
-  world.Registry.get<Layout>(world.findEntity(LAYOUT_KEY)) = command.Replacement;
-}
-
 std::shared_ptr<WorldSchema> makeCommandedSchema() {
   auto schema = makeSteppedFieldSchema();
   schema->addCommand<SetFootfall>();
   schema->addCommand<DropFootfall>();
-  schema->addCommand<ReplaceLayout>();
   return schema;
 }
 
@@ -272,72 +230,6 @@ TEST_CASE("resolved entries count as changed exactly when the walk emits differe
                       {emptied, std::bit_cast<uint64_t>(21.0)}});
 }
 
-// Two sources with both layers in both fields, stepped twice so that the readable stepped entries
-// are not the first tick's.
-World bothLayersInFlight(std::shared_ptr<const WorldSchema> schema) {
-  World world = makeFieldWorld(std::move(schema));
-  const EntityKey walker =
-      addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 1.0), entryAt(CARRIER_A, 2, 2.0)});
-  setSteps<Footfall>(world, walker, {entryAt(CARRIER_A, 4, 10.0)});
-  const EntityKey reacher = addSource<Reach>(world, {entryAt(CARRIER_A, 7, 3.0)});
-  setSteps<Reach>(world, reacher, {entryAt(CARRIER_A, 4, 30.0), entryAt(CARRIER_B, 3, 31.0)});
-  addSource<Footfall>(world, {entryAt(CARRIER_B, 0, 4.0)});
-  resolveWorld(world);
-  stepWorld(world);
-  stepWorld(world);
-  return world;
-}
-
-TEST_CASE("a save holds stepped entries, and loading the save of a resolved world with both layers "
-          "in flight and resolving gives the world saved") {
-  const auto schema = makeSteppedFieldSchema();
-  const World world = bothLayersInFlight(schema);
-  REQUIRE(sampled<Footfall>(world, JUNCTION) == Sampled{{EntityKey{2}, 11.0}, {EntityKey{4}, 4.0}});
-
-  const std::string text = saveWorld(world);
-  REQUIRE(text.find("[footfall-stepped]") != std::string::npos);
-  REQUIRE(text.find("[reach-stepped]") != std::string::npos);
-
-  World loaded = loadWorld(schema, text);
-  resolveWorld(loaded);
-  requireSameValue(loaded, world);
-}
-
-TEST_CASE("changing any stepped entry changes the world's hash") {
-  const World world = bothLayersInFlight(makeSteppedFieldSchema());
-  World changed = copyWorld(world);
-  const entt::entity holder = changed.findEntity(fieldKey("footfall"));
-  REQUIRE(holder != entt::null);
-  auto *held = changed.Registry.try_get<SteppedEntries<Footfall>>(holder);
-  REQUIRE(held != nullptr);
-  SteppedEntries<Footfall> &stepped = *held;
-  REQUIRE_FALSE(stepped.Readable.empty());
-  REQUIRE_FALSE(stepped.Readable.front().Entries.empty());
-
-  SECTION("a readable entry's value") { stepped.Readable.front().Entries.front().Value += 1.0; }
-  SECTION("a readable entry's place") {
-    stepped.Readable.front().Entries.front().At.Distance += 1.0;
-  }
-  SECTION("an entry published but not yet readable") {
-    stepped.Pending.push_back({.Source = EntityKey{2}, .Entries = {entryAt(CARRIER_A, 4, 1.0)}});
-  }
-
-  REQUIRE_FALSE(worldsEqual(changed, world));
-  REQUIRE(hashWorld(changed) != hashWorld(world));
-}
-
-TEST_CASE("a copy stepped forward equals the original stepped forward") {
-  World original = bothLayersInFlight(makeSteppedFieldSchema());
-  World copy = copyWorld(original);
-
-  for (int tick = 0; tick < 3; ++tick) {
-    CAPTURE(tick);
-    stepWorld(original);
-    stepWorld(copy);
-    requireSameValue(copy, original);
-  }
-}
-
 bool evenKey(EntityKey key) { return static_cast<uint64_t>(key) % 2 == 0; }
 bool oddKey(EntityKey key) { return static_cast<uint64_t>(key) % 2 == 1; }
 void publishEvenFootfall(World &world) { publishSteppedSourcesWhere<Footfall>(world, evenKey); }
@@ -375,62 +267,6 @@ TEST_CASE("systems that publish into fields give the same world and the same has
     stepWorld(backward);
     REQUIRE(sampled<Footfall>(forward, JUNCTION).size() == 3);
     requireSameValue(forward, backward);
-  }
-}
-
-// A preview is exact only if a candidate samples as the world that commits its commands.
-TEST_CASE("a candidate made with makeCandidate samples every field, both layers, as the world that "
-          "commits the same commands") {
-  World base = makeFieldWorld(makeCommandedSchema());
-  // Its resolved entries change, so the resolution clears its stepped entries.
-  const EntityKey walker = addSource<Footfall>(base, {entryAt(CARRIER_A, 4, 1.0)});
-  setSteps<Footfall>(base, walker, {entryAt(CARRIER_A, 4, 10.0), entryAt(CARRIER_A, 8.5, 11.0)});
-  // Its resolved entries do not change, so it keeps its stepped entries.
-  const EntityKey steady = addSource<Footfall>(base, {entryAt(CARRIER_A, 2, 2.0)});
-  setSteps<Footfall>(base, steady, {entryAt(CARRIER_A, 4, 20.0)});
-  // Stepped reach entries inside A's second edge, one where the command adds a node.
-  addStepper<Reach>(base, {entryAt(CARRIER_A, 7, 30.0), entryAt(CARRIER_A, 10, 31.0)});
-  addSource<Reach>(base, {entryAt(CARRIER_A, 4, 40.0)});
-  resolveWorld(base);
-  stepWorld(base);
-
-  // A new node on A at 7 cuts A's second edge.
-  Layout cut = standardLayout();
-  cut.Carriers.front().Stops = {{.Distance = 0, .Node = 0},
-                                {.Distance = 4, .Node = 1},
-                                {.Distance = 7, .Node = 4},
-                                {.Distance = 10, .Node = 2}};
-  cut.NodeCount = 5;
-  auto fill = [&](CommandQueue &queue) {
-    queue.push(ReplaceLayout{.Replacement = cut});
-    queue.push(SetFootfall{.Source = walker, .Entries = {entryAt(CARRIER_A, 4, 5.0)}});
-  };
-
-  World previewed = copyWorld(base);
-  stepWorld(previewed);
-  CommandQueue tentative;
-  fill(tentative);
-  const World candidate = makeCandidate(previewed, tentative);
-
-  World committed = copyWorld(base);
-  CommandQueue queued;
-  fill(queued);
-  stepWorld(committed, queued);
-
-  // The commands changed what is sampled, and stepped entries survive them, so the comparison below
-  // is not vacuous.
-  REQUIRE(sampled<Footfall>(candidate, JUNCTION) != sampled<Footfall>(previewed, JUNCTION));
-  REQUIRE(sampled<Footfall>(candidate, JUNCTION).size() == 2);
-  REQUIRE_FALSE(sampled<Reach>(candidate, place(CARRIER_A, 7)).empty());
-
-  // A node, a place inside an unchanged edge, the new node, and a place inside a cut edge.
-  for (const Place at :
-       {place(CARRIER_A, 4), place(CARRIER_A, 2), place(CARRIER_A, 7), place(CARRIER_A, 8.5)}) {
-    CAPTURE(at.Distance);
-    REQUIRE(sampledBits<Footfall>(candidate, at) == sampledBits<Footfall>(committed, at));
-    REQUIRE(std::bit_cast<uint64_t>(fieldValue<Footfall>(candidate, networkOf(candidate), at)) ==
-            std::bit_cast<uint64_t>(fieldValue<Footfall>(committed, networkOf(committed), at)));
-    REQUIRE(sampledBits<Reach>(candidate, at) == sampledBits<Reach>(committed, at));
   }
 }
 

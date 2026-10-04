@@ -1,6 +1,5 @@
 #include "support/guest_parks.h"
 #include "support/ledger_writes.h"
-#include "support/park_worlds.h"
 #include "support/route_edits.h"
 
 #include "sim/command_queue.h"
@@ -11,8 +10,6 @@
 #include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
-#include "sim/park_schema.h"
-#include "sim/save.h"
 #include "sim/world.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -148,60 +145,6 @@ TEST_CASE("After every cycle of randomized park edits with guests walking, waiti
       });
   CHECK(sawGuests);
   CHECK(retire.Retired);
-}
-
-TEST_CASE("Every world randomized park edits with guests walking, waiting, and eating reach equals "
-          "its copy") {
-  bool sawGuests = false;
-  runGuestEdits(73, [&](const World &world, bool /*edited*/) {
-    REQUIRE(worldsEqual(copyWorld(world), world));
-    sawGuests = sawGuests || !parkGuests(world).empty();
-  });
-  CHECK(sawGuests);
-}
-
-TEST_CASE("Every world randomized park edits with guests walking, waiting, and eating reach equals "
-          "its save loaded and "
-          "resolved") {
-  bool sawGuests = false;
-  runGuestEdits(74, [&](const World &world, bool /*edited*/) {
-    World loaded = loadWorld(makeParkSchema(), saveWorld(world));
-    resolveWorld(loaded);
-    REQUIRE(worldsEqual(loaded, world));
-    sawGuests = sawGuests || !parkGuests(world).empty();
-  });
-  CHECK(sawGuests);
-}
-
-TEST_CASE("A candidate made with an edit from a world of randomized park edits with guests "
-          "walking, waiting, and eating, once it has stepped a cycle, equals the world that queues "
-          "the edit for that "
-          "cycle") {
-  std::optional<World> candidate;
-  int compared = 0;
-  bool sawGuests = false;
-  runGuestEdits(
-      75,
-      [&](const World &world, const std::optional<ParkEdit> &edit) {
-        if (edit.has_value()) {
-          World previewed = copyWorld(world);
-          stepWorld(previewed);
-          CommandQueue queue;
-          queueEdit(queue, edit.value_or(ParkEdit{}));
-          candidate.emplace(makeCandidate(previewed, queue));
-          sawGuests = sawGuests || !parkGuests(world).empty();
-        }
-      },
-      [&](const World &world, bool edited) {
-        if (edited) {
-          REQUIRE(candidate.has_value());
-          REQUIRE(worldsEqual(candidate.value(), world));
-          candidate.reset();
-          ++compared;
-        }
-      });
-  CHECK(compared == EDITS);
-  CHECK(sawGuests);
 }
 
 TEST_CASE("In every cycle of randomized park edits with guests walking, waiting, and eating, "

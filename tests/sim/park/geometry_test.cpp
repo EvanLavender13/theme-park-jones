@@ -56,17 +56,6 @@ bool footprintsWithin(const Footprint &left, const Footprint &right, double tole
   return corners && near(left.Forward, right.Forward) && near(left.Right, right.Right);
 }
 
-bool sameFootprint(const Footprint &left, const Footprint &right) {
-  const auto same = [](ParkPoint a, ParkPoint b) {
-    return sameBits(a.X, b.X) && sameBits(a.Z, b.Z);
-  };
-  bool corners = true;
-  for (std::size_t index = 0; index < left.Corners.size(); ++index) {
-    corners = corners && same(left.Corners[index], right.Corners[index]);
-  }
-  return corners && same(left.Forward, right.Forward) && same(left.Right, right.Right);
-}
-
 // The pose's footprint, failing the test when there is none.
 Footprint requireFootprint(const Pose &pose, FootprintSize size) {
   const std::optional<Footprint> footprint = footprintOf(pose, size);
@@ -217,17 +206,6 @@ TEST_CASE("Scaling a pose's facing by a positive factor leaves its footprint unc
   const Footprint axis = requireFootprint(Pose{-40.0, 7.5, 0.0, -1.0}, size);
   const Footprint subnormal = requireFootprint(Pose{-40.0, 7.5, 0.0, -1e-310}, size);
   CHECK(footprintsWithin(subnormal, axis, 1e-12));
-}
-
-TEST_CASE(
-    "Ground lines and footprints computed twice from the same input are identical bit for bit") {
-  const std::vector<ParkPoint> points{{0.1, 0.2}, {3.7, -1.3}, {-2.9, 5.55}, {40.25, -17.125}};
-  CHECK(sameLine(groundLine(points), groundLine(points)));
-
-  const Pose pose{-12.3, 45.6, 0.7, -0.3};
-  const Footprint first = requireFootprint(pose, boxSize(BoxKind::Shop));
-  const Footprint second = requireFootprint(pose, boxSize(BoxKind::Shop));
-  CHECK(sameFootprint(first, second));
 }
 
 } // namespace

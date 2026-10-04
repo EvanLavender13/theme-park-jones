@@ -1,6 +1,5 @@
 #include "support/synthetic_fields.h"
 
-#include "sim/command_queue.h"
 #include "sim/entity_key.h"
 #include "sim/medium/field.h"
 #include "sim/medium/network.h"
@@ -34,7 +33,6 @@ using test::CARRIER_C;
 using test::Emits;
 using test::entryAt;
 using test::Footfall;
-using test::Layout;
 using test::LAYOUT_KEY;
 using test::makeFieldSchema;
 using test::makeFieldWorld;
@@ -44,10 +42,8 @@ using test::PublishOrderScope;
 using test::Reach;
 using test::ReachCall;
 using test::reachCalls;
-using test::standardLayout;
 
 using Sampled = std::vector<std::pair<EntityKey, double>>;
-using SampledBits = std::vector<std::pair<EntityKey, uint64_t>>;
 
 constexpr Place place(EntityKey carrier, double distance) {
   return {.Carrier = carrier, .Distance = distance};
@@ -65,14 +61,6 @@ Sampled sampledOn(const World &world, const Network &network, const Place &at) {
 // Sampled on the world's own network.
 template <typename F> Sampled sampled(const World &world, const Place &at) {
   return sampledOn<F>(world, networkOf(world), at);
-}
-
-template <typename F> SampledBits sampledBits(const World &world, const Place &at) {
-  SampledBits result;
-  for (const auto &[source, value] : sampled<F>(world, at)) {
-    result.emplace_back(source, std::bit_cast<uint64_t>(value));
-  }
-  return result;
 }
 
 void requireSameValue(const World &one, const World &other) {
@@ -159,14 +147,6 @@ void requireAlong(const Network &network, const std::vector<EdgeEntry<double>> &
             std::bit_cast<uint64_t>(position.ToOffset));
     REQUIRE(actual[i].Value == expected[i].Value);
   }
-}
-
-struct Occupant {
-  int64_t Count = 0;
-};
-
-template <typename Visitor> void visitFields(Visitor &visitor, Occupant &occupant) {
-  visitor.field("count", occupant.Count);
 }
 
 TEST_CASE("addField registers the field's derived component as <name>-resolved and its resolver "
@@ -305,23 +285,6 @@ TEST_CASE("every resolution replaces every source's resolved entries in full") {
   resolveWorld(world);
 
   REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 4)) == Sampled{{kept, 3.0}});
-}
-
-TEST_CASE("resolved entries never appear in a save, and loading the save of a resolved world and "
-          "resolving gives the world saved") {
-  const auto schema = makeFieldSchema();
-  World world = makeFieldWorld(schema);
-  addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 1.0), entryAt(CARRIER_A, 2, 2.0)});
-  addSource<Reach>(world, {entryAt(CARRIER_A, 7, 3.0)});
-  resolveWorld(world);
-  REQUIRE_FALSE(sampled<Footfall>(world, place(CARRIER_A, 4)).empty());
-
-  const std::string text = saveWorld(world);
-  REQUIRE(text.find("-resolved") == std::string::npos);
-
-  World loaded = loadWorld(schema, text);
-  resolveWorld(loaded);
-  requireSameValue(loaded, world);
 }
 
 // Three sources, each with entries whose values are in neither ascending nor descending order, so
@@ -615,87 +578,6 @@ TEST_CASE("fieldValue of a scalar field is 0.0 with each entry sampleField gives
 
     const double value = fieldValue<Footfall>(world, networkOf(world), place(CARRIER_A, 4));
     REQUIRE(std::bit_cast<uint64_t>(value) == std::bit_cast<uint64_t>(0.0));
-  }
-}
-
-// Commands that change the layout and the sources, for previews.
-struct ReplaceLayout {
-  Layout Replacement;
-};
-
-[[maybe_unused]] void applyCommand(World &world, const ReplaceLayout &command) {
-  world.Registry.get<Layout>(world.findEntity(LAYOUT_KEY)) = command.Replacement;
-}
-
-struct SetFootfall {
-  EntityKey Source = NULL_KEY;
-  std::vector<PlacedEntry<double>> Entries;
-};
-
-[[maybe_unused]] void applyCommand(World &world, const SetFootfall &command) {
-  world.Registry.emplace_or_replace<Emits<Footfall>>(world.findEntity(command.Source),
-                                                     Emits<Footfall>{.Entries = command.Entries});
-}
-
-struct AddReachSource {
-  std::vector<PlacedEntry<double>> Entries;
-};
-
-[[maybe_unused]] void applyCommand(World &world, const AddReachSource &command) {
-  addSource<Reach>(world, command.Entries);
-}
-
-// A preview is exact only if a candidate samples as the world that commits its commands.
-TEST_CASE("a candidate made with makeCandidate samples every field as the world that commits the "
-          "same commands and resolves") {
-  auto schema = makeFieldSchema();
-  schema->addCommand<ReplaceLayout>();
-  schema->addCommand<SetFootfall>();
-  schema->addCommand<AddReachSource>();
-  World base = makeFieldWorld(schema);
-  const EntityKey walker =
-      addSource<Footfall>(base, {entryAt(CARRIER_A, 4, 1.0), entryAt(CARRIER_A, 2, 2.0)});
-  addSource<Reach>(base, {entryAt(CARRIER_A, 7, 3.0), entryAt(CARRIER_A, 10, 4.0)});
-  resolveWorld(base);
-
-  // A new node on A at 7 cuts A's second edge, so the reach entry there becomes a node's.
-  Layout cut = standardLayout();
-  cut.Carriers.front().Stops = {{.Distance = 0, .Node = 0},
-                                {.Distance = 4, .Node = 1},
-                                {.Distance = 7, .Node = 4},
-                                {.Distance = 10, .Node = 2}};
-  cut.NodeCount = 5;
-  auto fill = [&](CommandQueue &queue) {
-    queue.push(ReplaceLayout{.Replacement = cut});
-    queue.push(SetFootfall{.Source = walker,
-                           .Entries = {entryAt(CARRIER_A, 4, 5.0), entryAt(CARRIER_A, 8.5, 6.0)}});
-    queue.push(AddReachSource{.Entries = {entryAt(CARRIER_A, 4, 7.0), entryAt(CARRIER_A, 8, 8.0)}});
-  };
-
-  World previewed = copyWorld(base);
-  stepWorld(previewed);
-  CommandQueue tentative;
-  fill(tentative);
-  const World candidate = makeCandidate(previewed, tentative);
-
-  World committed = copyWorld(base);
-  CommandQueue queued;
-  fill(queued);
-  stepWorld(committed, queued);
-
-  // The commands changed what is sampled, so the comparison below is not vacuous.
-  REQUIRE(sampled<Footfall>(candidate, place(CARRIER_A, 4)) !=
-          sampled<Footfall>(base, place(CARRIER_A, 4)));
-  REQUIRE_FALSE(sampled<Reach>(candidate, place(CARRIER_A, 8.5)).empty());
-
-  // A node, a place inside an unchanged edge, the new node, and a place inside a cut edge.
-  for (const Place at :
-       {place(CARRIER_A, 4), place(CARRIER_A, 2), place(CARRIER_A, 7), place(CARRIER_A, 8.5)}) {
-    CAPTURE(at.Distance);
-    REQUIRE(sampledBits<Footfall>(candidate, at) == sampledBits<Footfall>(committed, at));
-    REQUIRE(std::bit_cast<uint64_t>(fieldValue<Footfall>(candidate, networkOf(candidate), at)) ==
-            std::bit_cast<uint64_t>(fieldValue<Footfall>(committed, networkOf(committed), at)));
-    REQUIRE(sampledBits<Reach>(candidate, at) == sampledBits<Reach>(committed, at));
   }
 }
 

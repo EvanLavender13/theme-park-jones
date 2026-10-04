@@ -13,7 +13,6 @@
 
 #include <bit>
 #include <cmath>
-#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -318,21 +317,6 @@ TEST_CASE("loading the save of a resolved world and resolving gives the world sa
   }
 }
 
-TEST_CASE("a loaded and resolved world steps in lockstep with the world saved") {
-  const auto schema = makeSaveSchema();
-  World original = buildRandomWorld(schema, 1);
-  World loaded = loadWorld(schema, saveWorld(original));
-  resolveWorld(loaded);
-
-  // Enough ticks for every probe's samples to finish filling up.
-  for (int tick = 0; tick < 4; ++tick) {
-    stepWorld(original);
-    stepWorld(loaded);
-    CAPTURE(tick);
-    requireSameValue(loaded, original);
-  }
-}
-
 TEST_CASE("equal worlds give identical saves however they were built") {
   const auto schema = makeSaveSchema();
   const World plain = buildFormWorld(schema);
@@ -576,10 +560,6 @@ TEST_CASE("saveWorld refuses an enum value its type gives no name, naming the fi
   REQUIRE(message.has_value());
   CHECK_THAT(message.value_or(""), ContainsSubstring("feeling"));
 }
-
-struct UnsavedGadget {
-  int Value = 0;
-};
 
 TEST_CASE("a schema refuses a component type named entities and is left unchanged") {
   WorldSchema schema;
