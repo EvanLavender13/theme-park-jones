@@ -1,6 +1,6 @@
 # 0030. Check each change on Windows, and Linux at release
 
-Status: Accepted, 2026-10-02
+Status: Accepted, 2026-10-02; where tidy reads its compile commands superseded by 0035
 
 ## Context
 

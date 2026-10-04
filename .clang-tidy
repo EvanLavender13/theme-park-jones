@@ -1,5 +1,5 @@
-# clang-tidy configuration. Runs during the linux-debug build (TPJ_CLANG_TIDY).
-# Manual run: clang-tidy -p build/linux-debug src/file.cpp
+# clang-tidy configuration. scripts/tidy.sh runs it over windows-debug's sources (decision 0035).
+# Manual run: clang-tidy.exe -p build/windows-debug src/file.cpp
 ---
 Checks: >
   -*,

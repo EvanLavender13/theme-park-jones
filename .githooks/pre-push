@@ -35,11 +35,6 @@ if [ "$BUILD_STATUS" -ne 0 ] || [ -n "$WARNINGS" ]; then
     exit 1
 fi
 
-# tidy reads linux-debug's compile commands, which need it configured, not built.
-if [ ! -f build/linux-debug/compile_commands.json ]; then
-    echo "pre-push: configuring linux-debug for clang-tidy..."
-    cmake --preset linux-debug >/dev/null || { echo "pre-push: configure failed."; exit 1; }
-fi
 echo "pre-push: running clang-tidy..."
 if ! scripts/tidy.sh; then
     echo "pre-push: clang-tidy found problems; push aborted."
