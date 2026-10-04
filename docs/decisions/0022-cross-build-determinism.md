@@ -1,6 +1,6 @@
 # 0022. The simulation is bit-identical across builds
 
-Status: Accepted, 2026-09-26
+Status: Accepted, 2026-09-26; which builds the cross-build check compares superseded by 0036
 
 ## Context
 

@@ -1,8 +1,10 @@
 #!/bin/bash
-# cross-build-check: the Windows and Linux builds must simulate bit-identically (decision 0022).
-# Builds tpj_scenarios with linux-debug and windows-debug, runs both over the registered scenarios
-# and every park file in tests/parks/, and fails on the first line where their outputs differ.
-# Run from WSL at the repository root. scripts/release-check.sh runs it at release (decision 0030).
+# cross-build-check: every build that ships or is developed on must simulate bit-identically
+# (decisions 0022 and 0036). Builds tpj_scenarios with windows-debug, the build work is tested on,
+# and with windows-release and linux-release, the builds players run. Runs each over the registered
+# scenarios and every park file in tests/parks/, and fails on the first line where a release
+# build's output differs from windows-debug's. Run from WSL at the repository root.
+# scripts/release-check.sh runs it at release (decision 0030).
 set -uo pipefail
 
 stage() { echo "cross-build-check: $*"; }
@@ -16,8 +18,11 @@ if [ "$(uname -s)" != "Linux" ] || ! command -v cmake.exe >/dev/null; then
 fi
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
-for preset in linux-debug windows-debug; do
-    if [ "$preset" = windows-debug ]; then cmake=cmake.exe; else cmake=cmake; fi
+REFERENCE=windows-debug
+PRESETS=(windows-debug windows-release linux-release)
+
+for preset in "${PRESETS[@]}"; do
+    case "$preset" in windows-*) cmake=cmake.exe ;; *) cmake=cmake ;; esac
     if [ ! -f "build/$preset/CMakeCache.txt" ]; then
         stage "configuring $preset"
         "$cmake" --preset "$preset" || fail "$preset failed to configure"
@@ -31,19 +36,29 @@ parks=(tests/parks/*.park)
 out=build/cross-build-check
 mkdir -p "$out"
 
-stage "running linux-debug over the scenarios and ${#parks[@]} park files"
-build/linux-debug/tpj_scenarios "${parks[@]}" >"$out/linux-debug.txt" ||
-    fail "the linux-debug run failed"
-stage "running windows-debug"
-build/windows-debug/tpj_scenarios.exe "${parks[@]}" | tr -d '\r' >"$out/windows-debug.txt" ||
-    fail "the windows-debug run failed"
+for preset in "${PRESETS[@]}"; do
+    stage "running $preset over the scenarios and ${#parks[@]} park files"
+    case "$preset" in
+    windows-*)
+        "build/$preset/tpj_scenarios.exe" "${parks[@]}" | tr -d '\r' >"$out/$preset.txt" ||
+            fail "the $preset run failed"
+        ;;
+    *)
+        "build/$preset/tpj_scenarios" "${parks[@]}" >"$out/$preset.txt" ||
+            fail "the $preset run failed"
+        ;;
+    esac
+done
 
-stage "comparing"
-build/linux-debug/tpj_scenarios --compare "$out/linux-debug.txt" "$out/windows-debug.txt"
-status=$?
-if [ $status -eq 1 ]; then
-    fail "the builds differ; see the first differing line above"
-elif [ $status -ne 0 ]; then
-    fail "the comparison failed"
-fi
-stage "both builds wrote the same $(wc -l <"$out/linux-debug.txt") lines; passed."
+for preset in "${PRESETS[@]}"; do
+    [ "$preset" = "$REFERENCE" ] && continue
+    stage "comparing $preset with $REFERENCE"
+    "build/$REFERENCE/tpj_scenarios.exe" --compare "$out/$REFERENCE.txt" "$out/$preset.txt"
+    status=$?
+    if [ $status -eq 1 ]; then
+        fail "$preset differs from $REFERENCE; see the first differing line above"
+    elif [ $status -ne 0 ]; then
+        fail "the comparison of $preset failed"
+    fi
+done
+stage "all ${#PRESETS[@]} builds wrote the same $(wc -l <"$out/$REFERENCE.txt") lines; passed."

@@ -1,7 +1,8 @@
 #!/bin/bash
-# release-check: the checks that run on Linux, made before a release rather than on every change
-# (decision 0030). Builds linux-debug with AddressSanitizer and UBSan, warnings as errors, runs its
-# tests, and runs the cross-build check (decision 0022). Run from WSL at the repository root.
+# release-check: the checks made before a release rather than on every change (decision 0030).
+# Builds linux-debug with AddressSanitizer and UBSan, warnings as errors, runs its tests, and runs
+# the cross-build check, which compares windows-debug with the windows-release and linux-release
+# builds players run (decisions 0022 and 0036). Run from WSL at the repository root.
 set -uo pipefail
 
 say() { echo "release-check: $*"; }
