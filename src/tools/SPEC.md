@@ -1,27 +1,29 @@
 # tools
 
-The park's editing tools. The library tpj_tools links tpj_sim alone, so its logic runs and is tested without a window (principle 10). A tool never changes the world: it reads intent through sim/park's public queries and geometry (sim/park/SPEC.md), and gives edits, ParkEdit values, which the app queues for the next cycle.
+The park's editing tools: what the player's pointer does to the park. A tool never changes the world. It reads intent through sim/park's public queries and geometry (sim/park/SPEC.md) and gives edits, ParkEdit values, which the app queues for the next cycle. The library tpj_tools links tpj_sim alone, so it runs without a window (principle 10).
+
+## Boundary
+
+A ToolState holds one tool, of a ToolKind: None, GuestPath, BackstagePath, PlaceShop, PlaceDepot, MoveBox, or Delete. The app drives it with four calls, selectTool, movePointer, pressPointer, and releasePointer, and reads tentativeEdit, the edit the ghost shows, and highlightedEntity, the entity the tool marks. boxAt, pathAt, and snapToPath are the picking queries the tools use.
 
 ## Input
 
-A ToolState holds one tool, of a ToolKind: None, GuestPath, BackstagePath, PlaceShop, PlaceDepot, MoveBox, or Delete. Its fields are public for reading, but only four calls change them. selectTool sets the kind and drops any hold and any drawn points without committing, keeping the pointer and the place tools' facing. movePointer records where the pointer meets the ground, or none when it meets no ground or is over a panel. pressPointer is the primary button going down, and whether it takes hold is up to the tool; a press while holding changes nothing. releasePointer is the button going up. When the press before it took hold, it gives exactly the edit tentativeEdit gave just before it for the same world, and otherwise none, and then it holds nothing.
+selectTool changes the tool and drops anything held or drawn without committing it. movePointer records where the pointer meets the ground, or that it meets none, as over a panel. pressPointer and releasePointer are the primary button going down and up.
 
-tentativeEdit gives the edit the ghost shows, if any, and highlightedEntity the entity the tool marks, if any, which only MoveBox ever gives. Neither changes the state or the world. A tool refuses nothing: its edit is committed whether or not isAccepted is true for it, and the simulation's refusal is the only one (principle 5).
+A release commits exactly the edit tentativeEdit showed just before it, so what the player sees in the ghost is what lands. A tool refuses nothing: it commits its edit whether or not the simulation will accept it, and the simulation's refusal is the only one (principle 5). Neither tentativeEdit nor highlightedEntity changes anything.
 
 ## Picking
 
-boxAt gives the first box, in parkBoxes' key order, whose footprint holds a ground point: with d the point minus the pose's position, and Forward and Right from footprintOf for its kind's boxSize, |d · Forward| is at most half the depth and |d · Right| at most half the width. A box with no footprint holds nothing. pathAt gives the first path, in parkPaths' order, for which some segment between consecutive points of its ground line lies within half its pathWidth of the point, a segment's distance being that of its nearest point. Neither gives the entrance.
-
-snapToPath gives, for a ground point and a path kind, the nearest point to it on the ground line of a path of that kind when one lies within SNAP_REACH, 2 m, its distance at most that, and the point itself otherwise. The nearest point to P on the segment from A to B is A + (B - A) * t, with t the projection ((P - A) · (B - A)) / ((B - A) · (B - A)) clamped to between 0 and 1, and its distance is sqrt(dx * dx + dz * dz) of it minus P. Paths are taken in parkPaths' order and segments in order along the line, and a point replaces the nearest so far only when strictly nearer. Paths of the other kind are never snapped onto.
+boxAt gives the box whose footprint holds a ground point, and pathAt the path whose width covers it, the first in key order when several do. Neither gives the entrance. snapToPath moves a point onto the nearest line of a path of the given kind when one lies within SNAP_REACH, and leaves it otherwise. A path never snaps onto a line of the other kind.
 
 ## Tools
 
-None gives no edit and no highlight, and never takes hold.
+Look, ToolKind None, edits nothing.
 
-GuestPath and BackstagePath draw a path of their kind. The tool keeps Drawn, the points drawn so far, empty at first. Its next point is snapToPath of the pointer for its kind, when the pointer has a ground position and, if Drawn is not empty, that snapped point is farther than FINISH_REACH, 1 m, from Drawn's last point: dx * dx + dz * dz is above FINISH_REACH squared. A press with a ground position appends the next point to Drawn when there is one, and otherwise, the snapped point lying within FINISH_REACH of the last point, finishes: it takes hold. A press with no ground position does nothing. Not holding, its edit is an AddPath of its kind through Drawn followed by the next point when Drawn is not empty and there is one, and through Drawn alone otherwise. Holding, its edit is the AddPath through Drawn alone. Either is none when it would hold fewer than two points. A release while it holds empties Drawn, so finishing on a lone first point commits nothing and ends the drawing. A point outside the park's square gives the AddPath an empty ground line, so its ghost is empty. It highlights nothing. Every point it appends lies at least FINISH_REACH from the one before, so the path it commits keeps all of them.
+Guest path and Backstage path draw a path of their kind. Each click adds a point, snapped onto a nearby path of the same kind so the new path joins it. Clicking the last point again finishes and commits the path, and the ghost shows the path through the drawn points and the pointer. A path of fewer than two points commits nothing.
 
-PlaceShop and PlaceDepot place a shop and a depot. The tool keeps a facing, (0, -1) at first. Not holding, its edit is an AddBox of its kind at the pointer's position with that facing, and none when the pointer has no ground position. A press with a ground position takes hold, landing the box at that position with the tool's facing. While it holds, each movePointer to a ground position whose dx * dx + dz * dz from the landing position is at least MIN_FACING_DRAG squared, MIN_FACING_DRAG being 1 m, sets the landing facing to the pointer minus the landing position, as (dx, dz); a nearer position or none leaves it. Holding, its edit is the AddBox of its kind at the landing position with the landing facing. A release while it holds sets the tool's facing to the landing facing, so the next box faces the same way.
+Place shop and Place depot place a box at the pointer. Pressing lands it, and dragging before release turns it to face the drag. The next box faces the same way as the last.
 
-MoveBox moves a box. Not holding, it gives no edit and highlights the box boxAt gives under the pointer. A press with a ground position over a box takes hold of it, keeping its key, its pose, and the offset of its position from the pointer, and setting the target to its pose. While it holds, each movePointer to a ground position moves the target's position to the pointer plus the offset, keeping the facing; none leaves it. Holding, its edit is a MoveBox of the held key to the target, or none while the target equals the kept pose, so a click without a drag commits nothing. It highlights nothing while holding.
+Move box marks the box under the pointer, and dragging moves it, keeping its facing. A click without a drag commits nothing.
 
-Delete gives DeleteBox of the box boxAt gives under the pointer, or when there is none DeletePath of the path pathAt gives, or none, whether or not it holds, and highlights nothing: its ghost marks what it deletes. Every press takes hold.
+Delete removes the box under the pointer, or, when there is none, the path under it. The ghost shows what it removes.
