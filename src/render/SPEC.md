@@ -4,9 +4,9 @@ Draws views of the park through SDL_GPU (decision 0009). It reads what it needs 
 
 ## Boundary
 
-render reads intent through sim/park's public queries and geometry, the networks through parkNetwork and the Network type's queries, guests through parkGuests and guestRecord, and shops through shopRecord. It depends on no module but sim and core. The food overlay shades by a value function it is given, which views supplies.
+render reads intent through sim/park's public queries and geometry, the networks through parkNetwork and the Network type's queries, guests through parkGuests and guestRecord, and shops through shopRecord. It depends on no module but sim and core. The band overlay shades by values it is given, which views supplies.
 
-The app calls renderer.h to create the renderer, upload meshes, and draw frames; park_mesh.h for buildParkMesh, buildGhostMesh, appendEntity, meshBounds, and HIGHLIGHT_TINT; guest_mesh.h for buildGuestMesh and appendGuestEntity; graph_overlay.h for buildGraphOverlay, graphColor, and the GRAPH_ drawing constants; food_overlay.h for OVERLAY_BAND, the reach of the food tooltip; and picking.h for groundAtCursor and entityAtCursor.
+The app calls renderer.h to create the renderer, upload meshes, and draw frames; park_mesh.h for buildParkMesh, buildGhostMesh, appendEntity, meshBounds, and HIGHLIGHT_TINT; guest_mesh.h for buildGuestMesh and appendGuestEntity; graph_overlay.h for buildGraphOverlay, graphColor, and the GRAPH_ drawing constants; band_overlay.h for OVERLAY_BAND, the reach of the food tooltip; and picking.h for groundAtCursor and entityAtCursor.
 
 ## The renderer
 
@@ -34,9 +34,9 @@ appendEntity adds the box or path a key holds, shaped as the park draws it, in a
 
 buildGuestMesh draws each guest that has a position as an upright box where it stands, shaded from blue when sated to pink when hungry. appendGuestEntity adds the box of one guest, where buildGuestMesh draws it, in a given color, and nothing when the guest has no position.
 
-## Food overlay
+## Band overlay
 
-buildFoodOverlay(world, value) draws a band along each guest path, shaded at each place by the value function, from gray for none through a perceptually uniform, colorblind-safe ramp from dark purple to yellow. A color means the same value in every park, and any positive value is distinguishable from none. The band covers the ground within OVERLAY_BAND of each guest path, lies over the terrain and under every path, and rises toward its own path, so where bands overlap the nearest path's value shows. Connectors and backstage paths have no band.
+buildBandOverlay(world, values, full) draws a band along each guest path, shaded at each place by the value values gives for it, from gray for none through a perceptually uniform, colorblind-safe ramp from dark purple to yellow, which reaches yellow at full. It calls values once per build, with every place it shades, so whatever computes the values sees the whole build at once. A color means the same value in every park for the same full, and any positive value is distinguishable from none. The band covers the ground within OVERLAY_BAND of each guest path, lies over the terrain and under every path, and rises toward its own path, so where bands overlap the nearest path's value shows. Connectors and backstage paths have no band.
 
 ## Picking
 

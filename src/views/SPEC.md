@@ -4,8 +4,8 @@ What the app shows, joined from render's mesh builders and legible's explanation
 
 ## Boundary
 
-The library tpj_views links tpj_render and tpj_legible and builds only with the windowed application, as render does. It takes a world by const reference and changes nothing. The app and tpj_bench call food_overlay.h.
+The library tpj_views links tpj_render and tpj_legible and builds only with the windowed application, as render does. It takes a world by const reference and changes nothing. The app and tpj_bench call availability_overlay.h.
 
-## Food overlay
+## Availability overlays
 
-buildFoodAvailabilityOverlay(world) gives render's food overlay of the world shaded by legible's food availability at each place. The app builds its food overlay with it, and tpj_bench times it, so what is timed is what is shown.
+buildAvailabilityOverlay(world, definition) gives render's band overlay of the world shaded by the definition's availability at each place, saturating at its Full. The app builds its food overlay with FOOD_AVAILABILITY, and tpj_bench times the same call, so what is timed is what is shown. An overlay of another need is the same call with its definition.

@@ -1,11 +1,12 @@
 #include "bench/stages.h"
 
+#include "legible/food.h"
 #include "legible/preview.h"
 #include "render/guest_mesh.h"
 #include "render/park_mesh.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
-#include "views/food_overlay.h"
+#include "views/availability_overlay.h"
 
 #include <array>
 #include <charconv>
@@ -103,7 +104,9 @@ std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
         StageResult{"preview", preview.Times, ResultKind::Hash, hashWorld(*candidate)});
   }
 
-  stages.push_back(meshStage("food-overlay", park, buildFoodAvailabilityOverlay));
+  stages.push_back(meshStage("food-overlay", park, [](const World &world) {
+    return buildAvailabilityOverlay(world, FOOD_AVAILABILITY);
+  }));
   stages.push_back(meshStage("park-mesh", park, buildParkMesh));
   stages.push_back(meshStage("guest-mesh", park, buildGuestMesh));
 

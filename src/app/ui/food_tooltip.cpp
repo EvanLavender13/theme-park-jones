@@ -1,7 +1,7 @@
 #include "app/ui/food_tooltip.h"
 
 #include "legible/food.h"
-#include "render/food_overlay.h"
+#include "render/band_overlay.h"
 
 #include <imgui.h>
 

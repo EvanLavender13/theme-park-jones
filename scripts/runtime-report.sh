@@ -7,10 +7,10 @@
 # The first builds tpj_bench with windows-release and windows-debug, launches it N times, 10 by
 # default, on every park in tests/parks/stress/ with each build, in rounds, windows-debug stepping
 # 300 ticks and skipping the full park, which it cannot step in reasonable time. Each round also
-# launches the windows-release app on every park and keeps its frame times. It writes the report
-# tpj_bench_report makes of the launches to REPORT and prints it against the budget. The second
-# prints tpj_bench_report's comparison of two reports. Run from WSL. Nothing checks a time: reports
-# are read, never gated on.
+# launches the windows-release app on every park, without and then with the food overlay, and
+# keeps its frame times. It writes the report tpj_bench_report makes of the launches to REPORT and
+# prints it against the budget. The second prints tpj_bench_report's comparison of two reports.
+# Run from WSL. Nothing checks a time: reports are read, never gated on.
 set -uo pipefail
 export LC_ALL=C
 
@@ -102,13 +102,23 @@ for ((round = 1; round <= launches; round++)); do
                 fail "tpj_bench failed on $park with $preset in round $round"
         done
     done
-    for park in "${parks[@]}"; do
-        build/windows-release/ThemeParkJones.exe --park "$park" --frames "$app_frames" \
-            --frame-times >"$app_output" || fail "the app failed on $park in round $round"
-        echo "build windows-release-app" >>"$out/launches.txt"
-        build/windows-release/tpj_bench_report.exe frames "$park" "$(wslpath -w "$app_output")" |
-            tr -d '\r' >>"$out/launches.txt" ||
-            fail "converting the app's frames on $park in round $round failed"
+    # The app without the food overlay, then with it, which rebuilds it at every tick.
+    for overlay in none food; do
+        options=()
+        label=windows-release-app
+        if [ "$overlay" = food ]; then
+            options=(--overlay food)
+            label=windows-release-app-overlay
+        fi
+        for park in "${parks[@]}"; do
+            build/windows-release/ThemeParkJones.exe --park "$park" --frames "$app_frames" \
+                --frame-times "${options[@]}" >"$app_output" ||
+                fail "the app failed on $park with overlay $overlay in round $round"
+            echo "build $label" >>"$out/launches.txt"
+            build/windows-release/tpj_bench_report.exe frames "$park" \
+                "$(wslpath -w "$app_output")" | tr -d '\r' >>"$out/launches.txt" ||
+                fail "converting the app's frames on $park with overlay $overlay in round $round failed"
+        done
     done
 done
 

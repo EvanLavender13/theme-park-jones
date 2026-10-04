@@ -1,8 +1,9 @@
 #include "app/scene/scene_uploads.h"
 
+#include "legible/food.h"
 #include "render/guest_mesh.h"
 #include "render/park_mesh.h"
-#include "views/food_overlay.h"
+#include "views/availability_overlay.h"
 
 #include <optional>
 
@@ -34,7 +35,7 @@ ParkMesh foodOverlayMesh(const World &world, bool show) {
   if (!show) {
     return {};
   }
-  return buildFoodAvailabilityOverlay(world);
+  return buildAvailabilityOverlay(world, FOOD_AVAILABILITY);
 }
 
 } // namespace

@@ -1,6 +1,7 @@
 # Explanations of the simulation for display, computed from its fields, networks, and intent. They
 # link the simulation alone, so tests compute them without a window (principle 10).
 add_library(tpj_legible STATIC
+    availability.cpp
     food.cpp
     inspect.cpp
     path_place.cpp
