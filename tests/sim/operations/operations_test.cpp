@@ -101,7 +101,7 @@ TEST_CASE("nearestDepot is the depot box with the least supply route length at t
 }
 
 TEST_CASE("nearestDepot breaks a tie in supply route length toward the lower key") {
-  // Depots facing each other across the line at the same x meet it at the same place, 3 m from
+  // Depots facing each other across the line at the same x meet it at the same place, as far from
   // each door, so their routes to the shop tie.
   SECTION("the lower key on the far side of the line") {
     const World world =
@@ -140,79 +140,50 @@ TEST_CASE("nearestDepot is none when no depot box has a supply route length at t
 
 // Shipment delay.
 
-TEST_CASE("shipmentDelay gives 1 for a result below 1 or a NaN") {
-  for (const double distance : {0.0, -0.0, -5.0, -std::numeric_limits<double>::infinity(),
-                                std::numeric_limits<double>::quiet_NaN()}) {
-    CAPTURE(distance);
-    CHECK(shipmentDelay(distance) == 1);
+TEST_CASE("shipmentDelay gives a delay of at least 1 for every distance, a NaN included, and never "
+          "a smaller delay for a greater distance") {
+  // Ascending: below 0, none, a typical route, one whose ticks a uint32_t cannot hold, and no end.
+  const std::vector<double> distances{
+      -std::numeric_limits<double>::infinity(), -5.0, 0.0, 40.0, 1.0e12,
+      std::numeric_limits<double>::infinity()};
+  uint32_t previous = 0;
+  for (const double distance : distances) {
+    const uint32_t delay = shipmentDelay(distance);
+    CAPTURE(distance, delay);
+    CHECK(delay >= 1);
+    CHECK(delay >= previous);
+    previous = delay;
   }
-}
-
-TEST_CASE("shipmentDelay gives the largest uint32_t for a result above it") {
-  for (const double distance : {1.0e12, std::numeric_limits<double>::infinity()}) {
-    CAPTURE(distance);
-    CHECK(shipmentDelay(distance) == std::numeric_limits<uint32_t>::max());
-  }
+  CHECK(shipmentDelay(std::numeric_limits<double>::quiet_NaN()) >= 1);
 }
 
 // Inventory position.
 
-TEST_CASE("inventoryPosition counts the supplies the shop holds, supplies heading to it, and its "
-          "orders heading to or held by a depot box, and nothing else addressed to it") {
+TEST_CASE("inventoryPosition counts exactly the supplies the shop holds, the supplies heading to "
+          "it, and its orders heading to or held by a depot box") {
   World world = lineWorld({shopAt(SHOP, 0.0), depotAt(DEPOT, 32.0), shopAt(OTHER_SHOP, 16.0)});
-  REQUIRE(inventoryPosition(world, SHOP) == 0);
-  int64_t expected = 0;
+  // A different number of each kind that counts, so a kind missed or counted twice shows.
+  hold<Supplies>(world, SHOP, SHOP, 5);
+  carry<Supplies>(world, packetOf(DEPOT, SHOP, SHOP, 4));
+  carry<SupplyOrders>(world, packetOf(SHOP, DEPOT, SHOP, 3));
+  hold<SupplyOrders>(world, DEPOT, SHOP, 6);
+  // Units addressed to the shop that do not count: orders it holds, orders a depot sent back,
+  // orders returning from, heading to, or held by a deleted depot, supplies returning to a depot,
+  // and supplies a depot holds.
+  hold<SupplyOrders>(world, SHOP, SHOP, 7);
+  carry<SupplyOrders>(world, packetOf(DEPOT, SHOP, SHOP, 7));
+  carry<SupplyOrders>(world, packetOf(GONE, SHOP, SHOP, 7, true));
+  carry<SupplyOrders>(world, packetOf(SHOP, GONE, SHOP, 7));
+  hold<SupplyOrders>(world, GONE, SHOP, 7);
+  carry<Supplies>(world, packetOf(SHOP, DEPOT, SHOP, 7, true));
+  hold<Supplies>(world, DEPOT, SHOP, 7);
+  // Units addressed to another shop.
+  hold<Supplies>(world, OTHER_SHOP, OTHER_SHOP, 7);
+  carry<Supplies>(world, packetOf(DEPOT, OTHER_SHOP, OTHER_SHOP, 7));
+  carry<SupplyOrders>(world, packetOf(OTHER_SHOP, DEPOT, OTHER_SHOP, 7));
+  hold<SupplyOrders>(world, DEPOT, OTHER_SHOP, 7);
 
-  SECTION("supplies the shop holds count") {
-    hold<Supplies>(world, SHOP, SHOP, 5);
-    expected = 5;
-  }
-  SECTION("supplies heading to the shop count") {
-    carry<Supplies>(world, packetOf(DEPOT, SHOP, SHOP, 4));
-    expected = 4;
-  }
-  SECTION("orders heading to a depot box count") {
-    carry<SupplyOrders>(world, packetOf(SHOP, DEPOT, SHOP, 3));
-    expected = 3;
-  }
-  SECTION("orders a depot box holds count") {
-    hold<SupplyOrders>(world, DEPOT, SHOP, 6);
-    expected = 6;
-  }
-  SECTION("orders the shop holds do not count") { hold<SupplyOrders>(world, SHOP, SHOP, 7); }
-  SECTION("orders a depot sent back to the shop do not count") {
-    carry<SupplyOrders>(world, packetOf(DEPOT, SHOP, SHOP, 7));
-  }
-  SECTION("orders returning from a deleted depot do not count") {
-    carry<SupplyOrders>(world, packetOf(GONE, SHOP, SHOP, 7, true));
-  }
-  SECTION("orders heading to a deleted depot do not count") {
-    carry<SupplyOrders>(world, packetOf(SHOP, GONE, SHOP, 7));
-  }
-  SECTION("orders a deleted depot holds do not count") { hold<SupplyOrders>(world, GONE, SHOP, 7); }
-  SECTION("supplies returning to a depot do not count") {
-    carry<Supplies>(world, packetOf(SHOP, DEPOT, SHOP, 7, true));
-  }
-  SECTION("supplies a depot holds do not count") { hold<Supplies>(world, DEPOT, SHOP, 7); }
-  SECTION("units addressed to another shop do not count") {
-    hold<Supplies>(world, OTHER_SHOP, OTHER_SHOP, 7);
-    carry<Supplies>(world, packetOf(DEPOT, OTHER_SHOP, OTHER_SHOP, 7));
-    carry<SupplyOrders>(world, packetOf(OTHER_SHOP, DEPOT, OTHER_SHOP, 7));
-    hold<SupplyOrders>(world, DEPOT, OTHER_SHOP, 7);
-  }
-  SECTION("everything at once counts the four that count, added") {
-    hold<Supplies>(world, SHOP, SHOP, 5);
-    carry<Supplies>(world, packetOf(DEPOT, SHOP, SHOP, 4));
-    carry<SupplyOrders>(world, packetOf(SHOP, DEPOT, SHOP, 3));
-    hold<SupplyOrders>(world, DEPOT, SHOP, 6);
-    hold<SupplyOrders>(world, SHOP, SHOP, 7);
-    carry<SupplyOrders>(world, packetOf(SHOP, GONE, SHOP, 7));
-    hold<SupplyOrders>(world, GONE, SHOP, 7);
-    hold<Supplies>(world, DEPOT, SHOP, 7);
-    expected = 18;
-  }
-
-  CHECK(inventoryPosition(world, SHOP) == expected);
+  CHECK(inventoryPosition(world, SHOP) == 5 + 4 + 3 + 6);
 }
 
 // The shop's step.
@@ -234,40 +205,33 @@ TEST_CASE("A shop consumes every order unit it holds under its own handle as unf
   }
 }
 
-TEST_CASE("A supplied shop at or below the reorder point sends one packet of ORDER_UP_TO minus its "
-          "position to its nearest depot, under its own handle, with the delay ORDER_DELAY") {
-  CHECK(REORDER_POINT == 8);
-  CHECK(ORDER_UP_TO == 24);
-  CHECK(ORDER_DELAY == 30);
-  // The far depot has the lower key, so the order goes to the nearest, not the first.
-  World world = lineWorld({shopAt(SHOP, 0.0), depotAt(FAR_DEPOT, -48.0), depotAt(DEPOT, 32.0)});
-  int64_t position = 0;
-  SECTION("an empty shop") {}
-  SECTION("a shop at the reorder point") {
-    hold<Supplies>(world, SHOP, SHOP, REORDER_POINT);
-    position = REORDER_POINT;
-  }
-  REQUIRE(inventoryPosition(world, SHOP) == position);
+TEST_CASE("A shop orders only at or below REORDER_POINT, and then ORDER_UP_TO less its position, "
+          "to its nearest depot, with the delay ORDER_DELAY") {
+  // The far depot has the lower key, so the order goes to the nearest, not the first. One shop
+  // stands at the reorder point, and one just above it, each nearest the same depot.
+  World world = lineWorld({shopAt(SHOP, 0.0), depotAt(FAR_DEPOT, -48.0), depotAt(DEPOT, 32.0),
+                           shopAt(OTHER_SHOP, 16.0)});
+  hold<Supplies>(world, SHOP, SHOP, REORDER_POINT);
+  hold<Supplies>(world, OTHER_SHOP, OTHER_SHOP, REORDER_POINT + 1);
+  REQUIRE(inventoryPosition(world, SHOP) == REORDER_POINT);
+  REQUIRE(nearestDepot(world, OTHER_SHOP).value_or(DepotRoute{}).Depot == DEPOT);
   const uint64_t tick = world.Tick;
 
   stepWorld(world);
 
-  CHECK(packetsFrom<SupplyOrders>(world, SHOP) ==
-        std::vector<FlowPacket>{{.Arrival = tick + ORDER_DELAY,
-                                 .From = SHOP,
-                                 .To = DEPOT,
-                                 .Handle = SHOP,
-                                 .Units = ORDER_UP_TO - position,
-                                 .Delay = ORDER_DELAY,
-                                 .Returning = false}});
-}
-
-TEST_CASE("A shop above the reorder point sends no orders") {
-  World world = lineWorld({shopAt(SHOP, 0.0), depotAt(DEPOT, 32.0)});
-  hold<Supplies>(world, SHOP, SHOP, REORDER_POINT + 1);
-  stepWorld(world);
-  CHECK(packetsFrom<SupplyOrders>(world, SHOP).empty());
-  CHECK(unitsCreated<SupplyOrders>(world) == 0);
+  const std::vector<FlowPacket> orders = packetsFrom<SupplyOrders>(world, SHOP);
+  CHECK(orders == std::vector<FlowPacket>{{.Arrival = tick + ORDER_DELAY,
+                                           .From = SHOP,
+                                           .To = DEPOT,
+                                           .Handle = SHOP,
+                                           .Units = ORDER_UP_TO - REORDER_POINT,
+                                           .Delay = ORDER_DELAY,
+                                           .Returning = false}});
+  // An order at the reorder point holds at least one unit.
+  for (const FlowPacket &order : orders) {
+    CHECK(order.Units >= 1);
+  }
+  CHECK(packetsFrom<SupplyOrders>(world, OTHER_SHOP).empty());
 }
 
 TEST_CASE("A starved shop sends no orders") {

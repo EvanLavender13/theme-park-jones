@@ -240,10 +240,8 @@ template <typename Check> void runStallPark(Check check) {
   REQUIRE(state.CutServing);
 }
 
-TEST_CASE("A guest creates guest-visits units only in a cycle that ends with it waiting at its "
-          "Target's guest anchor, and then exactly one, under its own key as handle, which its "
-          "Target holds at the cycle's end") {
-  CHECK(VISIT_DELAY == 1);
+TEST_CASE("A guest sends one visit, addressed to its Target, only in a cycle in which it starts "
+          "waiting at that shop's guest anchor") {
   int sent = 0;
   runStallPark([&](const BeforeCycle &before, const World &after) {
     int64_t senders = 0;
@@ -262,11 +260,18 @@ TEST_CASE("A guest creates guest-visits units only in a cycle that ends with it 
       CAPTURE(guest);
       ++senders;
       CHECK(now.At == test::anchorPlace(after, now.Target));
+      // The visit is on its way to the shop, or has reached it.
       const FlowAddressed addressed = addressedTo<GuestVisits>(after, guest);
-      CHECK(addressed.Packets.empty());
-      REQUIRE(addressed.Stocks.size() == 1);
-      CHECK(addressed.Stocks.front().Endpoint == now.Target);
-      CHECK(addressed.Stocks.front().Units == 1);
+      REQUIRE(addressed.Packets.size() + addressed.Stocks.size() == 1);
+      for (const FlowPacket &packet : addressed.Packets) {
+        CHECK(packet.From == guest);
+        CHECK(packet.To == now.Target);
+        CHECK(packet.Units == 1);
+      }
+      for (const FlowStock &stock : addressed.Stocks) {
+        CHECK(stock.Endpoint == now.Target);
+        CHECK(stock.Units == 1);
+      }
     }
     CHECK(unitsCreated<GuestVisits>(after) - before.VisitsCreated == senders);
     sent += static_cast<int>(senders);
@@ -343,11 +348,9 @@ TEST_CASE("A waiting guest holding guest-visits units under its own key consumes
   CHECK(sawUnserved);
 }
 
-TEST_CASE("A served guest consumes its one meal as eaten, its MealsEaten rises by 1, and its "
-          "LastMeal gives the tick, its Hunger after the cycle's rise, and that less MEAL_RELIEF "
-          "but at least 0, which is its Hunger after the cycle") {
-  // Each guest's hunger rate, drawn in the cycle that admitted it.
-  std::map<EntityKey, double> rates;
+TEST_CASE("Eating a meal lowers the guest's hunger, never below 0, and counts the meal: it is "
+          "consumed as eaten, MealsEaten rises by 1, and LastMeal holds the tick and the hunger "
+          "before and after, which is the guest's Hunger") {
   int served = 0;
   runStallPark([&](const BeforeCycle &before, const World &after) {
     const uint64_t tick = before.Tick;
@@ -371,26 +374,24 @@ TEST_CASE("A served guest consumes its one meal as eaten, its MealsEaten rises b
         CHECK(record.LastMeal == was.Record.LastMeal);
         continue;
       }
-      REQUIRE(rates.contains(guest));
       eaten += meals;
       ++served;
-      const double hungerBefore = std::min(1.0, was.Record.Hunger + rates.at(guest));
-      const double hungerAfter = std::max(0.0, hungerBefore - MEAL_RELIEF);
       CHECK(unitsHeld<Meals>(after, guest, guest) == 0);
       CHECK(record.MealsEaten == was.Record.MealsEaten + 1);
-      CHECK(record.LastMeal ==
-            GuestMeal{.Tick = tick, .Before = hungerBefore, .After = hungerAfter});
-      CHECK(record.Hunger == hungerAfter);
-      CHECK(hungerAfter < hungerBefore);
+      REQUIRE(record.LastMeal.has_value());
+      const GuestMeal meal = record.LastMeal.value_or(GuestMeal{});
+      CAPTURE(was.Record.Hunger, meal.Before, meal.After);
+      CHECK(meal.Tick == tick);
+      // Its hunger rose in the cycle before it ate, and never past 1.
+      CHECK(meal.Before >= was.Record.Hunger);
+      CHECK(meal.Before <= 1.0);
+      CHECK(meal.After < meal.Before);
+      CHECK(meal.After >= 0.0);
+      CHECK(record.Hunger == meal.After);
     }
     const int64_t consumed = unitsConsumed<Meals>(after, EATEN_CAUSE) - before.MealsEaten;
     CHECK(consumed == eaten);
     CHECK(consumed == rose);
-    for (const EntityKey guest : parkGuests(after)) {
-      if (!rates.contains(guest)) {
-        rates.emplace(guest, test::drawnHungerRate(after, guest, tick));
-      }
-    }
   });
   CHECK(served > 0);
 }

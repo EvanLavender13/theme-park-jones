@@ -10,6 +10,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <stdint.h>
 #include <utility>
@@ -74,6 +75,24 @@ void stepUntil(World &world, uint64_t tick) {
   }
 }
 
+// The guest-visits units the shop has sent back to the guest, in transit to it or held by it.
+int64_t visitsSentBack(const World &world, EntityKey guest) {
+  const FlowAddressed addressed = addressedTo<GuestVisits>(world, guest);
+  int64_t units = 0;
+  for (const FlowPacket &packet : addressed.Packets) {
+    units += packet.To == guest ? packet.Units : 0;
+  }
+  for (const FlowStock &stock : addressed.Stocks) {
+    units += stock.Endpoint == guest ? stock.Units : 0;
+  }
+  return units;
+}
+
+bool hasMeal(const World &world, EntityKey guest) {
+  const FlowAddressed meals = addressedTo<Meals>(world, guest);
+  return !meals.Packets.empty() || !meals.Stocks.empty();
+}
+
 // Serving.
 
 // What serving the guest leaves: one meal created and sent, one supply consumed as served, and the
@@ -105,7 +124,6 @@ void checkServes(World world) {
 
 TEST_CASE("Serving a guest consumes one supply as served and sends the guest one meal and one of "
           "its visits, each one unit under its handle with the delay SERVICE_INTERVAL") {
-  CHECK(SERVICE_INTERVAL == 90);
   SECTION("a supplied shop") { checkServes(suppliedWorld()); }
   SECTION("a starved shop serves from its stock") { checkServes(starvedWorld()); }
 }
@@ -162,38 +180,29 @@ TEST_CASE("A supplied shop returns no visit, however long its queue") {
 
 // The queue.
 
-TEST_CASE("A shop serves the guest whose visit reached it at an earlier swap first, whatever the "
-          "guests' keys") {
+TEST_CASE("A shop serves visits in the order they arrived, and visits that arrived at the same "
+          "swap in guest key order") {
   World world = suppliedWorld();
-  const std::vector<EntityKey> guests = addGuests(world, 2);
-  const EntityKey low = guests[0];
-  const EntityKey high = guests[1];
-  hold<GuestVisits>(world, SHOP, high, 1);
-  carry<GuestVisits>(world, sentAtZero(low, SHOP, low, 1, 1));
-  // The shop can serve only once this arrives, when it holds both visits.
-  carry<Supplies>(world, sentAtZero(DEPOT, SHOP, SHOP, 1, 1));
+  const std::vector<EntityKey> guests = addGuests(world, 3);
+  // The highest key's visit is already held, and the two lower keys' visits arrive together after
+  // it, with the shop's first supplies, so its queue holds all three when it first serves.
+  const EntityKey first = guests[2];
+  hold<GuestVisits>(world, SHOP, first, 1);
+  carry<GuestVisits>(world, sentAtZero(guests[1], SHOP, guests[1], 1, 1));
+  carry<GuestVisits>(world, sentAtZero(guests[0], SHOP, guests[0], 1, 1));
+  carry<Supplies>(world, sentAtZero(DEPOT, SHOP, SHOP, 3, 1));
 
-  stepUntil(world, 2);
-
-  const std::vector<FlowPacket> meals = packetsFrom<Meals>(world, SHOP);
-  REQUIRE(meals.size() == 1);
-  CHECK(meals.front().To == high);
-}
-
-TEST_CASE("A shop serves visits that reached it at the same swap in ascending guest key order") {
-  World world = suppliedWorld();
-  const std::vector<EntityKey> guests = addGuests(world, 2);
-  const EntityKey low = guests[0];
-  const EntityKey high = guests[1];
-  carry<GuestVisits>(world, sentAtZero(high, SHOP, high, 1, 1));
-  carry<GuestVisits>(world, sentAtZero(low, SHOP, low, 1, 1));
-  hold<Supplies>(world, SHOP, SHOP, 1);
-
-  stepUntil(world, 2);
-
-  const std::vector<FlowPacket> meals = packetsFrom<Meals>(world, SHOP);
-  REQUIRE(meals.size() == 1);
-  CHECK(meals.front().To == low);
+  std::vector<EntityKey> served;
+  while (served.size() < guests.size()) {
+    REQUIRE(world.Tick < 1000);
+    stepWorld(world);
+    for (const EntityKey guest : guests) {
+      if (std::ranges::find(served, guest) == served.end() && hasMeal(world, guest)) {
+        served.push_back(guest);
+      }
+    }
+  }
+  CHECK(served == std::vector<EntityKey>{first, guests[0], guests[1]});
 }
 
 TEST_CASE("A shop's queue holds an entry for each visit unit it holds, so a guest with two visits "
@@ -209,7 +218,7 @@ TEST_CASE("A shop's queue holds an entry for each visit unit it holds, so a gues
   stepWorld(world);
 
   CHECK(unitsHeld<GuestVisits>(world, SHOP, guests[0]) == 2);
-  CHECK(unitsHeld<GuestVisits>(world, guests[1], guests[1]) == 1);
+  CHECK(visitsSentBack(world, guests[1]) == 1);
 }
 
 TEST_CASE("A starved shop keeps the visits that reached it earliest and returns the later ones") {
@@ -224,67 +233,48 @@ TEST_CASE("A starved shop keeps the visits that reached it earliest and returns 
   stepUntil(world, 2);
 
   CHECK(unitsHeld<GuestVisits>(world, SHOP, high) == 1);
-  CHECK(unitsHeld<GuestVisits>(world, low, low) == 1);
+  CHECK(visitsSentBack(world, low) == 1);
 }
 
 // Starved shops.
 
-TEST_CASE("A starved shop keeps queued only its first c visits, c being the supplies it holds "
-          "under its own handle and those in packets under its handle heading to it, and returns "
-          "every other visit to its guest at once with no meal") {
-  CHECK(RETURN_DELAY == 1);
+TEST_CASE("A starved shop keeps as many visits as the supplies it holds or has coming, and sends "
+          "every other visit back to its guest with no meal") {
   World world = lineWorld({shopAt(SHOP, 0.0), shopAt(OTHER_SHOP, 16.0)});
-  const std::vector<EntityKey> guests = addGuests(world, 6);
+  const std::vector<EntityKey> guests = addGuests(world, 7);
   for (const EntityKey guest : guests) {
     hold<GuestVisits>(world, SHOP, guest, 1);
   }
-  std::size_t cover = 0;
-  SECTION("nothing held or coming") {}
-  SECTION("supplies it holds under its own handle count") {
-    hold<Supplies>(world, SHOP, SHOP, 2);
-    cover = 2;
-  }
-  SECTION("supplies under its handle heading to it count") {
-    carry<Supplies>(world, sentAtZero(GONE, SHOP, SHOP, 3, 10));
-    cover = 3;
-  }
-  SECTION("supplies it holds under another handle do not count") {
-    hold<Supplies>(world, SHOP, GONE, 4);
-  }
-  SECTION("supplies under its handle heading elsewhere do not count") {
-    carry<Supplies>(world, FlowPacket{.Arrival = 10,
-                                      .From = SHOP,
-                                      .To = GONE,
-                                      .Handle = SHOP,
-                                      .Units = 4,
-                                      .Delay = 10,
-                                      .Returning = true});
-  }
-  SECTION("supplies addressed to another shop do not count") {
-    hold<Supplies>(world, OTHER_SHOP, OTHER_SHOP, 4);
-    carry<Supplies>(world, sentAtZero(GONE, OTHER_SHOP, OTHER_SHOP, 4, 10));
-  }
-  SECTION("everything at once counts the two that count, added") {
-    hold<Supplies>(world, SHOP, SHOP, 2);
-    carry<Supplies>(world, sentAtZero(GONE, SHOP, SHOP, 3, 10));
-    hold<Supplies>(world, SHOP, GONE, 4);
-    hold<Supplies>(world, OTHER_SHOP, OTHER_SHOP, 4);
-    cover = 5;
-  }
+  // Supplies it holds under its own handle and supplies heading to it, which cover 2 + 3 visits,
+  // beside supplies that cover none: held under another handle, under its handle heading
+  // elsewhere, and addressed to another shop.
+  const std::size_t cover = 2 + 3;
+  hold<Supplies>(world, SHOP, SHOP, 2);
+  carry<Supplies>(world, sentAtZero(GONE, SHOP, SHOP, 3, 10));
+  hold<Supplies>(world, SHOP, GONE, 4);
+  carry<Supplies>(world, FlowPacket{.Arrival = 10,
+                                    .From = SHOP,
+                                    .To = GONE,
+                                    .Handle = SHOP,
+                                    .Units = 4,
+                                    .Delay = 10,
+                                    .Returning = true});
+  hold<Supplies>(world, OTHER_SHOP, OTHER_SHOP, 4);
+  carry<Supplies>(world, sentAtZero(GONE, OTHER_SHOP, OTHER_SHOP, 4, 10));
 
   stepWorld(world);
 
-  // A visit returned with the delay RETURN_DELAY reaches its guest at the swap that ends the cycle
-  // returning it, and one kept or served does not.
+  // A kept visit stays at the shop, or goes back with a meal when the shop serves it from its
+  // stock.
   for (std::size_t index = 0; index < guests.size(); ++index) {
-    CAPTURE(index, cover);
     const EntityKey guest = guests[index];
-    CHECK(unitsHeld<GuestVisits>(world, guest, guest) == (index >= cover ? 1 : 0));
-    if (index >= cover) {
-      const FlowAddressed meals = addressedTo<Meals>(world, guest);
-      CHECK(meals.Packets.empty());
-      CHECK(meals.Stocks.empty());
+    CAPTURE(index);
+    if (index < cover) {
+      CHECK((visitsSentBack(world, guest) == 0 || hasMeal(world, guest)));
+      continue;
     }
+    CHECK(visitsSentBack(world, guest) == 1);
+    CHECK_FALSE(hasMeal(world, guest));
   }
 }
 

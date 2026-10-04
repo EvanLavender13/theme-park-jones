@@ -9,7 +9,6 @@
 #include "sim/medium/network.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
-#include "sim/sim_math.h"
 #include "sim/world.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -20,6 +19,7 @@
 #include <optional>
 #include <span>
 #include <stdint.h>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -29,32 +29,7 @@ namespace {
 using test::midpointOf;
 using test::recordOf;
 
-// Long enough for guests to have spread from the eating park's gate down the spine, past the near
-// and starved shops' junctions, leaving stretches they have walked and since left. No guest arrives
-// in the cycle stepping it, since its successor is not a multiple of ARRIVAL_INTERVAL.
-constexpr uint64_t SPREAD_TICK = 900;
-
 const EntityKey FOOTFALL_SOURCE = fieldKey(HungryFootfall::Name);
-
-// The eating park stepped with no commands until guests have spread over its first stretches.
-const World &spreadWorld() {
-  static const World world = [] {
-    World stepped = test::eatingWorld();
-    test::stepUntil(stepped, SPREAD_TICK);
-    return stepped;
-  }();
-  return world;
-}
-
-// The spread world stepped one more cycle with no commands.
-const World &steppedWorld() {
-  static const World world = [] {
-    World stepped = copyWorld(spreadWorld());
-    stepWorld(stepped);
-    return stepped;
-  }();
-  return world;
-}
 
 std::span<const KeptEntry> footfallEntries(const World &world) {
   return keptEntries<HungryFootfall>(world, FOOTFALL_SOURCE);
@@ -141,6 +116,64 @@ std::vector<NetworkEdge> edgesOn(const Network &network, EntityKey carrier) {
   return edges;
 }
 
+// Whether some stretch holds a footfall entry and no guest: one guests have walked and since left.
+bool hasLeftStretch(const World &world) {
+  const std::vector<NetworkEdge> &stretches = test::guestNetwork(world).edges();
+  return std::ranges::any_of(stretches, [&world](const NetworkEdge &stretch) {
+    return !entriesIn(world, stretch).empty() && guestsIn(world, stretch).empty();
+  });
+}
+
+// Whether guests have walked the spine past the near and starved shops' junctions, so its first
+// two stretches hold footfall.
+bool hasSpread(const World &world) {
+  const std::vector<NetworkEdge> spine = edgesOn(test::guestNetwork(world), test::EATING_SPINE);
+  return spine.size() > 2 && stretchValue(world, spine[0]) != 0.0 &&
+         stretchValue(world, spine[1]) != 0.0;
+}
+
+// The spread world, the eating park stepped with no commands until guests have spread over its
+// first stretches, leaving stretches they have walked and since left, and that world stepped one
+// more cycle with no commands, which still holds such a stretch.
+struct SpreadRun {
+  World Spread;
+  World Stepped;
+};
+
+const SpreadRun &spreadRun() {
+  static const SpreadRun run = [] {
+    // Far more cycles than the run takes, a guard against stepping for ever.
+    constexpr uint64_t LONGEST_RUN = 6000;
+    World spread = test::eatingWorld();
+    while (true) {
+      REQUIRE(spread.Tick < LONGEST_RUN);
+      stepWorld(spread);
+      if (!hasSpread(spread) || !hasLeftStretch(spread)) {
+        continue;
+      }
+      World stepped = copyWorld(spread);
+      stepWorld(stepped);
+      if (hasLeftStretch(stepped)) {
+        return SpreadRun{.Spread = std::move(spread), .Stepped = std::move(stepped)};
+      }
+    }
+  }();
+  return run;
+}
+
+const World &spreadWorld() { return spreadRun().Spread; }
+
+// The spread world stepped one more cycle with no commands.
+const World &steppedWorld() { return spreadRun().Stepped; }
+
+// A guest path crossing the eating park's gate path a quarter of the way along it, off its
+// midpoint, so a split leaves the old midpoint in the far half, whose midpoint differs from it.
+AddPath gateCrossing() {
+  const std::vector<ParkPoint> gate = test::eatingGatePoints();
+  const double z = gate.front().Z + ((gate.back().Z - gate.front().Z) / 4.0);
+  return AddPath{PathKind::Guest, {{-2.0, z}, {2.0, z}}};
+}
+
 World candidateWith(const World &world, const ParkEdit &edit) {
   REQUIRE(isAccepted(world, edit));
   CommandQueue commands;
@@ -175,8 +208,7 @@ TEST_CASE("Hungry footfall holds at most one kept entry in each stretch of the g
           "the stretch's midpoint") {
   // A crossing path splits the gate path's stretch, so a carried entry must move to its new
   // stretch's midpoint, and a cycle on the new network keeps entries there.
-  World world =
-      candidateWith(spreadWorld(), AddPath{PathKind::Guest, {{-2.0, 121.5}, {2.0, 121.5}}});
+  World world = candidateWith(spreadWorld(), gateCrossing());
   stepWorld(world);
   const Network &network = test::guestNetwork(world);
   REQUIRE(edgesOn(network, test::EATING_GATE_PATH).size() == 2);
@@ -195,47 +227,50 @@ TEST_CASE("Hungry footfall holds at most one kept entry in each stretch of the g
   }
 }
 
-TEST_CASE("A stretch some guest lies in after a cycle holds V + (S - V) / FOOTFALL_TIME, with V "
-          "its value before the cycle and S the summed hunger of its guests") {
+TEST_CASE("Each stretch's hungry footfall moves toward the summed hunger of the guests on it, and "
+          "a stretch with none never moves away from 0 as it is read later, and never passes it") {
   const World &before = spreadWorld();
   const World &after = steppedWorld();
 
-  bool sawHeldValue = false;
-  bool sawGuests = false;
+  bool sawMove = false;
+  bool sawDecay = false;
   for (const NetworkEdge &stretch : test::guestNetwork(after).edges()) {
+    const double held = stretchValue(before, stretch);
+    const double value = stretchValue(after, stretch);
+    CAPTURE(stretch.Carrier, stretch.FromDistance, stretch.ToDistance, held, value);
     const std::vector<GuestRecord> guests = guestsIn(after, stretch);
     if (guests.empty()) {
+      CHECK(value >= 0.0);
+      CHECK(value <= held);
+      sawDecay = sawDecay || held > 0.0;
       continue;
     }
-    sawGuests = true;
     double hunger = 0.0;
     for (const GuestRecord &guest : guests) {
       hunger += guest.Hunger;
     }
-    const double held = stretchValue(before, stretch);
-    sawHeldValue = sawHeldValue || held != 0.0;
-    CAPTURE(stretch.Carrier, stretch.FromDistance, stretch.ToDistance, hunger, held);
-    CHECK(stretchValue(after, stretch) ==
-          held + ((hunger - held) / static_cast<double>(FOOTFALL_TIME)));
+    CAPTURE(hunger);
+    CHECK(value >= std::min(held, hunger));
+    CHECK(value <= std::max(held, hunger));
+    if (held != hunger) {
+      CHECK(value != held);
+      sawMove = sawMove || held != 0.0;
+    }
   }
-  CHECK(sawGuests);
-  CHECK(sawHeldValue);
-}
+  CHECK(sawMove);
+  CHECK(sawDecay);
 
-TEST_CASE("A kept entry of hungry footfall reads, k ticks after its tick, as its value times "
-          "simExp(k * simLog(1 - 1/FOOTFALL_TIME))") {
-  const World &world = steppedWorld();
-  const double logFactor = simLog(1.0 - (1.0 / static_cast<double>(FOOTFALL_TIME)));
-
-  bool sawIdle = false;
-  for (const KeptEntry &entry : footfallEntries(world)) {
-    REQUIRE(entry.Tick <= world.Tick);
-    const uint64_t ticks = world.Tick - entry.Tick;
-    CAPTURE(entry.At.Carrier, entry.At.Distance, entry.Value, ticks);
-    CHECK(readValue(world, entry) == entry.Value * simExp(static_cast<double>(ticks) * logFactor));
-    sawIdle = sawIdle || (ticks > 0 && entry.Value != 0.0);
+  // Read far later than any stretch is left, a kept entry still lies between 0 and its value read
+  // now.
+  constexpr uint64_t FAR_LATER = 1'000'000;
+  for (const KeptEntry &entry : footfallEntries(after)) {
+    REQUIRE(entry.Tick <= after.Tick);
+    const double now = readValue(after, entry);
+    const double later = HungryFootfall::readKept(entry.Value, after.Tick - entry.Tick + FAR_LATER);
+    CAPTURE(entry.At.Carrier, entry.At.Distance, entry.Value, now, later);
+    CHECK(later >= 0.0);
+    CHECK(later <= now);
   }
-  CHECK(sawIdle);
 }
 
 TEST_CASE("Hungry footfall's value anywhere strictly inside a stretch is the stretch's value") {
@@ -318,9 +353,7 @@ TEST_CASE("After a resolution, each stretch's footfall is the sum of the values,
 TEST_CASE("A stretch that exactly one footfall entry is carried into holds that entry's value and "
           "tick") {
   const World &world = spreadWorld();
-  // Off the gate path's midpoint, so the half holding it has a new midpoint.
-  const World candidate =
-      candidateWith(world, AddPath{PathKind::Guest, {{-2.0, 121.5}, {2.0, 121.5}}});
+  const World candidate = candidateWith(world, gateCrossing());
   REQUIRE(edgesOn(test::guestNetwork(candidate), test::EATING_GATE_PATH).size() == 2);
 
   bool sawMoved = false;

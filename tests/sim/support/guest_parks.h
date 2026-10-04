@@ -1,16 +1,15 @@
 #ifndef TPJ_TESTS_SIM_SUPPORT_GUEST_PARKS_H
 #define TPJ_TESTS_SIM_SUPPORT_GUEST_PARKS_H
 
+#include "support/connected_parks.h"
 #include "support/park_worlds.h"
 
 #include "sim/command_queue.h"
-#include "sim/draw.h"
 #include "sim/entity_key.h"
 #include "sim/guests/footfall.h"
 #include "sim/guests/guests.h"
 #include "sim/medium/field.h"
 #include "sim/medium/network.h"
-#include "sim/mix.h"
 #include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
@@ -21,13 +20,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-#include <cmath>
 #include <limits>
 #include <map>
 #include <optional>
-#include <stddef.h>
 #include <stdint.h>
-#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -39,21 +35,24 @@ namespace tpj::test {
 // Meters a guest walks each cycle.
 inline constexpr double WALK_STEP = WALK_SPEED * SIM_TICK_SECONDS;
 
+// The z of a north gate's front door: the entrance's back lies on the park's north edge, so its
+// door is its depth in from the edge.
+inline constexpr double NORTH_GATE_DOOR_Z = (PARK_SIZE / 2.0) - ENTRANCE_SIZE.Depth;
+
 // An entrance whose back lies on the park's north edge, facing into the park, so its front door
-// is at (x, 125).
+// is at (x, NORTH_GATE_DOOR_Z).
 inline ParkEntrance northGate(EntityKey key, double x) {
-  return ParkEntrance{.Key = key, .At = Pose{x, 126.5, 0.0, -1.0}};
+  return ParkEntrance{.Key = key,
+                      .At = Pose{x, (PARK_SIZE - ENTRANCE_SIZE.Depth) / 2.0, 0.0, -1.0}};
 }
+
+// The z where a guest line leading into the park from a north gate's door starts: clear of the
+// door's face by more than the line's half width, and within CONNECTION_REACH of the door, so the
+// door connects to it.
+inline double northGateLineZ() { return NORTH_GATE_DOOR_Z - gapWithinReach(PathKind::Guest); }
 
 inline ParkPath guestPath(EntityKey key, std::vector<ParkPoint> points) {
   return ParkPath{.Key = key, .Kind = PathKind::Guest, .Points = std::move(points)};
-}
-
-// A world holding exactly the intent, resolved, at tick 0.
-inline World resolvedWorld(ParkIntent intent) {
-  World world = worldOf(std::move(intent));
-  resolveWorld(world);
-  return world;
 }
 
 inline const Network &guestNetwork(const World &world) {
@@ -95,28 +94,6 @@ inline bool isLive(const World &world, EntityKey key) {
   return std::ranges::find(keys, key) != keys.end();
 }
 
-// The guest's uniform draw for the purpose, made in the cycle stepping the tick.
-inline double guestDraw(const World &world, EntityKey guest, std::string_view purpose,
-                        uint64_t tick) {
-  return drawUniform(DrawKey{world.Seed, guest, hashName(purpose), tick, 0});
-}
-
-// What a guest admitted in the cycle stepping the tick draws from its key.
-inline uint64_t drawnStayUntil(const World &world, EntityKey guest, uint64_t tick) {
-  const double span = static_cast<double>(STAY_MAX - STAY_MIN);
-  return tick + STAY_MIN +
-         static_cast<uint64_t>(std::floor(guestDraw(world, guest, "guest-stay", tick) * span));
-}
-
-inline double drawnHungerRate(const World &world, EntityKey guest, uint64_t tick) {
-  return HUNGER_RATE_MIN +
-         (guestDraw(world, guest, "guest-hunger-rate", tick) * (HUNGER_RATE_MAX - HUNGER_RATE_MIN));
-}
-
-inline double drawnStartingHunger(const World &world, EntityKey guest, uint64_t tick) {
-  return guestDraw(world, guest, "guest-starting-hunger", tick) * STARTING_HUNGER_MAX;
-}
-
 // Steps the world until the tick is the one given, with no commands.
 inline void stepUntil(World &world, uint64_t tick) {
   while (world.Tick < tick) {
@@ -127,21 +104,27 @@ inline void stepUntil(World &world, uint64_t tick) {
 // The tick of the cycle that admits the first guests.
 inline constexpr uint64_t FIRST_ARRIVAL = ARRIVAL_INTERVAL - 1;
 
-// The legs park: an entrance whose door joins a near leg, a guest path 4 m long, whose far end
-// starts a far leg, a guest path 20 m long running on in line with it. The far leg starts 6 m from
-// the door, beyond CONNECTION_REACH, so deleting the near leg stops arrivals. The near leg is short
-// so that few guests are behind the first when it reaches the far leg.
+// The legs park: an entrance whose door joins a near leg, a short guest path leading in from it,
+// whose far end starts a far leg, a guest path 20 m long running on in line with it. The far leg
+// starts beyond CONNECTION_REACH of the door, so deleting the near leg stops arrivals. The near leg
+// is short so that few guests are behind the first when it reaches the far leg.
 inline constexpr EntityKey LEGS_GATE{1};
 inline constexpr EntityKey NEAR_LEG{2};
 inline constexpr EntityKey FAR_LEG{3};
 
-inline std::vector<ParkPoint> nearLegPoints() { return {{0.0, 123.0}, {0.0, 119.0}}; }
+// The z where the far leg starts, 2 m beyond CONNECTION_REACH of the gate's door.
+inline constexpr double FAR_LEG_Z = NORTH_GATE_DOOR_Z - (CONNECTION_REACH + 2.0);
+
+inline std::vector<ParkPoint> nearLegPoints() {
+  return {{0.0, northGateLineZ()}, {0.0, FAR_LEG_Z}};
+}
 
 inline World legsWorld() {
-  return resolvedWorld(ParkIntent{.Entrances = {northGate(LEGS_GATE, 0.0)},
-                                  .Paths = {guestPath(NEAR_LEG, nearLegPoints()),
-                                            guestPath(FAR_LEG, {{0.0, 119.0}, {0.0, 99.0}})},
-                                  .Boxes = {}});
+  return resolvedWorld(
+      ParkIntent{.Entrances = {northGate(LEGS_GATE, 0.0)},
+                 .Paths = {guestPath(NEAR_LEG, nearLegPoints()),
+                           guestPath(FAR_LEG, {{0.0, FAR_LEG_Z}, {0.0, FAR_LEG_Z - 20.0}})},
+                 .Boxes = {}});
 }
 
 // Steps the legs park, each cycle by step(world, commands), until its first guest stands on the far
@@ -198,41 +181,13 @@ template <typename Step> EntityKey strandPastStay(World &world, Step step) {
   return guest;
 }
 
-// A guest after one cycle: the tick the cycle stepped, its record, none once it has left, and the
-// least entrance distance at its place.
-struct GuestStep {
-  uint64_t Stepped = 0;
-  std::optional<GuestRecord> Record;
-  std::optional<double> Home;
-  bool Live = false;
-};
-
-// Steps the world with no commands, recording the guest after each cycle, until the guest has left
-// or the cycles run out.
-inline std::vector<GuestStep> traceGuest(World &world, EntityKey guest, uint64_t cycles) {
-  std::vector<GuestStep> trace;
-  for (uint64_t cycle = 0; cycle < cycles; ++cycle) {
-    const uint64_t stepped = world.Tick;
-    stepWorld(world);
-    const std::optional<GuestRecord> record = guestRecord(world, guest);
-    const std::optional<double> home =
-        record.has_value() ? homeDistance(world, record.value_or(GuestRecord{}).At) : std::nullopt;
-    const GuestStep step{
-        .Stepped = stepped, .Record = record, .Home = home, .Live = isLive(world, guest)};
-    trace.push_back(step);
-    if (!step.Record.has_value()) {
-      break;
-    }
-  }
-  return trace;
-}
-
 // The eating park: an entrance on the north edge whose door joins a gate path, which runs on as a
 // spine south to a dead end, crossed near that end by a cross path. Deleting the gate path leaves
 // the entrance no path within reach, so the park admits no more guests, and drawing it again lets
-// them head home. Beside the spine stand a near shop and a far shop, which a depot supplies over a
-// backstage path, and across it a starved shop, whose back door reaches no backstage path. Every
-// edge is far longer than WALK_STEP.
+// them head home. Beside the spine stand a near shop and a far shop, their front doors within reach
+// of it and their back doors within reach of a backstage path, at whose end a depot supplies them,
+// and across the spine a starved shop, whose back door reaches no backstage path. Every edge is far
+// longer than WALK_STEP.
 inline constexpr EntityKey EATING_GATE{1};
 inline constexpr EntityKey EATING_SPINE{2};
 inline constexpr EntityKey EATING_CROSS{3};
@@ -243,35 +198,49 @@ inline constexpr EntityKey STARVED_SHOP{7};
 inline constexpr EntityKey EATING_DEPOT{8};
 inline constexpr EntityKey EATING_GATE_PATH{9};
 
-inline std::vector<ParkPoint> eatingGatePoints() { return {{0.0, 123.0}, {0.0, 119.0}}; }
-inline std::vector<ParkPoint> eatingBackstagePoints() { return {{12.0, 122.0}, {12.0, 96.0}}; }
+// Where the spine starts, which the gate path joins.
+inline constexpr double EATING_SPINE_Z = 119.0;
+
+// How far a shop beside the spine stands from the spine's middle: its front door within reach of
+// the spine.
+inline double eatingShopX() {
+  return gapWithinReach(PathKind::Guest) + (boxSize(BoxKind::Shop).Depth / 2.0);
+}
+
+// The x of the backstage path, within reach of the back doors of the shops beside the spine.
+inline double eatingBackstageX() {
+  return eatingShopX() + (boxSize(BoxKind::Shop).Depth / 2.0) + gapWithinReach(PathKind::Backstage);
+}
+
+inline std::vector<ParkPoint> eatingGatePoints() {
+  return {{0.0, northGateLineZ()}, {0.0, EATING_SPINE_Z}};
+}
+
+inline std::vector<ParkPoint> eatingBackstagePoints() {
+  return {{eatingBackstageX(), 122.0}, {eatingBackstageX(), 96.0}};
+}
 
 inline World eatingWorld() {
   const auto box = [](EntityKey key, BoxKind kind, Pose at) {
     return ParkBox{.Key = key, .Kind = kind, .At = at};
   };
-  return resolvedWorld(
-      ParkIntent{.Entrances = {northGate(EATING_GATE, 0.0)},
-                 .Paths = {guestPath(EATING_GATE_PATH, eatingGatePoints()),
-                           guestPath(EATING_SPINE, {{0.0, 119.0}, {0.0, 60.0}}),
-                           guestPath(EATING_CROSS, {{-20.0, 70.0}, {20.0, 70.0}}),
-                           ParkPath{.Key = EATING_BACKSTAGE,
-                                    .Kind = PathKind::Backstage,
-                                    .Points = eatingBackstagePoints()}},
-                 .Boxes = {box(NEAR_SHOP, BoxKind::Shop, Pose{6.5, 115.0, -1.0, 0.0}),
-                           box(FAR_SHOP, BoxKind::Shop, Pose{6.5, 104.0, -1.0, 0.0}),
-                           box(STARVED_SHOP, BoxKind::Shop, Pose{-6.5, 112.0, 1.0, 0.0}),
-                           box(EATING_DEPOT, BoxKind::Depot, Pose{12.0, 89.0, 0.0, 1.0})}});
-}
-
-// The key of the eating park's gate path, drawn first or again, or none while it is deleted.
-inline std::optional<EntityKey> eatingGatePath(const World &world) {
-  for (const ParkPath &path : parkPaths(world)) {
-    if (path.Kind == PathKind::Guest && path.Points == eatingGatePoints()) {
-      return path.Key;
-    }
-  }
-  return std::nullopt;
+  const double shopX = eatingShopX();
+  // The depot faces the backstage path's end from beyond it, its front door within reach of it.
+  const ParkPoint backstageEnd = eatingBackstagePoints().back();
+  const double depotZ =
+      backstageEnd.Z - gapWithinReach(PathKind::Backstage) - (boxSize(BoxKind::Depot).Depth / 2.0);
+  return resolvedWorld(ParkIntent{
+      .Entrances = {northGate(EATING_GATE, 0.0)},
+      .Paths = {guestPath(EATING_GATE_PATH, eatingGatePoints()),
+                guestPath(EATING_SPINE, {{0.0, EATING_SPINE_Z}, {0.0, 60.0}}),
+                guestPath(EATING_CROSS, {{-20.0, 70.0}, {20.0, 70.0}}),
+                ParkPath{.Key = EATING_BACKSTAGE,
+                         .Kind = PathKind::Backstage,
+                         .Points = eatingBackstagePoints()}},
+      .Boxes = {box(NEAR_SHOP, BoxKind::Shop, Pose{shopX, 115.0, -1.0, 0.0}),
+                box(FAR_SHOP, BoxKind::Shop, Pose{shopX, 104.0, -1.0, 0.0}),
+                box(STARVED_SHOP, BoxKind::Shop, Pose{-shopX, 112.0, 1.0, 0.0}),
+                box(EATING_DEPOT, BoxKind::Depot, Pose{backstageEnd.X, depotZ, 0.0, 1.0})}});
 }
 
 // Guest route distance's entries at the place, sources ascending.
@@ -339,12 +308,6 @@ inline bool isOfferReachable(const ParkOffers &offers,
          offer.value_or(OfferEntry{}).Supplied;
 }
 
-inline bool isOfferReachable(const World &world,
-                             const std::vector<SampledEntry<RouteEntry>> &routes,
-                             EntityKey source) {
-  return isOfferReachable(parkOffers(world), routes, source);
-}
-
 inline bool isEntrance(const World &world, EntityKey key) {
   const std::vector<ParkEntrance> entrances = parkEntrances(world);
   return std::ranges::any_of(entrances,
@@ -377,82 +340,6 @@ inline Place midpointOf(const NetworkEdge &edge) {
 // Hungry footfall's value at the place on the guest network.
 inline double footfallAt(const World &world, const Place &place) {
   return fieldValue<HungryFootfall>(world, guestNetwork(world), place);
-}
-
-// The options a guest choosing at a place with the route entries weighs, with the offers, its
-// hunger, its target, and whether its stay is over: each reachable offer in source order with its
-// terms and score, carrying on, and heading home once the stay is over and an entrance has an
-// entry, each with the probability softmaxPick sets.
-inline std::vector<ChoiceOption> choiceOptions(const World &world, const ParkOffers &offers,
-                                               const std::vector<SampledEntry<RouteEntry>> &routes,
-                                               double hunger, EntityKey target, bool stayOver) {
-  std::vector<ChoiceOption> options;
-  for (const SampledEntry<RouteEntry> &sampled : routes) {
-    if (!isOfferReachable(offers, routes, sampled.Source)) {
-      continue;
-    }
-    const OfferEntry offer = offerAmong(offers, sampled.Source).value_or(OfferEntry{});
-    ChoiceOption option;
-    option.Kind = ChoiceKind::Offer;
-    option.Shop = sampled.Source;
-    option.Relief = RELIEF_WEIGHT * hungerCurve(hunger) * offer.Relief;
-    option.Distance = DISTANCE_WEIGHT * sampled.Value.Distance;
-    option.Wait = WAIT_WEIGHT * (static_cast<double>(offer.Wait) * SIM_TICK_SECONDS);
-    option.Commitment = sampled.Source == target ? COMMITMENT_BONUS : 0.0;
-    option.Score = option.Relief + option.Distance + option.Wait + option.Commitment;
-    options.push_back(option);
-  }
-  options.push_back(ChoiceOption{.Kind = ChoiceKind::CarryOn, .Score = CARRY_ON_SCORE});
-  if (stayOver && homeEntry(world, routes).has_value()) {
-    options.push_back(ChoiceOption{.Kind = ChoiceKind::HeadHome, .Score = HEAD_HOME_SCORE});
-  }
-  // The probabilities do not depend on the key the pick draws with.
-  (void)softmaxPick(DrawKey{world.Seed, NULL_KEY, hashName("guest-choice"), 0, 0}, options);
-  return options;
-}
-
-// Checks that a guest that picked an offer heads to the shop, or waits there when it chose at the
-// shop's anchor, by the route entries at the place it chose.
-inline void checkFollowsOffer(const GuestRecord &record, const ChoiceOption &option,
-                              const std::vector<SampledEntry<RouteEntry>> &routes) {
-  const std::optional<RouteEntry> entry = routeFrom(routes, option.Shop);
-  REQUIRE(entry.has_value());
-  const bool atAnchor = entry.value_or(RouteEntry{}).Next.Carrier == NULL_KEY;
-  CHECK(record.Activity == (atAnchor ? GuestActivity::Waiting : GuestActivity::HeadingToShop));
-  CHECK(record.Target == option.Shop);
-}
-
-// Checks that a guest still in the park does what the picked option says: an offer as
-// checkFollowsOffer checks, carrying on makes it wander, and heading home makes it head home.
-inline void checkFollows(const GuestRecord &record, const ChoiceOption &option,
-                         const std::vector<SampledEntry<RouteEntry>> &routes) {
-  if (option.Kind == ChoiceKind::Offer) {
-    checkFollowsOffer(record, option, routes);
-    return;
-  }
-  CHECK(record.Activity == (option.Kind == ChoiceKind::HeadHome ? GuestActivity::HeadingHome
-                                                                : GuestActivity::Wandering));
-  CHECK(record.Target == NULL_KEY);
-}
-
-// Picks among the options as a guest's first choice in the cycle stepping the tick does, checks
-// that the guest after the cycle does what the pick says, and gives the pick. A guest gone from
-// the park must have picked heading home, leaving at an entrance's anchor.
-inline ChoiceOption checkPick(const World &after, EntityKey guest, uint64_t tick,
-                              std::vector<ChoiceOption> options,
-                              const std::vector<SampledEntry<RouteEntry>> &routes) {
-  const size_t picked =
-      softmaxPick(DrawKey{after.Seed, guest, hashName("guest-choice"), tick, 0}, options);
-  REQUIRE(picked < options.size());
-  const ChoiceOption option = options.at(picked);
-  CAPTURE(picked, options.size());
-  const std::optional<GuestRecord> now = guestRecord(after, guest);
-  if (!now.has_value()) {
-    CHECK(option.Kind == ChoiceKind::HeadHome);
-    return option;
-  }
-  checkFollows(now.value_or(GuestRecord{}), option, routes);
-  return option;
 }
 
 } // namespace tpj::test

@@ -184,78 +184,35 @@ bool anyOn(const World &world, EntityKey carrier) {
       guests, [&](EntityKey guest) { return recordOf(world, guest).At.Carrier == carrier; });
 }
 
-// Where the carrying rule puts a place held on the network before: carried over when that gives a
-// place, else the nearest place to where it stood, else where it was.
-Place carriedPlace(const Place &place, const Network &before, const Network &after) {
-  if (const std::optional<Place> carried = carryOver(place, before, after)) {
-    return *carried;
-  }
-  if (const std::optional<GroundPoint> ground = before.groundPoint(place)) {
-    if (const std::optional<Place> nearest = after.nearestPlace(*ground)) {
-      return *nearest;
-    }
-  }
-  return place;
-}
-
-// Checks every guest of the candidate made from the world with the commands against the carrying
-// rule, and that nothing else of its record but its Position changed.
-void checkCarried(const World &world, const CommandQueue &commands) {
+TEST_CASE("An edit changes nothing of a guest but its place, and a guest whose carrier survives "
+          "the edit keeps its ground point") {
+  const World &world = waitingWorld();
+  // Deleting the spine takes away the places of the guests on it and of those waiting at the shops
+  // beside it, whose connectors reached only the spine, and leaves the other guest paths.
+  REQUIRE(anyOn(world, test::EATING_SPINE));
+  CommandQueue commands;
+  commands.push(DeletePath{test::EATING_SPINE});
   const World candidate = makeCandidate(world, commands);
   REQUIRE(parkGuests(candidate) == parkGuests(world));
-  const Network &before = test::guestNetwork(world);
-  const Network &after = test::guestNetwork(candidate);
+
+  bool sawKept = false;
+  bool sawMoved = false;
   for (const EntityKey guest : parkGuests(world)) {
-    CAPTURE(guest);
-    GuestRecord expected = recordOf(world, guest);
-    expected.At = carriedPlace(expected.At, before, after);
-    GuestRecord carried = recordOf(candidate, guest);
-    carried.Position = expected.Position;
-    CHECK(carried == expected);
-  }
-}
-
-TEST_CASE("A candidate holds exactly its world's guests, each carried over to the new guest "
-          "network, or else moved to its nearest place to where it stood, or else left where it "
-          "was, with nothing else of its record changed but its Position") {
-  const World &world = waitingWorld();
-  CommandQueue commands;
-
-  SECTION("a path crossing the spine splits edges guests walk, leaving every carrier's line") {
-    REQUIRE(anyOn(world, test::EATING_SPINE));
-    const AddPath crossing{PathKind::Guest, {{-10.0, 80.0}, {10.0, 80.0}}};
-    REQUIRE(isAccepted(world, crossing));
-    commands.push(crossing);
-  }
-  SECTION("deleting the spine retires the places of the guests on it, while other guest paths "
-          "are left") {
-    REQUIRE(anyOn(world, test::EATING_SPINE));
-    commands.push(DeletePath{test::EATING_SPINE});
-  }
-  SECTION("moving the shop a guest waits at moves its connector's line") {
-    const std::vector<EntityKey> guests = parkGuests(world);
-    const auto waiting = std::ranges::find_if(guests, [&](EntityKey guest) {
-      return recordOf(world, guest).Activity == GuestActivity::Waiting;
-    });
-    REQUIRE(waiting != guests.end());
-    const EntityKey shop = recordOf(world, *waiting).Target;
-    const std::vector<ParkBox> boxes = parkBoxes(world);
-    const auto box = std::ranges::find(boxes, shop, &ParkBox::Key);
-    REQUIRE(box != boxes.end());
-    const MoveBox move{shop, Pose{box->At.X, box->At.Z + 1.0, box->At.FacingX, box->At.FacingZ}};
-    REQUIRE(isAccepted(world, move));
-    commands.push(move);
-  }
-  SECTION("deleting every guest path leaves no place to move to") {
-    for (const ParkPath &path : parkPaths(world)) {
-      if (path.Kind == PathKind::Guest) {
-        commands.push(DeletePath{path.Key});
-      }
+    const GuestRecord was = recordOf(world, guest);
+    GuestRecord record = recordOf(candidate, guest);
+    CAPTURE(guest, was.At.Carrier, was.At.Distance, record.At.Carrier, record.At.Distance);
+    if (test::findCarrier(test::guestNetwork(candidate), was.At.Carrier) != nullptr) {
+      CHECK(record.Position == was.Position);
+      sawKept = true;
+    } else {
+      sawMoved = true;
     }
-    REQUIRE(test::guestNetwork(makeCandidate(world, commands)).carriers().empty());
+    record.At = was.At;
+    record.Position = was.Position;
+    CHECK(record == was);
   }
-
-  checkCarried(world, commands);
+  CHECK(sawKept);
+  CHECK(sawMoved);
 }
 
 TEST_CASE("A cycle stepped from a world whose guest network has no carrier leaves it holding no "

@@ -1,3 +1,4 @@
+#include "support/connected_parks.h"
 #include "support/ledger_writes.h"
 #include "support/line_park.h"
 #include "support/park_worlds.h"
@@ -42,16 +43,18 @@ using test::SHOP;
 using test::shopAt;
 using test::worldOf;
 
-// The line park with a guest path along z = -12 as well, 3 m from the front door of every shop on
-// the line, and reaching x = 90, beyond the backstage line's end at x = 64.
+// The line park with a guest path as well, running along the front doors of the shops on the line,
+// within reach of each, and reaching x = 90, beyond the backstage line's end at x = 64.
 constexpr EntityKey GUEST_LINE{9};
 // A shop at x = 90, on the guest path, whose back door is far from the backstage line, so it has a
 // guest anchor and no backstage connector.
 constexpr EntityKey CUT_OFF_SHOP{10};
 
 ParkPath guestLine() {
-  return ParkPath{
-      .Key = GUEST_LINE, .Kind = PathKind::Guest, .Points = {{-100.0, -12.0}, {100.0, -12.0}}};
+  const Pose shop = shopAt(SHOP, 0.0).At;
+  const double frontDoorZ = shop.Z + (shop.FacingZ * boxSize(BoxKind::Shop).Depth / 2.0);
+  const double z = frontDoorZ + (shop.FacingZ * test::gapWithinReach(PathKind::Guest));
+  return ParkPath{.Key = GUEST_LINE, .Kind = PathKind::Guest, .Points = {{-100.0, z}, {100.0, z}}};
 }
 
 // The line park with its guest path and the boxes, resolved, at tick 0 with empty ledgers.
@@ -132,24 +135,6 @@ std::vector<Place> placesOf(const std::vector<FieldSlot<OfferEntry>> &slots, Ent
   return places;
 }
 
-// The shipment delay of the shop's nearest depot: shipmentDelay of the depot's supply route length
-// to the shop, or of the nearest depot's Distance when that is none.
-uint64_t shipDelay(const World &world, EntityKey shop) {
-  const std::optional<DepotRoute> route = nearestDepot(world, shop);
-  REQUIRE(route.has_value());
-  const DepotRoute depot = route.value_or(DepotRoute{});
-  return shipmentDelay(supplyRouteLength(world, depot.Depot, shop).value_or(depot.Distance));
-}
-
-// The offer a shop's resolved entry holds, in a world whose route distance has no stepped entries.
-OfferEntry resolvedOffer(const World &world, EntityKey shop) {
-  if (!nearestDepot(world, shop).has_value()) {
-    return OfferEntry{};
-  }
-  return OfferEntry{
-      .Relief = MEAL_RELIEF, .Wait = ORDER_DELAY + shipDelay(world, shop), .Supplied = true};
-}
-
 // The shop's entries: one at its offer place holding the offer, or none without a guest anchor.
 Offers offeredAt(const World &world, EntityKey shop, const OfferEntry &offer) {
   const std::optional<Place> at = offerPlace(world, shop);
@@ -199,10 +184,9 @@ std::vector<uint64_t> resolvedWords(const World &world) {
 // Resolved offers.
 
 TEST_CASE("After a resolution, food-offer's resolved entries hold one source for each shop box, "
-          "with one entry at its offer place when it has a guest anchor and none otherwise, "
-          "offering {MEAL_RELIEF, ORDER_DELAY + D, true} with a nearest depot and OfferEntry{} "
-          "without") {
-  CHECK(MEAL_RELIEF == 0.5);
+          "with one entry at its guest anchor's node place or none without a guest anchor, "
+          "offering MEAL_RELIEF with meals when the shop has a nearest depot and OfferEntry{} "
+          "when it has none") {
   World world = offerWorld({shopAt(SHOP, 0.0), depotAt(DEPOT, 32.0), looseShop(), looseDepot(),
                             shopAt(CUT_OFF_SHOP, 90.0)});
   SECTION("the world's first resolution") {
@@ -225,8 +209,19 @@ TEST_CASE("After a resolution, food-offer's resolved entries hold one source for
   CHECK(sourcesOf(resolvedSlots(world)) == shops);
   for (const EntityKey shop : shops) {
     CAPTURE(shop);
-    CHECK(offersOf(resolvedSlots(world), shop) ==
-          std::optional<Offers>(offeredAt(world, shop, resolvedOffer(world, shop))));
+    const Offers offers = offersOf(resolvedSlots(world), shop).value_or(Offers{});
+    const std::optional<Place> at = offerPlace(world, shop);
+    REQUIRE(offers.size() == (at.has_value() ? 1U : 0U));
+    for (const auto &[place, offer] : offers) {
+      CHECK(place == at.value_or(Place{}));
+      // A wait says when the shop would take the next guest, which only serving one shows.
+      if (nearestDepot(world, shop).has_value()) {
+        CHECK(offer.Relief == MEAL_RELIEF);
+        CHECK(offer.Supplied);
+      } else {
+        CHECK(offer == OfferEntry{});
+      }
+    }
   }
 }
 

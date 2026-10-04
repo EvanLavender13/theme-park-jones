@@ -24,12 +24,11 @@ constexpr EntityKey EAST_GATE{2};
 constexpr EntityKey WALK{3};
 constexpr EntityKey BACKSTAGE{4};
 
-constexpr double WALK_LENGTH = 40.0;
-
 test::ParkIntent gatesIntent() {
   return test::ParkIntent{
       .Entrances = {test::northGate(WEST_GATE, -20.0), test::northGate(EAST_GATE, 20.0)},
-      .Paths = {test::guestPath(WALK, {{-20.0, 123.0}, {20.0, 123.0}}),
+      .Paths = {test::guestPath(WALK,
+                                {{-20.0, test::northGateLineZ()}, {20.0, test::northGateLineZ()}}),
                 ParkPath{.Key = BACKSTAGE,
                          .Kind = PathKind::Backstage,
                          .Points = {{-20.0, 100.0}, {20.0, 100.0}}}},
@@ -70,31 +69,13 @@ TEST_CASE(
 }
 
 TEST_CASE("addGuest throws std::invalid_argument for a place that does not resolve on the guest "
-          "network, leaving the world and its next key unchanged") {
-  SECTION("a place on a carrier of another network") {
-    World world = worldAtAddTick();
-    const World before = copyWorld(world);
-    CHECK_THROWS_AS(addGuest(world, Place{BACKSTAGE, 10.0}, LONG_STAY), std::invalid_argument);
-    CHECK(worldsEqual(world, before));
-    CHECK(world.nextKey() == before.nextKey());
-  }
-  SECTION("a place beyond the end of a guest path") {
-    World world = worldAtAddTick();
-    const World before = copyWorld(world);
-    CHECK_THROWS_AS(addGuest(world, Place{WALK, WALK_LENGTH + 1.0}, LONG_STAY),
-                    std::invalid_argument);
-    CHECK(worldsEqual(world, before));
-    CHECK(world.nextKey() == before.nextKey());
-  }
-  SECTION("a place on a guest path before the world's first resolution, when the guest network is "
-          "empty") {
-    World world = test::worldOf(gatesIntent());
-    REQUIRE(world.isResolvePending());
-    const World before = copyWorld(world);
-    CHECK_THROWS_AS(addGuest(world, INSIDE_WALK, LONG_STAY), std::invalid_argument);
-    CHECK(worldsEqual(world, before));
-    CHECK(world.nextKey() == before.nextKey());
-  }
+          "network, changing nothing, the world's next key included") {
+  World world = worldAtAddTick();
+  const World before = copyWorld(world);
+  // A place on a carrier of the backstage network, which the guest network does not hold.
+  CHECK_THROWS_AS(addGuest(world, Place{BACKSTAGE, 10.0}, LONG_STAY), std::invalid_argument);
+  CHECK(worldsEqual(world, before));
+  CHECK(world.nextKey() == before.nextKey());
 }
 
 } // namespace

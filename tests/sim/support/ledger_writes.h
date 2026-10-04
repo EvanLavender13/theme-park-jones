@@ -58,11 +58,6 @@ std::vector<FlowPacket> packetsFrom(const World &world, EntityKey from) {
   return packets;
 }
 
-template <FlowDefinition K> bool conserved(const World &world) {
-  return unitsCreated<K>(world) ==
-         unitsInTransit<K>(world) + unitsHeld<K>(world) + unitsConsumed<K>(world);
-}
-
 } // namespace tpj::test
 
 #endif
