@@ -10,7 +10,7 @@ Commands run from WSL at the repository root. Windows is the target, and work it
     cmake.exe --build --preset windows-debug
     build/windows-debug/ThemeParkJones.exe
 
-While iterating, build one test executable with `--target` and run it directly with a Catch2 filter, such as `cmake.exe --build --preset windows-debug --target tpj_sim_tests` and `build/windows-debug/tpj_sim_tests.exe -# "[#edits_test]"` for one file's tests. Warnings are errors in both builds.
+While iterating, build one test executable with `--target` and run it directly with a Catch2 filter, such as `cmake.exe --build --preset windows-debug --target tpj_sim_tests` and `build/windows-debug/tpj_sim_tests.exe -# "[#save_test]"` for one file's tests. Warnings are errors in both builds.
 
 scripts/tidy.sh runs MSYS2's clang-tidy.exe over the whole project, warnings as errors, with windows-debug's compile commands, so it checks the build that ships (decision 0035).
 
@@ -28,9 +28,9 @@ Planning and building go through the skills in .claude/skills; start at planning
 
 ## Specs and verification
 
-Each module keeps a SPEC.md beside its code, updated in the same change as the code it describes. Scale ceremony to the change: a small fix needs no spec edit.
+Each module keeps a SPEC.md beside its code, stating its observable behavior in the shape docs/conventions.md gives, updated in the same change as the behavior it describes. Implementation detail goes in the feature's PLAN.md and the code, never the spec. Scale ceremony to the change: a small fix needs no spec edit.
 
-docs/testing.md says what a test is, and outranks every skill and agent on it (decision 0032). Tests are written in a separate pass from the implementation, by the test-writer agent, never by the context that writes the code. After implementing, the reviewer agent checks the diff against the spec and the principles with fresh context and reports only gaps that affect correctness or stated requirements. Report results with evidence such as test output, never as self-assessment.
+docs/testing.md says which tests exist and what a feature adds, and outranks every skill and agent on it (decision 0037). Tests guard copies, saves, hashes, and replay; gameplay is checked by playing it and with --capture. The few tests a feature adds are listed in its FEATURE.md and written in a separate pass by the test-writer agent, never by the context that writes the code. After implementing, the reviewer agent checks the diff against the spec and the principles with fresh context and reports only gaps that affect correctness or stated requirements. Report results with evidence such as test output, a capture, or a scenarios comparison, never as self-assessment.
 
 Anything mechanically checkable belongs in a test, hook, or CI check, not in a document.
 

@@ -1,6 +1,6 @@
 # 0033. Rule 1 covers a test's setup
 
-Status: Accepted, 2026-10-03
+Status: Superseded by 0037
 
 ## Context
 

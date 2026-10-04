@@ -1,13 +1,13 @@
 ---
 name: implementing-features
-description: Use whenever the user wants to build a feature whose PLAN.md exists and is approved. Updates the specs and interfaces, dispatches the separate test pass to the test-writer agent, executes the implementation tasks until those tests pass, dispatches the fresh-context reviewer on the diff, and commits the feature once via commit-hygiene. Stops on any deviation from the plan. Does not modify scope, acceptance criteria, or the test pass's tests. If no approved plan exists, routes to planning-features.
+description: Use whenever the user wants to build a feature whose PLAN.md exists and is approved. Updates the specs and interfaces, dispatches the separate test pass for the few tests FEATURE.md lists, executes the implementation tasks, confirms each criterion by play, capture, comparison, or test, dispatches the fresh-context reviewer on the diff, and commits the feature once via commit-hygiene. Stops on any deviation from the plan. Does not modify scope, acceptance criteria, or the test pass's tests. If no approved plan exists, routes to planning-features.
 ---
 
 # Implementing Features
 
 ## Purpose
 
-Execute an approved PLAN.md task by task, with tests written in a separate pass from the implementation and the result checked by a fresh-context reviewer. The feature commits once, at the end.
+Execute an approved PLAN.md task by task, with any tests the feature lists written in a separate pass from the implementation and the result checked by a fresh-context reviewer. The feature commits once, at the end.
 
 ## Hard gate
 
@@ -22,9 +22,9 @@ Create a task for each item. Complete in order.
 1. Read the PLAN.md and the parent FEATURE.md in full.
 2. Create a feature branch: if on the default branch, run `git switch -c <feature-slug>`. If already on the branch named `<feature-slug>`, stay on it. If on any other branch, stop and ask the user.
 3. Do the spec and interface tasks. The windows-debug build must succeed with the stub definitions.
-4. Run the test pass, unless the feature is a test utility, which gets no tests (docs/testing.md rule 6); its criteria are confirmed by running it in step 6. First, check FEATURE.md's acceptance criteria against docs/testing.md, and that none that was in an earlier version of the list has been dropped without a reason. Fix FEATURE.md before going on, since the tests can only be as good as the criteria. Then dispatch the `test-writer` agent with the Agent tool, using the first template below, or the rewrite template for a feature that rewrites cases plans/focused-tests/RESEARCH.md lists, with the feature's entries copied verbatim under their file names. When it returns, confirm its tests build, and that the ones for unimplemented behavior fail for that reason and not because of a compile error or a broken harness. A test case that breaks a rule of docs/testing.md goes back to the test-writer, after the criterion behind it is rewritten if that is the cause. Then settle each gap its report lists before implementing: one that follows from the principles and specs becomes a spec decision in FEATURE.md; one that needs a design choice goes to the user; one that can wait is recorded in FEATURE.md's Open questions with what could resolve it. A gap is never left only in the report.
+4. Run the test pass when FEATURE.md's Tests section lists tests; with none listed, skip it. First, check each listed test against docs/testing.md: a feature adds only a test reproducing a bug it fixes and an integration test of a consequence across modules it exists to make. Fix FEATURE.md before going on. Then dispatch the `test-writer` agent with the Agent tool, using the template below. When it returns, confirm its tests build, and that the ones for unimplemented behavior fail for that reason and not because of a compile error or a broken harness. Settle each gap its report lists before implementing: one that follows from the principles and specs becomes a spec decision in FEATURE.md; one that needs a design choice goes to the user; one that can wait is recorded in FEATURE.md's Open questions. A gap is never left only in the report.
 5. Do the implementation tasks in order. Perform each task's steps and run its verification before starting the next. Verify narrowly: build only the targets the task changes and run only the test executables that cover it, filtered to the relevant files or test names; the full build and ctest belong to step 6.
-6. Confirm every acceptance criterion in FEATURE.md: the full windows-debug build has no warnings, `ctest.exe --preset windows-debug` passes, and `scripts/tidy.sh` is clean. Linux is checked at release by scripts/release-check.sh, not per feature (decision 0030). When the feature has visible output, check it with a `--capture` run. For a test utility, run each check its criteria name and keep the output for the report.
+6. Confirm every acceptance criterion in FEATURE.md by the means it names: play, a `--capture` run, a `tpj_scenarios --compare` showing the simulation unchanged, or a listed test. When the feature registers state, confirm a park file in tests/parks/ holds it, so the park world checks cover it. The full windows-debug build has no warnings, `ctest.exe --preset windows-debug` passes, and `scripts/tidy.sh` is clean. Linux is checked at release by scripts/release-check.sh, not per feature (decision 0030). Keep the output of each check for the report.
 7. Review. Stage everything with `git add -A` and dispatch the `reviewer` agent via the `reviewing` skill, with the staged diff as the artifact and FEATURE.md, the changed SPEC.md files, and docs/principles.md as context. Present the findings verbatim. The user decides which to act on; fixes go through the deviation procedure.
 8. Commit the feature once, via the `commit-hygiene` skill.
 9. Merge into the default branch: `git switch main`, then `git merge --no-ff <feature-slug> -m "Merge: <feature-slug>" -m "<Co-Authored-By trailer>"`, then `git branch -d <feature-slug>`. The pre-push hook gates what leaves the machine.
@@ -36,26 +36,13 @@ Create a task for each item. Complete in order.
 The dispatch prompt contains only paths and the instruction. Do not describe the implementation, the plan, or what you expect the tests to find.
 
 ```
-Write the tests for this feature.
+Write the tests this feature lists.
 
 Feature: plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md
 Specs: <SPEC.md paths the feature changes or depends on>
 Public headers: <header paths from the interface tasks>
 
 Follow your standard procedure and return your standard report.
-```
-
-Rewrite dispatch:
-
-```
-Rewrite the test cases these inventory entries name.
-
-Feature: plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md
-Specs: <SPEC.md paths the feature changes or depends on>
-Entries:
-<the entries, verbatim, each under its file name>
-
-Follow your rewrite mode and return your standard report.
 ```
 
 ## Deviation procedure
@@ -83,7 +70,7 @@ What was built:
 [One paragraph.]
 
 Evidence:
-[Build and test command output summary: tests run, passed, failed.]
+[Build and test output summary, and each criterion's capture, comparison, or play check.]
 
 Deviations:
 - [List, or "none"]

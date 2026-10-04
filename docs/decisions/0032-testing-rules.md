@@ -1,6 +1,6 @@
 # 0032. Tests follow one set of rules, held in docs/testing.md
 
-Status: Accepted, 2026-10-03
+Status: Superseded by 0037
 
 ## Context
 

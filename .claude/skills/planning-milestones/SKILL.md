@@ -40,30 +40,11 @@ Create a task for each item. Complete in order.
 
 ## Closing a milestone
 
-When every feature in the milestone's Features list has merged into main. A MILESTONE.md with no Status line predates milestone closing; decision 0032's audit read the tests those milestones added.
+When every feature in the milestone's Features list has merged into main.
 
-1. Find the milestone's merges: for each feature directory under the milestone, `git log --format='%h %s' --grep='^Merge: <feature-slug>$' main`.
-2. Dispatch the test audit via the `reviewing` skill's Test audit dispatch template, and present the report to Evan verbatim.
-3. Settle each finding with Evan. It is fixed, filed, or rejected.
-    - A case that should not exist is deleted.
-    - A case asserting a real property in the wrong shape is rewritten. When the finding names the criterion or spec statement behind the case, rewrite that first. Then dispatch the `test-writer` with the template below.
-    - A fix that needs a design choice, or belongs to planned work, is filed in plans/BACKLOG.md via `maintaining-backlog`, naming the test, the rule, and the property. A finding plans/focused-tests/RESEARCH.md already lists counts as filed.
-    - A rejected finding needs nothing more, unless Evan says the rule is wrong or incomplete. Then a decision record changes docs/testing.md.
-4. Confirm that the windows-debug build has no warnings, `ctest.exe --preset windows-debug` passes, and `scripts/tidy.sh` is clean.
-5. Set the MILESTONE.md's Status to complete, and commit via `commit-hygiene`.
-
-Rewrite dispatch:
-
-```
-Rewrite the test cases these closing-audit findings name.
-
-Features: <FEATURE.md path of each feature whose cases are named>
-Specs: <SPEC.md paths those features change or depend on>
-Findings:
-<the findings, verbatim>
-
-Follow your rewrite mode and return your standard report.
-```
+1. Confirm that the windows-debug build has no warnings, `ctest.exe --preset windows-debug` passes, and `scripts/tidy.sh` is clean.
+2. Play the milestone's acceptance criteria in the app, or check each by the means it names, and report what you saw to Evan.
+3. Set the MILESTONE.md's Status to complete, and commit via `commit-hygiene`.
 
 ## Process notes
 

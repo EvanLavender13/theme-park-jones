@@ -4,47 +4,16 @@ add_executable(tpj_sim_tests
     draw_test.cpp
     entity_key_test.cpp
     fp_environment_test.cpp
-    guests/add_guest_test.cpp
-    guests/arrivals_test.cpp
-    guests/choice_test.cpp
-    guests/footfall_test.cpp
-    guests/guest_edits_test.cpp
-    guests/guest_options_test.cpp
-    guests/visits_test.cpp
-    guests/walks_test.cpp
-    medium/carry_over_test.cpp
-    medium/field_index_test.cpp
-    medium/field_sampling_test.cpp
-    medium/field_test.cpp
-    medium/flow_test.cpp
-    medium/kept_field_test.cpp
-    medium/network_test.cpp
-    medium/source_sample_test.cpp
-    medium/stepped_field_test.cpp
-    operations/food_offer_test.cpp
-    operations/operations_edits_test.cpp
-    operations/operations_test.cpp
-    operations/service_test.cpp
-    operations/shop_records_test.cpp
-    park/edits_test.cpp
-    park/geometry_test.cpp
-    park/intent_test.cpp
-    park/validity_test.cpp
     park_world_checks_test.cpp
-    routes/connections_test.cpp
-    routes/route_distance_test.cpp
-    routes/networks_test.cpp
-    routes/previous_networks_test.cpp
-    routes/route_entry_test.cpp
     save_test.cpp
     schema_test.cpp
     sim_math_test.cpp
     walk_test.cpp
     world_checks_test.cpp)
 target_link_libraries(tpj_sim_tests PRIVATE tpj_sim Catch2::Catch2WithMain)
-# So that tests in subdirectories, such as medium/, include the shared fixtures as support/....
+# So that the tests include their shared fixtures as support/....
 target_include_directories(tpj_sim_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-# The park tests read the checked-in parks.
+# The park world checks read the checked-in parks.
 target_compile_definitions(tpj_sim_tests PRIVATE TPJ_PARKS_DIR="${CMAKE_SOURCE_DIR}/tests/parks")
 # Some tests restate an arithmetic rule of the simulation and compare bits, so they must round each
 # operation as tpj_sim does, never fusing a multiply and an add.
