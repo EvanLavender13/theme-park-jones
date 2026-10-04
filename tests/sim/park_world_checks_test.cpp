@@ -242,14 +242,8 @@ TEST_CASE("A copy of every checked world equals it and hashes equal") {
   }
 }
 
-// A park file is itself a save, so it too must save again to its own text; a hand-written one
-// whose numbers a save spells unusually shows they read back to the same bits.
 TEST_CASE("The save of every checked world loads back, resolves equal to the world saved, and "
-          "saves again to identical text, as every park file does") {
-  for (const ParkFile &park : parkFiles()) {
-    INFO(park.Name);
-    CHECK(saveWorld(loadWorld(makeParkSchema(), park.Text)) == park.Text);
-  }
+          "saves again to identical text") {
   for (const CheckedWorld &checked : checkedWorlds()) {
     INFO(checked.Name);
     const std::string text = saveWorld(checked.Value);

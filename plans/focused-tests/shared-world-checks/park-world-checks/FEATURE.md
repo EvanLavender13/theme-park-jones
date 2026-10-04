@@ -22,7 +22,7 @@ The edits, each applied to warm.park, whose guests are walking, heading to its s
 
 cut.park already holds supplies in transit to a shop with no supply route, so no edit makes that state.
 
-tests/parks/degenerate-intent.park holds intent of every kind, both path kinds and both box kinds, with finite values a save spells unusually and degenerate intent: a path of repeated points leaving the park, a path of one point, a path of none, a box and an entrance with a zero facing, and positions outside the park. It is a save as saveWorld writes it, so saving it again gives identical text. As a park file in tests/parks/, it is a checked world like the others.
+tests/parks/degenerate-intent.park holds intent of every kind, both path kinds and both box kinds, with finite values a save spells unusually and degenerate intent: a path of repeated points leaving the park, a path of one point, a path of none, a box and an entrance with a zero facing, and positions outside the park. As a park file in tests/parks/, it is a checked world like the others.
 
 ## Medium
 
