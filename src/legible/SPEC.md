@@ -6,13 +6,19 @@ Legible simulation (plans/legible-simulation): explanations of the simulation fo
 
 The library tpj_legible links tpj_sim alone, so its values are computed without a window (principle 10). It reads a world only through the medium's fields and networks, parkNetwork, park intent, and the owning modules' public queries, such as guestRecord, shopRecord, isAccepted, and nearestDepot, and makes candidate worlds only with makeCandidate (decision 0025). It takes a world by const reference and changes nothing, so nothing it computes enters a world's state, hash, or save (principle 1).
 
-The app calls food.h through foodNear, preview.h for keepPreview and previewedWorld, inspect.h for pickSubject and inspectSubject, and park_summary.h for summarizePark. views calls foodAvailability.
+The app calls food.h through foodNear, preview.h for keepPreview and previewedWorld, inspect.h for pickSubject and inspectSubject, and park_summary.h for summarizePark. views calls availability.h for availabilityValues, and the app and tpj_bench read FOOD_AVAILABILITY from food.h.
 
-## Food availability
+## Availability
 
-Food availability at a place is how well fed a guest standing there could be: the sum, over the supplied shops it can reach, of each shop's relief discounted by the time it would take to get a meal there, walking and waiting (decision 0020). foodAvailability(world, place) gives the value and each shop's contribution, with its relief, route distance, wait, effective time, and term. The terms add up to the value exactly, so the value is attributed to its sources (principle 8). Shops' offers are found as guests find them.
+An availability at a place is how well the sources a guest standing there can reach serve one need: the sum, over the supplied sources it can reach, of each source's relief discounted by the time it would take to be served there, walking and waiting (decision 0020). An AvailabilityDefinition in availability.h says which need: the offer its sources publish, the curve that discounts a relief by time, and Full, the value at which an overlay of it is fully saturated. So an availability of another need, such as thirst, is a definition, with no new code.
 
-Distance is measured along the paths, so a shop across a fence is as far as its route (principle 4). Every reachable supplied shop contributes, however far, and its term only falls as its effective time grows (principle 5). A place with no reachable supplied shop, or that is not on the guest network, has the value 0.
+availabilityAt(world, definition, place) gives the value and each source's contribution, with its relief, route distance, wait, effective time, and term. The terms add up to the value exactly, so the value is attributed to its sources (principle 8). Sources' offers are found as guests find them.
+
+availabilityValues(world, definition, places) gives the value at each of many places in one call, each exactly the value availabilityAt gives there, so a shade and the tooltip over it agree. It finds each source's offer once per call, however many of the places reach the source, and keeps nothing after it returns.
+
+Distance is measured along the paths, so a source across a fence is as far as its route (principle 4). Every reachable supplied source contributes, however far, and its term only falls as its effective time grows (principle 5). A place with no reachable supplied source, or that is not on the guest network, has the value 0.
+
+Food availability is FOOD_AVAILABILITY, in food.h: shops' food offers, and a Full that is a meal's relief with no walk and no wait, so a color means the same availability in every park. foodAvailability(world, place) gives it at a place.
 
 ## Path places
 

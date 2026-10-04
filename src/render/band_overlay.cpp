@@ -1,4 +1,4 @@
-#include "render/food_overlay.h"
+#include "render/band_overlay.h"
 
 #include "sim/medium/network.h"
 #include "sim/park/intent.h"
@@ -8,8 +8,10 @@
 #include <math.h>
 #include <numbers>
 #include <optional>
+#include <span>
 #include <stddef.h>
 #include <stdint.h>
+#include <utility>
 #include <vector>
 
 namespace tpj {
@@ -127,14 +129,14 @@ void appendCone(ParkMesh &mesh, const BandRow &end, ParkPoint direction) {
   }
 }
 
-} // namespace
-
-Rgba foodColor(double value) {
+// The ramp's color for a value, reaching its top at full, or OVERLAY_ZERO_COLOR for a value not
+// above 0.
+Rgba rampColor(double value, double full) {
   if (isnan(value) || value <= 0.0) {
     return OVERLAY_ZERO_COLOR;
   }
   const double scaled =
-      std::min(value / OVERLAY_FULL, 1.0) * static_cast<double>(OVERLAY_RAMP.size() - 1);
+      std::min(value / full, 1.0) * static_cast<double>(OVERLAY_RAMP.size() - 1);
   const size_t index = std::min(static_cast<size_t>(scaled), OVERLAY_RAMP.size() - 2);
   const auto fraction = static_cast<float>(scaled - static_cast<double>(index));
   const Rgba &low = OVERLAY_RAMP[index];
@@ -143,7 +145,9 @@ Rgba foodColor(double value) {
           low.B + (high.B - low.B) * fraction, 1.0f};
 }
 
-ParkMesh buildFoodOverlay(const World &world, const OverlayValue &value) {
+} // namespace
+
+ParkMesh buildBandOverlay(const World &world, const OverlayValues &values, double full) {
   std::vector<EntityKey> guestPaths;
   for (const ParkPath &path : parkPaths(world)) {
     if (path.Kind == PathKind::Guest) {
@@ -151,7 +155,13 @@ ParkMesh buildFoodOverlay(const World &world, const OverlayValue &value) {
     }
   }
   const Network &network = parkNetwork(world, PathKind::Guest);
-  ParkMesh mesh;
+  // Each band line's rows, colored once every row's value is known.
+  struct BandLine {
+    const Carrier *Line = nullptr;
+    std::vector<BandRow> Rows;
+  };
+  std::vector<BandLine> lines;
+  std::vector<Place> places;
   // Carriers come in key order, and a connector's key is no path's.
   for (const Carrier &carrier : network.carriers()) {
     if (!std::ranges::binary_search(guestPaths, carrier.Key)) {
@@ -166,15 +176,25 @@ ParkMesh buildFoodOverlay(const World &world, const OverlayValue &value) {
       if (!at) {
         continue;
       }
-      rows.push_back({*at, directionAt(carrier.Points, distance), foodColor(value(place))});
+      rows.push_back({*at, directionAt(carrier.Points, distance), OVERLAY_ZERO_COLOR});
+      places.push_back(place);
     }
-    if (rows.empty()) {
-      continue;
+    if (!rows.empty()) {
+      lines.push_back({&carrier, std::move(rows)});
     }
-    const std::vector<CarrierPoint> &points = carrier.Points;
-    appendBand(mesh, rows);
-    appendCone(mesh, rows.front(), unitStep(points[1], points[0]));
-    appendCone(mesh, rows.back(), unitStep(points[points.size() - 2], points.back()));
+  }
+  const std::vector<double> shades = values(places);
+  ParkMesh mesh;
+  size_t next = 0;
+  for (BandLine &line : lines) {
+    for (BandRow &row : line.Rows) {
+      row.Color = rampColor(shades.at(next), full);
+      ++next;
+    }
+    const std::vector<CarrierPoint> &points = line.Line->Points;
+    appendBand(mesh, line.Rows);
+    appendCone(mesh, line.Rows.front(), unitStep(points[1], points[0]));
+    appendCone(mesh, line.Rows.back(), unitStep(points[points.size() - 2], points.back()));
   }
   return mesh;
 }
