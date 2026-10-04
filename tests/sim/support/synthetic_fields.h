@@ -73,7 +73,7 @@ template <typename Visitor, typename F> void visitFields(Visitor &visitor, Emits
 }
 
 // The order the synthetic publishers publish their sources in, relative to ascending key order.
-enum class PublishOrder : uint8_t { Ascending, Descending, Rotated };
+enum class PublishOrder : uint8_t { Ascending, Descending };
 
 inline PublishOrder &publishOrder() {
   static PublishOrder order = PublishOrder::Descending;
@@ -109,8 +109,6 @@ template <typename Component> SourceEntries sourcesInPublishOrder(World &world) 
   });
   if (publishOrder() == PublishOrder::Descending) {
     std::ranges::reverse(sources);
-  } else if (publishOrder() == PublishOrder::Rotated && !sources.empty()) {
-    std::ranges::rotate(sources, sources.begin() + 1);
   }
   return sources;
 }
@@ -132,23 +130,14 @@ template <typename Visitor, typename F> void visitFields(Visitor &visitor, Steps
   visitor.field("entries", steps.Entries);
 }
 
-// Publishes, while stepping, each entity holding Steps<F> whose key the filter selects, in the
-// current publish order.
-template <typename F> void publishSteppedSourcesWhere(World &world, bool (*select)(EntityKey)) {
+// Publishes, while stepping, each entity holding Steps<F>, in the current publish order.
+template <typename F> void publishSteppedSources(World &world) {
   for (auto &[source, entries] : sourcesInPublishOrder<Steps<F>>(world)) {
-    if (!select(source)) {
-      continue;
-    }
     for (PlacedEntry<double> &entry : entries) {
       entry.Value += static_cast<double>(world.Tick);
     }
     publishStepped<F>(world, source, std::move(entries));
   }
-}
-
-// Publishes every entity holding Steps<F>.
-template <typename F> void publishSteppedSources(World &world) {
-  publishSteppedSourcesWhere<F>(world, [](EntityKey) { return true; });
 }
 
 // The intent a network is derived from.
