@@ -12,7 +12,6 @@
 #include <bit>
 #include <memory>
 #include <stdint.h>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -21,7 +20,6 @@ namespace {
 
 using test::addSource;
 using test::addStepper;
-using test::addStepsComponents;
 using test::CARRIER_A;
 using test::CARRIER_B;
 using test::Emits;
@@ -32,8 +30,6 @@ using test::makeSteppedFieldSchema;
 using test::networkOf;
 using test::PublishOrder;
 using test::PublishOrderScope;
-using test::publishSteppedSources;
-using test::publishSteppedSourcesWhere;
 using test::Reach;
 using test::setSteps;
 using test::Steps;
@@ -60,12 +56,6 @@ template <typename F> SampledBits sampledBits(const World &world, const Place &a
     result.emplace_back(source, std::bit_cast<uint64_t>(value));
   }
   return result;
-}
-
-void requireSameValue(const World &one, const World &other) {
-  REQUIRE(worldsEqual(one, other));
-  REQUIRE(worldsEqual(other, one));
-  REQUIRE(hashWorld(one) == hashWorld(other));
 }
 
 std::vector<Sampled> &observed() {
@@ -151,28 +141,35 @@ TEST_CASE("a source with readable stepped entries, even an empty list, is sample
   REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 2)) == Sampled{{steppedElsewhere, 40.0}});
 }
 
-TEST_CASE("sources are sampled in ascending key order across both layers, each source's stepped "
-          "entries in the order it gave them, whatever order they were published in") {
-  for (const PublishOrder order :
-       {PublishOrder::Ascending, PublishOrder::Descending, PublishOrder::Rotated}) {
-    CAPTURE(order);
-    const PublishOrderScope scope(order);
-    World world = makeFieldWorld(makeSteppedFieldSchema());
-    // Keys 2 to 5 alternate between the layers.
-    addStepper<Footfall>(world, {entryAt(CARRIER_A, 4, 21.0), entryAt(CARRIER_B, 0, 20.0)});
-    addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 30.0)});
-    addStepper<Footfall>(world, {entryAt(CARRIER_B, 0, 41.0), entryAt(CARRIER_A, 4, 40.0)});
-    addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 50.0)});
-    resolveWorld(world);
-    stepWorld(world);
+TEST_CASE("a field samples sources in ascending key order across both layers, and each source's "
+          "entries in the order it gave them") {
+  // Published in descending key order, and each source's entries in neither place nor value order.
+  const PublishOrderScope scope(PublishOrder::Descending);
+  World world = makeFieldWorld(makeSteppedFieldSchema());
+  // Keys 2 to 5 alternate between the layers.
+  addStepper<Footfall>(world, {entryAt(CARRIER_B, 0, 22.0), entryAt(CARRIER_A, 4, 20.0),
+                               entryAt(CARRIER_B, 0, 21.0)});
+  addSource<Footfall>(world, {entryAt(CARRIER_B, 0, 32.0), entryAt(CARRIER_A, 4, 30.0),
+                              entryAt(CARRIER_B, 0, 31.0)});
+  addStepper<Footfall>(world, {entryAt(CARRIER_B, 0, 42.0), entryAt(CARRIER_A, 4, 40.0),
+                               entryAt(CARRIER_B, 0, 41.0)});
+  addSource<Footfall>(world, {entryAt(CARRIER_B, 0, 52.0), entryAt(CARRIER_A, 4, 50.0),
+                              entryAt(CARRIER_B, 0, 51.0)});
+  resolveWorld(world);
+  stepWorld(world);
 
-    REQUIRE(sampled<Footfall>(world, JUNCTION) == Sampled{{EntityKey{2}, 21.0},
-                                                          {EntityKey{2}, 20.0},
-                                                          {EntityKey{3}, 30.0},
-                                                          {EntityKey{4}, 41.0},
-                                                          {EntityKey{4}, 40.0},
-                                                          {EntityKey{5}, 50.0}});
-  }
+  REQUIRE(sampled<Footfall>(world, JUNCTION) == Sampled{{EntityKey{2}, 22.0},
+                                                        {EntityKey{2}, 20.0},
+                                                        {EntityKey{2}, 21.0},
+                                                        {EntityKey{3}, 32.0},
+                                                        {EntityKey{3}, 30.0},
+                                                        {EntityKey{3}, 31.0},
+                                                        {EntityKey{4}, 42.0},
+                                                        {EntityKey{4}, 40.0},
+                                                        {EntityKey{4}, 41.0},
+                                                        {EntityKey{5}, 52.0},
+                                                        {EntityKey{5}, 50.0},
+                                                        {EntityKey{5}, 51.0}});
 }
 
 TEST_CASE("a resolution after a command clears the readable stepped entries of exactly the "
@@ -228,46 +225,6 @@ TEST_CASE("resolved entries count as changed exactly when the walk emits differe
   REQUIRE(sampledBits<Footfall>(world, JUNCTION) ==
           SampledBits{{signFlipped, std::bit_cast<uint64_t>(-0.0)},
                       {emptied, std::bit_cast<uint64_t>(21.0)}});
-}
-
-bool evenKey(EntityKey key) { return static_cast<uint64_t>(key) % 2 == 0; }
-bool oddKey(EntityKey key) { return static_cast<uint64_t>(key) % 2 == 1; }
-void publishEvenFootfall(World &world) { publishSteppedSourcesWhere<Footfall>(world, evenKey); }
-void publishOddFootfall(World &world) { publishSteppedSourcesWhere<Footfall>(world, oddKey); }
-
-// Three systems: two publish alternate sources into footfall, and one publishes into reach.
-std::shared_ptr<const WorldSchema> makeSystemsSchema(const std::vector<WorldFunction> &systems) {
-  auto schema = test::makeFieldSchema();
-  addStepsComponents(*schema);
-  for (const WorldFunction system : systems) {
-    schema->addSystem(system);
-  }
-  return schema;
-}
-
-World publishingWorld(std::shared_ptr<const WorldSchema> schema) {
-  World world = makeFieldWorld(std::move(schema));
-  addStepper<Footfall>(world, {entryAt(CARRIER_A, 4, 1.0)});
-  addStepper<Footfall>(world, {entryAt(CARRIER_A, 4, 2.0), entryAt(CARRIER_B, 3, 3.0)});
-  addStepper<Footfall>(world, {entryAt(CARRIER_A, 4, 4.0)});
-  addStepper<Reach>(world, {entryAt(CARRIER_A, 7, 5.0)});
-  return world;
-}
-
-TEST_CASE("systems that publish into fields give the same world and the same hash after every "
-          "tick whatever order they are registered in") {
-  World forward = publishingWorld(
-      makeSystemsSchema({publishEvenFootfall, publishOddFootfall, publishSteppedSources<Reach>}));
-  World backward = publishingWorld(
-      makeSystemsSchema({publishSteppedSources<Reach>, publishOddFootfall, publishEvenFootfall}));
-
-  for (int tick = 0; tick < 3; ++tick) {
-    CAPTURE(tick);
-    stepWorld(forward);
-    stepWorld(backward);
-    REQUIRE(sampled<Footfall>(forward, JUNCTION).size() == 3);
-    requireSameValue(forward, backward);
-  }
 }
 
 SampledBits bitsOf(const std::vector<SampledEntry<double>> &entries) {

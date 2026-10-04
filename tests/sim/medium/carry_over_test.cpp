@@ -141,54 +141,38 @@ TEST_CASE("carryOver keeps a place whose carrier's points are unchanged, whateve
   }
 }
 
-TEST_CASE("carryOver moves a place whose carrier's points changed to the nearest place on the same "
-          "carrier to its old ground position") {
+TEST_CASE("carryOver moves a place whose carrier's geometry changed to nearestPlaceOn, in the "
+          "network after, of its carrier and its ground point in the network before") {
   constexpr EntityKey LINE{5};
-  auto requireMoved = [](const Place &place, const Network &before, const Network &after) {
+  constexpr EntityKey BENT{10};
+  constexpr EntityKey OTHER{2};
+  // LINE moves aside, and OTHER now lies where it was, so a place that snapped to the nearest
+  // carrier would leave LINE. BENT's distances before are unlike its ground lengths: distance 11
+  // is halfway along its second segment, at (4, 21.5), which only the network before can say.
+  const Network before(
+      {straight(LINE, {.X = 0, .Z = 0}, {.X = 10, .Z = 0}, 10, 0, 1),
+       Carrier{.Key = BENT,
+               .Points = {{.X = 0, .Z = 20, .Distance = 0},
+                          {.X = 4, .Z = 20, .Distance = 10},
+                          {.X = 4, .Z = 23, .Distance = 12}},
+               .Stops = {{.Distance = 0, .Node = 2}, {.Distance = 12, .Node = 3}}}},
+      4, {});
+  const Network after({straight(LINE, {.X = 0, .Z = 2}, {.X = 8, .Z = 2}, 8, 0, 1),
+                       straight(OTHER, {.X = 0, .Z = 0}, {.X = 10, .Z = 0}, 10, 4, 5),
+                       Carrier{.Key = BENT,
+                               .Points = {{.X = 0, .Z = 20, .Distance = 0},
+                                          {.X = 4, .Z = 20, .Distance = 4},
+                                          {.X = 4, .Z = 26, .Distance = 10}},
+                               .Stops = {{.Distance = 0, .Node = 2}, {.Distance = 10, .Node = 3}}}},
+                      6, {});
+
+  for (const Place place :
+       std::vector<Place>{{.Carrier = LINE, .Distance = 8}, {.Carrier = BENT, .Distance = 11}}) {
     CAPTURE(place.Carrier, place.Distance);
     const std::optional<GroundPoint> was = before.groundPoint(place);
     REQUIRE(was.has_value());
-    const GroundPoint old = was.value_or(NOWHERE);
-    const std::optional<Place> moved = carryOver(place, before, after);
-    REQUIRE(moved == after.nearestPlaceOn(place.Carrier, old));
-    requireNearestOn(after, place.Carrier, old, moved);
-  };
-
-  SECTION("the carrier moved aside, and another carrier now lies nearer its old line") {
-    const Network before({straight(LINE, {.X = 0, .Z = 0}, {.X = 10, .Z = 0}, 20, 0, 1)}, 2, {});
-    const Network after({straight(LINE, {.X = 0, .Z = 2}, {.X = 8, .Z = 2}, 8, 0, 1),
-                         straight(EntityKey{2}, {.X = 0, .Z = 0}, {.X = 10, .Z = 0}, 10, 2, 3)},
-                        4, {});
-    requireMoved({.Carrier = LINE, .Distance = 8}, before, after);
-  }
-  SECTION("the carrier shortened past the place") {
-    const Network before({straight(LINE, {.X = 0, .Z = 0}, {.X = 10, .Z = 0}, 10, 0, 1)}, 2, {});
-    const Network after({straight(LINE, {.X = 0, .Z = 0}, {.X = 6, .Z = 0}, 6, 0, 1)}, 2, {});
-    requireMoved({.Carrier = LINE, .Distance = 9}, before, after);
-  }
-  SECTION("the carrier's ground line is the same but its producer measures it differently") {
-    const Network before({straight(LINE, {.X = 0, .Z = 0}, {.X = 10, .Z = 0}, 10, 0, 1)}, 2, {});
-    const Network after({straight(LINE, {.X = 0, .Z = 0}, {.X = 10, .Z = 0}, 20, 0, 1)}, 2, {});
-    requireMoved({.Carrier = LINE, .Distance = 5}, before, after);
-  }
-  SECTION("the carrier bent differently, with distances unlike ground lengths before") {
-    // Before, distance 11 lies halfway along the second segment, at (4, 1.5), which only the
-    // network before can say.
-    const Network before(
-        {Carrier{.Key = LINE,
-                 .Points = {{.X = 0, .Z = 0, .Distance = 0},
-                            {.X = 4, .Z = 0, .Distance = 10},
-                            {.X = 4, .Z = 3, .Distance = 12}},
-                 .Stops = {{.Distance = 0, .Node = 0}, {.Distance = 12, .Node = 1}}}},
-        2, {});
-    const Network after(
-        {Carrier{.Key = LINE,
-                 .Points = {{.X = 0, .Z = 0, .Distance = 0},
-                            {.X = 4, .Z = 0, .Distance = 4},
-                            {.X = 4, .Z = 6, .Distance = 10}},
-                 .Stops = {{.Distance = 0, .Node = 0}, {.Distance = 10, .Node = 1}}}},
-        2, {});
-    requireMoved({.Carrier = LINE, .Distance = 11}, before, after);
+    REQUIRE(carryOver(place, before, after) ==
+            after.nearestPlaceOn(place.Carrier, was.value_or(NOWHERE)));
   }
 }
 

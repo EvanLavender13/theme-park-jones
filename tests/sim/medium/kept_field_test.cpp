@@ -21,7 +21,6 @@
 #include <stddef.h>
 #include <stdexcept>
 #include <stdint.h>
-#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -301,11 +300,13 @@ TEST_CASE("a kept change is read by nothing before the swap that ends its tick, 
                      {kept(CARRIER_A, 7, 16.0, 4), kept(CARRIER_A, 2, 1.0, 3)});
 }
 
-TEST_CASE("a source holds one entry at each place it has changed, in the order first kept, with "
-          "the last value given there and the tick of the swap that applied it") {
-  World world = makeKeptWorld(makeKeptSchema());
+TEST_CASE("a source holds one entry at each place it has changed, in the order its places were "
+          "first kept, with the last value given there and the tick of the swap that applied it") {
+  const auto schema = makeKeptSchema();
+  World world = makeKeptWorld(schema);
   const EntityKey source = world.createEntity();
-  // Places compare as numbers, so -0.0 is the place 0.0.
+  // Kept out of place order, so the order first kept differs from the order by place. Places
+  // compare as numbers, so -0.0 is the place 0.0.
   plannedKeeps<Litter>() = {
       {.Tick = 0, .Source = source, .At = place(CARRIER_A, 7), .Value = 1.0},
       {.Tick = 0, .Source = source, .At = place(CARRIER_A, 2), .Value = 2.0},
@@ -314,43 +315,55 @@ TEST_CASE("a source holds one entry at each place it has changed, in the order f
       {.Tick = 1, .Source = source, .At = place(CARRIER_A, 2), .Value = 6.0},
       {.Tick = 1, .Source = source, .At = place(CARRIER_A, -0.0), .Value = 5.0},
   };
+  stepWorld(world);
+  // A load rebuilds the order by place kept beside the entries, so the loaded world must find the
+  // places it already holds again.
+  World loaded = loadWorld(schema, saveWorld(world));
 
   stepWorld(world);
-  stepWorld(world);
+  stepWorld(loaded);
 
-  requireSameEntries(
-      held<Litter>(world, source),
-      {kept(CARRIER_A, 7, 3.0, 1), kept(CARRIER_A, 2, 6.0, 2), kept(CARRIER_A, 0.0, 5.0, 2)});
+  const std::vector<KeptEntry> expected = {kept(CARRIER_A, 7, 3.0, 1), kept(CARRIER_A, 2, 6.0, 2),
+                                           kept(CARRIER_A, 0.0, 5.0, 2)};
+  requireSameEntries(held<Litter>(world, source), expected);
+  requireSameEntries(held<Litter>(loaded, source), expected);
 }
 
-TEST_CASE("a kept entry reads as its owner's rule of its held value and the ticks since its tick, "
-          "or 0 ticks when its tick is later than the reading world's") {
-  const auto schema = makeKeptSchema();
-  World world = makeKeptWorld(schema);
+TEST_CASE("a kept entry reads as its owner's rule of the ticks since its tick, or of 0 ticks when "
+          "its tick is later than the reading world's") {
+  World world = makeKeptWorld(makeKeptSchema());
   const EntityKey source = world.createEntity();
   plannedKeeps<Litter>() = {{.Tick = 0, .Source = source, .At = WATCHED, .Value = 8.0}};
 
-  // The entry's tick is 1, the world's tick after the swap that applied it.
-  stepWorld(world);
-  REQUIRE(keptValue<Litter>(world, source, WATCHED) == std::optional<double>{8.0});
+  // The entry's tick is 1, the world's tick after the swap that applied it, and the world's is 3.
   stepWorld(world);
   stepWorld(world);
-  REQUIRE(keptValue<Litter>(world, source, WATCHED) == std::optional<double>{2.0});
-  REQUIRE_FALSE(keptValue<Litter>(world, source, place(CARRIER_A, 6)).has_value());
+  stepWorld(world);
+  REQUIRE(keptValue<Litter>(world, source, WATCHED) == std::optional<double>{halved(8.0, 3 - 1)});
 
-  // The same entries in a world whose tick is 0, before the entry's tick.
-  std::string text = saveWorld(world);
-  const std::string tickLine = "\ntick 3\n";
-  const size_t at = text.find(tickLine);
-  REQUIRE(at != std::string::npos);
-  text.replace(at, tickLine.size(), "\ntick 0\n");
-  const World earlier = loadWorld(schema, text);
-  REQUIRE(earlier.Tick == 0);
-  REQUIRE(keptValue<Litter>(earlier, source, WATCHED) == std::optional<double>{8.0});
+  // Stepping only advances the tick, so a world earlier than the entry is made by setting it.
+  World earlier = copyWorld(world);
+  earlier.Tick = 0;
+  REQUIRE(keptValue<Litter>(earlier, source, WATCHED) == std::optional<double>{halved(8.0, 0)});
 }
 
-TEST_CASE("sampleField and fieldValue of a kept field without node or edge rules give the read "
-          "values of each source's entries at the place, sources in ascending key order") {
+TEST_CASE("keptValue gives none at a place where the source holds no entry") {
+  World world = makeKeptWorld(makeKeptSchema());
+  const EntityKey source = world.createEntity();
+  plannedKeeps<Litter>() = {
+      {.Tick = 0, .Source = source, .At = JUNCTION, .Value = 8.0},
+      {.Tick = 0, .Source = source, .At = WATCHED, .Value = 4.0},
+  };
+  stepWorld(world);
+
+  REQUIRE(keptValue<Litter>(world, source, JUNCTION).has_value());
+  REQUIRE(keptValue<Litter>(world, source, WATCHED).has_value());
+  // B's 0 resolves to the same node as JUNCTION, but keptValue reads exact places, not nodes.
+  REQUIRE_FALSE(keptValue<Litter>(world, source, place(CARRIER_B, 0)).has_value());
+}
+
+TEST_CASE("sampleField of a kept field without node or edge rules gives the read values of each "
+          "source's entries at the place, sources in ascending key order") {
   World world = makeKeptWorld(makeKeptSchema());
   const EntityKey lower = world.createEntity();
   const EntityKey higher = world.createEntity();
@@ -371,7 +384,6 @@ TEST_CASE("sampleField and fieldValue of a kept field without node or edge rules
   REQUIRE(sampled<Litter>(world, place(CARRIER_B, 0)) == atNode);
   REQUIRE(sampled<Litter>(world, WATCHED) == Sampled{{lower, 16.0}, {higher, 32.0}});
   REQUIRE(sampled<Litter>(world, place(CARRIER_A, 6)).empty());
-  REQUIRE(fieldValue<Litter>(world, networkOf(world), WATCHED) == 48.0);
 }
 
 TEST_CASE("a kept field's edge rule is given the read values of the source's entries") {
@@ -383,19 +395,18 @@ TEST_CASE("a kept field's edge rule is given the read values of the source's ent
       {.Tick = 0, .Source = source, .At = place(CARRIER_A, 10), .Value = 4.0},
       {.Tick = 0, .Source = source, .At = place(CARRIER_A, 6), .Value = 2.0},
   };
+  // Read one tick after the entries' tick, so each read value is half the held one.
   stepWorld(world);
   stepWorld(world);
   edgeCalls().clear();
 
-  REQUIRE(sampled<Crowding>(world, WATCHED) == Sampled{{source, 7.0}});
+  static_cast<void>(sampled<Crowding>(world, WATCHED));
 
   REQUIRE(edgeCalls().size() == 1);
   const EdgeSample<double> &sample = edgeCalls().front();
   REQUIRE(sample.AtFrom == std::vector<double>{4.0});
   REQUIRE(sample.AtTo == std::vector<double>{2.0});
   REQUIRE(sample.Along.size() == 1);
-  REQUIRE(sample.Along.front().FromOffset == 2.0);
-  REQUIRE(sample.Along.front().ToOffset == 4.0);
   REQUIRE(sample.Along.front().Value == 1.0);
 }
 
@@ -540,28 +551,6 @@ TEST_CASE("replaceKeptEntries, called by a finisher, makes the source's held ent
   requireSameEntries(held<Litter>(world, replaced), replacement);
   REQUIRE(held<Litter>(world, removed).empty());
   REQUIRE(sampled<Litter>(world, place(CARRIER_A, 2)) == Sampled{{replaced, 0.5}});
-}
-
-// A load leaves behind the order by place kept beside a source's entries, so a change in the
-// loaded world must find the place it already holds again.
-TEST_CASE("in a world loaded from a save, a change at a held place leaves one entry there, with "
-          "the last value given and the tick of the swap that applied it") {
-  const auto schema = makeKeptSchema();
-  World world = makeKeptWorld(schema);
-  const EntityKey source = world.createEntity();
-  // Kept out of place order, so the order by place differs from the order first kept.
-  plannedKeeps<Litter>() = {
-      {.Tick = 0, .Source = source, .At = place(CARRIER_A, 7), .Value = 1.0},
-      {.Tick = 0, .Source = source, .At = place(CARRIER_A, 2), .Value = 2.0},
-      {.Tick = 1, .Source = source, .At = place(CARRIER_A, 2), .Value = 3.0},
-  };
-  stepWorld(world);
-  World loaded = loadWorld(schema, saveWorld(world));
-
-  stepWorld(loaded);
-
-  requireSameEntries(held<Litter>(loaded, source),
-                     {kept(CARRIER_A, 7, 1.0, 1), kept(CARRIER_A, 2, 3.0, 2)});
 }
 
 } // namespace

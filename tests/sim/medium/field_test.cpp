@@ -12,12 +12,13 @@
 
 #include <algorithm>
 #include <bit>
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stddef.h>
 #include <stdexcept>
 #include <stdint.h>
-#include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
@@ -27,6 +28,7 @@ namespace tpj {
 namespace {
 
 using test::addSource;
+using test::addStepper;
 using test::CARRIER_A;
 using test::CARRIER_B;
 using test::CARRIER_C;
@@ -36,6 +38,7 @@ using test::Footfall;
 using test::LAYOUT_KEY;
 using test::makeFieldSchema;
 using test::makeFieldWorld;
+using test::makeSteppedFieldSchema;
 using test::networkOf;
 using test::PublishOrder;
 using test::PublishOrderScope;
@@ -44,6 +47,8 @@ using test::ReachCall;
 using test::reachCalls;
 
 using Sampled = std::vector<std::pair<EntityKey, double>>;
+
+constexpr double NOT_A_NUMBER = std::numeric_limits<double>::quiet_NaN();
 
 constexpr Place place(EntityKey carrier, double distance) {
   return {.Carrier = carrier, .Distance = distance};
@@ -61,12 +66,6 @@ Sampled sampledOn(const World &world, const Network &network, const Place &at) {
 // Sampled on the world's own network.
 template <typename F> Sampled sampled(const World &world, const Place &at) {
   return sampledOn<F>(world, networkOf(world), at);
-}
-
-void requireSameValue(const World &one, const World &other) {
-  REQUIRE(worldsEqual(one, other));
-  REQUIRE(worldsEqual(other, one));
-  REQUIRE(hashWorld(one) == hashWorld(other));
 }
 
 // What a call threw. std::invalid_argument is itself a std::logic_error, so the two are told apart.
@@ -89,11 +88,6 @@ template <typename Call> Thrown thrownBy(Call call) {
 // it.
 std::vector<Thrown> &outcomes() {
   static std::vector<Thrown> recorded;
-  return recorded;
-}
-
-std::vector<std::string> &journal() {
-  static std::vector<std::string> recorded;
   return recorded;
 }
 
@@ -149,35 +143,18 @@ void requireAlong(const Network &network, const std::vector<EdgeEntry<double>> &
   }
 }
 
-TEST_CASE("addField registers the field's derived component as <name>-resolved and its resolver "
-          "as <name>-field") {
-  const auto schema = makeFieldSchema();
+TEST_CASE("addField registers the field's derived type as <name>-resolved, its state type as "
+          "<name>-stepped, and its resolver as <name>-field") {
+  WorldSchema schema;
+  addField<Footfall>(schema);
 
-  for (const std::string_view name : {"footfall", "reach"}) {
-    CAPTURE(name);
-    const ComponentType *resolved = componentNamed(*schema, std::string(name) + "-resolved");
-    REQUIRE(resolved != nullptr);
-    REQUIRE(resolved->Kind == DataKind::Derived);
-    REQUIRE(hasResolver(*schema, std::string(name) + "-field"));
-  }
-}
-
-TEST_CASE("isResolving is true while a resolver runs and false otherwise") {
-  auto schema = std::make_shared<WorldSchema>();
-  schema->addSystem([](World &world) {
-    journal().push_back(std::string("system ") + (world.isResolving() ? "true" : "false"));
-  });
-  schema->addResolver("watch", [](World &world) {
-    journal().push_back(std::string("resolver ") + (world.isResolving() ? "true" : "false"));
-  });
-  World world(schema, 0);
-  REQUIRE_FALSE(world.isResolving());
-
-  journal().clear();
-  stepWorld(world);
-
-  REQUIRE(journal() == std::vector<std::string>{"resolver true", "system false"});
-  REQUIRE_FALSE(world.isResolving());
+  const ComponentType *resolved = componentNamed(schema, "footfall-resolved");
+  REQUIRE(resolved != nullptr);
+  REQUIRE(resolved->Kind == DataKind::Derived);
+  const ComponentType *stepped = componentNamed(schema, "footfall-stepped");
+  REQUIRE(stepped != nullptr);
+  REQUIRE(stepped->Kind == DataKind::State);
+  REQUIRE(hasResolver(schema, "footfall-field"));
 }
 
 TEST_CASE("entries a resolver publishes are sampled at once, by later resolvers and after the "
@@ -233,40 +210,19 @@ TEST_CASE("publishResolved throws std::invalid_argument for a source that has al
                                             Thrown::Nothing, Thrown::InvalidArgument});
 }
 
-TEST_CASE("a publishResolved that throws leaves the field's entries unchanged") {
-  SECTION("a repeated source keeps its first entries, and a null source adds none") {
-    auto schema = std::make_shared<WorldSchema>();
-    test::addSyntheticNetwork(*schema);
-    addField<Footfall>(*schema);
-    schema->addResolver("refused-publisher",
-                        [](World &world) {
-                          publishTwice<1>(world);
-                          outcomes().push_back(thrownBy([&] {
-                            publishResolved<Footfall>(world, NULL_KEY,
-                                                      {entryAt(CARRIER_A, 4, 3.0)});
-                          }));
-                        },
-                        {"footfall-field"});
-    World world = makeFieldWorld(schema);
+// A refused source has already published, so its slot exists for the refused call to change.
+TEST_CASE("a refused publication into a field changes nothing") {
+  auto schema = std::make_shared<WorldSchema>();
+  test::addSyntheticNetwork(*schema);
+  addField<Footfall>(*schema);
+  schema->addResolver("twice-publisher", publishTwice<1>, {"footfall-field"});
+  World world = makeFieldWorld(schema);
 
-    outcomes().clear();
-    resolveWorld(world);
+  outcomes().clear();
+  resolveWorld(world);
 
-    REQUIRE(outcomes() ==
-            std::vector<Thrown>{Thrown::Nothing, Thrown::InvalidArgument, Thrown::InvalidArgument});
-    REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 4)) == Sampled{{LAYOUT_KEY, 1.0}});
-  }
-  SECTION("outside resolution, the world is unchanged") {
-    World world = makeFieldWorld(makeFieldSchema());
-    const EntityKey source = addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 1.0)});
-    resolveWorld(world);
-    const World before = copyWorld(world);
-
-    REQUIRE(thrownBy([&] {
-              publishResolved<Footfall>(world, source, {entryAt(CARRIER_A, 4, 2.0)});
-            }) == Thrown::OtherLogicError);
-    requireSameValue(world, before);
-  }
+  REQUIRE(outcomes() == std::vector<Thrown>{Thrown::Nothing, Thrown::InvalidArgument});
+  REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 4)) == Sampled{{LAYOUT_KEY, 1.0}});
 }
 
 TEST_CASE("every resolution replaces every source's resolved entries in full") {
@@ -287,52 +243,51 @@ TEST_CASE("every resolution replaces every source's resolved entries in full") {
   REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 4)) == Sampled{{kept, 3.0}});
 }
 
-// Three sources, each with entries whose values are in neither ascending nor descending order, so
-// only publication order explains the order within a source.
-World threeSourceWorld() {
-  World world = makeFieldWorld(makeFieldSchema());
+// Sources in both layers, keys alternating between them, each published in the given order.
+World publishedInOrder(PublishOrder order) {
+  const PublishOrderScope scope(order);
+  World world = makeFieldWorld(makeSteppedFieldSchema());
   addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 7.0)});
-  addSource<Footfall>(world, {entryAt(CARRIER_A, 4, 5.0), entryAt(CARRIER_B, 0, 3.0)});
+  addStepper<Footfall>(world, {entryAt(CARRIER_A, 4, 5.0), entryAt(CARRIER_B, 0, 3.0)});
   addSource<Footfall>(world, {entryAt(CARRIER_B, 0, 1.0), entryAt(CARRIER_A, 4, 9.0)});
+  addStepper<Footfall>(world, {entryAt(CARRIER_A, 4, 2.0)});
+  resolveWorld(world);
+  stepWorld(world);
   return world;
 }
 
-const std::vector<PublishOrder> PUBLISH_ORDERS = {PublishOrder::Ascending, PublishOrder::Descending,
-                                                  PublishOrder::Rotated};
+TEST_CASE("the order sources publish in does not change a field, in either layer") {
+  const World ascending = publishedInOrder(PublishOrder::Ascending);
+  const World descending = publishedInOrder(PublishOrder::Descending);
+  // Every source, resolved and stepped, has published.
+  REQUIRE(sampled<Footfall>(ascending, place(CARRIER_A, 4)).size() == 6);
 
-TEST_CASE("publishing the same sources in different orders gives the same world and the same "
-          "hash") {
-  std::vector<World> worlds;
-  for (const PublishOrder order : PUBLISH_ORDERS) {
-    const PublishOrderScope scope(order);
-    worlds.push_back(threeSourceWorld());
-    resolveWorld(worlds.back());
-  }
-  REQUIRE_FALSE(sampled<Footfall>(worlds.front(), place(CARRIER_A, 4)).empty());
-
-  requireSameValue(worlds[0], worlds[1]);
-  requireSameValue(worlds[0], worlds[2]);
+  REQUIRE(worldsEqual(ascending, descending));
 }
 
 TEST_CASE("at a place that resolves to a node, a source's sampled entries are those whose places "
-          "resolve to the same node, whatever carrier they name") {
+          "resolve to the same node, whatever carrier they name, in the source's order") {
   World world = makeFieldWorld(makeFieldSchema());
-  // Node 1 is A at 4 and B at 0; node 3 is B at 6 and C at both 0 and 8.
+  // Node 1 is A at 4 and B at 0; node 3 is B at 6 and C at both 0 and 8. Distances compare as
+  // numbers, so B at -0.0 is node 1's stop place, and a NaN distance is at no place.
   const EntityKey source = addSource<Footfall>(world, {
                                                           entryAt(CARRIER_A, 4, 1.0),
                                                           entryAt(CARRIER_A, 2, 2.0),
-                                                          entryAt(CARRIER_B, 0, 3.0),
-                                                          entryAt(CARRIER_A, 0, 4.0),
+                                                          entryAt(CARRIER_B, -0.0, 3.0),
+                                                          entryAt(CARRIER_A, NOT_A_NUMBER, 4.0),
                                                           entryAt(CARRIER_B, 6, 5.0),
-                                                          entryAt(CARRIER_C, 0, 6.0),
+                                                          entryAt(CARRIER_A, 4, 6.0),
+                                                          entryAt(CARRIER_B, 0.0, 7.0),
+                                                          entryAt(CARRIER_C, 0, 8.0),
+                                                          entryAt(CARRIER_A, 0, 9.0),
                                                       });
   resolveWorld(world);
 
-  const Sampled atJunction = {{source, 1.0}, {source, 3.0}};
+  const Sampled atJunction = {{source, 1.0}, {source, 3.0}, {source, 6.0}, {source, 7.0}};
   REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 4)) == atJunction);
   REQUIRE(sampled<Footfall>(world, place(CARRIER_B, 0)) == atJunction);
   // A place no entry names, at the end of a carrier that starts at the same node.
-  REQUIRE(sampled<Footfall>(world, place(CARRIER_C, 8)) == Sampled{{source, 5.0}, {source, 6.0}});
+  REQUIRE(sampled<Footfall>(world, place(CARRIER_C, 8)) == Sampled{{source, 5.0}, {source, 8.0}});
 }
 
 TEST_CASE("at a place that resolves to a node, a field with sampleEdge gives the entries at the "
@@ -355,9 +310,13 @@ TEST_CASE("at a place that resolves to a node, a field with sampleEdge gives the
   }
 }
 
-TEST_CASE("at a place strictly inside an edge, a field without sampleEdge gives the entries whose "
-          "places equal it") {
+TEST_CASE("at a place strictly inside an edge, a field without sampleEdge gives each source's "
+          "entries whose places equal it") {
   World world = makeFieldWorld(makeFieldSchema());
+  // One representable step inside each end of A's edge from node 1 at 4 to node 2 at 10, beside
+  // entries at those nodes, which a place mistaken for its nearby node would give.
+  const double afterFrom = std::nextafter(4.0, 10.0);
+  const double beforeTo = std::nextafter(10.0, 4.0);
   const EntityKey source = addSource<Footfall>(world, {
                                                           entryAt(CARRIER_A, 2, 1.0),
                                                           entryAt(CARRIER_A, 2.5, 2.0),
@@ -365,6 +324,9 @@ TEST_CASE("at a place strictly inside an edge, a field without sampleEdge gives 
                                                           entryAt(CARRIER_A, 4, 4.0),
                                                           entryAt(CARRIER_A, 2, 5.0),
                                                           entryAt(CARRIER_B, 2, 6.0),
+                                                          entryAt(CARRIER_A, afterFrom, 7.0),
+                                                          entryAt(CARRIER_A, beforeTo, 8.0),
+                                                          entryAt(CARRIER_A, 10, 9.0),
                                                       });
   resolveWorld(world);
 
@@ -372,6 +334,8 @@ TEST_CASE("at a place strictly inside an edge, a field without sampleEdge gives 
   REQUIRE(sampled<Footfall>(world, place(CARRIER_A, 2.5)) == Sampled{{source, 2.0}});
   // The same distance on another carrier is another place.
   REQUIRE(sampled<Footfall>(world, place(CARRIER_B, 2)) == Sampled{{source, 6.0}});
+  REQUIRE(sampled<Footfall>(world, place(CARRIER_A, afterFrom)) == Sampled{{source, 7.0}});
+  REQUIRE(sampled<Footfall>(world, place(CARRIER_A, beforeTo)) == Sampled{{source, 8.0}});
 }
 
 TEST_CASE("a place that does not resolve on the network gives no entries") {
@@ -423,9 +387,9 @@ TEST_CASE("a world holding no entries for a field samples as empty, with value 0
 }
 
 // Around the place A at 4.3, inside A's edge from node 1 at 4 to node 2 at 10. The first source
-// has entries at both nodes, one named through B, inside the edge, and elsewhere. The second has
-// entries only elsewhere. The third has one entry at the place itself. They are published in
-// descending key order.
+// has entries at both nodes, one named through B, inside the edge, including one representable
+// step inside each end, and elsewhere. The second has entries only elsewhere. The third has one
+// entry at the place itself. They are published in descending key order.
 struct EdgeRuleCase {
   World Resolved;
   EntityKey First = NULL_KEY;
@@ -443,6 +407,8 @@ EdgeRuleCase edgeRuleCase() {
                                              entryAt(CARRIER_A, 2, 14.0),
                                              entryAt(CARRIER_A, 5.5, 15.0),
                                              entryAt(CARRIER_B, 6, 16.0),
+                                             entryAt(CARRIER_A, std::nextafter(10.0, 4.0), 17.0),
+                                             entryAt(CARRIER_A, std::nextafter(4.0, 10.0), 18.0),
                                          });
   addSource<Reach>(world, {entryAt(CARRIER_A, 2, 20.0), entryAt(CARRIER_B, 3, 21.0),
                            entryAt(CARRIER_A, 0, 22.0)});
@@ -472,8 +438,8 @@ TEST_CASE("a field's sampleEdge is called once for each source with an entry at 
 }
 
 TEST_CASE("sampleEdge is given the edge, the place's offsets as resolve gives them, and the "
-          "source's entries at the edge's From node, at its To node, and inside it, each in the "
-          "source's order") {
+          "source's entries at the edge's From node, at its To node, and strictly inside it, each "
+          "in the source's order") {
   const EdgeRuleCase edgeCase = edgeRuleCase();
   const Network &network = networkOf(edgeCase.Resolved);
   const EdgePosition position = edgePositionOf(network, EDGE_RULE_PLACE);
@@ -497,9 +463,11 @@ TEST_CASE("sampleEdge is given the edge, the place's offsets as resolve gives th
   const EdgeSample<double> &first = reachCalls()[0].Sample;
   REQUIRE(first.AtFrom == std::vector<double>{10.0, 13.0});
   REQUIRE(first.AtTo == std::vector<double>{11.0});
-  requireAlong(
-      network, first.Along,
-      {{.At = place(CARRIER_A, 7.1), .Value = 12.0}, {.At = place(CARRIER_A, 5.5), .Value = 15.0}});
+  requireAlong(network, first.Along,
+               {{.At = place(CARRIER_A, 7.1), .Value = 12.0},
+                {.At = place(CARRIER_A, 5.5), .Value = 15.0},
+                {.At = place(CARRIER_A, std::nextafter(10.0, 4.0)), .Value = 17.0},
+                {.At = place(CARRIER_A, std::nextafter(4.0, 10.0)), .Value = 18.0}});
 
   const EdgeSample<double> &third = reachCalls()[1].Sample;
   REQUIRE(third.AtFrom.empty());

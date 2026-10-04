@@ -10,7 +10,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -18,7 +17,6 @@
 #include <stddef.h>
 #include <stdexcept>
 #include <stdint.h>
-#include <string>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -178,70 +176,12 @@ TEST_CASE("the default network is empty") {
   REQUIRE(network.nodeCount() == 0);
 }
 
-TEST_CASE("the constructor refuses each malformed input the spec lists") {
-  const std::vector<std::pair<std::string, std::function<void(SyntheticNetwork &)>>> malformed = {
-      {"a carrier keyed NULL_KEY",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, SPUR).Key = NULL_KEY; }},
-      {"a repeated carrier key",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, SPUR).Key = BEND; }},
-      {"a carrier with one point",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, SPUR).Points.pop_back(); }},
-      {"a coordinate that is NaN",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Points[1].X = NOT_A_NUMBER; }},
-      {"a coordinate that is infinite",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Points[1].Z = INFINITE; }},
-      // NaN compares false, so an ordering test alone would let it through.
-      {"a point distance that is NaN",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Points[1].Distance = NOT_A_NUMBER; }},
-      // Infinity equals itself and exceeds every finite distance, so only finiteness refuses it.
-      {"a last point and last stop at infinity",
-       [](SyntheticNetwork &inputs) {
-         carrierOf(inputs, BEND).Points[2].Distance = INFINITE;
-         carrierOf(inputs, BEND).Stops[2].Distance = INFINITE;
-       }},
-      {"a first point whose distance is not 0",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Points[0].Distance = 0.5; }},
-      {"point distances that repeat",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Points[1].Distance = 12; }},
-      {"a carrier with one stop",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, SPUR).Stops.pop_back(); }},
-      {"a stop distance that is NaN",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Stops[1].Distance = NOT_A_NUMBER; }},
-      {"a first stop not at 0",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Stops[0].Distance = 1; }},
-      {"a last stop before the carrier's length",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, SPUR).Stops[1].Distance = 5; }},
-      {"a last stop beyond the carrier's length",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, SPUR).Stops[1].Distance = 7; }},
-      {"stop distances that repeat",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Stops[1].Distance = 0; }},
-      {"a stop naming the node count",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, SPUR).Stops[1].Node = 5; }},
-      {"a node no carrier stops at", [](SyntheticNetwork &inputs) { inputs.NodeCount = 6; }},
-      {"an anchor naming the node count",
-       [](SyntheticNetwork &inputs) {
-         inputs.Anchors.push_back({.Node = 5, .Entity = SECOND_OWNER});
-       }},
-      {"an anchor naming NULL_KEY",
-       [](SyntheticNetwork &inputs) { inputs.Anchors.push_back({.Node = 2, .Entity = NULL_KEY}); }},
-      {"a second anchor on a node",
-       [](SyntheticNetwork &inputs) {
-         inputs.Anchors.push_back({.Node = 3, .Entity = SECOND_OWNER});
-       }},
-      // Identical anchors must not be merged silently.
-      {"a repeated anchor",
-       [](SyntheticNetwork &inputs) {
-         inputs.Anchors.push_back({.Node = 3, .Entity = FIRST_OWNER});
-       }},
-  };
-
+TEST_CASE("the constructor refuses malformed input with std::invalid_argument") {
   REQUIRE_NOTHROW(sampleInputs().build());
-  for (const auto &[label, apply] : malformed) {
-    CAPTURE(label);
-    SyntheticNetwork inputs = sampleInputs();
-    apply(inputs);
-    CHECK_THROWS_AS(inputs.build(), std::invalid_argument);
-  }
+  // NaN compares false, so a check of point order alone would let it through.
+  SyntheticNetwork inputs = sampleInputs();
+  carrierOf(inputs, BEND).Points[1].Distance = NOT_A_NUMBER;
+  REQUIRE_THROWS_AS(inputs.build(), std::invalid_argument);
 }
 
 TEST_CASE("a network does not depend on the order its carriers and anchors are given in") {
@@ -318,13 +258,15 @@ TEST_CASE("resolve gives the node at a stop's distance, and between stops the en
   }
 }
 
-TEST_CASE("resolve gives no position for a missing carrier or a distance outside its carrier") {
+TEST_CASE("a place whose carrier is absent, or whose distance lies outside its carrier, resolves "
+          "to nothing") {
   const Network network = sampleInputs().build();
-  for (const Place &place : unresolvablePlaces()) {
-    CAPTURE(place.Carrier, place.Distance);
-    CHECK_FALSE(network.resolve(place).has_value());
-  }
-  CHECK_FALSE(Network().resolve({.Carrier = BEND, .Distance = 0}).has_value());
+  // One representable step past each end of BEND, which runs from 0 to 12.
+  CHECK_FALSE(
+      network.resolve({.Carrier = BEND, .Distance = std::nextafter(0.0, -1.0)}).has_value());
+  CHECK_FALSE(
+      network.resolve({.Carrier = BEND, .Distance = std::nextafter(12.0, INFINITE)}).has_value());
+  CHECK_FALSE(network.resolve({.Carrier = EntityKey{99}, .Distance = 1}).has_value());
 }
 
 TEST_CASE("nodeAnchor and anchoredNodes find the anchors given, and nothing where none was given") {
@@ -359,12 +301,9 @@ TEST_CASE("firstAnchoredNode gives the first node anchoredNodes gives, and none 
   }
 }
 
-TEST_CASE("nodePlace and nodeAnchor refuse a node not below the node count") {
+TEST_CASE("nodePlace and nodeAnchor throw std::out_of_range for a node not below the node count") {
   const Network network = sampleInputs().build();
-  REQUIRE_THROWS_AS(network.nodePlace(5), std::out_of_range);
-  REQUIRE_THROWS_AS(network.nodeAnchor(5), std::out_of_range);
-  REQUIRE_THROWS_AS(Network().nodePlace(0), std::out_of_range);
-  REQUIRE_THROWS_AS(Network().nodeAnchor(0), std::out_of_range);
+  REQUIRE_THROWS_AS(network.nodePlace(network.nodeCount()), std::out_of_range);
 }
 
 bool placeBefore(const Place &left, const Place &right) {

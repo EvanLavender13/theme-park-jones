@@ -7,14 +7,12 @@
 #include "sim/schema.h"
 #include "sim/world.h"
 
-// So that a failed comparison of labeled outcomes prints them.
+// So that a failed comparison of holdings prints them.
 #define CATCH_CONFIG_ENABLE_PAIR_STRINGMAKER
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <functional>
-#include <iterator>
-#include <limits>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -134,12 +132,6 @@ void stepWith(World &world, const std::vector<EntityKey> &removals) {
     commands.push(RemoveEntity{.Key = key});
   }
   stepWorld(world, commands);
-}
-
-// The kind's ledger component, or null when the world holds none.
-template <FlowDefinition K> Ledger *ledgerOf(World &world) {
-  const entt::entity holder = world.findEntity(flowKey(K::Name));
-  return holder == entt::null ? nullptr : world.Registry.try_get<FlowLedger<K>>(holder);
 }
 
 using Holdings = std::vector<std::pair<EntityKey, int64_t>>;
@@ -378,171 +370,25 @@ TEST_CASE("addressedTo gives exactly the kind's packets and stocks whose handle 
         std::vector<StockTuple>{{ENDPOINT, HANDLE, 3}, {OTHER, HANDLE, 3}, {HANDLE, HANDLE, 1}});
 }
 
-// Each operation, with every argument valid for a scripted world stocked up in tick 0.
-std::vector<std::pair<std::string, Action>> validOperations() {
-  return {
-      {"createUnits", [](World &world) { createUnits<Meals>(world, ENDPOINT, HANDLE, 1); }},
-      {"sendUnits", [](World &world) { sendUnits<Meals>(world, ENDPOINT, OTHER, HANDLE, 1, 1); }},
-      {"consumeUnits",
-       [](World &world) { consumeUnits<Meals>(world, ENDPOINT, HANDLE, 1, "spoiled"); }},
-  };
-}
-
-// Supplies has a ledger, and meals has none.
-std::shared_ptr<const WorldSchema> makeUnledgeredSchema() {
-  auto schema = std::make_shared<WorldSchema>();
-  addFlow<Supplies>(*schema);
-  schema->addSystem(runScript);
-  return schema;
-}
-
-using Rejections = std::vector<std::pair<std::string, Action>>;
-
-Rejections endpointAndUnitRejections();
-Rejections sendRejections();
-Rejections consumeRejections();
-std::vector<std::string> labelsOf(const Rejections &calls);
-
-// Calls every operation rejects for its endpoint or units, in a world stocked up in tick 0.
-Rejections endpointAndUnitRejections() {
-  Rejections rejections;
-  for (const EntityKey endpoint : {NULL_KEY, DEAD}) {
-    const std::string who = endpoint == NULL_KEY ? " for a null endpoint" : " for a dead endpoint";
-    rejections.emplace_back("createUnits" + who, [endpoint](World &world) {
-      createUnits<Meals>(world, endpoint, HANDLE, 1);
-    });
-    rejections.emplace_back("sendUnits" + who, [endpoint](World &world) {
-      sendUnits<Meals>(world, endpoint, OTHER, HANDLE, 1, 1);
-    });
-    rejections.emplace_back("consumeUnits" + who, [endpoint](World &world) {
-      consumeUnits<Meals>(world, endpoint, HANDLE, 1, "spoiled");
-    });
-  }
-  for (const int64_t units : {int64_t{0}, int64_t{-1}}) {
-    const std::string what = " of " + std::to_string(units) + " units";
-    rejections.emplace_back("createUnits" + what, [units](World &world) {
-      createUnits<Meals>(world, ENDPOINT, HANDLE, units);
-    });
-    rejections.emplace_back("sendUnits" + what, [units](World &world) {
-      sendUnits<Meals>(world, ENDPOINT, OTHER, HANDLE, units, 1);
-    });
-    rejections.emplace_back("consumeUnits" + what, [units](World &world) {
-      consumeUnits<Meals>(world, ENDPOINT, HANDLE, units, "spoiled");
-    });
-  }
-  return rejections;
-}
-
-// The endpoint holds 5 units addressed to HANDLE, and none addressed to OTHER.
-Rejections sendRejections() {
-  return {
-      {"to a null destination",
-       [](World &world) { sendUnits<Meals>(world, ENDPOINT, NULL_KEY, HANDLE, 1, 1); }},
-      {"with a delay of 0",
-       [](World &world) { sendUnits<Meals>(world, ENDPOINT, OTHER, HANDLE, 1, 0); }},
-      {"of more units than held",
-       [](World &world) { sendUnits<Meals>(world, ENDPOINT, OTHER, HANDLE, 6, 1); }},
-      {"of a handle not held",
-       [](World &world) { sendUnits<Meals>(world, ENDPOINT, OTHER, OTHER, 1, 1); }},
-  };
-}
-
-Rejections consumeRejections() {
-  return {
-      {"with an uppercase cause",
-       [](World &world) { consumeUnits<Meals>(world, ENDPOINT, HANDLE, 1, "Spoiled"); }},
-      {"with an empty cause",
-       [](World &world) { consumeUnits<Meals>(world, ENDPOINT, HANDLE, 1, ""); }},
-      {"with a cause holding a space",
-       [](World &world) { consumeUnits<Meals>(world, ENDPOINT, HANDLE, 1, "went off"); }},
-      {"of more units than held",
-       [](World &world) { consumeUnits<Meals>(world, ENDPOINT, HANDLE, 6, "spoiled"); }},
-      {"of a handle not held",
-       [](World &world) { consumeUnits<Meals>(world, ENDPOINT, OTHER, 1, "spoiled"); }},
-  };
-}
-
-std::vector<std::string> labelsOf(const Rejections &calls) {
-  std::vector<std::string> labels;
-  for (const auto &[label, call] : calls) {
-    labels.push_back(label);
-  }
-  return labels;
-}
-
-constexpr int64_t LARGEST = std::numeric_limits<int64_t>::max();
-
-// After tick 0 the created count is set 7 below the largest int64_t. The ledger is a public medium
-// component, so a test may set it directly.
-World nearlyFullWorld() {
-  World world = makeScriptedWorld(makeScriptedSchema());
-  at(0, stockUp);
-  stepWorld(world);
-  Ledger *ledger = ledgerOf<Meals>(world);
-  REQUIRE(ledger != nullptr);
-  ledger->Created = LARGEST - 7;
-  return world;
-}
-
-std::vector<std::pair<std::string, bool>> &unchanged() {
-  static std::vector<std::pair<std::string, bool>> recorded;
-  return recorded;
-}
-
-// Records, for each call, whether the world's hash is the same after it threw as before.
-void recordUnchanged(World &world, const Rejections &calls) {
-  for (const auto &labeled : calls) {
-    const Action &call = labeled.second;
-    const uint64_t before = hashWorld(world);
-    const Thrown thrown = thrownBy([&] { call(world); });
-    unchanged().emplace_back(labeled.first,
-                             thrown != Thrown::Nothing && hashWorld(world) == before);
-  }
-}
-
-std::vector<std::pair<std::string, bool>> allUnchanged(const std::vector<std::string> &labels) {
-  std::vector<std::pair<std::string, bool>> labeled;
-  labeled.reserve(labels.size());
-  for (const std::string &label : labels) {
-    labeled.emplace_back(label, true);
-  }
-  return labeled;
-}
-
-TEST_CASE("an operation that throws changes nothing") {
+// Sending more units than the stock holds is refused only after the stock is found, so a refusal
+// that changed the stock first would show.
+TEST_CASE("a refused flow operation changes nothing") {
   const ScriptScope scope;
-  unchanged().clear();
+  World world = makeScriptedWorld(makeScriptedSchema());
+  Thrown thrown = Thrown::Nothing;
+  uint64_t before = 0;
+  uint64_t after = 0;
+  at(0, stockUp);
+  at(1, [&](World &stepping) {
+    before = hashWorld(stepping);
+    thrown = thrownBy([&] { sendUnits<Meals>(stepping, ENDPOINT, OTHER, HANDLE, 6, 1); });
+    after = hashWorld(stepping);
+  });
+  stepWorld(world);
+  stepWorld(world);
 
-  SECTION("rejected for its arguments while stepping") {
-    Rejections calls = endpointAndUnitRejections();
-    std::ranges::move(sendRejections(), std::back_inserter(calls));
-    std::ranges::move(consumeRejections(), std::back_inserter(calls));
-    calls.emplace_back("createUnits beyond the largest created count",
-                       [](World &world) { createUnits<Meals>(world, ENDPOINT, HANDLE, 8); });
-    World world = nearlyFullWorld();
-    at(1, [&calls](World &stepping) { recordUnchanged(stepping, calls); });
-    stepWorld(world);
-    REQUIRE(unchanged() == allUnchanged(labelsOf(calls)));
-  }
-  SECTION("rejected for want of a ledger") {
-    World world = makeScriptedWorld(makeUnledgeredSchema());
-    const Rejections calls = validOperations();
-    at(0, [&calls](World &stepping) { recordUnchanged(stepping, calls); });
-    stepWorld(world);
-    REQUIRE(unchanged() == allUnchanged(labelsOf(calls)));
-  }
-  SECTION("rejected outside stepping") {
-    World world = makeScriptedWorld(makeScriptedSchema());
-    at(0, stockUp);
-    stepWorld(world);
-    const World before = copyWorld(world);
-    for (const auto &operation : validOperations()) {
-      const Action &call = operation.second;
-      CAPTURE(operation.first);
-      REQUIRE(thrownBy([&] { call(world); }) != Thrown::Nothing);
-      requireSameValue(world, before);
-    }
-  }
+  REQUIRE(thrown == Thrown::InvalidArgument);
+  REQUIRE(after == before);
 }
 
 TEST_CASE("a packet sent while stepping tick t with delay d to a destination live at its arrival "

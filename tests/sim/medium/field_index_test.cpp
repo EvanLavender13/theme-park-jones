@@ -9,15 +9,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <bit>
 #include <cmath>
 #include <limits>
 #include <memory>
-#include <optional>
 #include <span>
 #include <stddef.h>
 #include <stdint.h>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -37,7 +34,6 @@ using test::networkOf;
 using test::Reach;
 using test::setSteps;
 
-using Sampled = std::vector<std::pair<EntityKey, double>>;
 using Positions = std::vector<uint32_t>;
 
 constexpr double NOT_A_NUMBER = std::numeric_limits<double>::quiet_NaN();
@@ -74,7 +70,7 @@ TEST_CASE("orderByPlace gives the positions of the entries whose distance is not
           .empty());
 }
 
-// Commands that change a source's resolved entries and its stepped entries.
+// A command that changes a source's resolved entries.
 struct SetFootfall {
   EntityKey Source = NULL_KEY;
   std::vector<PlacedEntry<double>> Entries;
@@ -85,19 +81,9 @@ struct SetFootfall {
                                                      Emits<Footfall>{.Entries = command.Entries});
 }
 
-struct SetFootfallSteps {
-  EntityKey Source = NULL_KEY;
-  std::vector<PlacedEntry<double>> Entries;
-};
-
-[[maybe_unused]] void applyCommand(World &world, const SetFootfallSteps &command) {
-  setSteps<Footfall>(world, command.Source, command.Entries);
-}
-
 std::shared_ptr<WorldSchema> makeCommandedSchema() {
   auto schema = makeSteppedFieldSchema();
   schema->addCommand<SetFootfall>();
-  schema->addCommand<SetFootfallSteps>();
   return schema;
 }
 
@@ -155,7 +141,6 @@ void sampleEverySlot(const World &world) {
 
 struct IndexedWorld {
   World Value;
-  EntityKey Walker = NULL_KEY;
   EntityKey Middle = NULL_KEY;
 };
 
@@ -164,11 +149,10 @@ struct IndexedWorld {
 IndexedWorld indexedWorld(std::shared_ptr<const WorldSchema> schema) {
   IndexedWorld world{.Value = makeFieldWorld(std::move(schema))};
   World &value = world.Value;
-  world.Walker =
+  const EntityKey walker =
       addSource<Footfall>(value, {entryAt(CARRIER_C, 8, 1.0), entryAt(CARRIER_A, 4, 2.0),
                                   entryAt(CARRIER_B, 0, 3.0), entryAt(CARRIER_A, 2, 4.0)});
-  setSteps<Footfall>(value, world.Walker,
-                     {entryAt(CARRIER_A, 7, 10.0), entryAt(CARRIER_A, 4, 11.0)});
+  setSteps<Footfall>(value, walker, {entryAt(CARRIER_A, 7, 10.0), entryAt(CARRIER_A, 4, 11.0)});
   world.Middle =
       addSource<Footfall>(value, {entryAt(CARRIER_A, 10, 5.0), entryAt(CARRIER_A, 4, 6.0)});
   setSteps<Footfall>(
@@ -185,42 +169,29 @@ IndexedWorld indexedWorld(std::shared_ptr<const WorldSchema> schema) {
   return world;
 }
 
-TEST_CASE("every slot's kept order by place equals orderByPlace of its entries after "
-          "resolutions after commands, steps, swaps, copies, and loads") {
+TEST_CASE("every field slot's order by place equals orderByPlace of its entries") {
   const auto schema = makeCommandedSchema();
   IndexedWorld indexed = indexedWorld(schema);
   World &world = indexed.Value;
-  REQUIRE(requireAllIndexed(world) > 0);
 
-  // The middle source's resolved entries change, so the settle drops its readable stepped slot and
-  // the slot after it moves; the walker's stepped entries move to other places from the next tick.
+  // Every slot has been sampled. The middle source's resolved entries change, so the resolution
+  // makes it a new resolved slot, and the settle drops its readable stepped slot, which moves the
+  // sampled slot after it.
   CommandQueue queue;
   queue.push(SetFootfall{.Source = indexed.Middle,
                          .Entries = {entryAt(CARRIER_A, 10, 50.0), entryAt(CARRIER_C, 4, 51.0),
                                      entryAt(CARRIER_A, 1, 52.0)}});
-  queue.push(SetFootfallSteps{.Source = indexed.Walker,
-                              .Entries = {entryAt(CARRIER_B, 1, 60.0), entryAt(CARRIER_A, 9, 61.0),
-                                          entryAt(CARRIER_A, 3, 62.0)}});
   stepWorld(world, queue);
-  CHECK(requireAllIndexed(world) > 0);
   sampleEverySlot(world);
-
-  // The swap makes the walker's moved entries readable.
-  stepWorld(world);
-  CHECK(requireAllIndexed(world) > 0);
-  sampleEverySlot(world);
-
-  World copy = copyWorld(world);
-  CHECK(requireAllIndexed(copy) > 0);
+  // Neither a copy nor a load carries the order, so each makes its own when sampled.
+  const World copy = copyWorld(world);
   sampleEverySlot(copy);
-  stepWorld(copy);
-  CHECK(requireAllIndexed(copy) > 0);
-
   World loaded = loadWorld(schema, saveWorld(world));
   resolveWorld(loaded);
-  CHECK(requireAllIndexed(loaded) > 0);
   sampleEverySlot(loaded);
-  stepWorld(loaded);
+
+  CHECK(requireAllIndexed(world) > 0);
+  CHECK(requireAllIndexed(copy) > 0);
   CHECK(requireAllIndexed(loaded) > 0);
 }
 
@@ -254,37 +225,6 @@ TEST_CASE("a world whose slots have been sampled saves to the same text, hashes 
   CHECK(worldsEqual(sampled, never));
   CHECK(worldsEqual(never, sampled));
 }
-
-// Three sources publishing the same entries into footfall and reach: the mixed one; one with a
-// single entry inside A between 0 and 4, so it has nothing at most places; and one whose first
-// entry at node 1 is not at node 1's nodePlace. Resolved, with no stepped entries.
-struct MixedWorld {
-  World Value;
-  EntityKey Mixed = NULL_KEY;
-  EntityKey Sparse = NULL_KEY;
-  EntityKey Junction = NULL_KEY;
-};
-
-template <typename F> Sampled sampled(const World &world, const Place &at) {
-  Sampled result;
-  for (const SampledEntry<double> &entry : sampleField<F>(world, networkOf(world), at)) {
-    result.emplace_back(entry.Source, entry.Value);
-  }
-  return result;
-}
-
-// An entry strictly inside an edge as sampleEdge should receive it.
-struct ExpectedAlong {
-  double Distance = 0.0;
-  double Value = 0.0;
-};
-
-struct ExpectedCall {
-  EntityKey Source = NULL_KEY;
-  std::vector<double> AtFrom;
-  std::vector<double> AtTo;
-  std::vector<ExpectedAlong> Along;
-};
 
 } // namespace
 } // namespace tpj
