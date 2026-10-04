@@ -65,6 +65,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 - Flows made visible: supplies drawn as carts and guest visits as queues, derived from the ledger for presentation (decision 0018).
 - The player-facing form of overlays, previews, and explanations. Gated on: the player-facing UI question.
 - Previews that simulate ahead in time, out of scope for the slice. Gated on: candidate copies being cheap enough to step.
+- Availability estimated from what guests experience rather than computed from every route and queue: the walk and wait guests actually took to a meal, kept where they started, as hungry footfall is kept, so the overlay is a realistic, statistical picture rather than an omniscient one.
 
 ## Open questions
 

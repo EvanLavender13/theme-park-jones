@@ -43,7 +43,7 @@ The milestone changes how the overlay reads the medium, not what any field or fl
 
 Unordered pool this milestone draws later features from.
 
-None.
+- Overlay updated by sampling, Monte Carlo style: a random share of its places, or of each place's sources, recomputed at each tick, so a tick's cost stays fixed however large the park. Gated on: parks larger than the full park still costly after lean-overlay-rebuild.
 
 ## Open questions
 
