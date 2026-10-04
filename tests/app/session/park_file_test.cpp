@@ -10,7 +10,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
-#include <optional>
 #include <string>
 #include <string_view>
 
@@ -61,25 +60,6 @@ TEST_CASE("saveParkFile writes exactly saveWorld's text, replacing any file ther
 
   CHECK(message.empty());
   CHECK(readFile(path) == expected);
-}
-
-TEST_CASE("A park saved with saveParkFile and opened with openParkFile is unchanged") {
-  const auto directory = scratchDirectory("round-trip");
-  const std::string path = (directory / "sketch.park").string();
-  const World world = resolvedSketchPark();
-  REQUIRE(saveParkFile(world, path.c_str()).empty());
-  const std::string file = readFile(path);
-
-  const OpenedPark opened = openParkFile(path.c_str());
-
-  CHECK(opened.Error.empty());
-  REQUIRE(opened.Park.has_value());
-  if (opened.Park.has_value()) {
-    // The walk covers whether resolution is pending, so an equal hash also shows the opened world
-    // was resolved before anything could step it.
-    CHECK(saveWorld(*opened.Park) == file);
-    CHECK(hashWorld(*opened.Park) == hashWorld(world));
-  }
 }
 
 TEST_CASE("openParkFile of a path it cannot read gives no world and a message naming the path") {

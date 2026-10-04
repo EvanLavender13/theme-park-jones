@@ -40,7 +40,6 @@ using test::networkOf;
 using test::standardLayout;
 
 using Sampled = std::vector<std::pair<EntityKey, double>>;
-using SampledBits = std::vector<std::pair<EntityKey, uint64_t>>;
 
 constexpr double NOT_A_NUMBER = std::numeric_limits<double>::quiet_NaN();
 
@@ -144,14 +143,6 @@ template <typename F> Sampled sampled(const World &world, const Place &at) {
   return result;
 }
 
-template <typename F> SampledBits sampledBits(const World &world, const Place &at) {
-  SampledBits result;
-  for (const auto &[source, value] : sampled<F>(world, at)) {
-    result.emplace_back(source, std::bit_cast<uint64_t>(value));
-  }
-  return result;
-}
-
 // Inside A's second edge.
 constexpr Place WATCHED = place(CARRIER_A, 7);
 // Node 1, where A, its second edge, and B meet.
@@ -244,12 +235,6 @@ void requireSameEntries(const std::vector<KeptEntry> &actual,
     REQUIRE(std::bit_cast<uint64_t>(actual[i].Value) == std::bit_cast<uint64_t>(expected[i].Value));
     REQUIRE(actual[i].Tick == expected[i].Tick);
   }
-}
-
-void requireSameValue(const World &one, const World &other) {
-  REQUIRE(worldsEqual(one, other));
-  REQUIRE(worldsEqual(other, one));
-  REQUIRE(hashWorld(one) == hashWorld(other));
 }
 
 template <typename Call> bool throwsInvalidArgument(Call call) {
@@ -577,45 +562,6 @@ TEST_CASE("in a world loaded from a save, a change at a held place leaves one en
 
   requireSameEntries(held<Litter>(loaded, source),
                      {kept(CARRIER_A, 7, 1.0, 1), kept(CARRIER_A, 2, 3.0, 2)});
-}
-
-TEST_CASE("a saved world holding kept entries, loaded and resolved, reads exactly as the world "
-          "saved, and reading it never changes its save") {
-  const auto schema = makeKeptSchema();
-  World world = makeKeptWorld(schema);
-  const EntityKey first = world.createEntity();
-  const EntityKey second = world.createEntity();
-  plannedKeeps<Litter>() = {
-      {.Tick = 0, .Source = second, .At = JUNCTION, .Value = 8.0},
-      {.Tick = 0, .Source = first, .At = WATCHED, .Value = 16.0},
-      {.Tick = 1, .Source = first, .At = place(CARRIER_B, 0), .Value = 4.0},
-      {.Tick = 1, .Source = second, .At = WATCHED, .Value = 2.0},
-  };
-  plannedKeeps<Crowding>() = {
-      {.Tick = 0, .Source = first, .At = place(CARRIER_A, 6), .Value = 32.0},
-      {.Tick = 0, .Source = first, .At = place(CARRIER_B, 3), .Value = 64.0},
-  };
-  stepWorld(world);
-  stepWorld(world);
-  stepWorld(world);
-
-  const std::string text = saveWorld(world);
-  REQUIRE(text.find("[litter-kept]") != std::string::npos);
-  REQUIRE(text.find("[crowding-kept]") != std::string::npos);
-  World loaded = loadWorld(schema, text);
-  resolveWorld(loaded);
-  requireSameValue(loaded, world);
-
-  REQUIRE(sampledBits<Litter>(loaded, JUNCTION) == sampledBits<Litter>(world, JUNCTION));
-  REQUIRE(sampledBits<Litter>(loaded, WATCHED) == sampledBits<Litter>(world, WATCHED));
-  REQUIRE(sampledBits<Crowding>(loaded, JUNCTION) == sampledBits<Crowding>(world, JUNCTION));
-  REQUIRE(sampledBits<Crowding>(loaded, WATCHED) == sampledBits<Crowding>(world, WATCHED));
-  REQUIRE(keptValue<Litter>(loaded, first, WATCHED) == keptValue<Litter>(world, first, WATCHED));
-  REQUIRE_FALSE(sampled<Litter>(loaded, WATCHED).empty());
-  REQUIRE_FALSE(sampled<Crowding>(loaded, JUNCTION).empty());
-
-  REQUIRE(saveWorld(loaded) == text);
-  requireSameValue(loaded, world);
 }
 
 } // namespace

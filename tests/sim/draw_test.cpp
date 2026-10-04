@@ -1,7 +1,5 @@
-#include "support/expected_draws.h"
 #include "support/synthetic_types.h"
 
-#include "sim/command_queue.h"
 #include "sim/draw.h"
 #include "sim/entity_key.h"
 #include "sim/mix.h"
@@ -10,7 +8,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <limits>
 #include <span>
@@ -22,7 +19,6 @@
 namespace tpj {
 namespace {
 
-using test::buildWorld;
 using test::makeSchema;
 
 // The statistical tests' sample, from the acceptance of keyed draws.
@@ -252,37 +248,6 @@ TEST_CASE("drawPick refuses weights it cannot pick from in proportion") {
     REQUIRE(pickDouble(key, {SMALLEST_NORMAL}) == 0);
     REQUIRE_NOTHROW(pickDouble(key, {SMALLEST_NORMAL / 2.0, SMALLEST_NORMAL / 2.0}));
     REQUIRE(pickDouble(key, {LARGEST}) == 0);
-  }
-}
-
-TEST_CASE("a copy of a world draws the same values as the world") {
-  World world = buildWorld(makeSchema());
-  stepWorld(world);
-  const World copy = copyWorld(world);
-  for (const EntityKey entity : world.keys()) {
-    for (uint64_t index = 0; index < 3; ++index) {
-      CAPTURE(entity, index);
-      REQUIRE(drawBits(drawKey(copy, entity, WANDER, index)) ==
-              drawBits(drawKey(world, entity, WANDER, index)));
-    }
-  }
-}
-
-TEST_CASE("a candidate draws the same values as the world its commands would give") {
-  // Two copies of one world: one finishes a cycle and previews, the other commits that cycle.
-  World previewed = buildWorld(makeSchema());
-  World committed = copyWorld(previewed);
-  CommandQueue commands;
-  stepWorld(previewed);
-  const World candidate = makeCandidate(previewed, commands);
-  stepWorld(committed, commands);
-
-  for (const EntityKey entity : committed.keys()) {
-    for (uint64_t index = 0; index < 3; ++index) {
-      CAPTURE(entity, index);
-      REQUIRE(drawBits(drawKey(candidate, entity, WANDER, index)) ==
-              drawBits(drawKey(committed, entity, WANDER, index)));
-    }
   }
 }
 

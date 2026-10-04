@@ -37,14 +37,6 @@ void requireSameValue(const World &one, const World &other) {
   REQUIRE(hashWorld(one) == hashWorld(other));
 }
 
-TEST_CASE("a copy equals its original, hashes the same, and keeps its keys") {
-  const World original = buildWorld(makeSchema());
-  const World copy = copyWorld(original);
-  requireSameValue(copy, original);
-  REQUIRE(copy.keys() == original.keys());
-  REQUIRE(copy.nextKey() == original.nextKey());
-}
-
 TEST_CASE("a copy and its original are independent") {
   const auto schema = makeSchema();
   const World reference = buildWorld(schema);

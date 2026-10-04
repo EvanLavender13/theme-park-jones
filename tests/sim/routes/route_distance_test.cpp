@@ -435,19 +435,6 @@ const ResolvedEntries<RouteDistance<Kind>> *resolvedOf(const World &world) {
              : world.Registry.try_get<ResolvedEntries<RouteDistance<Kind>>>(holder);
 }
 
-template <PathKind Kind> const SteppedEntries<RouteDistance<Kind>> *steppedOf(const World &world) {
-  const entt::entity holder = world.findEntity(fieldKey(RouteDistance<Kind>::Name));
-  return holder == entt::null ? nullptr
-                              : world.Registry.try_get<SteppedEntries<RouteDistance<Kind>>>(holder);
-}
-
-template <PathKind Kind> void checkNoSteppedEntries(const World &world) {
-  const auto *stepped = steppedOf<Kind>(world);
-  REQUIRE(stepped != nullptr);
-  CHECK(stepped->Readable.empty());
-  CHECK(stepped->Pending.empty());
-}
-
 template <PathKind Kind> void checkSampledAtNodes(const World &world) {
   INFO("kind " << static_cast<int>(Kind));
   const Network &network = parkNetwork(world, Kind);
@@ -583,31 +570,6 @@ TEST_CASE(
 
 // Derivation from intent.
 
-template <PathKind Kind> bool sameRouteDistance(const World &left, const World &right) {
-  const auto *a = resolvedOf<Kind>(left);
-  const auto *b = resolvedOf<Kind>(right);
-  if (a == nullptr || b == nullptr) {
-    return a == b;
-  }
-  if (a->Slots.size() != b->Slots.size()) {
-    return false;
-  }
-  for (std::size_t index = 0; index < a->Slots.size(); ++index) {
-    const EntityKey source = a->Slots[index].Source;
-    if (b->Slots[index].Source != source ||
-        entryWords(a->Slots, source) != entryWords(b->Slots, source)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-// Both kinds' resolved route distance entries are equal, doubles bit for bit.
-bool sameRouteDistances(const World &left, const World &right) {
-  return sameRouteDistance<PathKind::Guest>(left, right) &&
-         sameRouteDistance<PathKind::Backstage>(left, right);
-}
-
 // Whether the worlds a sequence reached had a source with entries beyond its own nodes, and a
 // source some node of its network has no entry for.
 struct FieldCoverage {
@@ -663,46 +625,6 @@ ParkEdit sequenceEdit(int cycle, test::RouteEditDraws &draws, const World &world
   return test::routeEdit(draws, world);
 }
 
-TEST_CASE("Every world a random edit sequence reaches equals its save loaded and resolved, route "
-          "distance included") {
-  test::RouteEditDraws draws(31);
-  World world = makeNewPark(5);
-  FieldCoverage coverage;
-  for (int cycle = 0; cycle < CYCLES; ++cycle) {
-    INFO("cycle " << cycle);
-    CommandQueue queue;
-    queueEdit(queue, sequenceEdit(cycle, draws, world));
-    stepWorld(world, queue);
-
-    World loaded = loadWorld(makeParkSchema(), saveWorld(world));
-    resolveWorld(loaded);
-    REQUIRE(sameRouteDistances(loaded, world));
-    REQUIRE(worldsEqual(loaded, world));
-    coverage.note(world);
-  }
-  CHECK(coverage.Routed);
-  CHECK(coverage.Unreachable);
-}
-
-TEST_CASE("A candidate made with an edit has the route distance of the world after a cycle "
-          "applies it") {
-  test::RouteEditDraws draws(32);
-  World world = makeNewPark(5);
-  FieldCoverage coverage;
-  for (int cycle = 0; cycle < CYCLES; ++cycle) {
-    INFO("cycle " << cycle);
-    CommandQueue queue;
-    queueEdit(queue, sequenceEdit(cycle, draws, world));
-    const World candidate = makeCandidate(world, queue);
-    stepWorld(world, queue);
-
-    REQUIRE(sameRouteDistances(candidate, world));
-    coverage.note(world);
-  }
-  CHECK(coverage.Routed);
-  CHECK(coverage.Unreachable);
-}
-
 TEST_CASE("Every world a random edit sequence reaches resolves route distance without throwing, "
           "including a lone path, an unconnected box, and an unreachable source") {
   test::RouteEditDraws draws(33);
@@ -734,16 +656,6 @@ TEST_CASE("Every world a random edit sequence reaches resolves route distance wi
   CHECK(reachedUnconnected);
   CHECK(coverage.Routed);
   CHECK(coverage.Unreachable);
-}
-
-template <PathKind Kind> void checkNothingSampled(const World &unresolved, const World &resolved) {
-  INFO("kind " << static_cast<int>(Kind));
-  const Network &network = parkNetwork(resolved, Kind);
-  REQUIRE(network.nodeCount() > 0);
-  for (uint32_t node = 0; node < network.nodeCount(); ++node) {
-    INFO("node " << node);
-    CHECK(sampleField<RouteDistance<Kind>>(unresolved, network, network.nodePlace(node)).empty());
-  }
 }
 
 } // namespace

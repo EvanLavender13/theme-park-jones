@@ -1,7 +1,7 @@
 // The food loop on the checked-in parks: tests/parks/fed.park feeds its guests, and cutting the
 // backstage path, which turns warm.park into cut.park, withdraws the shop's offer, stops guests
 // picking it, empties its queue, and leaves guests hungrier. These name parks and compare runs, so
-// they are not standards that park_standards_test.cpp could check over every park file.
+// they are not standards the sim's park world checks prove over every park file.
 
 #include "support/park_files.h"
 
@@ -9,9 +9,7 @@
 #include "sim/guests/guests.h"
 #include "sim/medium/field.h"
 #include "sim/medium/flow.h"
-#include "sim/medium/network.h"
 #include "sim/operations/operations.h"
-#include "sim/park/intent.h"
 #include "sim/routes/networks.h"
 #include "sim/world.h"
 
@@ -19,9 +17,7 @@
 
 #include <algorithm>
 #include <map>
-#include <optional>
 #include <set>
-#include <stddef.h>
 #include <stdint.h>
 #include <string_view>
 #include <vector>
@@ -43,13 +39,6 @@ using test::recordOf;
 constexpr uint64_t HUNGER_TICKS = 540;
 
 World openParkFile(std::string_view name) { return openPark(parkFile(name)); }
-
-// A guest before a cycle: its record, and whether its visit has come back, so that it chooses in
-// the cycle.
-struct GuestBefore {
-  GuestRecord Record;
-  bool VisitBack = false;
-};
 
 double meanHunger(const World &world) {
   const std::vector<EntityKey> guests = parkGuests(world);

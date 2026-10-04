@@ -4,7 +4,6 @@
 #include "sim/entity_key.h"
 #include "sim/medium/flow.h"
 #include "sim/mix.h"
-#include "sim/save.h"
 #include "sim/schema.h"
 #include "sim/world.h"
 
@@ -224,14 +223,6 @@ const ComponentType *componentNamed(const WorldSchema &schema, std::string_view 
 bool hasResolver(const WorldSchema &schema, std::string_view name) {
   return std::ranges::any_of(schema.resolvers(),
                              [name](const ResolverType &type) { return type.Name == name; });
-}
-
-struct Occupant {
-  int64_t Count = 0;
-};
-
-template <typename Visitor> void visitFields(Visitor &visitor, Occupant &occupant) {
-  visitor.field("count", occupant.Count);
 }
 
 TEST_CASE("addFlow registers the kind's state component as <name>-ledger, its resolver as "
@@ -736,62 +727,6 @@ TEST_CASE("for each kind, units created equal units in transit plus held plus co
   CHECK(sawUsed);
   CHECK(sawUndeliverable);
   CHECK(sawDiscarded);
-}
-
-// Traders that have been trading and churning for a while, with packets in transit and stocks
-// held.
-World tradedWorld() {
-  World world = test::makeTradeWorld(tradeSchema(), 11, 4);
-  for (int cycle = 0; cycle < 12; ++cycle) {
-    test::stepWithChurn(world);
-  }
-  return world;
-}
-
-TEST_CASE("a save holds ledgers, and loading the save of a world with packets in transit and "
-          "stocks held and resolving gives the world saved") {
-  const World world = tradedWorld();
-  REQUIRE(unitsInTransit<Meals>(world) > 0);
-  REQUIRE(unitsHeld<Meals>(world) > 0);
-
-  const std::string text = saveWorld(world);
-  REQUIRE(text.find("[meals-ledger]") != std::string::npos);
-  REQUIRE(text.find("[supplies-ledger]") != std::string::npos);
-
-  World loaded = loadWorld(tradeSchema(), text);
-  resolveWorld(loaded);
-  requireSameValue(loaded, world);
-}
-
-TEST_CASE("changing any packet, stock, created count, or consumed count changes the world's hash") {
-  const World world = tradedWorld();
-  World changed = copyWorld(world);
-  Ledger *ledger = ledgerOf<Meals>(changed);
-  REQUIRE(ledger != nullptr);
-  REQUIRE_FALSE(ledger->Packets.empty());
-  REQUIRE_FALSE(ledger->Stocks.empty());
-  REQUIRE_FALSE(ledger->Consumed.empty());
-
-  SECTION("a packet's units") { ledger->Packets.front().Units += 1; }
-  SECTION("a packet's arrival") { ledger->Packets.front().Arrival += 1; }
-  SECTION("a stock's units") { ledger->Stocks.front().Units += 1; }
-  SECTION("the created count") { ledger->Created += 1; }
-  SECTION("a consumed count") { ledger->Consumed.front().Units += 1; }
-
-  REQUIRE_FALSE(worldsEqual(changed, world));
-  REQUIRE(hashWorld(changed) != hashWorld(world));
-}
-
-TEST_CASE("a copy of a world with flows stepped forward equals the original stepped forward") {
-  World original = tradedWorld();
-  World copy = copyWorld(original);
-
-  for (int cycle = 0; cycle < 5; ++cycle) {
-    CAPTURE(cycle);
-    test::stepWithChurn(original);
-    test::stepWithChurn(copy);
-    requireSameValue(copy, original);
-  }
 }
 
 TEST_CASE("systems whose ledger operations act for different endpoints give the same world and "

@@ -9,7 +9,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
-#include <algorithm>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -265,38 +264,6 @@ TEST_CASE("a queue holding an unregistered command type is refused, naming the t
   REQUIRE(queue.commands()[1].TypeId == entt::type_id<Straggler>().hash());
 }
 
-// A preview is exact only if the candidate is the world the same commands would give when queued.
-TEST_CASE("a candidate made just after a cycle equals the world that queuing its commands for "
-          "that cycle gives, and leaves its source unchanged") {
-  World resolved = buildPark(makeParkSchema());
-  resolveWorld(resolved);
-  World first = copyWorld(resolved);
-  World second = copyWorld(resolved);
-
-  // One command creates an entity from the key counter, and one changes existing intent.
-  auto fill = [](CommandQueue &queue) {
-    queue.push(AddPlan{.Size = 5});
-    queue.push(ResizePlan{.Key = FIRST, .Size = 8});
-  };
-
-  stepWorld(first);
-  const World firstAfterCycle = copyWorld(first);
-  const uint64_t firstHash = hashWorld(first);
-  CommandQueue tentative;
-  fill(tentative);
-  const World candidate = makeCandidate(first, tentative);
-
-  CommandQueue queued;
-  fill(queued);
-  stepWorld(second, queued);
-
-  requireSameValue(candidate, second);
-  REQUIRE(hashWorld(first) == firstHash);
-  requireSameValue(first, firstAfterCycle);
-  // The commands did change something, so the equality above is not vacuous.
-  REQUIRE_FALSE(worldsEqual(candidate, first));
-}
-
 TEST_CASE("makeCandidate applies the commands in submission order and resolves, without "
           "stepping") {
   World world(makeRecordingSchema(), 0);
@@ -319,28 +286,6 @@ TEST_CASE("makeCandidate applies the commands in submission order and resolves, 
                        });
   REQUIRE(candidate.Tick == 4);
   REQUIRE_FALSE(candidate.isResolvePending());
-}
-
-TEST_CASE("worlds built by the same calls and cycled with the same commands at the same ticks "
-          "stay equal after every cycle") {
-  const auto schema = makeParkSchema();
-  World left = buildPark(schema);
-  World right = buildPark(schema);
-
-  for (int cycle = 0; cycle < 6; ++cycle) {
-    for (World *world : {&left, &right}) {
-      CommandQueue queue;
-      if (cycle == 2) {
-        queue.push(AddPlan{.Size = 4});
-      }
-      if (cycle == 4) {
-        queue.push(ResizePlan{.Key = FIRST, .Size = 6});
-      }
-      stepWorld(*world, queue);
-    }
-    CAPTURE(cycle);
-    requireSameValue(left, right);
-  }
 }
 
 TEST_CASE("in debug builds, createEntity during resolution throws WorldInvariantError") {

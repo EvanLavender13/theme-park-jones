@@ -3,8 +3,6 @@
 #include "sim/entity_key.h"
 #include "sim/medium/network.h"
 #include "sim/mix.h"
-#include "sim/park_schema.h"
-#include "sim/save.h"
 #include "sim/schema.h"
 #include "sim/world.h"
 
@@ -622,89 +620,6 @@ TEST_CASE("addNetworkComponent registers Network as the derived type network") {
   REQUIRE(type.Name == "network");
   REQUIRE(type.Kind == DataKind::Derived);
   REQUIRE(type.TypeId == entt::type_id<Network>().hash());
-}
-
-TEST_CASE("a world holding networks copies equal and hashes equal") {
-  const World world =
-      holdNetworks(makeNetworkSchema(),
-                   {sampleInputs().build(), makeSyntheticNetwork(5, 10).build(), Network()});
-  const World copy = copyWorld(world);
-  REQUIRE(worldsEqual(copy, world));
-  REQUIRE(worldsEqual(world, copy));
-  REQUIRE(hashWorld(copy) == hashWorld(world));
-}
-
-TEST_CASE("changing a carrier point, stop, or anchor of a held network changes the world's hash") {
-  const std::vector<std::pair<std::string, std::function<void(SyntheticNetwork &)>>> changes = {
-      {"a point's x", [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Points[1].X = 5; }},
-      {"a point's z", [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Points[1].Z = 1; }},
-      {"a point's distance",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Points[1].Distance = 9; }},
-      {"a stop's distance",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, BEND).Stops[1].Distance = 6; }},
-      {"a stop's node",
-       [](SyntheticNetwork &inputs) { carrierOf(inputs, LOOP).Stops[2].Node = 2; }},
-      {"an anchor's entity",
-       [](SyntheticNetwork &inputs) { inputs.Anchors[1].Entity = EntityKey{9}; }},
-      {"an anchor's node", [](SyntheticNetwork &inputs) { inputs.Anchors[1].Node = 4; }},
-  };
-
-  const auto schema = makeNetworkSchema();
-  const World reference = holdNetworks(schema, {sampleInputs().build()});
-  const uint64_t referenceHash = hashWorld(reference);
-  for (const auto &[label, apply] : changes) {
-    CAPTURE(label);
-    SyntheticNetwork inputs = sampleInputs();
-    apply(inputs);
-    const World changed = holdNetworks(schema, {inputs.build()});
-    CHECK_FALSE(worldsEqual(changed, reference));
-    CHECK(hashWorld(changed) != referenceHash);
-  }
-}
-
-// A holder keeping a place in its own state, as guests will.
-struct Holder {
-  Place Where;
-};
-
-template <typename Visitor> void visitFields(Visitor &visitor, Holder &holder) {
-  visitor.field("where", holder.Where);
-}
-
-std::shared_ptr<const WorldSchema> makeHolderSchema() {
-  auto schema = std::make_shared<WorldSchema>();
-  addNetworkComponent(*schema);
-  schema->addComponent<Holder>("holder", DataKind::State);
-  return schema;
-}
-
-TEST_CASE("a save holds no network") {
-  World world = holdNetworks(makeHolderSchema(), {sampleInputs().build()});
-  world.Registry.emplace<Holder>(world.findEntity(EntityKey{1}),
-                                 Holder{.Where = {.Carrier = BEND, .Distance = 2}});
-  const std::string text = saveWorld(world);
-  REQUIRE(text.find("[network]") == std::string::npos);
-
-  const EntityKey held = deriveKey(EntityKey{1}, NETWORK_PURPOSE, 0);
-  world.Registry.remove<Network>(world.findEntity(held));
-  REQUIRE(saveWorld(world) == text);
-}
-
-TEST_CASE("a place in a registered state component saves and loads back equal") {
-  const auto schema = makeHolderSchema();
-  World world(schema, 3);
-  // A derived carrier key uses the top bit, and 0.1 has no short binary form.
-  const Place far{.Carrier = deriveKey(EntityKey{2}, hashName("path"), 1), .Distance = 0.1};
-  const Place near{.Carrier = EntityKey{2}, .Distance = 1e-300};
-  const EntityKey first = world.createEntity();
-  const EntityKey second = world.createEntity();
-  world.Registry.emplace<Holder>(world.findEntity(first), Holder{.Where = far});
-  world.Registry.emplace<Holder>(world.findEntity(second), Holder{.Where = near});
-
-  const World loaded = loadWorld(schema, saveWorld(world));
-  REQUIRE(worldsEqual(loaded, world));
-  REQUIRE(loaded.Registry.get<Holder>(loaded.findEntity(first)).Where == far);
-  REQUIRE(loaded.Registry.get<Holder>(loaded.findEntity(second)).Where == near);
 }
 
 } // namespace
