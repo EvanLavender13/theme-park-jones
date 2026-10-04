@@ -5,37 +5,43 @@ description: Use whenever the user asks to review, check, audit, sanity-check, o
 
 # Reviewing
 
-This skill dispatches a review to the `reviewer` subagent and presents the findings. It does not review the artifact itself. It does not edit anything.
+This skill dispatches a review to the `reviewer` subagent and presents the findings. It doesn't review the artifact itself, and it doesn't edit anything.
 
 ## Why a subagent
 
-Two reasons.
+There are two reasons.
 
 - Fresh context. The current session may have written the artifact under review. The subagent has no memory of that conversation and judges only from what is on disk.
-- Read-only enforcement. The `reviewer` subagent's tool list excludes `Edit` and `Write`, which Claude Code enforces. Its instructions limit Bash to read-only git commands.
+- Read-only enforcement. The `reviewer` subagent's tool list leaves out `Edit` and `Write`, and Claude Code enforces that. Its instructions limit Bash to read-only git commands.
 
 ## Checklist
 
-1. Identify the artifact: One file, a set of files, a commit range, or the staged diff. Ask the user if ambiguous.
-2. Identify the artifact type: Plan document, implementation plan, code change, or other. The subagent applies a different lens to each.
-3. Identify required context: Parent artifacts the reviewer must read. A `MILESTONE.md` review requires its `CAPABILITY.md`, plus its `SLICE.md` when it is a slice member. A `SLICE.md` review requires docs/vision.md and the CAPABILITY.md and MILESTONE.md of every existing member. A `FEATURE.md` and `PLAN.md` review requires its `MILESTONE.md`, the SPEC.md of every module the feature touches, and docs/principles.md. A code change requires FEATURE.md when one exists, the SPEC.md of every module it touches, and docs/principles.md. Do not summarize these for the reviewer; pass paths so the reviewer reads them itself.
-4. Dispatch via the Agent tool: Use `subagent_type: reviewer`. The dispatch prompt contains only:
+1. Identify the artifact: one file, a set of files, a commit range, or the staged diff. If it's unclear, ask the user.
+2. Identify the artifact type: plan document, implementation plan, code change, or other. The subagent checks each type differently.
+3. Identify required context: the parent artifacts the reviewer must read.
+    - A `MILESTONE.md` review requires its `CAPABILITY.md`. If the milestone is a slice member, it also requires its `SLICE.md`.
+    - A `SLICE.md` review requires docs/vision.md and the CAPABILITY.md and MILESTONE.md of every existing member.
+    - A `FEATURE.md` and `PLAN.md` review requires its `MILESTONE.md`, the SPEC.md of every module the feature touches, and docs/principles.md.
+    - A code change requires FEATURE.md when one exists, the SPEC.md of every module it touches, and docs/principles.md.
+
+    Don't summarize these for the reviewer. Pass the paths so the reviewer reads them itself.
+4. Dispatch with the Agent tool: Use `subagent_type: reviewer`. Put only these in the dispatch prompt:
     - The artifact path or paths.
     - The artifact type.
     - The required context paths.
     - Any specific focus area the user requested (optional).
     - Nothing else. See "Dispatch hygiene" below.
-5. Receive the findings: A plain-text report from the subagent.
-6. Present the findings to the user verbatim: Do not summarize, reorder, soften, or add commentary. The point of dispatching to a fresh subagent is wasted if this session filters its output.
-7. Ask the user what to act on: Do not propose fixes yourself. The user decides which findings to address and which skill to invoke next.
+5. Receive the findings: the subagent returns a plain-text report.
+6. Present the findings to the user verbatim: Don't summarize, reorder, soften, or add commentary. If this session filters the output, there was no point in using a fresh subagent.
+7. Ask the user what to act on: Don't propose fixes yourself. The user decides which findings to address and which skill to invoke next.
 
-Planning briefs are the exception. When a planning skill dispatches the review of its own brief (CAPABILITY.md, MILESTONE.md, SLICE.md, or FEATURE.md with PLAN.md) before approval, steps 6 and 7 are replaced:
+Planning briefs are the exception. A planning skill may dispatch a review of its own brief (CAPABILITY.md, MILESTONE.md, SLICE.md, or FEATURE.md with PLAN.md) before approval. In that case, replace steps 6 and 7 with these:
 
 - Fix Minor findings directly.
-- Fix Major findings directly when the fix follows from the principles and settled decisions without a new design choice.
+- Fix Major findings directly when the fix follows from the principles and settled decisions and needs no new design choice.
 - Bring the user only the Major findings that need a design choice. Give each one a sentence or two and a recommended option.
 - Report the rest in one line, for example "review fixed A, B, and C".
-- Dispatch the follow-up review only when a Major fix changed a core definition that other plans rely on. Before dispatching it, check the fix against every kind of edit or case the definition covers.
+- Dispatch the follow-up review only when a Major fix changed a core definition that other plans rely on. Before you dispatch it, check the fix against every kind of edit or case the definition covers.
 
 Code reviews and reviews the user asks for directly still follow steps 6 and 7.
 
@@ -53,13 +59,13 @@ The reviewer needs the artifact, the context paths, and the type. Nothing else.
 
 ## Review budget
 
-A reviewer asked to find issues will keep finding smaller ones, so reviews of one artifact are capped.
+A reviewer asked to find issues will keep finding smaller ones. So limit the number of reviews of one artifact.
 
-- One full review per artifact. Stage or commit the artifact first, so later fixes show up as a diff.
-- At most one follow-up review, and only when the full review had Blocker or Major findings whose fixes changed the design, not just wording. The follow-up checks that each finding was addressed and reports only Blocker or Major problems the fixes introduced. It does not re-review untouched parts.
-- No third pass. Anything the follow-up finds is fixed without another review, or recorded as an open question.
+- Run one full review per artifact. Stage or commit the artifact first, so later fixes show up as a diff.
+- Run at most one follow-up review. Run it only when the full review had Blocker or Major findings and their fixes changed the design, not just the wording. The follow-up checks that each finding was addressed. It reports only Blocker or Major problems that the fixes introduced. It doesn't re-review untouched parts.
+- Don't run a third pass. Fix anything the follow-up finds without another review, or record it as an open question.
 
-Later stages catch what plan reviews miss: milestone and feature reviews against their parents, the separate test pass, and slice closing. A plan does not need to be flawless before it moves on.
+Later stages catch what plan reviews miss: milestone and feature reviews against their parents, the separate test pass, and slice closing. A plan doesn't need to be flawless before it moves on.
 
 ## Dispatch template
 
@@ -76,7 +82,7 @@ Follow your standard procedure. Return findings in the standard format.
 
 ## Follow-up dispatch template
 
-Include the full review's report verbatim. It is the reviewer's own output, not your assessment, so it does not break dispatch hygiene. Do not describe the fixes; the reviewer reads them from the artifact and the diff.
+Include the full review's report verbatim. It is the reviewer's own output, not your assessment, so it doesn't break dispatch hygiene. Don't describe the fixes. The reviewer reads them from the artifact and the diff.
 
 ```
 Follow-up review of the following artifact.
@@ -96,11 +102,11 @@ Follow your follow-up procedure. Return findings in the standard format.
 The user chooses one of:
 
 - Accept some or all findings and invoke the appropriate planning or implementation skill to address them.
-- Reject findings with reasoning. Do not argue.
+- Reject findings with reasoning. Don't argue.
 - Dispatch the one follow-up review the review budget allows, when it applies.
 
-You do not edit the artifact. You do not invoke another skill on the user's behalf.
+Don't edit the artifact. Don't invoke another skill on the user's behalf.
 
 ## When the reviewer returns "No issues found."
 
-Pass that result through unchanged. Do not add caveats, do not re-run the review, do not suggest the reviewer might have missed something. The reviewer was thorough; that is the contract.
+Pass that result through unchanged. Don't add caveats, re-run the review, or suggest the reviewer might have missed something. The reviewer's job is to be thorough, so take the result as it is.

@@ -1,24 +1,24 @@
 ---
 name: planning-overview
-description: Read this first whenever the user asks to plan, design, scope, decompose, build, or implement anything. Names the planning hierarchy (capability, milestone, feature, plan, implementation) and the slices that span capabilities, the principles gate every level passes, where artifacts live, and which skill to invoke next. Consult before any of planning-slices, planning-capabilities, planning-milestones, planning-features, implementing-features, or maintaining-backlog.
+description: Read this first whenever the user asks to plan, design, scope, decompose, build, or implement anything. Describes the planning hierarchy (capability, milestone, feature, plan, implementation), the slices that span capabilities, the principles gate that every level must pass, where artifacts live, and which skill to invoke next. Consult before any of planning-slices, planning-capabilities, planning-milestones, planning-features, implementing-features, or maintaining-backlog.
 ---
 
 # Planning Overview
 
-This skill routes. It does not plan, decompose, or build.
+This skill only points to the right skill. It doesn't plan, decompose, or build.
 
 ## Hierarchy
 
-Work decomposes through four levels.
+Work breaks down through four levels.
 
-1. Capability: a durable quality, discipline, or principle implementation the game deepens over many milestones; never completes. An engineering capability deepens a property of the software the player cannot perceive, such as performance or code structure (decision 0028).
-2. Milestone: weeks of work; one coherent slice that deepens a capability; completes.
-3. Feature: hours to days; one implementable unit; completes.
-4. Implementation: code satisfying a feature's plan, with the module specs updated to match.
+1. Capability: a durable quality, discipline, or principle implementation that the game deepens over many milestones. It never completes. An engineering capability deepens a property of the software that the player can't perceive, such as performance or code structure (decision 0028).
+2. Milestone: weeks of work on one coherent piece that deepens a capability. It completes.
+3. Feature: hours to days of work on one implementable unit. It completes.
+4. Implementation: code that satisfies a feature's plan, with the module specs updated to match.
 
-Each level produces an artifact the next level consumes. The principles sit above the whole tree: docs/principles.md outranks every artifact in it.
+Each level produces an artifact that the next level uses. The principles sit above the whole tree: docs/principles.md outranks every artifact in it.
 
-A slice sits beside the tree (decision 0023). It is a goal no single capability owns, met when member milestones in several capabilities land together. The slice fixes the end-to-end criteria and the fields and flows that pass between capabilities; each member milestone stays in its own capability and names its slice.
+A slice sits beside the tree (decision 0023). It is a goal that no single capability owns. It is met when member milestones in several capabilities land together. The slice sets the end-to-end criteria and the fields and flows that pass between capabilities. Each member milestone stays in its own capability and names its slice.
 
 ## File layout
 
@@ -39,7 +39,7 @@ plans/
         PLAN.md
 ```
 
-Plans are the route to a change. The long-lived contract is each module's SPEC.md beside its code, which a feature updates as part of its work.
+Plans describe how to make a change. The long-lived contract is each module's SPEC.md, next to its code. A feature updates it as part of its work.
 
 ## Skill selection
 
@@ -54,33 +54,35 @@ Plans are the route to a change. The long-lived contract is each module's SPEC.m
 | Review any artifact for real issues | `reviewing` |
 | Research a question and retain the findings | `researching` |
 
-If the level is ambiguous, ask. Do not guess.
+If the level is unclear, ask. Don't guess.
 
 ## Hard gates
 
-- `planning-milestones` requires an approved parent `CAPABILITY.md`, and for a slice member also the approved `SLICE.md`.
+- `planning-milestones` requires an approved parent `CAPABILITY.md`. For a slice member, it also requires the approved `SLICE.md`.
 - `planning-features` requires an approved parent `MILESTONE.md`.
 - `implementing-features` requires an approved target `PLAN.md`.
 
-The user may start at any level. The user may not skip a level downward without producing its artifact.
+The user may start at any level. The user may not skip a level on the way down without producing its artifact.
 
 ## The principles gate
 
-A tree gives each thing one owner, which is why cross-cutting mechanics felt wrong in the previous project. The fix is to check every plan against the principles, at every level.
+A tree gives each thing one owner. That is why cross-cutting mechanics felt wrong in the previous project. To fix this, check every plan against the principles at every level.
 
-- Every brief has a Medium section naming the fields it samples and emits and the flows it draws and supplies. Interactions between things go through these (principle 3, decision 0005).
-- A plan in which one system depends on another's internals fails the gate (principle 6). Rework it so the interaction goes through the shared medium.
-- Anything that genuinely cannot fit fields, flows, or encapsulation is raised with Evan before planning continues. If he accepts it, it goes in docs/exceptions.md with a reason.
-- A plan that conflicts with any principle is surfaced to Evan, not planned around.
-- Work that cuts across capabilities lives under the capability whose quality it primarily deepens. It names the other capabilities it touches, and reaches them only through the medium.
-- Work a player would not notice missing, if the machine were infinitely fast and the code never changed again, is engineering: it lives in an engineering capability, whichever capability surfaced it, and changes no observable behavior (decision 0028). Work motivated by speed that changes what the player sees is gameplay. A goal that needs several capabilities to move together is a slice, and its medium map is where the gate applies across them.
+- Give every brief a Medium section. It names the fields the work samples and emits and the flows it draws and supplies. Interactions between things go through these (principle 3, decision 0005).
+- If a plan has one system depending on another's internals, it fails the gate (principle 6). Rework it so the interaction goes through the shared medium.
+- If something genuinely can't fit fields, flows, or encapsulation, raise it with Evan before planning continues. If he accepts it, add it to docs/exceptions.md with a reason.
+- If a plan conflicts with any principle, tell Evan instead of planning around it.
+- Put work that cuts across capabilities under the capability whose quality it mainly deepens. Name the other capabilities it touches, and reach them only through the medium.
+- Work is engineering if a player wouldn't notice it missing, assuming the machine were infinitely fast and the code never changed again. It goes in an engineering capability, whichever capability surfaced it, and it changes no observable behavior (decision 0028).
+- Work that is motivated by speed but changes what the player sees is gameplay.
+- A goal that needs several capabilities to move together is a slice. The gate applies across those capabilities through the slice's medium map.
 
 ## Rules every planning skill enforces
 
-- Read docs/principles.md, the SPEC.md of every module the work touches, and the decision records that bear on it. docs/design-notes.md is provisional input, never a spec.
-- Do the research in-skill via the `researching` skill, which retains findings to a RESEARCH.md at the node. Read project files. Brainstorm with the user one question at a time.
+- Read docs/principles.md, the SPEC.md of every module the work touches, and the decision records that bear on it. docs/design-notes.md is provisional input, not a spec.
+- Do the research inside the skill with the `researching` skill. It saves findings to a RESEARCH.md at the node. Read project files. Brainstorm with the user one question at a time.
 - Build the smallest version that produces value first.
-- Order work bottom-up. Foundations before dependents.
-- Send speculation to `maintaining-backlog`. Commit only what current evidence supports.
+- Order work bottom-up, foundations before the work that depends on them.
+- Send speculation to `maintaining-backlog`. Commit only to what current evidence supports.
 - Plan one level down only. Deeper detail belongs to the next skill.
-- Questions in docs/open-questions.md are Evan's to decide. When a plan depends on one, ask it; do not decide it in the plan.
+- Questions in docs/open-questions.md are Evan's to decide. When a plan depends on one, ask him. Don't decide it in the plan.
