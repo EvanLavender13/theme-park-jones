@@ -288,7 +288,7 @@ sim/operations/service_test.cpp
 
 sim/park/edit_sequences_test.cpp
 
-- rewrite: "Random command sequences from the new park leave a physicall…" Property: one randomized test, "on a valid world, a command is accepted exactly when the world it describes is valid, so every cycle leaves the park valid". It drops the copy and save assertions. A command whose kind is not an enum value describes nothing and must count as refused. Re-proves the copy, round-trip, and re-save standards, owned by walk_test and save_test (S2). Keep only physical validity.
+- rewrite: "Random command sequences from the new park leave a physicall…" Property: one test, "on a valid world, a command is accepted exactly when the world it describes is valid, so every cycle leaves the park valid", shown on a few commands each chosen for a reason, such as one that fits, one that overlaps a box, and one whose kind is not an enum value. It drops the copy and save assertions. A command whose kind is not an enum value describes nothing and must count as refused. Re-proves the copy, round-trip, and re-save standards, owned by walk_test and save_test (S2). Keep only physical validity.
 
 sim/park/edits_test.cpp
 
@@ -296,7 +296,7 @@ sim/park/edits_test.cpp
 - rewrite: "An accepted AddBox gives the next key an entity holding a bo…" Property: one test, "an accepted command leaves exactly the intent it describes, with new keys from the counter". Same. Rewritten as one test with "An accepted AddPath gives the next key an entity holding a p…", "An accepted MoveBox replaces the box's pose exactly with the…", "An accepted DeletePath or DeleteBox destroys the entity it n…".
 - rewrite: "An accepted MoveBox replaces the box's pose exactly with the…" Property: one test, "an accepted command leaves exactly the intent it describes, with new keys from the counter". Same. Rewritten as one test with "An accepted AddPath gives the next key an entity holding a p…", "An accepted AddBox gives the next key an entity holding a bo…", "An accepted DeletePath or DeleteBox destroys the entity it n…".
 - rewrite: "An accepted DeletePath or DeleteBox destroys the entity it n…" Property: one test, "an accepted command leaves exactly the intent it describes, with new keys from the counter". Same. Rewritten as one test with "An accepted AddPath gives the next key an entity holding a p…", "An accepted AddBox gives the next key an entity holding a bo…", "An accepted MoveBox replaces the box's pose exactly with the…".
-- rewrite: "On a physically valid world, a command naming what it acts o…" Property: one randomized test, "on a valid world, a command is accepted exactly when the world it describes is valid, so every cycle leaves the park valid". It drops the copy and save assertions. A command whose kind is not an enum value describes nothing and must count as refused. Hand-picked expected validity depends on boxSize and pathWidth literals (S1). Assert the equivalence over random commands.
+- rewrite: "On a physically valid world, a command naming what it acts o…" Property: one test, "on a valid world, a command is accepted exactly when the world it describes is valid, so every cycle leaves the park valid", shown on a few commands each chosen for a reason, such as one that fits, one that overlaps a box, and one whose kind is not an enum value. It drops the copy and save assertions. A command whose kind is not an enum value describes nothing and must count as refused. Hand-picked expected validity depends on boxSize and pathWidth literals (S1).
 
 sim/park/geometry_test.cpp
 
@@ -327,7 +327,7 @@ sim/routes/route_distance_test.cpp
 - rewrite: "Among steps achieving a node's distance, Next is on the lowe…" Property: Next is the least achieving step by key, direction, then From. Family of three same-shape tests, one per tie level; one network with ties at every level.
 - rewrite: "Among steps achieving a node's distance on one carrier, Next…" Property: Next is the least achieving step by key, direction, then From. Second member of the tie-break family. Rewritten as one test with "Among steps achieving a node's distance on one carrier in on…".
 - rewrite: "Among steps achieving a node's distance on one carrier in on…" Property: Next is the least achieving step by key, direction, then From. Third member of the tie-break family. Rewritten as one test with "Among steps achieving a node's distance on one carrier, Next…".
-- rewrite: "sampleRouteEdge gives one entry, the least of each end's ent…" Property: Edge sample is the least end entry plus offset, stepping toward it. Four sections enumerate inputs of one rule; assert it once over drawn end entries.
+- rewrite: "sampleRouteEdge gives one entry, the least of each end's ent…" Property: Edge sample is the least end entry plus offset, stepping toward it. Four sections enumerate inputs of one rule; assert it once, on a few end entries chosen for a reason.
 
 sim/save_test.cpp
 

@@ -55,6 +55,7 @@ The foundation is 0027 made enforceable and then applied to the worst case. The 
 - A standing architecture audit: the reviewer run over the whole tree against 0027 rather than one diff, at the close of each milestone in any capability.
 - A signal for files that outgrow one concern, such as a line count past which the reviewer must justify the file. Gated on: drift the function size limits and placement step miss.
 - Public surfaces listed per module, so a module's SPEC.md names exactly which headers other modules may include.
+- Values other modules repeat as literals read by name instead: src/app/application.cpp's PARK_SIZE_METERS copies sim/park's PARK_SIZE, and render's OVERLAY_FULL in food_overlay.h is a meal's relief written as 0.5.
 
 ## Open questions
 
