@@ -6,9 +6,16 @@
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
-if [ ! -f build/linux-debug/compile_commands.json ]; then
-    echo "tidy: configure linux-debug first (cmake --preset linux-debug)."
-    exit 1
+# The compile database lists the sources as of linux-debug's last configure, so a source added since
+# would go unchecked and one deleted since would fail the run. Configure again when the database is
+# missing, or when a CMake file, or a source directory's list of files, changed after it was made.
+DATABASE=build/linux-debug/compile_commands.json
+if [ ! -f "$DATABASE" ] || [ -n "$(find src tests cmake CMakeLists.txt CMakePresets.json \
+    \( -type d -o -name CMakeLists.txt -o -name '*.cmake' -o -name CMakePresets.json \) \
+    -newer "$DATABASE" -print -quit)" ]; then
+    echo "tidy: configuring linux-debug..."
+    cmake --preset linux-debug >/dev/null || { echo "tidy: configuring linux-debug failed."; exit 1; }
+    touch "$DATABASE"
 fi
 
 # Project sources only: dependencies are built from .cpm-cache and build/.
