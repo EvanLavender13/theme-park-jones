@@ -43,10 +43,10 @@ template <typename Visitor> void visitFields(Visitor &visitor, RouteEntry &entry
   visitor.field("next", entry.Next);
 }
 
-// At a place inside an edge, one entry for the source: the better of the edge's two ends, the
-// place's offset to each added to that end's distance, ties to the From end. Entries inside the
-// edge are ignored.
-std::vector<RouteEntry> sampleRouteEdge(const EdgeSample<RouteEntry> &sample);
+// At a place inside an edge, appends one entry for the source to out: the better of the edge's two
+// ends, the place's offset to each added to that end's distance, ties to the From end. Entries
+// inside the edge are ignored.
+void sampleRouteEdge(const EdgeSample<RouteEntry> &sample, std::vector<RouteEntry> &out);
 
 // The route distance field on the kind's network.
 template <PathKind NetworkKind> struct RouteDistance {
@@ -55,8 +55,8 @@ template <PathKind NetworkKind> struct RouteDistance {
       NetworkKind == PathKind::Guest ? "guest-route-distance" : "backstage-route-distance";
   static constexpr FieldKind Kind = FieldKind::Entry;
 
-  static std::vector<RouteEntry> sampleEdge(const EdgeSample<RouteEntry> &sample) {
-    return sampleRouteEdge(sample);
+  static void sampleEdge(const EdgeSample<RouteEntry> &sample, std::vector<RouteEntry> &out) {
+    sampleRouteEdge(sample, out);
   }
 };
 

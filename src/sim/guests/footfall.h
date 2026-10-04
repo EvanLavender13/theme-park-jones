@@ -22,9 +22,9 @@ struct HungryFootfall {
   // value * simExp(ticks * simLog(1 - 1 / FOOTFALL_TIME)), so the value itself at 0 ticks.
   static double readKept(double value, uint64_t ticks);
 
-  // The values of the source's entries strictly inside the sampled edge, in order, ignoring those
-  // at its nodes.
-  static std::vector<double> sampleEdge(const EdgeSample<double> &sample);
+  // Appends the values of the source's entries strictly inside the sampled edge to out, in order,
+  // ignoring those at its nodes.
+  static void sampleEdge(const EdgeSample<double> &sample, std::vector<double> &out);
 
   // The mean, over the node's edge ends, of each end's stretch value: the sum of the values of
   // the entries strictly inside its edge.
