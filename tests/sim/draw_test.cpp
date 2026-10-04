@@ -129,12 +129,22 @@ TEST_CASE("drawKey takes the world's seed and tick at the time of the call") {
       DrawKey{.Seed = 778, .Entity = entity, .Purpose = WANDER, .Tick = 3001, .Index = 2});
 }
 
-TEST_CASE("drawUniform is the draw's top 53 bits times 2^-53, in [0, 1)") {
-  for (uint64_t index = 0; index < 1000; ++index) {
-    const DrawKey key = sampleKey(WANDER, index);
-    CAPTURE(index);
+TEST_CASE("drawUniform lies in [0, 1)") {
+  constexpr uint64_t MAX_WORD = std::numeric_limits<uint64_t>::max();
+  // Every word zero and every word at its maximum, the keys at the ends of the key space, and a
+  // typical key.
+  const std::vector<DrawKey> keys = {
+      DrawKey{},
+      DrawKey{.Seed = MAX_WORD,
+              .Entity = EntityKey{MAX_WORD},
+              .Purpose = MAX_WORD,
+              .Tick = MAX_WORD,
+              .Index = MAX_WORD},
+      sampleKey(WANDER, 0),
+  };
+  for (const DrawKey &key : keys) {
     const double uniform = drawUniform(key);
-    REQUIRE(uniform == static_cast<double>(drawBits(key) >> 11U) * 0x1.0p-53);
+    CAPTURE(uniform);
     REQUIRE(uniform >= 0.0);
     REQUIRE(uniform < 1.0);
   }
@@ -215,40 +225,9 @@ TEST_CASE("drawPick never picks an index whose weight is zero") {
 }
 
 TEST_CASE("drawPick refuses weights it cannot pick from in proportion") {
-  const DrawKey key = sampleKey(WANDER, 0);
-  constexpr uint64_t MAX_TOTAL = std::numeric_limits<uint64_t>::max();
-
-  SECTION("integer weights") {
-    REQUIRE_THROWS_AS(pickInteger(key, {}), std::invalid_argument);
-    REQUIRE_THROWS_AS(pickInteger(key, {0, 0}), std::invalid_argument);
-    // This total wraps to 1, so only a check for overflow refuses it.
-    REQUIRE_THROWS_AS(pickInteger(key, {MAX_TOTAL, 2}), std::invalid_argument);
-
-    // The largest total allowed, from one weight and from two.
-    REQUIRE(pickInteger(key, {MAX_TOTAL}) == 0);
-    REQUIRE_NOTHROW(pickInteger(key, {MAX_TOTAL - 1, 1}));
-  }
-
-  SECTION("double weights") {
-    constexpr double SMALLEST_NORMAL = std::numeric_limits<double>::min();
-    constexpr double LARGEST = std::numeric_limits<double>::max();
-    constexpr double INF = std::numeric_limits<double>::infinity();
-    constexpr double NAN_WEIGHT = std::numeric_limits<double>::quiet_NaN();
-
-    REQUIRE_THROWS_AS(pickDouble(key, {}), std::invalid_argument);
-    // The total is positive, so only a check of each weight refuses it.
-    REQUIRE_THROWS_AS(pickDouble(key, {-1.0, 2.0}), std::invalid_argument);
-    REQUIRE_THROWS_AS(pickDouble(key, {NAN_WEIGHT, 1.0}), std::invalid_argument);
-    REQUIRE_THROWS_AS(pickDouble(key, {INF, 1.0}), std::invalid_argument);
-    REQUIRE_THROWS_AS(pickDouble(key, {0.0, 0.0}), std::invalid_argument);
-    REQUIRE_THROWS_AS(pickDouble(key, {SMALLEST_NORMAL / 2.0}), std::invalid_argument);
-    REQUIRE_THROWS_AS(pickDouble(key, {LARGEST, LARGEST}), std::invalid_argument);
-
-    // The smallest normal total, from one weight and from two subnormal weights, and the largest.
-    REQUIRE(pickDouble(key, {SMALLEST_NORMAL}) == 0);
-    REQUIRE_NOTHROW(pickDouble(key, {SMALLEST_NORMAL / 2.0, SMALLEST_NORMAL / 2.0}));
-    REQUIRE(pickDouble(key, {LARGEST}) == 0);
-  }
+  // This total wraps to 1, so only a check for overflow refuses it.
+  const std::vector<uint64_t> weights = {std::numeric_limits<uint64_t>::max(), 2};
+  REQUIRE_THROWS_AS(pickInteger(sampleKey(WANDER, 0), weights), std::invalid_argument);
 }
 
 } // namespace

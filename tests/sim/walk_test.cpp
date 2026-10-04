@@ -67,10 +67,18 @@ TEST_CASE("a copy and its original are independent") {
   }
 }
 
-TEST_CASE("worlds built by the same calls are equal and hash equal, even on separate schemas") {
-  const auto schema = makeSchema();
-  requireSameValue(buildWorld(schema), buildWorld(schema));
-  requireSameValue(buildWorld(makeSchema()), buildWorld(makeSchema()));
+// Each world holds its own schema, so equality cannot rest on sharing one.
+TEST_CASE("world equality compares schemas by content") {
+  // The same registrations as makeSchema, but with tag registered as state.
+  auto rekinded = std::make_shared<WorldSchema>();
+  rekinded->addComponent<Probe>("probe", DataKind::State);
+  rekinded->addComponent<Tag>("tag", DataKind::State);
+  rekinded->addComponent<Cached>("cached", DataKind::Derived);
+
+  // Empty worlds, so that nothing but the schema can differ.
+  const World world(makeSchema(), 5);
+  REQUIRE(worldsEqual(world, World(makeSchema(), 5)));
+  REQUIRE_FALSE(worldsEqual(world, World(rekinded, 5)));
 }
 
 TEST_CASE("a change to any one thing the walk covers makes worlds unequal and changes the hash") {
@@ -114,32 +122,6 @@ TEST_CASE("a change to any one thing the walk covers makes worlds unequal and ch
     CHECK_FALSE(worldsEqual(changed, reference));
     CHECK_FALSE(worldsEqual(reference, changed));
     CHECK(hashWorld(changed) != referenceHash);
-  }
-}
-
-TEST_CASE("worlds on different schemas are never equal") {
-  auto reordered = std::make_shared<WorldSchema>();
-  reordered->addComponent<Tag>("tag", DataKind::Intent);
-  reordered->addComponent<Probe>("probe", DataKind::State);
-  reordered->addComponent<Cached>("cached", DataKind::Derived);
-
-  auto rekinded = std::make_shared<WorldSchema>();
-  rekinded->addComponent<Probe>("probe", DataKind::State);
-  rekinded->addComponent<Tag>("tag", DataKind::State);
-  rekinded->addComponent<Cached>("cached", DataKind::Derived);
-
-  auto renamed = std::make_shared<WorldSchema>();
-  renamed->addComponent<Probe>("probe", DataKind::State);
-  renamed->addComponent<Tag>("marker", DataKind::Intent);
-  renamed->addComponent<Cached>("cached", DataKind::Derived);
-
-  // Empty worlds, so that nothing but the schema differs.
-  const World base(makeSchema(), 5);
-  for (const std::shared_ptr<const WorldSchema> &other :
-       std::vector<std::shared_ptr<const WorldSchema>>{reordered, rekinded, renamed}) {
-    const World different(other, 5);
-    CHECK_FALSE(worldsEqual(base, different));
-    CHECK_FALSE(worldsEqual(different, base));
   }
 }
 

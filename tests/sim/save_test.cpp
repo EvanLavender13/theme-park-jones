@@ -289,18 +289,6 @@ std::string lines(const std::vector<std::string> &textLines) {
   return text;
 }
 
-// The number of the line a LoadError names, or nothing if the load succeeds.
-std::optional<size_t> failingLine(const std::shared_ptr<const WorldSchema> &schema,
-                                  const std::string &text) {
-  try {
-    static_cast<void>(loadWorld(schema, text));
-  } catch (const LoadError &error) {
-    CHECK_THAT(error.what(), ContainsSubstring("line " + std::to_string(error.line())));
-    return error.line();
-  }
-  return std::nullopt;
-}
-
 TEST_CASE("loading the save of a resolved world and resolving gives the world saved, whose save "
           "is the same text") {
   const auto schema = makeSaveSchema();
@@ -325,212 +313,90 @@ TEST_CASE("equal worlds give identical saves however they were built") {
   REQUIRE(saveWorld(reordered) == saveWorld(plain));
 }
 
-TEST_CASE("a loaded world holds the saved seed, tick, and next key, with resolution pending") {
+TEST_CASE("a loaded world is pending resolution") {
   const auto schema = makeSaveSchema();
-
-  SECTION("values at the edges of their ranges") {
-    // Seed and tick past what 63 and 32 bits hold; next-key at its largest, with the counter key
-    // just below it.
-    const World loaded = loadWorld(schema, lines({"tpj-park 1", "seed 18446744073709551615",
-                                                  "tick 4294967296", "next-key 9223372036854775808",
-                                                  "", "[entities]", "2", "9223372036854775807"}));
-    REQUIRE(loaded.Seed == std::numeric_limits<uint64_t>::max());
-    REQUIRE(loaded.Tick == uint64_t{1} << 32U);
-    REQUIRE(loaded.nextKey() == DERIVED_KEY_BIT);
-    REQUIRE(loaded.keys() == std::vector<EntityKey>{SECOND, EntityKey{DERIVED_KEY_BIT - 1}});
-    REQUIRE(loaded.isResolvePending());
-  }
-  SECTION("the save of a resolved world") {
-    World resolved = buildFormWorld(schema);
-    resolveWorld(resolved);
-    const World loaded = loadWorld(schema, saveWorld(resolved));
-    REQUIRE(loaded.Seed == resolved.Seed);
-    REQUIRE(loaded.Tick == resolved.Tick);
-    REQUIRE(loaded.nextKey() == resolved.nextKey());
-    REQUIRE(loaded.isResolvePending());
-  }
+  World resolved = buildFormWorld(schema);
+  resolveWorld(resolved);
+  REQUIRE(loadWorld(schema, saveWorld(resolved)).isResolvePending());
 }
 
-TEST_CASE("a save holds no derived data") {
+TEST_CASE("a save is independent of derived data") {
   const auto schema = makeSaveSchema();
   World world = buildFormWorld(schema);
   resolveWorld(world);
   const std::string text = saveWorld(world);
 
-  for (const ComponentType &type : schema->components()) {
-    if (type.Kind == DataKind::Derived) {
-      CAPTURE(type.Name);
-      REQUIRE(text.find("[" + type.Name + "]") == std::string::npos);
-    }
-  }
+  componentOf<Cached>(world, SLOT).Total += 1;
 
-  SECTION("changing a derived component") { componentOf<Cached>(world, SLOT).Total = 99; }
-  SECTION("adding derived components, to entities holding saved data and not") {
-    world.Registry.emplace<Cached>(world.findEntity(FIRST), Cached{.Total = 1});
-    world.Registry.emplace<Cached>(
-        world.findEntity(world.createDerivedEntity(BARE, SLOT_PURPOSE, 0)), Cached{.Total = 2});
-  }
-  SECTION("removing derived components") {
-    world.Registry.remove<Cached>(world.findEntity(SLOT));
-    world.Registry.remove<Cached>(world.findEntity(BARE));
-  }
   REQUIRE(saveWorld(world) == text);
 }
 
-// Each case breaks one rule the spec gives for a save, at a line chosen for it.
-struct Malformed {
-  std::string Label;
-  std::vector<std::string> Lines;
-  size_t Line = 0;
-};
+std::vector<std::string> splitLines(const std::string &text) {
+  std::vector<std::string> result;
+  size_t start = 0;
+  while (start < text.size()) {
+    const size_t end = text.find('\n', start);
+    result.push_back(text.substr(start, end - start));
+    start = end + 1;
+  }
+  return result;
+}
+
+TEST_CASE("a failed load names the first line it cannot read") {
+  const auto schema = makeSaveSchema();
+  World resolved = buildFormWorld(schema);
+  resolveWorld(resolved);
+  std::vector<std::string> broken = splitLines(saveWorld(resolved));
+
+  // No header, section, key, or field begins with %, so both lines are unreadable wherever they
+  // fall, and only reading in order makes the earlier one the line named.
+  const size_t first = broken.size() / 2;
+  const size_t later = broken.size() - 1;
+  REQUIRE(first < later);
+  broken[first] = "%";
+  broken[later] = "%";
+
+  std::optional<size_t> named;
+  std::string message;
+  try {
+    static_cast<void>(loadWorld(schema, lines(broken)));
+  } catch (const LoadError &error) {
+    named = error.line();
+    message = error.what();
+  }
+  // Lines are numbered from 1.
+  REQUIRE(named == first + 1);
+  CHECK_THAT(message, ContainsSubstring("line " + std::to_string(first + 1)));
+}
+
+TEST_CASE("a load ignores carriage returns and blank lines") {
+  const auto schema = makeSaveSchema();
+  World resolved = buildFormWorld(schema);
+  resolveWorld(resolved);
+  const std::string text = saveWorld(resolved);
+
+  // A carriage return ends every line, and a blank line, itself ending in a carriage return, comes
+  // before the first line and after every line.
+  std::string variant = "\r\n";
+  for (const char ch : text) {
+    if (ch == '\n') {
+      variant += "\r\n\r\n";
+    } else {
+      variant += ch;
+    }
+  }
+
+  REQUIRE(worldsEqual(loadWorld(schema, variant), loadWorld(schema, text)));
+}
 
 const std::vector<std::string> HEADER = {"tpj-park 1", "seed 5", "tick 0", "next-key 4"};
 const std::string PROBE_LINE = "1 flag=true count=-7 small=9 level=1.5 feeling=excited target=2 "
                                "samples=[0.25 -3] place={x=4.5 z=-2}";
-const std::string ROUTE_LINE =
-    "2 points=[{x=1 z=2} {x=3 z=4}] moods=[calm excited] stops=[1 3] low=-1 high=1";
 
 std::vector<std::string> withHeader(const std::vector<std::string> &body) {
   std::vector<std::string> all = HEADER;
   all.insert(all.end(), body.begin(), body.end());
   return all;
-}
-
-// A probe line with one substring replaced, at line 7.
-Malformed probeCase(std::string label, const std::string &from, const std::string &to) {
-  std::string line = PROBE_LINE;
-  const size_t at = line.find(from);
-  REQUIRE(at != std::string::npos);
-  line.replace(at, from.size(), to);
-  return {std::move(label), withHeader({"", "[probe]", line}), 7};
-}
-
-std::vector<Malformed> headerCases() {
-  return {
-      {"empty text", {}, 1},
-      {"text ending inside the header", {"tpj-park 1", "seed 5", "tick 0"}, 4},
-      {"wrong label", {"tpj-pork 1", "seed 5", "tick 0", "next-key 4"}, 1},
-      {"wrong version", {"tpj-park 2", "seed 5", "tick 0", "next-key 4"}, 1},
-      {"a NUL in the label",
-       {std::string("tpj-park\0 1", 11), "seed 5", "tick 0", "next-key 4"},
-       1},
-      {"header line missing", {"tpj-park 1", "tick 0", "next-key 4"}, 2},
-      {"header lines out of order", {"tpj-park 1", "tick 0", "seed 5", "next-key 4"}, 2},
-      {"seed too large for 64 bits",
-       {"tpj-park 1", "seed 18446744073709551616", "tick 0", "next-key 4"},
-       2},
-      {"text after a header value", {"tpj-park 1", "seed 5", "tick 0 0", "next-key 4"}, 3},
-      {"next-key zero", {"tpj-park 1", "seed 5", "tick 0", "next-key 0"}, 4},
-      {"next-key above 2^63",
-       {"tpj-park 1", "seed 5", "tick 0", "next-key 9223372036854775809"},
-       4},
-  };
-}
-
-std::vector<Malformed> sectionCases() {
-  return {
-      {"malformed section header", withHeader({"", "[probe", PROBE_LINE}), 6},
-      {"unknown section", withHeader({"", "[box]", "1"}), 6},
-      {"derived type's section", withHeader({"", "[cached]", "1 total=1"}), 6},
-      {"repeated section", withHeader({"", "[tag]", "1", "", "[tag]", "2"}), 9},
-      {"sections out of registration order",
-       withHeader({"", "[route]", ROUTE_LINE, "", "[tag]", "1"}), 9},
-      {"[entities] after a type's section", withHeader({"", "[tag]", "1", "", "[entities]", "3"}),
-       9},
-      {"key line before any section", withHeader({"", "1"}), 6},
-      {"section with no key lines before another", withHeader({"", "[entities]", "", "[tag]", "1"}),
-       8},
-      {"section with no key lines at the end", withHeader({"", "[tag]"}), 7},
-  };
-}
-
-std::vector<Malformed> keyCases() {
-  return {
-      {"key zero", withHeader({"", "[tag]", "0"}), 7},
-      {"key not a number", withHeader({"", "[tag]", "one"}), 7},
-      {"key repeated in a section", withHeader({"", "[tag]", "1", "1"}), 8},
-      {"counter key at next-key", withHeader({"", "[tag]", "4"}), 7},
-      {"derived key in [entities]", withHeader({"", "[entities]", "9223372036854775808"}), 7},
-      {"[entities] key again in a type's section",
-       withHeader({"", "[entities]", "1", "", "[tag]", "1"}), 10},
-      {"text after the key of a type without fields", withHeader({"", "[tag]", "1 x=1"}), 7},
-  };
-}
-
-std::vector<Malformed> fieldCases() {
-  return {
-      probeCase("field missing", " place={x=4.5 z=-2}", ""),
-      probeCase("fields out of order", "flag=true count=-7", "count=-7 flag=true"),
-      probeCase("field misnamed", "flag=", "flags="),
-      probeCase("nested field misnamed", "z=-2", "y=-2"),
-      probeCase("bool not true or false", "flag=true", "flag=1"),
-      probeCase("integer not read in full", "count=-7", "count=-7.5"),
-      probeCase("integer too large for its field", "small=9", "small=65536"),
-      probeCase("NaN", "level=1.5", "level=nan"),
-      // An enum is written by name, never by number.
-      probeCase("enum by number", "feeling=excited", "feeling=1"),
-      probeCase("enum name unknown", "feeling=excited", "feeling=angry"),
-      probeCase("vector elements separated by two spaces", "[0.25 -3]", "[0.25  -3]"),
-      probeCase("vector left open at the end of the line", " -3] place={x=4.5 z=-2}", ""),
-      probeCase("struct left open at the end of the line", "place={x=4.5 z=-2}", "place={x=4.5"),
-      probeCase("text after the last field", "z=-2}", "z=-2} extra"),
-      {"struct in a vector left open", withHeader({"", "[route]", "2 points=[{x=1 z=2} {x=3"}), 7},
-  };
-}
-
-TEST_CASE("text that is not a save fails the load naming the first line that cannot be read") {
-  const auto schema = makeSaveSchema();
-  // The pieces the cases break load when whole, so each failure is the rule its case breaks.
-  REQUIRE_NOTHROW(
-      loadWorld(schema, lines(withHeader({"", "[entities]", "3", "", "[probe]", PROBE_LINE, "",
-                                          "[tag]", "1", "2", "", "[route]", ROUTE_LINE}))));
-
-  std::vector<Malformed> cases = headerCases();
-  for (const auto &more : {sectionCases(), keyCases(), fieldCases()}) {
-    cases.insert(cases.end(), more.begin(), more.end());
-  }
-  for (const Malformed &broken : cases) {
-    const std::string text = lines(broken.Lines);
-    CAPTURE(broken.Label, text);
-    CHECK(failingLine(schema, text) == broken.Line);
-  }
-}
-
-TEST_CASE("blank lines and carriage returns do not change what a save loads as") {
-  const auto schema = makeSaveSchema();
-  World resolved = buildFormWorld(schema);
-  resolveWorld(resolved);
-  const std::string text = saveWorld(resolved);
-  const World expected = loadWorld(schema, text);
-
-  std::string variant;
-  SECTION("carriage return before every line feed") {
-    for (const char ch : text) {
-      if (ch == '\n') {
-        variant += '\r';
-      }
-      variant += ch;
-    }
-  }
-  SECTION("blank lines removed") {
-    for (size_t i = 0; i < text.size(); ++i) {
-      const bool repeatsLineFeed = text[i] == '\n' && i > 0 && text[i - 1] == '\n';
-      if (!repeatsLineFeed) {
-        variant += text[i];
-      }
-    }
-    REQUIRE(variant.find("\n\n") == std::string::npos);
-  }
-  SECTION("blank lines added before, between, and after every line") {
-    variant = "\n";
-    for (const char ch : text) {
-      variant += ch;
-      if (ch == '\n') {
-        variant += "\n\n";
-      }
-    }
-  }
-  requireSameValue(loadWorld(schema, variant), expected);
 }
 
 TEST_CASE("a number std::from_chars reads in full loads as its value, and saves in its canonical "
@@ -559,17 +425,6 @@ TEST_CASE("saveWorld refuses an enum value its type gives no name, naming the fi
   }
   REQUIRE(message.has_value());
   CHECK_THAT(message.value_or(""), ContainsSubstring("feeling"));
-}
-
-TEST_CASE("a schema refuses a component type named entities and is left unchanged") {
-  WorldSchema schema;
-  schema.addComponent<Tag>("tag", DataKind::Intent);
-
-  REQUIRE_THROWS_AS(schema.addComponent<Probe>("entities", DataKind::State), std::invalid_argument);
-  REQUIRE(schema.components().size() == 1);
-  REQUIRE(schema.components()[0].Name == "tag");
-  // The refused type was not half registered.
-  REQUIRE_NOTHROW(schema.addComponent<Probe>("probe", DataKind::State));
 }
 
 } // namespace

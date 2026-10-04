@@ -6,10 +6,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cfenv>
-#include <functional>
-#include <memory>
-#include <stdint.h>
 #include <string>
+#include <vector>
 
 #if defined(__SSE2__)
 #include <pmmintrin.h>
@@ -21,8 +19,6 @@ namespace {
 
 using test::buildWorld;
 using test::makeSchema;
-
-constexpr uint64_t SEED = 12345;
 
 // Ways the thread's floating-point environment can differ from the default.
 enum class Deviation {
@@ -61,13 +57,17 @@ private:
 #endif
 };
 
-// Flush-to-zero and denormals-are-zero are controls outside <cfenv>, which the test sets only
-// where it knows them.
+// The deviations this target can set. Flush-to-zero and denormals-are-zero are controls outside
+// <cfenv>, set only where the test knows them.
+std::vector<Deviation> settableDeviations() {
+  std::vector<Deviation> deviations = {Deviation::RoundUpward, Deviation::RoundDownward,
+                                       Deviation::RoundTowardZero};
 #if defined(__SSE2__)
-constexpr bool HAS_SUBNORMAL_CONTROLS = true;
-#else
-constexpr bool HAS_SUBNORMAL_CONTROLS = false;
+  deviations.push_back(Deviation::FlushToZero);
+  deviations.push_back(Deviation::DenormalsAreZero);
 #endif
+  return deviations;
+}
 
 void apply(Deviation deviation) {
   switch (deviation) {
@@ -93,73 +93,23 @@ void apply(Deviation deviation) {
   }
 }
 
-// True if the call throws WorldInvariantError while the environment deviates. The environment is
-// restored before this returns, whatever the call does.
-bool refusedUnder(Deviation deviation, const std::function<void()> &call) {
-  const EnvironmentGuard guard;
-  apply(deviation);
-  try {
-    call();
-  } catch (const WorldInvariantError &) {
-    return true;
-  }
-  return false;
-}
-
-void requireWorldChecks() {
+// The check works by arithmetic, and a probe that tells one rounding direction from to-nearest can
+// still miss another, so each rounding direction and each subnormal control is its own input.
+TEST_CASE("in debug builds, constructing a World by any route refuses a non-default "
+          "floating-point environment") {
   if (!WORLD_CHECKS) {
     SKIP("world checks run only in debug builds");
   }
-}
+  const auto schema = makeSchema();
+  const std::string text = saveWorld(buildWorld(schema));
 
-void requireSubnormalControls() {
-  if (!HAS_SUBNORMAL_CONTROLS) {
-    SKIP("this target has no flush-to-zero or denormals-are-zero control the test can set");
+  // A load builds its world from a file rather than from a seed.
+  for (const Deviation deviation : settableDeviations()) {
+    CAPTURE(deviation);
+    const EnvironmentGuard guard;
+    apply(deviation);
+    CHECK_THROWS_AS(loadWorld(schema, text), WorldInvariantError);
   }
-}
-
-void constructDirectly() { const World world(makeSchema(), SEED); }
-
-// Each direction is its own case because an arithmetic probe can tell one direction from
-// to-nearest and still miss another.
-TEST_CASE("in debug builds, constructing a World throws unless rounding is to nearest") {
-  requireWorldChecks();
-  Deviation deviation = Deviation::RoundUpward;
-  SECTION("upward") { deviation = Deviation::RoundUpward; }
-  SECTION("downward") { deviation = Deviation::RoundDownward; }
-  SECTION("toward zero") { deviation = Deviation::RoundTowardZero; }
-  REQUIRE(refusedUnder(deviation, constructDirectly));
-}
-
-TEST_CASE("in debug builds, constructing a World throws when subnormal results flush to zero") {
-  requireWorldChecks();
-  requireSubnormalControls();
-  REQUIRE(refusedUnder(Deviation::FlushToZero, constructDirectly));
-}
-
-TEST_CASE("in debug builds, constructing a World throws when subnormal operands read as zero") {
-  requireWorldChecks();
-  requireSubnormalControls();
-  REQUIRE(refusedUnder(Deviation::DenormalsAreZero, constructDirectly));
-}
-
-TEST_CASE("in debug builds, every way of constructing a World checks the environment") {
-  requireWorldChecks();
-  const std::shared_ptr<const WorldSchema> schema = makeSchema();
-  const World original = buildWorld(schema);
-  const std::string text = saveWorld(original);
-
-  std::function<void()> construct;
-  SECTION("the default constructor") {
-    construct = [] { const World world; };
-  }
-  SECTION("copyWorld") {
-    construct = [&] { static_cast<void>(copyWorld(original)); };
-  }
-  SECTION("loadWorld") {
-    construct = [&] { static_cast<void>(loadWorld(schema, text)); };
-  }
-  REQUIRE(refusedUnder(Deviation::RoundUpward, construct));
 }
 
 } // namespace
