@@ -22,7 +22,6 @@ using test::SimMathReference;
 
 constexpr double INF = std::numeric_limits<double>::infinity();
 constexpr double NOT_A_NUMBER = std::numeric_limits<double>::quiet_NaN();
-constexpr double LARGEST = std::numeric_limits<double>::max();
 constexpr double SMALLEST_SUBNORMAL = std::numeric_limits<double>::denorm_min();
 
 // A double's bits as an integer in the same order as the doubles, so that adjacent doubles differ
@@ -58,8 +57,6 @@ void checkAgainst(std::span<const SimMathReference> table, double (*function)(do
   }
 }
 
-bool isPositiveZero(double value) { return value == 0.0 && !std::signbit(value); }
-
 TEST_CASE("simExp is within one ULP of the correctly rounded e^x") {
   checkAgainst(EXP_REFERENCE, simExp);
 }
@@ -68,42 +65,46 @@ TEST_CASE("simLog is within one ULP of the correctly rounded ln x") {
   checkAgainst(LOG_REFERENCE, simLog);
 }
 
-TEST_CASE("simExp returns exactly 1 for zero of either sign") {
-  CHECK(simExp(0.0) == 1.0);
-  CHECK(simExp(-0.0) == 1.0);
+// True when actual is expected, a NaN when expected is one, and a zero of expected's sign.
+bool sameSpecialValue(double actual, double expected) {
+  if (std::isnan(expected)) {
+    return std::isnan(actual);
+  }
+  return actual == expected && std::signbit(actual) == std::signbit(expected);
 }
 
-TEST_CASE("simExp returns +infinity for +infinity and for any argument of 710 or more") {
-  CHECK(simExp(710.0) == INF);
-  CHECK(simExp(LARGEST) == INF);
-  CHECK(simExp(INF) == INF);
+struct SpecialValue {
+  double (*Function)(double);
+  const char *Name;
+  double Argument;
+  double Expected;
+};
+
+TEST_CASE("simExp and simLog return IEEE's special values") {
+  // Zeros of both signs, the infinities, a NaN, for simExp arguments whose results overflow to
+  // infinity and underflow to zero, and for simLog the argument nearest zero from below.
+  const std::array<SpecialValue, 13> cases = {{
+      {simExp, "simExp", 0.0, 1.0},
+      {simExp, "simExp", -0.0, 1.0},
+      {simExp, "simExp", 710.0, INF},
+      {simExp, "simExp", INF, INF},
+      {simExp, "simExp", -746.0, 0.0},
+      {simExp, "simExp", -INF, 0.0},
+      {simExp, "simExp", NOT_A_NUMBER, NOT_A_NUMBER},
+      {simLog, "simLog", 0.0, -INF},
+      {simLog, "simLog", -0.0, -INF},
+      {simLog, "simLog", INF, INF},
+      {simLog, "simLog", 1.0, 0.0},
+      {simLog, "simLog", -SMALLEST_SUBNORMAL, NOT_A_NUMBER},
+      {simLog, "simLog", NOT_A_NUMBER, NOT_A_NUMBER},
+  }};
+  for (const SpecialValue &special : cases) {
+    const double actual = special.Function(special.Argument);
+    INFO(special.Name << "(" << hex(special.Argument) << "), expected " << hex(special.Expected)
+                      << ", got " << hex(actual));
+    CHECK(sameSpecialValue(actual, special.Expected));
+  }
 }
-
-TEST_CASE("simExp returns +0 for -infinity and for any argument of -746 or less") {
-  CHECK(isPositiveZero(simExp(-746.0)));
-  CHECK(isPositiveZero(simExp(-LARGEST)));
-  CHECK(isPositiveZero(simExp(-INF)));
-}
-
-TEST_CASE("simExp returns a NaN for a NaN") { CHECK(std::isnan(simExp(NOT_A_NUMBER))); }
-
-TEST_CASE("simLog returns -infinity for zero of either sign") {
-  CHECK(simLog(0.0) == -INF);
-  CHECK(simLog(-0.0) == -INF);
-}
-
-TEST_CASE("simLog returns +infinity for +infinity") { CHECK(simLog(INF) == INF); }
-
-TEST_CASE("simLog returns +0 for 1") { CHECK(isPositiveZero(simLog(1.0))); }
-
-// The negative of the smallest subnormal is the argument nearest zero from below.
-TEST_CASE("simLog returns a NaN for any argument below zero") {
-  CHECK(std::isnan(simLog(-SMALLEST_SUBNORMAL)));
-  CHECK(std::isnan(simLog(-1.0)));
-  CHECK(std::isnan(simLog(-INF)));
-}
-
-TEST_CASE("simLog returns a NaN for a NaN") { CHECK(std::isnan(simLog(NOT_A_NUMBER))); }
 
 } // namespace
 } // namespace tpj

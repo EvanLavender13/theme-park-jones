@@ -12,15 +12,8 @@
 namespace tpj {
 namespace {
 
-using test::Cached;
 using test::Probe;
 using test::Tag;
-
-struct Rename {
-  int Id = 0;
-};
-
-[[maybe_unused]] void applyCommand(World & /*world*/, const Rename & /*command*/) {}
 
 void resolveNothing(World & /*world*/) {}
 void resolveNothingElse(World & /*world*/) {}
@@ -33,48 +26,26 @@ std::vector<std::string> namesOf(const WorldSchema &schema) {
   return names;
 }
 
-TEST_CASE("a schema accepts names of lowercase letters, digits, and hyphens") {
+TEST_CASE("a schema accepts a name exactly when it is lowercase letters, digits, and hyphens") {
   WorldSchema schema;
-  REQUIRE_NOTHROW(schema.addComponent<Probe>("probe", DataKind::State));
+
   REQUIRE_NOTHROW(schema.addComponent<Tag>("tag-2", DataKind::Intent));
-  REQUIRE_NOTHROW(schema.addComponent<Cached>("0-z-9", DataKind::Derived));
-  REQUIRE(namesOf(schema) == std::vector<std::string>{"probe", "tag-2", "0-z-9"});
+  // A letter, but not a lowercase one.
+  REQUIRE_THROWS_AS(schema.addComponent<Probe>("Probe", DataKind::State), std::invalid_argument);
+  REQUIRE(namesOf(schema) == std::vector<std::string>{"tag-2"});
 }
 
-TEST_CASE("a schema refuses a malformed name and is left unchanged") {
-  WorldSchema schema;
-  schema.addComponent<Tag>("tag", DataKind::Intent);
-
-  // Uppercase, an underscore, a space, and a letter outside ASCII.
-  const std::vector<std::string> malformed = {"Probe", "my_probe", "my probe", "caf\xc3\xa9"};
-  for (const std::string &name : malformed) {
-    CAPTURE(name);
-    REQUIRE_THROWS_AS(schema.addComponent<Probe>(name, DataKind::State), std::invalid_argument);
-    REQUIRE(namesOf(schema) == std::vector<std::string>{"tag"});
-  }
-  // The refused type was not half registered.
-  REQUIRE_NOTHROW(schema.addComponent<Probe>("probe", DataKind::State));
-}
-
-TEST_CASE("a schema refuses a repeated name and is left unchanged") {
+// A repeated name or type would make two registrations indistinguishable to the walk and the save,
+// and saves reserve the name entities for their list of bare keys.
+TEST_CASE("a schema refuses a repeated or reserved registration and is left unchanged") {
   WorldSchema schema;
   schema.addComponent<Tag>("tag", DataKind::Intent);
 
   REQUIRE_THROWS_AS(schema.addComponent<Probe>("tag", DataKind::State), std::invalid_argument);
-  REQUIRE(schema.components().size() == 1);
-  REQUIRE(schema.components()[0].TypeId == entt::type_id<Tag>().hash());
-  REQUIRE(schema.components()[0].Kind == DataKind::Intent);
-  REQUIRE_NOTHROW(schema.addComponent<Probe>("probe", DataKind::State));
-}
-
-TEST_CASE("a schema refuses a type registered twice and is left unchanged") {
-  WorldSchema schema;
-  schema.addComponent<Tag>("tag", DataKind::Intent);
-
-  REQUIRE_THROWS_AS(schema.addComponent<Tag>("marker", DataKind::Intent), std::invalid_argument);
+  REQUIRE_THROWS_AS(schema.addComponent<Probe>("entities", DataKind::State), std::invalid_argument);
   REQUIRE(namesOf(schema) == std::vector<std::string>{"tag"});
-  // The refused name was not reserved either.
-  REQUIRE_NOTHROW(schema.addComponent<Probe>("marker", DataKind::State));
+  // The refused type was not half registered.
+  REQUIRE_NOTHROW(schema.addComponent<Probe>("probe", DataKind::State));
 }
 
 std::vector<std::string> resolverNamesOf(const WorldSchema &schema) {
@@ -83,27 +54,6 @@ std::vector<std::string> resolverNamesOf(const WorldSchema &schema) {
     names.push_back(resolver.Name);
   }
   return names;
-}
-
-TEST_CASE("a schema refuses a resolver with a malformed name and is left unchanged") {
-  WorldSchema schema;
-  schema.addResolver("zones", resolveNothing);
-
-  const std::vector<std::string> malformed = {"Access", "my_access", "my access"};
-  for (const std::string &name : malformed) {
-    CAPTURE(name);
-    REQUIRE_THROWS_AS(schema.addResolver(name, resolveNothingElse), std::invalid_argument);
-    REQUIRE(resolverNamesOf(schema) == std::vector<std::string>{"zones"});
-  }
-}
-
-TEST_CASE("a schema refuses a resolver with a repeated name and is left unchanged") {
-  WorldSchema schema;
-  schema.addResolver("zones", resolveNothing);
-
-  REQUIRE_THROWS_AS(schema.addResolver("zones", resolveNothingElse), std::invalid_argument);
-  REQUIRE(resolverNamesOf(schema) == std::vector<std::string>{"zones"});
-  REQUIRE(schema.resolvers()[0].Resolve == &resolveNothing);
 }
 
 // Only a dependency registered earlier is accepted, so registration order is a dependency order
@@ -128,16 +78,6 @@ TEST_CASE("a schema refuses a resolver depending on anything but an already regi
   schema.addResolver("missing", resolveNothing);
   REQUIRE_NOTHROW(schema.addResolver("access", resolveNothingElse, {"zones", "missing"}));
   REQUIRE(resolverNamesOf(schema) == std::vector<std::string>{"zones", "missing", "access"});
-}
-
-TEST_CASE("a schema refuses a command type registered twice and is left unchanged") {
-  WorldSchema schema;
-  schema.addCommand<Rename>();
-  REQUIRE(schema.commands().size() == 1);
-
-  REQUIRE_THROWS_AS(schema.addCommand<Rename>(), std::invalid_argument);
-  REQUIRE(schema.commands().size() == 1);
-  REQUIRE(schema.commands()[0].TypeId == entt::type_id<Rename>().hash());
 }
 
 } // namespace

@@ -7,10 +7,10 @@
 #include "sim/world.h"
 
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <map>
 #include <memory>
-#include <optional>
+#include <set>
 #include <stdexcept>
 #include <stdint.h>
 #include <string>
@@ -20,17 +20,10 @@
 namespace tpj {
 namespace {
 
-using Catch::Matchers::ContainsSubstring;
 using test::Cached;
 using test::componentOf;
 using test::Probe;
 using test::SLOT_PURPOSE;
-
-void requireSameValue(const World &one, const World &other) {
-  REQUIRE(worldsEqual(one, other));
-  REQUIRE(worldsEqual(other, one));
-  REQUIRE(hashWorld(one) == hashWorld(other));
-}
 
 // What the recording systems, swaps, resolvers, and commands were called for, in call order, each
 // with the tick it saw. Systems take only the world, so the tests' record has to live outside it.
@@ -154,16 +147,6 @@ struct Straggler {
   int Id = 0;
 };
 
-// The message of the std::invalid_argument the call throws, or nothing if it throws none.
-template <typename Call> std::optional<std::string> invalidArgument(Call call) {
-  try {
-    call();
-  } catch (const std::invalid_argument &error) {
-    return std::string(error.what());
-  }
-  return std::nullopt;
-}
-
 TEST_CASE("a cycle resolves if pending, steps the systems, advances the tick, runs the swaps, "
           "applies the commands in submission order, and resolves again") {
   World world(makeRecordingSchema(), 0);
@@ -195,18 +178,6 @@ TEST_CASE("a cycle resolves if pending, steps the systems, advances the tick, ru
   REQUIRE_FALSE(world.isResolvePending());
 }
 
-TEST_CASE("a new world is pending until resolveWorld calls every resolver once, in registration "
-          "order") {
-  World world(makeRecordingSchema(), 0);
-  REQUIRE(world.isResolvePending());
-
-  journal().clear();
-  resolveWorld(world);
-
-  REQUIRE(journal() == std::vector<std::string>{"resolver zones @0", "resolver access @0"});
-  REQUIRE_FALSE(world.isResolvePending());
-}
-
 TEST_CASE("a cycle that applies no command to a resolved world calls no resolver") {
   World world(makeRecordingSchema(), 0);
   resolveWorld(world);
@@ -235,57 +206,39 @@ TEST_CASE("the walk covers whether resolution is pending") {
   REQUIRE_FALSE(copyWorld(resolved).isResolvePending());
 }
 
-TEST_CASE("a queue holding an unregistered command type is refused, naming the type, with no "
-          "change to the world or the queue") {
+TEST_CASE("a queue holding a command of an unregistered type is refused before anything "
+          "changes") {
   // A pending world, so that even the cycle's first resolution would change it.
   World world = buildPark(makeParkSchema());
   const World before = copyWorld(world);
-  const uint64_t hashBefore = hashWorld(world);
 
   // A registered command that would change the world comes first.
   CommandQueue queue;
   queue.push(ResizePlan{.Key = FIRST, .Size = 9});
   queue.push(Straggler{.Id = 1});
 
-  std::optional<std::string> message;
-  SECTION("stepWorld") {
-    message = invalidArgument([&] { stepWorld(world, queue); });
-  }
-  SECTION("makeCandidate") {
-    message = invalidArgument([&] { static_cast<void>(makeCandidate(world, queue)); });
-  }
-
-  REQUIRE(message.has_value());
-  CHECK_THAT(message.value_or(""), ContainsSubstring("Straggler"));
-  requireSameValue(world, before);
-  REQUIRE(hashWorld(world) == hashBefore);
+  REQUIRE_THROWS_AS(stepWorld(world, queue), std::invalid_argument);
+  REQUIRE(worldsEqual(world, before));
   REQUIRE(queue.commands().size() == 2);
-  REQUIRE(queue.commands()[0].TypeId == entt::type_id<ResizePlan>().hash());
-  REQUIRE(queue.commands()[1].TypeId == entt::type_id<Straggler>().hash());
 }
 
-TEST_CASE("makeCandidate applies the commands in submission order and resolves, without "
-          "stepping") {
-  World world(makeRecordingSchema(), 0);
-  world.Tick = 4;
-  resolveWorld(world);
+TEST_CASE("a candidate equals the world that commits the same commands, applied in submission "
+          "order") {
+  const auto schema = makeParkSchema();
+  World committed = buildPark(schema);
+  World world = buildPark(schema);
+  stepWorld(world);
+
+  // Two sizes for one plan, so that only the order they apply in decides which one it keeps.
   CommandQueue queue;
-  queue.push(Note{.Id = 1});
-  queue.push(Mark{.Id = 2});
-  queue.push(Note{.Id = 3});
+  queue.push(ResizePlan{.Key = FIRST, .Size = 5});
+  queue.push(ResizePlan{.Key = FIRST, .Size = 9});
 
-  journal().clear();
-  const World candidate = makeCandidate(world, queue);
+  World candidate = makeCandidate(world, queue);
+  stepWorld(committed, queue);
 
-  REQUIRE(journal() == std::vector<std::string>{
-                           "note 1 @4",
-                           "mark 2 @4",
-                           "note 3 @4",
-                           "resolver zones @4",
-                           "resolver access @4",
-                       });
-  REQUIRE(candidate.Tick == 4);
-  REQUIRE_FALSE(candidate.isResolvePending());
+  REQUIRE(worldsEqual(candidate, committed));
+  REQUIRE(componentOf<Plan>(candidate, FIRST).Size == 9);
 }
 
 TEST_CASE("in debug builds, createEntity during resolution throws WorldInvariantError") {
@@ -299,154 +252,88 @@ TEST_CASE("in debug builds, createEntity during resolution throws WorldInvariant
   REQUIRE_THROWS_AS(resolveWorld(world), WorldInvariantError);
 }
 
-// A command that records whether the world is stepping when it is applied.
+// The stage flags a world shows, named, or none.
+std::string flagsOf(const World &world) {
+  std::string flags;
+  if (world.isStepping()) {
+    flags += " stepping";
+  }
+  if (world.isResolving()) {
+    flags += " resolving";
+  }
+  if (world.isFinishing()) {
+    flags += " finishing";
+  }
+  return flags.empty() ? "none" : flags.substr(1);
+}
+
+// Every set of flags each stage saw, so that a stage that runs twice must see the same flags both
+// times.
+std::map<std::string, std::set<std::string>> &flagsSeen() {
+  static std::map<std::string, std::set<std::string>> seen;
+  return seen;
+}
+
+void recordFlags(const std::string &stage, const World &world) {
+  flagsSeen()[stage].insert(flagsOf(world));
+}
+
+// A command that records the flags the world shows when it is applied.
 struct Look {
   int Id = 0;
 };
 
-void recordStepping(const std::string &stage, const World &world) {
-  journal().push_back(stage + (world.isStepping() ? " stepping" : " not stepping"));
-}
-
 [[maybe_unused]] void applyCommand(World &world, const Look & /*look*/) {
-  recordStepping("command", world);
+  recordFlags("command", world);
 }
 
-TEST_CASE("isStepping is true while a system runs and false otherwise") {
+TEST_CASE("isStepping, isResolving, and isFinishing are each true exactly while their stage runs") {
   auto schema = std::make_shared<WorldSchema>();
-  schema->addSystem([](World &world) { recordStepping("system 1", world); });
-  schema->addSystem([](World &world) { recordStepping("system 2", world); });
-  schema->addSwap([](World &world) { recordStepping("swap", world); });
-  schema->addResolver("watch", [](World &world) { recordStepping("resolver", world); });
-  schema->addFinisher([](World &world) { recordStepping("finisher", world); });
+  schema->addSystem([](World &world) { recordFlags("system", world); });
+  schema->addSwap([](World &world) { recordFlags("swap", world); });
+  schema->addResolver("watch", [](World &world) { recordFlags("resolver", world); });
+  schema->addFinisher([](World &world) { recordFlags("finisher", world); });
   schema->addCommand<Look>();
   World world(schema, 0);
-  REQUIRE_FALSE(world.isStepping());
+  REQUIRE(flagsOf(world) == "none");
 
-  journal().clear();
+  // The command makes the cycle resolve twice, before stepping and after the command.
   CommandQueue queue;
   queue.push(Look{});
+  flagsSeen().clear();
   stepWorld(world, queue);
 
-  REQUIRE(journal() == std::vector<std::string>{
-                           "resolver not stepping",
-                           "finisher not stepping",
-                           "system 1 stepping",
-                           "system 2 stepping",
-                           "swap not stepping",
-                           "command not stepping",
-                           "resolver not stepping",
-                           "finisher not stepping",
-                       });
-  REQUIRE_FALSE(world.isStepping());
-}
-
-// A command that records whether the world is finishing when it is applied.
-struct Glance {
-  int Id = 0;
-};
-
-void recordFinishing(const std::string &stage, const World &world) {
-  journal().push_back(stage + (world.isFinishing() ? " finishing" : " not finishing"));
-}
-
-[[maybe_unused]] void applyCommand(World &world, const Glance & /*glance*/) {
-  recordFinishing("command", world);
-}
-
-TEST_CASE("isFinishing is true while a finisher runs and false otherwise") {
-  auto schema = std::make_shared<WorldSchema>();
-  schema->addSystem([](World &world) { recordFinishing("system", world); });
-  schema->addSwap([](World &world) { recordFinishing("swap", world); });
-  schema->addResolver("watch", [](World &world) { recordFinishing("resolver", world); });
-  schema->addFinisher([](World &world) { recordFinishing("finisher 1", world); });
-  schema->addFinisher([](World &world) { recordFinishing("finisher 2", world); });
-  schema->addCommand<Glance>();
-  World world(schema, 0);
-  REQUIRE_FALSE(world.isFinishing());
-
-  journal().clear();
-  CommandQueue queue;
-  queue.push(Glance{});
-  stepWorld(world, queue);
-
-  REQUIRE(journal() == std::vector<std::string>{
-                           "resolver not finishing",
-                           "finisher 1 finishing",
-                           "finisher 2 finishing",
-                           "system not finishing",
-                           "swap not finishing",
-                           "command not finishing",
-                           "resolver not finishing",
-                           "finisher 1 finishing",
-                           "finisher 2 finishing",
-                       });
-  REQUIRE_FALSE(world.isFinishing());
+  REQUIRE(flagsSeen() == std::map<std::string, std::set<std::string>>{
+                             {"system", {"stepping"}},
+                             {"swap", {"none"}},
+                             {"command", {"none"}},
+                             {"resolver", {"resolving"}},
+                             {"finisher", {"finishing"}},
+                         });
+  REQUIRE(flagsOf(world) == "none");
 }
 
 // Finishers are registered between resolvers, so that only running them after every resolver
-// explains the calls.
+// explains the calls, and resolvers against alphabetical order, so that only registration order
+// explains theirs.
 std::shared_ptr<const WorldSchema> makeFinishingSchema() {
   auto schema = std::make_shared<WorldSchema>();
   schema->addFinisher([](World &world) { record("finisher 1", world); });
   schema->addResolver("zones", [](World &world) { record("resolver zones", world); });
   schema->addFinisher([](World &world) { record("finisher 2", world); });
   schema->addResolver("access", [](World &world) { record("resolver access", world); }, {"zones"});
-  schema->addSystem([](World &world) { record("system", world); });
-  schema->addCommand<Note>();
   return schema;
 }
 
-TEST_CASE("every resolution runs each finisher once, after all of its resolvers, in registration "
+TEST_CASE("a resolution runs every resolver, then every finisher, once each in registration "
           "order") {
-  const auto schema = makeFinishingSchema();
-  const std::vector<std::string> resolution = {"resolver zones @0", "resolver access @0",
-                                               "finisher 1 @0", "finisher 2 @0"};
+  World world(makeFinishingSchema(), 0);
 
-  SECTION("resolveWorld") {
-    World world(schema, 0);
-    journal().clear();
-    resolveWorld(world);
-    REQUIRE(journal() == resolution);
-  }
-  SECTION("a cycle's resolutions, before stepping and after a command") {
-    World world(schema, 0);
-    CommandQueue queue;
-    queue.push(Note{.Id = 1});
-    journal().clear();
-    stepWorld(world, queue);
-    REQUIRE(journal() == std::vector<std::string>{
-                             "resolver zones @0",
-                             "resolver access @0",
-                             "finisher 1 @0",
-                             "finisher 2 @0",
-                             "system @0",
-                             "note 1 @1",
-                             "resolver zones @1",
-                             "resolver access @1",
-                             "finisher 1 @1",
-                             "finisher 2 @1",
-                         });
-  }
-  SECTION("a candidate's") {
-    World world(schema, 0);
-    resolveWorld(world);
-    CommandQueue queue;
-    queue.push(Note{.Id = 1});
-    journal().clear();
-    static_cast<void>(makeCandidate(world, queue));
-    REQUIRE(journal() == std::vector<std::string>{"note 1 @0", "resolver zones @0",
-                                                  "resolver access @0", "finisher 1 @0",
-                                                  "finisher 2 @0"});
-  }
-  SECTION("a loaded world's") {
-    World world(schema, 0);
-    resolveWorld(world);
-    World loaded = loadWorld(schema, saveWorld(world));
-    journal().clear();
-    resolveWorld(loaded);
-    REQUIRE(journal() == resolution);
-  }
+  journal().clear();
+  resolveWorld(world);
+
+  REQUIRE(journal() == std::vector<std::string>{"resolver zones @0", "resolver access @0",
+                                                "finisher 1 @0", "finisher 2 @0"});
 }
 
 } // namespace

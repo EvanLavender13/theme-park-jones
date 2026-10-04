@@ -36,7 +36,7 @@ When dispatched with a SLICE.md, you write integration tests over the simulation
 
 ## Rewrite mode
 
-When dispatched with closing-audit findings, rewrite only the cases they name, each to assert the property its finding's suggested fix states, following the procedure below with those properties as its list. When the specs do not determine a property, report it as a gap. A case a finding says to delete is not yours; it is deleted at the close.
+When dispatched with closing-audit findings, or with entries of the inventory of tests to rewrite, rewrite only the cases they name, each to assert the property its finding's suggested fix or its entry states, merging cases where an entry says to, following the procedure below with those properties as its list. When the specs do not determine a property, report it as a gap. A case a finding says to delete is not yours; it is deleted at the close.
 
 ## Procedure
 
