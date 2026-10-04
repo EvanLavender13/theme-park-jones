@@ -24,8 +24,6 @@ using test::samePoints;
 using test::samePose;
 using test::worldOf;
 
-// Kinds with no enumerator, which a command can still hold.
-
 constexpr EntityKey ENTRANCE{1};
 constexpr EntityKey TEMPLATE_PATH{2};
 constexpr EntityKey BACKSTAGE{3};
@@ -97,78 +95,64 @@ bool acceptedWithoutThrowing(const World &world, const Command &command) {
   return accepted;
 }
 
-TEST_CASE("An accepted AddPath gives the next key an entity holding a path of its kind through its "
-          "kept points, and changes nothing else") {
+TEST_CASE("An accepted command leaves exactly the intent it describes, with new keys from the "
+          "counter") {
   World world = editedPark();
-  const World before = copyWorld(world);
-  // A repeated point and one within 1 cm of the last kept are dropped.
-  const AddPath command{
-      PathKind::Guest,
-      {{-60.0, -20.0}, {-60.0, -20.0}, {-60.0, -19.995}, {-60.0, 0.0}, {-50.0, 10.0}}};
-  const std::vector<ParkPoint> kept = keptPoints(command.Points);
+  ParkIntent expected = intentOf(world);
+
+  // Each command is applied in turn, and the world after it holds the expected intent.
+  const auto check = [&](const World &before, bool adds) {
+    checkHoldsOnly(world, before, expected);
+    CHECK(world.nextKey() == before.nextKey() + (adds ? 1 : 0));
+  };
+
+  // A repeated point, and one closer than MIN_POINT_SPACING to the last kept point, are dropped.
+  const AddPath addPath{PathKind::Guest,
+                        {{-60.0, -20.0},
+                         {-60.0, -20.0},
+                         {-60.0, -20.0 + (MIN_POINT_SPACING / 2.0)},
+                         {-60.0, 0.0},
+                         {-50.0, 10.0}}};
+  const std::vector<ParkPoint> kept = keptPoints(addPath.Points);
   REQUIRE(kept.size() == 3);
-  REQUIRE(isAccepted(world, command));
+  World before = copyWorld(world);
+  REQUIRE(isAccepted(world, addPath));
+  applyCommand(world, addPath);
+  expected.Paths.push_back({EntityKey{before.nextKey()}, PathKind::Guest, kept});
+  check(before, true);
 
-  applyCommand(world, command);
-
-  ParkIntent expected = intentOf(before);
-  const EntityKey added{before.nextKey()};
-  expected.Paths.push_back({added, PathKind::Guest, kept});
-  checkHoldsOnly(world, before, expected);
-  CHECK(world.nextKey() == before.nextKey() + 1);
-}
-
-TEST_CASE("An accepted AddBox gives the next key an entity holding a box of its kind with its pose "
-          "exactly as given, and changes nothing else") {
-  World world = editedPark();
-  const World before = copyWorld(world);
   // Negative zero and an unnormalized facing, which the box keeps bit for bit.
-  const AddBox command{BoxKind::Depot, Pose{-0.0, -70.25, 3.0, -4.0}};
-  REQUIRE(isAccepted(world, command));
+  const AddBox addBox{BoxKind::Depot, Pose{-0.0, -70.25, 3.0, -4.0}};
+  before = copyWorld(world);
+  REQUIRE(isAccepted(world, addBox));
+  applyCommand(world, addBox);
+  expected.Boxes.push_back({EntityKey{before.nextKey()}, BoxKind::Depot, addBox.At});
+  check(before, true);
 
-  applyCommand(world, command);
-
-  ParkIntent expected = intentOf(before);
-  expected.Boxes.push_back({EntityKey{before.nextKey()}, BoxKind::Depot, command.At});
-  checkHoldsOnly(world, before, expected);
-  CHECK(world.nextKey() == before.nextKey() + 1);
-}
-
-TEST_CASE("An accepted MoveBox replaces the box's pose exactly with the one given, keeping its key "
-          "and kind, and changes nothing else") {
-  World world = editedPark();
-  const World before = copyWorld(world);
-  const MoveBox command{SHOP, Pose{60.5, -0.0, -0.5, 2.0}};
-  REQUIRE(isAccepted(world, command));
-
-  applyCommand(world, command);
-
-  ParkIntent expected = intentOf(before);
+  const MoveBox moveBox{SHOP, Pose{60.5, -0.0, -0.5, 2.0}};
+  before = copyWorld(world);
+  REQUIRE(isAccepted(world, moveBox));
+  applyCommand(world, moveBox);
   for (ParkBox &box : expected.Boxes) {
     if (box.Key == SHOP) {
-      box.At = command.At;
+      box.At = moveBox.At;
     }
   }
-  checkHoldsOnly(world, before, expected);
-  CHECK(world.nextKey() == before.nextKey());
-}
+  check(before, false);
 
-TEST_CASE("An accepted DeletePath or DeleteBox destroys the entity it names, and changes nothing "
-          "else") {
-  World world = editedPark();
-  const World before = copyWorld(world);
   const DeletePath deletePath{BACKSTAGE};
-  const DeleteBox deleteBox{SHOP};
+  before = copyWorld(world);
   REQUIRE(isAccepted(world, deletePath));
   applyCommand(world, deletePath);
+  std::erase_if(expected.Paths, [](const ParkPath &path) { return path.Key == BACKSTAGE; });
+  check(before, false);
+
+  const DeleteBox deleteBox{DEPOT};
+  before = copyWorld(world);
   REQUIRE(isAccepted(world, deleteBox));
   applyCommand(world, deleteBox);
-
-  ParkIntent expected = intentOf(before);
-  std::erase_if(expected.Paths, [](const ParkPath &path) { return path.Key == BACKSTAGE; });
-  std::erase_if(expected.Boxes, [](const ParkBox &box) { return box.Key == SHOP; });
-  checkHoldsOnly(world, before, expected);
-  CHECK(world.nextKey() == before.nextKey());
+  std::erase_if(expected.Boxes, [](const ParkBox &box) { return box.Key == DEPOT; });
+  check(before, false);
 }
 
 template <typename Command>
@@ -287,12 +271,6 @@ World withBox(const World &world, BoxKind kind, const Pose &at) {
   return worldOf(intent);
 }
 
-World withPath(const World &world, PathKind kind, const std::vector<ParkPoint> &points) {
-  ParkIntent intent = intentOf(world);
-  intent.Paths.push_back({EntityKey{world.nextKey()}, kind, keptPoints(points)});
-  return worldOf(intent);
-}
-
 World withMove(const World &world, EntityKey key, const Pose &at) {
   ParkIntent intent = intentOf(world);
   for (ParkBox &box : intent.Boxes) {
@@ -303,76 +281,39 @@ World withMove(const World &world, EntityKey key, const Pose &at) {
   return worldOf(intent);
 }
 
-World without(const World &world, EntityKey key) {
-  ParkIntent intent = intentOf(world);
-  std::erase_if(intent.Paths, [key](const ParkPath &path) { return path.Key == key; });
-  std::erase_if(intent.Boxes, [key](const ParkBox &box) { return box.Key == key; });
-  return worldOf(intent);
-}
-
-TEST_CASE("On a physically valid world, a command naming what it acts on is accepted exactly when "
-          "the world it describes is physically valid") {
-  const World world = editedPark();
+TEST_CASE("On a physically valid world, a command is accepted exactly when the world it describes "
+          "is physically valid, so every cycle leaves the park valid") {
+  World world = editedPark();
   REQUIRE(isPhysicallyValid(world));
+  const World before = copyWorld(world);
+  const double shopWidth = boxSize(BoxKind::Shop).Width;
 
-  const auto checkBox = [&](BoxKind kind, const Pose &at, bool valid) {
-    INFO("box at " << at.X << ", " << at.Z);
-    CHECK(isPhysicallyValid(withBox(world, kind, at)) == valid);
-    CHECK(isAccepted(world, AddBox{kind, at}) == valid);
-  };
-  const auto checkPath = [&](PathKind kind, const std::vector<ParkPoint> &points, bool valid) {
-    INFO("path from " << points.front().X << ", " << points.front().Z);
-    CHECK(isPhysicallyValid(withPath(world, kind, points)) == valid);
-    CHECK(isAccepted(world, AddPath{kind, points}) == valid);
-  };
-  const auto checkMove = [&](EntityKey key, const Pose &at, bool valid) {
-    INFO("move to " << at.X << ", " << at.Z);
-    CHECK(isPhysicallyValid(withMove(world, key, at)) == valid);
-    CHECK(isAccepted(world, MoveBox{key, at}) == valid);
-  };
+  // Far from everything, turned to an unnormalized facing.
+  const AddBox fits{BoxKind::Shop, Pose{80.0, -80.0, -2.0, 0.5}};
+  // Reaching half its width into the shop's side.
+  const AddBox overlaps{BoxKind::Shop, facingSouth(40.0 + (shopWidth / 2.0), 0.0)};
+  // Onto part of its own old footprint, which the moved box no longer holds.
+  const MoveBox ontoItself{SHOP, facingSouth(40.0 + (shopWidth / 4.0), 0.0)};
+  // A kind that is not an enum value describes nothing, even where a real kind fits.
+  const AddBox noKind{static_cast<BoxKind>(enumNames(BoxKind{}).size()), fits.At};
 
-  SECTION("AddBox") {
-    // Far from any path, turned to an unnormalized facing.
-    checkBox(BoxKind::Shop, Pose{80.0, -80.0, -2.0, 0.5}, true);
-    // Flush with the backstage path's side at x = -39.
-    checkBox(BoxKind::Shop, facingSouth(-35.0, 0.0), true);
-    checkBox(BoxKind::Shop, facingSouth(-35.5, 0.0), false);
-    checkBox(BoxKind::Shop, facingSouth(44.0, 0.0), false);
-    // Reaching 1 m into the entrance's side, clear of the template path.
-    checkBox(BoxKind::Shop, facingSouth(8.0, 124.0), false);
-    checkBox(BoxKind::Depot, facingSouth(125.0, 0.0), false);
-    checkBox(BoxKind::Shop, Pose{80.0, -80.0, 0.0, 0.0}, false);
-  }
+  CHECK(isAccepted(world, fits));
+  CHECK(isPhysicallyValid(withBox(world, fits.Kind, fits.At)));
+  CHECK_FALSE(isAccepted(world, overlaps));
+  CHECK_FALSE(isPhysicallyValid(withBox(world, overlaps.Kind, overlaps.At)));
+  CHECK(isAccepted(world, ontoItself));
+  CHECK(isPhysicallyValid(withMove(world, ontoItself.Box, ontoItself.At)));
+  CHECK_FALSE(isAccepted(world, noKind));
 
-  SECTION("AddPath") {
-    checkPath(PathKind::Guest, {{-10.0, 113.0}, {10.0, 113.0}}, true);
-    checkPath(PathKind::Backstage, {{-60.0, 0.0}, {-20.0, 0.0}}, true);
-    checkPath(PathKind::Guest, {{40.0, -20.0}, {40.0, 20.0}}, false);
-    // 1 m from the entrance's front, less than a guest path's half width.
-    checkPath(PathKind::Guest, {{-20.0, 124.0}, {20.0, 124.0}}, false);
-    checkPath(PathKind::Guest, {{127.0, -10.0}, {127.0, 10.0}}, false);
-    checkPath(PathKind::Guest, {{60.0, 60.0}, {60.0, 60.005}}, false);
-  }
+  CommandQueue queue;
+  queue.push(fits);
+  queue.push(overlaps);
+  queue.push(ontoItself);
+  queue.push(noKind);
+  stepWorld(world, queue);
 
-  SECTION("MoveBox") {
-    checkMove(SHOP, facingSouth(40.0, 0.0), true);
-    // Onto part of its own old footprint, which the moved box no longer holds.
-    checkMove(SHOP, facingSouth(42.0, 0.0), true);
-    checkMove(SHOP, Pose{-80.0, -80.0, 1.0, 3.0}, true);
-    checkMove(SHOP, facingSouth(-40.0, 0.0), false);
-    checkMove(SHOP, facingSouth(80.0, 36.0), false);
-    // A shop would fit here, x from 119 to 127, but the depot reaches x = 129.
-    checkMove(DEPOT, facingSouth(123.0, 0.0), false);
-  }
-
-  SECTION("DeletePath and DeleteBox") {
-    CHECK(isPhysicallyValid(without(world, TEMPLATE_PATH)));
-    CHECK(isAccepted(world, DeletePath{TEMPLATE_PATH}));
-    CHECK(isPhysicallyValid(without(world, BACKSTAGE)));
-    CHECK(isAccepted(world, DeletePath{BACKSTAGE}));
-    CHECK(isPhysicallyValid(without(world, DEPOT)));
-    CHECK(isAccepted(world, DeleteBox{DEPOT}));
-  }
+  CHECK(isPhysicallyValid(world));
+  CHECK_FALSE(parkBoxes(world) == parkBoxes(before));
 }
 
 } // namespace

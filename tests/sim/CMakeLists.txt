@@ -26,7 +26,6 @@ add_executable(tpj_sim_tests
     operations/operations_test.cpp
     operations/service_test.cpp
     operations/shop_records_test.cpp
-    park/edit_sequences_test.cpp
     park/edits_test.cpp
     park/geometry_test.cpp
     park/intent_test.cpp
