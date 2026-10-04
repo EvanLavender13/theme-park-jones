@@ -15,7 +15,7 @@ It resolves the park and adds 2,000 guests through addGuest, spread evenly along
 makeFullPark, tpj_bench, and full.park are test utilities. They have no tests. The implementer checks each criterion by running the commands, and the feature's report gives their output.
 
 1. `build/windows-release/tpj_bench.exe --full-park tests/parks/stress/full.park` exits with status 0. So every command makeFullPark applied was accepted, the park is physically valid, and no shop is starved.
-2. `tpj_bench --full-park PATH --warm-ticks 60` from windows-release and windows-debug writes two identical files, byte for byte. So makeFullPark gives the same text on both Windows builds. Linux is checked at release, by Evan's ruling. The full warm-up takes the same code path for 30 times as many ticks.
+2. `tpj_bench --full-park PATH --warm-ticks 60` from windows-release and windows-debug writes two identical files, byte for byte. So makeFullPark gives the same text on both Windows builds. Linux is checked at release, by the user's ruling. The full warm-up takes the same code path for 30 times as many ticks.
 3. full.park holds:
    - 21 guest paths and 6 backstage paths;
    - 30 shop boxes and 3 depot boxes;
@@ -109,4 +109,4 @@ World makeFullPark(uint64_t warmTicks);
 
 ## Open questions
 
-- Whether the food overlay is costly on windows-release on the full park. Resolved by criterion 4's report. Evan decides whether affordable-overlay goes ahead.
+- Whether the food overlay is costly on windows-release on the full park. Resolved by criterion 4's report. The user decides whether affordable-overlay goes ahead.

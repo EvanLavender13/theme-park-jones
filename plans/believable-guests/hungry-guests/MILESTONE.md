@@ -85,11 +85,11 @@ Unordered pool this milestone draws later features from.
 ## Open questions
 
 - Whether the tuning values give a slice that reads well: guests visibly get hungry, most eat once, and a cut shop leaves some hungry. Resolved by watching fed.park and cut.park in the app once eating-guests lands, and adjusting.
-- The player-facing form of guest explanations (docs/open-questions.md). Evan decides. The inspection record and legible-simulation's ImGui inspector stand in.
+- The player-facing form of guest explanations (docs/open-questions.md). The user decides. The inspection record and legible-simulation's ImGui inspector stand in.
 
 ## Research notes
 
-- Carrying places during the resolution follows the field's Previous slot: path-networks keeps the previous networks, a guests finisher carries each place with carryOver, and a routes finisher registered after it drops them before the resolution ends, so saves and first resolutions are unaffected. Evan chose it over re-snapping at the guest's step.
+- Carrying places during the resolution follows the field's Previous slot: path-networks keeps the previous networks, a guests finisher carries each place with carryOver, and a routes finisher registered after it drops them before the resolution ends, so saves and first resolutions are unaffected. The user chose it over re-snapping at the guest's step.
 - A guest decides at a node within the tick and walks on with the rest, so its speed does not depend on how nodes are spaced.
 - Hungry footfall is an exponential moving average per stretch of the summed hunger on it, with one number per stretch, one time constant, and no threshold.
 - Guests get a mesh of their own, rebuilt every frame from their records, since the park mesh is rebuilt only when intent changes.

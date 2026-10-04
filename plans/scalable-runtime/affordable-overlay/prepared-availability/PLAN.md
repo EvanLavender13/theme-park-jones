@@ -596,7 +596,7 @@ Expected: the line for windows-release tests/parks/stress/full.park food-overlay
 Step 3: Capture the overlay with the windows-release build the after report made
 
 Run: `build/windows-release/ThemeParkJones.exe --park tests/parks/warm.park --ticks 3000 --overlay food --capture build/prepared-availability-after.bmp; echo $?`
-Expected: `0`. Open it beside build/prepared-availability-before.bmp: the same bands in the same colors, apart from where guests stand (criterion 2). Put both captures in the feature's report, and ask Evan to try criterion 2's hover by play.
+Expected: `0`. Open it beside build/prepared-availability-before.bmp: the same bands in the same colors, apart from where guests stand (criterion 2). Put both captures in the feature's report, and ask the user to try criterion 2's hover by play.
 
 ### Task 14: Commit
 

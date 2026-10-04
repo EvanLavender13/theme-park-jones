@@ -7,7 +7,7 @@ description: Use whenever the user asks to research something, or whenever a pla
 
 ## Purpose
 
-Research a question and keep what matters. Run the searches, synthesize the findings, and write them to `RESEARCH.md` at the node the research serves. That way the details survive when the session ends.
+Research a question and keep what matters. Run the searches, synthesize the findings, and write them to `RESEARCH.md` at the node the research serves, so the details survive when the session ends.
 
 The brief at that node keeps a one-line conclusion in its "Research notes" section. `RESEARCH.md` holds the details behind it.
 
@@ -50,7 +50,7 @@ Use one `##` section per question. Add a section when you research a new questio
 
 ## Research with no node
 
-Sometimes the research serves no existing plans node, such as an open question with no slice or capability yet. In that case, ask the user where it should attach. The options are:
+If the research serves no existing plans node, such as an open question with no slice or capability yet, ask the user where it should attach. The options are:
 
 - the nearest existing capability
 - a node to be created next
@@ -62,9 +62,9 @@ Don't invent a node, and don't write `RESEARCH.md` outside the plans tree.
 
 When narrowing, ask one question per message. Settle the question with the user before spending searches on a broad request.
 
-Cite enough to find the source again. A source is a URL plus a one-line note on what it contributed. Don't store full pages or long excerpts.
+Cite enough to find the source again. Record each source as a URL plus a one-line note on what it contributed. Don't store full pages or long excerpts.
 
-The details go here; the conclusions go in the brief. Someone reading the brief gets the answer. Someone who needs the reasoning opens `RESEARCH.md`.
+Put the details here and the conclusions in the brief. A reader of the brief gets the answer, and a reader who needs the reasoning opens `RESEARCH.md`.
 
 ## What this skill does not do
 

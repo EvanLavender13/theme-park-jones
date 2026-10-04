@@ -8,7 +8,7 @@ The function is a template found by argument-dependent lookup. It lives beside t
 
 Rejected:
 
-- Five hand-written functions per type: they can drift apart, so a field hashed but not saved would be lost silently. Evan chose visitFields.
+- Five hand-written functions per type: they can drift apart, so a field hashed but not saved would be lost silently. The user chose visitFields.
 - Reflection through a macro or code generator: more machinery than a function per type, for no gain at this size.
 
 Sources:

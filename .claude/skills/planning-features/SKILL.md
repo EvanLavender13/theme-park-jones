@@ -10,7 +10,7 @@ description: Use whenever the user wants to plan a feature inside an approved mi
 Take one feature from a milestone brief. Produce two artifacts:
 
 - FEATURE.md says what the feature does as the player and other modules see it, how each criterion is confirmed, and the few tests it adds.
-- PLAN.md has bite-sized tasks the implementer can follow without making design decisions.
+- PLAN.md has small tasks the implementer can follow without making design decisions.
 
 ## Hard gate
 
@@ -33,11 +33,11 @@ Create a task for each item. Complete them in order.
 5. Research implementation patterns with the `researching` skill. It writes findings to plans/<capability-slug>/<milestone-slug>/<feature-slug>/RESEARCH.md.
 6. Ask clarifying questions, one at a time. Cover acceptance criteria, edge cases, and integration boundaries.
 7. Name the simplest version that works. Strip polish, edge cases, and nice-to-haves, and send them to `maintaining-backlog`.
-8. Map the medium: the fields and flows the feature samples, emits, draws, or supplies. Any state the feature registers is covered by the park world checks once a park file holds it. Name that park file. Apply the principles gate from `planning-overview`.
+8. Map the medium: the fields and flows the feature samples, emits, draws, or supplies. If the feature registers state, the park world checks cover that state once a park file holds it. Name that park file. Apply the principles gate from `planning-overview`.
 9. Draft the spec change. Write the exact sentences to add or change in each affected SPEC.md. State observable behavior only, in the shape docs/conventions.md gives. Also draft the public interface (header declarations) the feature exposes. How the behavior is achieved goes in PLAN.md.
 10. Place each behavior the feature adds, following decision 0027. Name the module and component that own it, and say why. If a behavior fits no existing component, give it a new one. Don't add a new concern to src/app/main.cpp or src/scenarios/main.cpp until sound-architecture restructures them. If a feature must touch one of them, say what it adds there and that it is composition only.
 11. List the files to touch, with specific paths. Mark each one create or modify.
-12. Break the work into bite-sized tasks, each one action of two to five minutes, using the task structure below.
+12. Break the work into small tasks, each one action of two to five minutes, using the task structure below.
 13. Write FEATURE.md at plans/<capability-slug>/<milestone-slug>/<feature-slug>/FEATURE.md.
 14. Write PLAN.md at the same path.
 15. Self-review, and fix problems inline. Check that:
@@ -62,9 +62,9 @@ Write each criterion as what the feature does as the player or another module ob
 - By a check the implementer runs. Give its command and expected output.
 - By a listed test.
 
-A feature needs a handful of criteria. More than about eight means the feature is too big, or its criteria are listing examples.
+Give a feature a handful of criteria. If it has more than about eight, the feature is too big, or its criteria are listing examples.
 
-Tests follow docs/testing.md. List a test only to reproduce a bug the feature fixes, or as an integration test of a cross-module consequence the feature exists to make. State that test as cause and effect. Most features list no tests. The `test-writer` agent writes the listed tests in a separate pass without reading PLAN.md. So each entry in the Tests section must say what to set up, what to change, and what difference to expect. Don't put test code in PLAN.md.
+Follow docs/testing.md for tests. List a test only to reproduce a bug the feature fixes, or as an integration test of a cross-module consequence the feature exists to make. State that test as cause and effect. Most features list no tests. Because the `test-writer` agent writes the listed tests in a separate pass without reading PLAN.md, each entry in the Tests section must say what to set up, what to change, and what difference to expect. Don't put test code in PLAN.md.
 
 Order the work in PLAN.md like this:
 
@@ -74,15 +74,15 @@ Order the work in PLAN.md like this:
 4. Implementation tasks.
 5. The commit.
 
-Every PLAN.md has a Placement section. The pre-commit hook refuses a commit that adds a PLAN.md without a line reading "## Placement". The reviewer judges what the section says.
+Give every PLAN.md a Placement section. If a commit adds a PLAN.md without a line reading "## Placement", the pre-commit hook refuses it. The reviewer judges what the section says.
 
 Graybox first. When a feature combines mechanics and presentation, deliver the mechanics first and add presentation in later tasks.
 
-Make one commit per feature. The final task ends with the feature's single commit, made with the `commit-hygiene` skill. No other task commits.
+Make one commit per feature. End the final task with the feature's single commit, made with the `commit-hygiene` skill. Don't commit in any other task.
 
-Put one concept in each task. A task that combines two unrelated changes hides a dependency, so split it.
+Put one concept in each task. If a task combines two unrelated changes, split it, because the combination hides a dependency.
 
-Defer everything optional. Anything that doesn't contribute to the acceptance criteria goes in FEATURE.md's Out of scope section and into the backlog.
+Defer everything optional. If something doesn't contribute to the acceptance criteria, put it in FEATURE.md's Out of scope section and in the backlog.
 
 ## Task structure
 
@@ -103,7 +103,7 @@ Run: `exact command`
 Expected: <exact expected output>
 ```
 
-Verify each implementation task with the narrowest check that covers it. That is one of these: the windows-debug build of the targets the task changes, a run of the app or a `--capture`, a `tpj_scenarios --compare`, or the listed tests run directly with a filter. Run the full windows-debug build, its ctest run, and `scripts/tidy.sh` once, when you confirm the feature's acceptance criteria (decision 0030).
+Verify each implementation task with the narrowest check that covers it, which is one of these: the windows-debug build of the targets the task changes, a run of the app or a `--capture`, a `tpj_scenarios --compare`, or the listed tests run directly with a filter. Run the full windows-debug build, its ctest run, and `scripts/tidy.sh` once, when you confirm the feature's acceptance criteria (decision 0030).
 
 ## FEATURE.md format
 
@@ -140,7 +140,7 @@ Code, libraries, content, or sibling features required.
 
 ## Out of scope
 
-What this feature deliberately does not do. Items that still have value go in the backlog.
+What this feature deliberately does not do. If an item still has value, put it in the backlog.
 
 ## Open questions
 

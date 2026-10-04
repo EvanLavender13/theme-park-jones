@@ -18,7 +18,7 @@ Sources: plans/plausible-operations/CAPABILITY.md, foundation criteria; plans/sl
 
 ## How is a starved shop marked?
 
-A cube floating over the shop's roof in STARVED_COLOR, as Parkitect marks an out-of-stock shop with an icon above it. Evan chose it over recoloring the box or its roof, since the box keeps the color that says it is a shop. The cube is appendBox's faces for a small square footprint at the shop's pose, raised above the roof, with a bottom face so it is solid from a low camera. Starved depends on intent alone in every world the app holds, since route distance is published only by resolution, so the park mesh, rebuilt when intent changes or a park is opened, always shows it.
+A cube floating over the shop's roof in STARVED_COLOR, as Parkitect marks an out-of-stock shop with an icon above it. The user chose it over recoloring the box or its roof, since the box keeps the color that says it is a shop. The cube is appendBox's faces for a small square footprint at the shop's pose, raised above the roof, with a bottom face so it is solid from a low camera. Starved depends on intent alone in every world the app holds, since route distance is published only by resolution, so the park mesh, rebuilt when intent changes or a park is opened, always shows it.
 
 The ghost appends its candidate world's marks at GHOST_ALPHA, after its walkways, as it does the candidate's walkways. A ghost mark lying on a committed one blends to the same color, so only the marks the edit adds stand out: hovering a backstage path with the delete tool shows a translucent mark over each shop it would starve, and placing or moving a shop where it has no supply route shows its mark on the ghost.
 
@@ -28,6 +28,6 @@ Sources: plans/plausible-operations/supplied-food-shop/MILESTONE.md, research no
 
 ## What does the Debug panel show?
 
-One line per shop box, in key order: its key, stock, queue, on order, and limiting factor by name. Starved needs no word of its own, since a shop is starved exactly when its factor is no supply route. Evan asked for it to be folded in, so the record is visible while playing before legible-simulation's inspector replaces it.
+One line per shop box, in key order: its key, stock, queue, on order, and limiting factor by name. Starved needs no word of its own, since a shop is starved exactly when its factor is no supply route. The user asked for it to be folded in, so the record is visible while playing before legible-simulation's inspector replaces it.
 
 Sources: none; follows from the milestone's deepening candidate this feature draws.

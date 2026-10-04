@@ -56,7 +56,7 @@ The exact text is in PLAN.md, Task 2.
 - Entries at a NaN distance are not tested. The debug walk refuses a NaN in any registered double, so no world holds such an entry.
 - An entry at -0.0 resolves to the node of its carrier's stop at 0, and is among that node's stop places. The spec's resolve compares distances as numbers, and -0.0 is neither below 0 nor different from it, as carry-over's rule on 0 and -0 also says.
 
-- Criterion 5 was amended during implementation, with Evan's agreement. It asked for resolve's share to fall under 5%, but the samples themselves still resolve their own places, once each, and guests resolve their places while walking. Those calls leave resolve at 6.75% of a run 1.4 times shorter, though its time fell about tenfold. The lasting property is that no entry is resolved, so the criterion now asks for that and a fivefold fall in resolve's time.
+- Criterion 5 was amended during implementation, with the user's agreement. It asked for resolve's share to fall under 5%, but the samples themselves still resolve their own places, once each, and guests resolve their places while walking. Those calls leave resolve at 6.75% of a run 1.4 times shorter, though its time fell about tenfold. The lasting property is that no entry is resolved, so the criterion now asks for that and a fivefold fall in resolve's time.
 
 ## Open questions
 

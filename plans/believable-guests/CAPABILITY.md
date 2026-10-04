@@ -75,7 +75,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 ## Open questions
 
 - Arrival rate, stay length, hunger rates, walking speed, softmax temperature, the carry-on utility, and the commitment bonus are tuning values. They are set while planning hungry-guests, with the carry-on utility tuned with several shops present because of logit's independence of irrelevant alternatives.
-- The player-facing form of guest explanations (docs/open-questions.md). Evan decides. ImGui inspectors stand in, through legible-simulation.
+- The player-facing form of guest explanations (docs/open-questions.md). The user decides. ImGui inspectors stand in, through legible-simulation.
 
 ## Research notes
 

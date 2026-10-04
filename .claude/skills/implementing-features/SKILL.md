@@ -7,7 +7,7 @@ description: Use whenever the user wants to build a feature whose PLAN.md exists
 
 ## Purpose
 
-Carry out an approved PLAN.md task by task. Any tests the feature lists are written in a separate pass from the implementation, and a fresh-context reviewer checks the result. The feature is committed once, at the end.
+Carry out an approved PLAN.md task by task. If the feature lists tests, a separate pass writes them, apart from the implementation. A fresh-context reviewer checks the result. Commit the feature once, at the end.
 
 ## Hard gate
 
@@ -23,11 +23,11 @@ Create a task for each item. Complete them in order.
 2. Create a feature branch. If you're on the default branch, run `git switch -c <feature-slug>`. If you're already on the branch named `<feature-slug>`, stay on it. If you're on any other branch, stop and ask the user.
 3. Do the spec and interface tasks. The windows-debug build must succeed with the stub definitions.
 4. Run the test pass if FEATURE.md's Tests section lists tests. If it lists none, skip this step.
-    - First, check each listed test against docs/testing.md. A feature adds only two kinds of test: one that reproduces a bug the feature fixes, and an integration test of a cross-module consequence the feature exists to make. Fix FEATURE.md before going on.
+    - First, check each listed test against docs/testing.md. A feature may add only two kinds of test: one that reproduces a bug the feature fixes, and an integration test of a cross-module consequence the feature exists to make. If a listed test is neither, fix FEATURE.md before going on.
     - Then dispatch the `test-writer` agent with the Agent tool, using the template below.
     - When it returns, confirm that its tests build. Confirm that the tests for unimplemented behavior fail for that reason, not because of a compile error or a broken harness.
     - Settle each gap its report lists before implementing. If a gap follows from the principles and specs, record it as a spec decision in FEATURE.md. If it needs a design choice, take it to the user. If it can wait, record it in FEATURE.md's Open questions. Don't leave a gap only in the report.
-5. Do the implementation tasks in order. Perform each task's steps and run its verification before starting the next. Verify narrowly: build only the targets the task changes, and run only the test executables that cover it, filtered to the relevant files or test names. The full build and ctest belong to step 6.
+5. Do the implementation tasks in order. Perform each task's steps and run its verification before starting the next. Verify narrowly: build only the targets the task changes, and run only the test executables that cover it, filtered to the relevant files or test names. Leave the full build and ctest for step 6.
 6. Confirm every acceptance criterion in FEATURE.md by the means it names: play, a `--capture` run, a `tpj_scenarios --compare` showing the simulation unchanged, or a listed test.
     - If the feature registers state, confirm that a park file in tests/parks/ holds it, so the park world checks cover it.
     - The full windows-debug build must have no warnings, `ctest.exe --preset windows-debug` must pass, and `scripts/tidy.sh` must be clean.

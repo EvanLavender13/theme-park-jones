@@ -60,7 +60,7 @@ park-session is the core. It makes the world's replacement one call in one compo
 
 ## Open questions
 
-None. Evan chose the own loop over SDL3's main callbacks and placed the park summary in legible and the graph view in app (RESEARCH.md).
+None. The user chose the own loop over SDL3's main callbacks and placed the park summary in legible and the graph view in app (RESEARCH.md).
 
 ## Research notes
 

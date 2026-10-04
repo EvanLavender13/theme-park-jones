@@ -15,7 +15,7 @@ Decision 0027 places each behavior this feature adds:
 - Making the candidate of an accepted edit and a shop ghost's context: legible, new component legible/preview.h. It reads intent, the networks, fields, and operations' nearestDepot, and makes the candidate with makeCandidate, with no window, so tests check it.
 - Drawing a ghost's walkways and marks from a given candidate: render, park_mesh.h's buildGhostMesh overload. Render still links no tpj_legible: it takes a World.
 - Drawing the shop context: app, new component app/shop_context_tooltip.h, the platform edge. It only renders a ShopContext.
-- Composing them: main.cpp keeps the preview with legible's keepPreview, which alone decides when it is stale, and rebuilds the ghost and overlay meshes only when it is made again or the highlight or checkbox changes. This replaces the ghost cache main.cpp held (DrawnGhost and updateGhostMesh). The per-frame preview first planned cost about 60 fps in debug, so Evan chose the cache; RESEARCH.md has the timings.
+- Composing them: main.cpp keeps the preview with legible's keepPreview, which alone decides when it is stale, and rebuilds the ghost and overlay meshes only when it is made again or the highlight or checkbox changes. This replaces the ghost cache main.cpp held (DrawnGhost and updateGhostMesh). The per-frame preview first planned cost about 60 fps in debug, so the user chose the cache; RESEARCH.md has the timings.
 
 ## Tasks
 
@@ -661,7 +661,7 @@ Expected: `0`. With no pointer there is no ghost, so the capture shows the commi
 
 ### Task 11: Check the preview by hand
 
-Step 1: Ask Evan to run, from `build/windows-debug`, `./ThemeParkJones.exe --park ../../tests/parks/warm.park --overlay food`, and to:
+Step 1: Ask the user to run, from `build/windows-debug`, `./ThemeParkJones.exe --park ../../tests/parks/warm.park --overlay food`, and to:
 
 - choose Place shop and hover beside the guest path south of the shop, near (6.5, 106.8), between path 5 and the shop, and then over a spot where it is refused;
 - choose Delete and hover the backstage path east of the shop;
@@ -695,6 +695,6 @@ Expected: `tidy: clean.`
 
 Step 1: Stage exactly the feature's paths: `git add plans/legible-simulation/explained-food/candidate-previews src/legible src/render src/app tests/legible tests/render tests/integration`, and check `git status --short` shows nothing else staged.
 
-Step 2: Dispatch the reviewer on the staged diff, `git diff --cached`, with FEATURE.md, src/legible/SPEC.md, src/render/SPEC.md, src/app/SPEC.md, docs/principles.md, and docs/decisions/0027-code-architecture.md as context, and give its findings to Evan verbatim.
+Step 2: Dispatch the reviewer on the staged diff, `git diff --cached`, with FEATURE.md, src/legible/SPEC.md, src/render/SPEC.md, src/app/SPEC.md, docs/principles.md, and docs/decisions/0027-code-architecture.md as context, and give its findings to the user verbatim.
 
 Step 3: Commit through commit-hygiene with the subject `Legible: Preview edits on a candidate world` and a body of at most 72-character lines saying that previewEdit makes the candidate of an accepted edit and a shop ghost's context, that the app makes it each frame so the ghost, overlay, and tooltip share one candidate, replacing the ghost cache, and that the tooltip gives a shop ghost's footfall and supply route, ending with the trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

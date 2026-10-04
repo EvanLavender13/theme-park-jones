@@ -13,7 +13,7 @@ Take a goal that no single capability owns. Produce plans/slices/<slug>/SLICE.md
 - How the capabilities involved exchange data through the shared medium.
 - Which milestone each capability contributes, in build order.
 
-A slice completes. Its member milestones live in their capabilities and stay there after the slice closes.
+A slice completes. Its member milestones belong to their capabilities and stay there after the slice closes.
 
 ## Hard gate
 
@@ -36,13 +36,13 @@ Create a task for each item. Complete them in order.
 3. Give the slice a short slug.
 4. Where the scenario raises open questions of design or technique, research them with the `researching` skill. It writes findings to plans/slices/<slug>/RESEARCH.md.
 5. Write the end-to-end scenario in prose: what a player does and sees, from an empty park to the slice's payoff.
-6. Map the medium. List every field and flow the scenario needs, each with the capability that produces it and the capabilities that consume it. Apply the principles gate from `planning-overview` across capabilities. If the scenario needs an interaction that is not a field or flow, rework it, or raise it with Evan as a possible exception.
+6. Map the medium. List every field and flow the scenario needs, each with the capability that produces it and the capabilities that consume it. Apply the principles gate from `planning-overview` across capabilities. If the scenario needs an interaction that is not a field or flow, rework it, or raise it with the user as a possible exception.
 7. Name the members. For each capability involved, existing or still to be planned, name the one milestone it contributes. Give that milestone's share of the scenario in one sentence. If a capability contributes nothing observable, leave it out.
 8. Order the members bottom-up, so the producers of the medium land before its consumers.
 9. Write acceptance criteria. Include observable end-to-end conditions in the running app, and consequences that an integration test over the simulation can check, as docs/testing.md defines them. Each criterion names how it is checked:
     - An integration test.
     - A capture of a scripted scenario. Name the member milestone that delivers the script in Members.
-    - A manual check by Evan.
+    - A manual check by the user.
 10. Write SLICE.md at plans/slices/<slug>/SLICE.md in the format below.
 11. Self-review, and fix problems inline. Look for:
     - Placeholders.
@@ -62,7 +62,7 @@ Close a slice when every member milestone has landed.
     - Run the integration tests with `ctest.exe --preset windows-debug`.
     - For each cross-module bug the test-writer names, introduce that bug by hand once and confirm a test fails, then revert. For example, skip one consumption, or leave one component out of the save.
     - Run each scripted scenario on the Windows build with `--capture`, and inspect the captures against their criteria.
-    - Ask Evan to check the manual criteria, and record his answer.
+    - Ask the user to check the manual criteria, and record the answer.
 3. Dispatch the `reviewer` with the `reviewing` skill on SLICE.md and the integration tests.
 4. If everything passes, set the slice's Status to complete and commit with `commit-hygiene`. If not, report the failing criteria to the user. The fix belongs to the next milestone or feature of a member capability.
 
@@ -72,7 +72,7 @@ Ask one question per message. Each answer changes which question comes next.
 
 A slice is the smallest end-to-end experience worth having. Send anything that doesn't serve the scenario to the backlog.
 
-The medium map is the main thing a slice contributes. The capabilities plan their own internals; the slice fixes what passes between them.
+The medium map is the main thing a slice contributes. The capabilities plan their own internals; the slice sets what passes between them.
 
 ## Output format
 

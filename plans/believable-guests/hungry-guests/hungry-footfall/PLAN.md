@@ -403,6 +403,6 @@ Expected: exit 0, and the capture shows guests on the paths as before.
 
 ### Task 8: Review and commit
 
-Step 1: Review the staged diff via the reviewing skill, as implementing-features step 7 describes, and present the findings to Evan.
+Step 1: Review the staged diff via the reviewing skill, as implementing-features step 7 describes, and present the findings to the user.
 
 Step 2: Commit once, via the commit-hygiene skill, with the subject `Guests: Publish hungry footfall on the guest network` and a body naming the moving average, the held midpoints, the sampleEdge rule, and the carrying finisher.

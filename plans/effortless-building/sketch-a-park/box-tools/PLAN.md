@@ -8,7 +8,7 @@ Let the player place, move, and delete boxes and delete paths through tools in a
 
 sim/park gains ParkEdit, a variant of its five commands, with isAccepted and queueEdit over it. src/tools holds ToolState and plain functions of the pointer's ground position, presses, releases, and the world, so tests drive them without a window. tpj_render builds ghosts with appendBox and appendPath in ghost colors, draws them through a second pipeline on the park's shaders that blends and tests greater-or-equal without writing depth, and turns the cursor into a ground position. main.cpp wires the Tools panel, the left button, the cursor, and a CommandQueue into the loop.
 
-All commands run from the repository root, /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones.
+All commands run from the repository root.
 
 ## Tasks
 
@@ -1025,8 +1025,8 @@ Expected: it passes.
 Step 5: Dispatch the reviewer agent on the diff, with FEATURE.md, the four SPEC.md files, and docs/principles.md.
 Expected: no findings that affect correctness or stated requirements, or each fixed.
 
-Step 6: Ask Evan to run build/windows-debug/ThemeParkJones.exe --park tests/parks/sketch.park and check criterion 10.
-Expected: Evan confirms it.
+Step 6: Ask the user to run build/windows-debug/ThemeParkJones.exe --park tests/parks/sketch.park and check criterion 10.
+Expected: the user confirms it.
 
 ### Task 19: Commit
 

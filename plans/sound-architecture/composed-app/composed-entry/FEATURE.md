@@ -65,4 +65,4 @@ src/app/SPEC.md, "## Command line", a new last paragraph:
 
 ## Open questions
 
-- Three command lines the Command line section does not name keep their behavior from before the restructure and get no test: a --ticks value of decimal digits too large for 64 bits, which is refused; an argument that does not start with --, which is refused as an unknown option; and a --frames value that is not positive without --capture, which runs until the player quits. Evan decides whether the section should name them, should one matter.
+- Three command lines the Command line section does not name keep their behavior from before the restructure and get no test: a --ticks value of decimal digits too large for 64 bits, which is refused; an argument that does not start with --, which is refused as an unknown option; and a --frames value that is not positive without --capture, which runs until the player quits. The user decides whether the section should name them, should one matter.

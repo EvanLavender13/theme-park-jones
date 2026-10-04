@@ -4,7 +4,7 @@
 
 Each guest kept its last choice in its saved state: the tick, place, and hunger it chose at, and one option per reachable shop, plus carrying on and heading home, each with four terms, a score, and a probability. Only guestRecord read it, for the guest panel. Nothing in the simulation did. Every save, world copy, and hash grew with guests times shops. A guest line in tests/parks/warm.park is about 400 characters before its last choice, and each option adds about 190, so the full park's 2,000 guests and 30 shops would save about 13 MB, almost all of it last choices.
 
-Evan ruled that a save holds what behavior depends on, and that the explanation is not worth storing. The guest panel keeps principle 8's trace by working out, when a guest is inspected, what it would weigh if it chose now. That is the same scoring a guest does at a junction, with its current place, hunger, and target and the park's current offers, and the probabilities softmax gives, but with no draw. It costs one choice, for the one guest inspected, and stores nothing.
+The user ruled that a save holds what behavior depends on, and that the explanation is not worth storing. The guest panel keeps principle 8's trace by working out, when a guest is inspected, what it would weigh if it chose now. That is the same scoring a guest does at a junction, with its current place, hunger, and target and the park's current offers, and the probabilities softmax gives, but with no draw. It costs one choice, for the one guest inspected, and stores nothing.
 
 This is not the last choice rebuilt. That choice was made at an earlier tick, place, and hunger, and its draw is gone. The panel shows the guest's present weighing, and the Target row shows what it is doing.
 

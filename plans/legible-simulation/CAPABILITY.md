@@ -70,7 +70,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 ## Open questions
 
 - Whether copying and resolving a candidate on every ghost move stays interactive. Resolved by measurement in explained-food's candidate-previews; throttling or incremental resolution are the fallbacks.
-- The player-facing UI (docs/open-questions.md). Evan decides.
+- The player-facing UI (docs/open-questions.md). The user decides.
 
 ## Research notes
 

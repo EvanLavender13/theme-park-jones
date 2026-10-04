@@ -8,7 +8,7 @@ Draw the park's intent, flat path ribbons and boxes, through a lit mesh pipeline
 
 src/render/park_mesh.cpp builds a ParkMesh of plain vertices and indices from the park module's public queries, one element at a time, so tests check the geometry without a GPU and box-tools can reuse the same functions for ghosts. The renderer gains a second pipeline with position, normal, and color attributes, uploads the mesh when setParkMesh is called, and draws it after the terrain in the same pass, with the terrain depth-biased away. main.cpp parses the new options, builds the starting world, answers --hash before SDL_Init, and rebuilds the mesh whenever the intent it reads differs from what it last drew.
 
-All commands run from the repository root, /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones.
+All commands run from the repository root.
 
 ## Tasks
 
@@ -325,7 +325,7 @@ Expected: no warnings or errors, and the listing shows park.frag.spv, park.vert.
 Files:
 - Modify: `src/render/renderer.cpp`
 
-Step 1: Generalize createTerrainPipeline into `SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *vertexFile, const char *fragmentFile, const SDL_GPUVertexAttribute *attributes, uint32_t attributeCount, uint32_t pitch)`, keeping its shader loading, vertex buffer description, and states, with the depth test's compare op SDL_GPU_COMPAREOP_GREATER. In drawScene, clear depth to 0. In src/render/math.cpp, reverse perspective's depth: M[10] = nearZ / (farZ - nearZ) and M[14] = nearZ * farZ / (farZ - nearZ), so the near plane maps to 1 and the far plane to 0, and say so in math.h's comment. (Amended after Evan's zoomed-out check: a terrain depth bias left paths flickering seen from above.) It logs "Cannot create pipeline" with the vertex file's name and returns null on failure.
+Step 1: Generalize createTerrainPipeline into `SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *vertexFile, const char *fragmentFile, const SDL_GPUVertexAttribute *attributes, uint32_t attributeCount, uint32_t pitch)`, keeping its shader loading, vertex buffer description, and states, with the depth test's compare op SDL_GPU_COMPAREOP_GREATER. In drawScene, clear depth to 0. In src/render/math.cpp, reverse perspective's depth: M[10] = nearZ / (farZ - nearZ) and M[14] = nearZ * farZ / (farZ - nearZ), so the near plane maps to 1 and the far plane to 0, and say so in math.h's comment. (Amended after the user's zoomed-out check: a terrain depth bias left paths flickering seen from above.) It logs "Cannot create pipeline" with the vertex file's name and returns null on failure.
 
 Step 2: createTerrainPipeline keeps its two attributes and calls createPipeline with "terrain.vert.spv", "terrain.frag.spv", sizeof(TerrainVertex). Add createParkPipeline with three attributes at locations 0, 1, and 2: FLOAT3 at offsetof(ParkVertex, Position), FLOAT3 at offsetof(ParkVertex, Normal), and FLOAT4 at offsetof(ParkVertex, Color), calling createPipeline with "park.vert.spv", "park.frag.spv", sizeof(ParkVertex). Add `static_assert(sizeof(Rgba) == 4 * sizeof(float));` beside it.
 
@@ -426,7 +426,7 @@ next-key 7
 The shops face the guest path, the depot faces the backstage path's start 6 m in front of it, and every box stands well clear of every path.
 
 Run: `ctest --preset linux-debug` then `build/linux-debug/ThemeParkJones --park tests/parks/sketch.park --capture build/linux-debug/sketch.bmp`
-Expected: the test pass's tests of criterion 8 pass. Read the capture: the whole park is in frame, the paths lie flat on the ground, curving smoothly, the boxes and the entrance stand as boxes with lighter fronts, guest and backstage paths and shops and the depot differ in color, and nothing flickers through the grass (criterion 9). The far view is not scriptable, so when reporting the feature, ask Evan to zoom out to 400 m in the Windows build and look for flicker.
+Expected: the test pass's tests of criterion 8 pass. Read the capture: the whole park is in frame, the paths lie flat on the ground, curving smoothly, the boxes and the entrance stand as boxes with lighter fronts, guest and backstage paths and shops and the depot differ in color, and nothing flickers through the grass (criterion 9). The far view is not scriptable, so when reporting the feature, ask the user to zoom out to 400 m in the Windows build and look for flicker.
 
 ### Task 16: Verify both builds and the cross-build check
 

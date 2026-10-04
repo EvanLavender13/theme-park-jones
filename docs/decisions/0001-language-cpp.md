@@ -4,7 +4,7 @@ Status: Accepted, 2026-09-26
 
 ## Context
 
-The game needs tight control over memory layout and performance for a simulation and a custom renderer, and Evan is an experienced C++ developer.
+The game needs tight control over memory layout and performance for a simulation and a custom renderer, and the user is an experienced C++ developer.
 
 ## Decision
 

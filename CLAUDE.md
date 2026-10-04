@@ -31,9 +31,9 @@ To check rendering, run the app with `--capture out.bmp`. It renders a few frame
 
 ## Authority
 
-docs/principles.md is the highest authority. If a request or plan conflicts with a principle, tell Evan instead of coding around it. Principles change only through a decision record.
+docs/principles.md is the highest authority. If a request or plan conflicts with a principle, tell the user instead of coding around it. Principles change only through a decision record.
 
-Decisions that are expensive to reverse are recorded in docs/decisions/ (see its README). docs/design-notes.md is provisional thinking, not a spec. The questions in docs/open-questions.md are Evan's. Ask him about them; don't decide them in code.
+Decisions that are expensive to reverse are recorded in docs/decisions/ (see its README). docs/design-notes.md is provisional thinking, not a spec. The questions in docs/open-questions.md are the user's to decide. Ask about them; don't decide them in code.
 
 ## Workflow
 
@@ -51,7 +51,7 @@ Report results with evidence, such as test output, a capture, or a scenarios com
 
 ## Exceptions
 
-Anything that doesn't fit fields, flows, or encapsulation goes in docs/exceptions.md with a reason. If that list keeps growing, tell Evan. It means a principle is wrong.
+If something doesn't fit fields, flows, or encapsulation, list it in docs/exceptions.md with a reason. If that list keeps growing, tell the user, because it means a principle is wrong.
 
 ## Code
 
@@ -59,17 +59,22 @@ Follow docs/conventions.md for naming and file layout.
 
 ## Writing
 
-Write so the reader gets it on the first read. This applies to every document, plan, spec, skill, memory, and comment.
+Write so the reader understands on the first read. This applies to every document, plan, spec, skill, memory, and comment. Use short sentences and common words, with one idea in each sentence.
 
-Use short sentences and common words. Put one idea in each sentence. If a sentence needs a second "that" or "which" clause, split it.
+The most common problem here is a rule written as a fact about an imaginary thing: "A plan that finds this broken in code it touches fixes it, never defers it." It has four signs:
 
-Write rules as instructions, not as descriptions of how things behave. Write "Fix it now", not "A plan that finds it broken fixes it." In a spec, describing behavior is right, but keep the sentences short.
+- The subject is a generic thing, such as "a plan", "a test", "a caller", or "a result", instead of the reader who has to act.
+- A clause is attached to that subject, so the reader holds a long phrase before reaching the verb: "a result that a caller reads one number from", "state a feature registers".
+- The verb is plain present tense, such as "fixes", "is not built", or "never depends", so a command reads like a description.
+- A "never" or "not" tail restates the opposite.
 
-Don't write mannered prose. Mannered prose uses metaphor and flourish instead of a plain statement: "a dial worth turning" instead of "a parameter worth varying", "earns its keep" instead of "still matters", "the medium a module speaks" instead of "the fields and flows a module uses". If a literal phrase exists, use it.
+Fix it by putting the condition in an "if" or "when" clause and stating the action directly. "A plan that finds this broken fixes it" becomes "If you find this broken, fix it." Specs describe behavior, so they keep the present tense, but they take the same fix: "A place that does not resolve gives nothing" becomes "If a place doesn't resolve, sampling it gives nothing."
 
-Say the rule, then stop. Don't list every edge case, and don't end sentences with "never X" or "not Y" unless the reader would otherwise get it wrong.
+When you split a long sentence, rewrite both halves. Don't start the second half with "So" or "That is".
 
-Use no bold emphasis. Use bullets for lists of separate items.
+Don't write mannered prose, which uses metaphor and flourish instead of a plain statement. Write "still matters", not "earns its keep". Write "the fields and flows a module uses", not "the medium a module speaks". If a literal phrase exists, use it.
+
+Use no bold emphasis. Use bullets for lists of separate items. Call the person who directs the project "the user", not by name.
 
 Here is a rule written badly:
 
@@ -79,4 +84,4 @@ The same rule written well:
 
     Don't allocate inside loops in per-tick or per-frame code. Allocate buffers once and reuse them. If you find an allocation in such a loop, fix it now; don't defer it.
 
-Anything a machine can check belongs in a test, hook, or check, not in a document.
+If a machine can check a rule, put the rule in a test, hook, or check instead of a document.

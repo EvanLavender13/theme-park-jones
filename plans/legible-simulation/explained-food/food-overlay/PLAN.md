@@ -892,7 +892,7 @@ Step 5: The cross-build check is unaffected, since nothing under src/sim, src/co
 
 ### Task 16: Commit
 
-Step 1: Dispatch the reviewer on the diff, with FEATURE.md, src/legible/SPEC.md, src/render/SPEC.md, src/app/SPEC.md, and docs/principles.md as context, and give its findings to Evan verbatim.
+Step 1: Dispatch the reviewer on the diff, with FEATURE.md, src/legible/SPEC.md, src/render/SPEC.md, src/app/SPEC.md, and docs/principles.md as context, and give its findings to the user verbatim.
 
 Step 2: Stage exactly the feature's paths: `git add plans/legible-simulation/explained-food/food-overlay src/legible src/render src/app CMakeLists.txt tests/legible tests/render tests/app tests/integration tests/CMakeLists.txt`, then check `git status --short` shows nothing else staged and the untracked parks/routes.park and parks/sketch.park unstaged.
 

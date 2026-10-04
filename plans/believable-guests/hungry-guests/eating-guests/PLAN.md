@@ -778,4 +778,4 @@ Expected: no warnings; every test passes on both builds; the cross-build check p
 
 ### Task 13: Review and commit
 
-Stage src, tests, and plans (`git add src tests plans`), dispatch the reviewer as implementing-features describes, and give Evan its findings verbatim. Then commit once via the commit-hygiene skill, with the subject `Guests: Choose food by softmax, visit shops, and eat`.
+Stage src, tests, and plans (`git add src tests plans`), dispatch the reviewer as implementing-features describes, and give the user its findings verbatim. Then commit once via the commit-hygiene skill, with the subject `Guests: Choose food by softmax, visit shops, and eat`.

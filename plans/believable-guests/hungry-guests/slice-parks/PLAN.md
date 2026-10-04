@@ -303,6 +303,6 @@ Expected: exit 0, and the capture shows guests on the paths, the shop marked sta
 
 ### Task 10: Review and commit
 
-Step 1: Review the staged diff via the reviewing skill, as implementing-features step 7 describes, and present the findings to Evan.
+Step 1: Review the staged diff via the reviewing skill, as implementing-features step 7 describes, and present the findings to the user.
 
 Step 2: Commit once, via the commit-hygiene skill, with the subject `Scenarios: Generate the slice's park files` and a body naming makeSliceParks, the --slice-parks mode, the three parks, the integration tests, and SLICE.md's run lengths.

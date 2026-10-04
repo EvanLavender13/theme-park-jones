@@ -47,7 +47,7 @@ Create a task for each item. Complete them in order.
 Close a milestone when every feature in its Features list has merged into main.
 
 1. Confirm that the windows-debug build has no warnings, `ctest.exe --preset windows-debug` passes, and `scripts/tidy.sh` is clean.
-2. Play the milestone's acceptance criteria in the app, or check each one by the means it names. Report what you saw to Evan.
+2. Play the milestone's acceptance criteria in the app, or check each one by the means it names. Report what you saw to the user.
 3. Set the MILESTONE.md's Status to complete, and commit with `commit-hygiene`.
 
 ## Process notes
@@ -58,7 +58,7 @@ Size features so each can be built in hours to days. Split anything bigger, and 
 
 Plan only to the next loop. Uncertainty compounds, and it invalidates the rest.
 
-A weak core feature fails the brief. If a milestone's first feature produces nothing, the milestone is too abstract or has the wrong boundaries. Push back.
+If the core feature is weak, the brief fails. If a milestone's first feature produces nothing, the milestone is too abstract or has the wrong boundaries. Push back.
 
 ## Output format
 

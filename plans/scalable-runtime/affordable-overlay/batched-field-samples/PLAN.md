@@ -413,7 +413,7 @@ Step 4: Capture and compare (criterion 2)
 Run: `build/windows-release/ThemeParkJones.exe --park tests/parks/warm.park --ticks 3000 --overlay food --capture build/batched-field-samples-after.bmp; python3 -c "from PIL import Image, ImageChops; a = Image.open('build/batched-field-samples-before.bmp').convert('RGB'); b = Image.open('build/batched-field-samples-after.bmp').convert('RGB'); print('differing pixels', sum(1 for p in ImageChops.difference(a, b).getdata() if max(p)))"`
 Expected: `differing pixels 0`.
 
-Put both comparisons, the frames lines of both reports, and the capture in the feature's report, and ask Evan to try criterion 5's hungry footfall by play.
+Put both comparisons, the frames lines of both reports, and the capture in the feature's report, and ask the user to try criterion 5's hungry footfall by play.
 
 ### Task 8: Commit
 

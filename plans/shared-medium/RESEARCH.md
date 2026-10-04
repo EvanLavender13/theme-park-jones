@@ -9,7 +9,7 @@ What this suggests for the medium:
 - The sampling interface should hide the storage, as decision 0005 already says.
 - A network-place field can be stored as values on nodes, or computed on demand from sources and route distance.
 - Per-source attribution is not standard in influence maps. They keep one summed layer per kind of influence and discard where it came from. Keeping attribution means holding a per-source term at each sample, or recomputing it on demand.
-- The additive rule Evan chose makes the reconstruction exact, provided the summation order is fixed. Floating-point addition is not associative, so the total must be the ordered sum of the reported contributions, not a separately accumulated value.
+- The additive rule the user chose makes the reconstruction exact, provided the summation order is fixed. Floating-point addition is not associative, so the total must be the ordered sum of the reported contributions, not a separately accumulated value.
 
 Rejected:
 

@@ -4,9 +4,9 @@ Status: Accepted, 2026-10-04. Supersedes 0032, 0033, and 0034.
 
 ## Context
 
-The suite holds 446 test cases in 18,483 lines, more than the 15,759 lines of code under src/ it tests. Decision 0032 deleted the cases that broke its rules and set the rest to be reshaped. In the two days since, the rules took two more decision records (0033 and 0034), and reshaping went module by module through four features. Each one needed Evan to sort out judgments the agents made badly or inconsistently. Two runs of the same closing audit each reported findings the other missed, eight in all.
+The suite holds 446 test cases in 18,483 lines, more than the 15,759 lines of code under src/ it tests. Decision 0032 deleted the cases that broke its rules and set the rest to be reshaped. In the two days since, the rules took two more decision records (0033 and 0034), and reshaping went module by module through four features. Each one needed the user to sort out judgments the agents made badly or inconsistently. Two runs of the same closing audit each reported findings the other missed, eight in all.
 
-The cause is the process, not the individual tests. For every spec statement and every criterion, an agent judges whether it is a lasting property worth a test, and further agents then check those judgments. Agents are unreliable at that judgment. Each wrong call becomes either a test that breaks when the code changes or a finding Evan has to settle. Adding rules has not made the judgments better, and the work has crowded out gameplay.
+The cause is the process, not the individual tests. For every spec statement and every criterion, an agent judges whether it is a lasting property worth a test, and further agents then check those judgments. Agents are unreliable at that judgment. Each wrong call becomes either a test that breaks when the code changes or a finding the user has to settle. Adding rules has not made the judgments better, and the work has crowded out gameplay.
 
 Tests are uniquely good at one thing in this game: catching a broken copy, save, hash, or deterministic replay. Those failures are silent, nobody would see them while playing, and decisions 0022 and 0036 rest on them. The mechanical checks on layering, private headers, and the sim's symbols need no judgment either. Almost everything else a module test checks shows up when the game is played.
 
@@ -18,7 +18,7 @@ The suite consists of three parts:
 - the integration tests in tests/integration;
 - the mechanical checks: tests/checks and the sim symbol check.
 
-A feature adds a test only in two cases. A test reproduces each bug the feature fixes. A test also covers each consequence across modules that the player depends on and that the feature's FEATURE.md names, stated as cause and effect, as food_loop_test does. State a feature registers is covered by the park world checks once a park file in tests/parks/ holds it, so a feature adds to a park file rather than writing a test. Each test a feature adds is listed in its FEATURE.md, which Evan approves. No agent derives tests from specs or criteria.
+A feature adds a test only in two cases. A test reproduces each bug the feature fixes. A test also covers each consequence across modules that the player depends on and that the feature's FEATURE.md names, stated as cause and effect, as food_loop_test does. State a feature registers is covered by the park world checks once a park file in tests/parks/ holds it, so a feature adds to a park file rather than writing a test. Each test a feature adds is listed in its FEATURE.md, which the user approves. No agent derives tests from specs or criteria.
 
 A feature is otherwise verified by playing it, by `--capture`, by `tpj_scenarios --compare` when the simulation must not change, and by the release checks.
 

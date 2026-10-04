@@ -6,7 +6,7 @@ The shop takes the guest at the front of its queue when it is free and holds a s
 
 Rejected: an instant handoff after one tick with a cooldown of SERVICE_INTERVAL. At an idle shop the first guest would get food almost at once, so service would not take time (principle 7). Rejected: a separate in-service slot that completes after SERVICE_INTERVAL. It gives the same timing as the delay, with one more piece of state to save and keep consistent.
 
-Sources: none; Evan chose the delay model while planning.
+Sources: none; the user chose the delay model while planning.
 
 ## Where does the queue live?
 

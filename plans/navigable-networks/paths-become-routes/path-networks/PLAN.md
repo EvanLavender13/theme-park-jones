@@ -8,7 +8,7 @@ Derive the park's guest and backstage networks from its paths in a new module, s
 
 A resolver registered after park edits copies parkPaths, builds one carrier per path of each kind from its ground line, and puts each kind's Network on a derived entity keyed by the kind. Meetings come from a pairwise test of segments with a bounding-box reject: a proper crossing by the orientation test, and each end within JUNCTION_TOLERANCE of the other segment. Each carrier's meeting distances are grouped greedily into stops, a union-find over stops joins the two stops of each meeting, and nodes are numbered by walking carriers in key order and stops by distance.
 
-All commands run from the repository root, /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones.
+All commands run from the repository root.
 
 ## Tasks
 
@@ -458,7 +458,7 @@ Network deriveNetwork(const std::vector<ParkPath> &paths, PathKind kind) {
 Run: `cmake --build --preset linux-debug --target tpj_sim_tests 2>&1 | grep -E "^[^ ]+:[0-9]+:[0-9]+: (warning|error):"; for f in tests/sim/routes/*_test.cpp; do build/linux-debug/tpj_sim_tests -# "[#$(basename "$f" .cpp)]" 2>&1 | tail -1; done`
 Expected: no warnings, and every test under tests/sim/routes passes.
 
-Deviation (approved by Evan): the pairwise search in findMeetings made the park-edits scenario about six times slower under the sanitizers. findMeetings now sweeps segments sorted by their least x and tests only pairs whose x spans come within farApart's margin, which rejects every other pair, so the meetings found are the same set. MEETING_MARGIN names that margin.
+Deviation (approved by the user): the pairwise search in findMeetings made the park-edits scenario about six times slower under the sanitizers. findMeetings now sweeps segments sorted by their least x and tests only pairs whose x spans come within farApart's margin, which rejects every other pair, so the meetings found are the same set. MEETING_MARGIN names that margin.
 
 ### Task 8: Verify
 
@@ -475,7 +475,7 @@ Step 4: Run: `scripts/cross-build-check.sh`
 Expected: it passes, running the scenarios and three park files.
 
 Step 5: Dispatch the reviewer agent on the staged diff via the reviewing skill, with FEATURE.md, src/sim/routes/SPEC.md, src/sim/SPEC.md, src/sim/medium/SPEC.md, src/sim/park/SPEC.md, and docs/principles.md.
-Expected: Evan decides on each finding.
+Expected: the user decides on each finding.
 
 ### Task 9: Commit
 
