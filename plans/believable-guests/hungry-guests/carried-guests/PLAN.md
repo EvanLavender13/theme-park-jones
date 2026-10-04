@@ -390,6 +390,6 @@ Expected: exit 0, and the capture shows guests on the paths as before.
 
 ### Task 11: Review and commit
 
-Step 1: Review the staged diff via the reviewing skill, as implementing-features step 7 describes, and present the findings to Evan.
+Step 1: Review the staged diff via the reviewing skill, as implementing-features step 7 describes, and present the findings to the user.
 
 Step 2: Commit once, via the commit-hygiene skill, with the subject `Guests: Carry guests' places across park edits` and a body naming the previous networks, the carrying finisher, and the nearest-point rule for retired places.

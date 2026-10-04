@@ -1,6 +1,6 @@
 ---
 name: maintaining-backlog
-description: Use whenever the user wants to add, select, drop, or reconcile a speculative idea, or whenever a planning or implementing skill needs to deposit one or prune items that shipped work has implemented or made moot. Ideas live in three pools, chosen by the narrowest scope that fits. An idea that fits one existing milestone goes to that MILESTONE.md's "Deepening candidates" section. A capability-scoped idea with no fitting milestone goes to that CAPABILITY.md's section. A cross-capability idea, or one with no home, goes to plans/BACKLOG.md. Items are added when ideas fall out of current scope, selected when a new piece of work needs a starting point, and dropped when shipped work retires them. Use this even for a single idea.
+description: Use whenever the user wants to add, select, drop, or reconcile a speculative idea, or whenever a planning or implementing skill needs to deposit one or prune items that shipped work has implemented or made moot. Ideas live in three pools, chosen by the narrowest scope that fits. If an idea fits one existing milestone, it goes to that MILESTONE.md's "Deepening candidates" section. If it is scoped to one capability and fits no milestone, it goes to that CAPABILITY.md's section. If it spans capabilities or has no capability yet, it goes to plans/BACKLOG.md. Items are added when ideas fall out of current scope, selected when a new piece of work needs a starting point, and dropped when shipped work retires them. Use this even for a single idea.
 ---
 
 # Maintaining the Backlog
@@ -15,15 +15,15 @@ The pools hold ideas without committing to them. Most items will never be implem
 
 Ideas live in one of three pools. Choose the pool with the narrowest scope that fits.
 
-First apply decision 0028's test. Ask whether a player would notice the idea missing if the machine were infinitely fast and the code never changed again. If not, as with a speedup or a restructure, it belongs in an engineering capability's pools, whichever capability's work surfaced it. If no engineering capability fits, put the idea in `plans/BACKLOG.md`.
+First apply decision 0028's test. Ask whether a player would notice the idea missing if the machine were infinitely fast and the code never changed again. If not, as with a speedup or a restructure, put it in an engineering capability's pools, whichever capability's work surfaced it. If no engineering capability fits, put the idea in `plans/BACKLOG.md`.
 
-- If an idea fits the theme of one existing milestone, put it in the `## Deepening candidates` section of that milestone's `MILESTONE.md`. Milestones are durable buckets, so a shipped milestone still collects candidates.
+- If an idea fits the theme of one existing milestone, put it in the `## Deepening candidates` section of that milestone's `MILESTONE.md`. Milestones are durable, so keep adding candidates to a milestone after it ships.
 - If an idea is scoped to one existing capability but fits no milestone, put it in the `## Deepening candidates` section of that capability's `CAPABILITY.md`.
 - If an idea spans capabilities, or has no capability yet, put it in `plans/BACKLOG.md`.
 
 If the `## Deepening candidates` section doesn't exist, create it. For a milestone, open it with the line "Unordered pool this milestone draws later features from." For a capability, open it with "Unordered pool this capability draws later milestones from."
 
-Every operation below applies to all pools. When an item's home is created or its scope narrows so that a capability or milestone now fits, move it to the narrower pool.
+Every operation below applies to all pools. When a capability or milestone that fits an item is created, or the item's scope narrows so that one now fits, move the item to the narrower pool.
 
 ## File format
 
@@ -68,7 +68,7 @@ The user has decided an item is no longer worth keeping. Delete it.
 A feature or milestone has shipped. Check the backlog against it.
 
 1. Find items that the shipped work implements, supersedes, or makes moot.
-2. Show each candidate with the work that retired it.
+2. Show each candidate with the shipped work that made it unnecessary.
 3. Delete the ones the user confirms.
 
 Many items name what they wait on ("deferred from X", "gated on Y", "ships with Z"). When that work lands, the item is a candidate for reconciling.
@@ -81,6 +81,6 @@ Show the user the full list. Don't filter, sort, or group it. Let the user decid
 
 Don't impose structure. Use no dates, tags, sections, or rankings inside a pool. Keep each pool a flat list.
 
-Put each item in one pool only. An item lives in exactly one `## Deepening candidates` section or in `plans/BACKLOG.md`, not in two places.
+Put each item in exactly one pool: either one `## Deepening candidates` section or `plans/BACKLOG.md`.
 
-Items never start work on their own. The user chooses when to draw from a pool. Pruning is the exception: planning and implementing skills reconcile against the backlog when shipped work retires an item.
+Don't start work from an item on your own. The user chooses when to draw from a pool. Pruning is the exception: when shipped work implements an item or makes it moot, planning and implementing skills reconcile the backlog against it.

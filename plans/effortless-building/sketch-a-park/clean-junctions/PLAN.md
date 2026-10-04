@@ -173,7 +173,7 @@ Step 2: Capture on Windows, since Linux captures hang under WSLg.
 Run: `timeout 60 build/windows-debug/ThemeParkJones.exe --park tests/parks/sketch.park --capture build/windows-debug/junctions.bmp`
 Expected: exit 0. Convert the BMP to PNG in the scratchpad and look at it: every path's free end is round, and the paths and walkways are otherwise as before.
 
-Step 3: Check criterion 8 by hand in the running app: two guest paths drawn to meet end to end at an angle join with a round outer corner, and a guest path drawn across a backstage path draws over it without flicker while orbiting and zooming from near to far. This is Evan's to confirm.
+Step 3: Check criterion 8 by hand in the running app: two guest paths drawn to meet end to end at an angle join with a round outer corner, and a guest path drawn across a backstage path draws over it without flicker while orbiting and zooming from near to far. This is the user's to confirm.
 
 ### Task 8: Review and commit
 

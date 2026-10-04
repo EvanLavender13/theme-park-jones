@@ -1,6 +1,6 @@
 # Design Notes
 
-These notes are provisional. They record current thinking from design conversations and are illustrative, not binding. Don't implement them as fixed structures; treat them as starting points to test. When a note hardens into something code depends on, move it into a module spec or a decision record.
+These notes are provisional. They record current thinking from design conversations and are illustrative, not binding. Don't implement them as fixed structures; treat them as starting points to test. When code comes to depend on a note, move it into a module spec or a decision record.
 
 ## Fields and flows
 
@@ -21,7 +21,7 @@ The current thinking has three networks: a guest path network, a backstage or se
 - values on network nodes;
 - cached visibility.
 
-Scale is not a concern at park size, so a naive grid per field is fine at first. Most absent values are the default, like a vacuum.
+Scale is not a concern at park size, so a naive grid per field is fine at first. Most places have no stored value and read as the default.
 
 ## Resolution over time
 
@@ -37,7 +37,7 @@ Later, a shop's identity (pizza, drinks, or both) could emerge from what it is s
 
 ## Coasters
 
-Physics validity is the gate. A coaster needs a complete circuit, an energy source, brakes, and a station. The ride runs its own encapsulated train simulation (block sections, dispatch, forces). It exposes only emitted fields and flows: throughput, noise, spectacle, and wear. Noise sources extend along the track; they are not points.
+Physical validity is the only thing that can block a coaster. It needs a complete circuit, an energy source, brakes, and a station. The ride runs its own encapsulated train simulation (block sections, dispatch, forces). It exposes only emitted fields and flows: throughput, noise, spectacle, and wear. Noise sources extend along the track; they are not points.
 
 Wear is a stock drained by a maintenance flow. Transfer tracks and service access are capacity for that flow. Track reachability for inspection and evacuation (catwalks, ground access for lifts) could be derived per section. Unreachable sections would cost more downtime.
 
@@ -62,17 +62,17 @@ Player paint is intent that overrides the derived look. Recovery should be fast 
 
 Most staff work is a stock at a place. The stock builds up, and staff capacity drains it. The capacity is drawn over route distance from a staff room. Examples of such stocks are litter on a path segment, vomit, a full bin, a flower bed's thirst, a lawn's height, and a ride's wear. Garbage leaving a bin is a conserved flow, like supplies.
 
-The logistical play is in the layout, not in who walks: where staff rooms sit, how far they are from what needs care, and which routes staff travel. Whether a pool or agents drain a stock stays inside the entity (decision 0018, principle 6). So a job that feels flat as a pool could become agents without changing anything that reads its work.
+The logistical play is in the layout, not in who walks: where staff rooms sit, how far they are from what needs care, and which routes staff travel. Whether a pool or agents drain a stock stays inside the entity (decision 0018, principle 6). If a job feels dull as a pool, it could become agents without changing anything that reads its work.
 
 Where staff pass between guest and backstage paths is an open question.
 
 ## Figures
 
-Visible figures (janitors, gardeners, haulers with carts) are drawn where and when capacity is actually spent. They walk the real route from their source in the real travel time. So a well-kept corner shows staff at work, and a neglected one shows none.
+Visible figures (janitors, gardeners, haulers with carts) are drawn where and when capacity is actually spent. They walk the real route from their source in the real travel time. A well-kept corner shows staff at work, and a neglected one shows none.
 
-A figure's position is computed from current state each frame, such as when capacity set off for a place and how long the route is. It is never accumulated. So figures are drawn only for places in view, and they appear in a consistent state when the camera arrives.
+A figure's position is computed from current state each frame, such as when capacity set off for a place and how long the route is, and is never accumulated. This lets the game draw figures only for places in view, and they appear in a consistent state when the camera arrives.
 
-Only presentation may depend on the camera. The simulation is the same everywhere (principle 10). So any switch between individual and aggregate guests keys on something like crowd density, never on the view.
+Only presentation may depend on the camera. Because the simulation is the same everywhere (principle 10), if guests switch between individual and aggregate, the switch must depend on something like crowd density, never on the view.
 
 ## Legibility
 

@@ -8,7 +8,7 @@ Let the player start a new park, open a park file, and save one from the Tools p
 
 tpj_park_files, a static library in src/app, holds openParkFile, saveParkFile, and withParkExtension over SDL_LoadFile, SDL_SaveFile, loadWorld, and saveWorld. --park uses it too. The Tools panel returns a park action. main.cpp shows the dialogs and receives their paths in a mutex-guarded slot that lives for the whole program. At the start of each frame it saves, or replaces the world, empties the queue, reselects the tool, and forgets the drawn intent so the camera frames the new park.
 
-All commands run from the repository root, /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones.
+All commands run from the repository root.
 
 ## Tasks
 
@@ -458,7 +458,7 @@ Expected: no output.
 
 ### Task 7a: Start the dialogs in the linked parks folder
 
-Added after implementation at Evan's request, so saved parks survive a clean build, following SteelJones' resources link.
+Added after implementation at the user's request, so saved parks survive a clean build, following SteelJones' resources link.
 
 Files:
 - Create: `parks/.gitkeep`
@@ -492,10 +492,10 @@ Step 5: Run: `build/linux-debug/ThemeParkJones --park tests/parks/sketch.park --
 Expected: the Tools panel shows New park, Open park, and Save park above the tools.
 
 Step 6: Dispatch the reviewer agent on the staged diff via the reviewing skill, with FEATURE.md, src/app/SPEC.md, and docs/principles.md.
-Expected: Evan decides on each finding.
+Expected: the user decides on each finding.
 
-Step 7: Ask Evan to run build/windows-debug/ThemeParkJones.exe and check criterion 6.
-Expected: Evan confirms it.
+Step 7: Ask the user to run build/windows-debug/ThemeParkJones.exe and check criterion 6.
+Expected: the user confirms it.
 
 ### Task 9: Commit
 

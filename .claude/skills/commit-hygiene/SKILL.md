@@ -21,10 +21,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ## Subject rules
 
-- The subsystem is one capitalized word followed by a colon and a space: `Sim:`, `Render:`, `App:`, `Docs:`, `Plans:`, `Skills:`, `Hooks:`, `Build:`.
-- The verb is imperative: `Add`, `Drop`, `Fix`, `Rename`, `Move`, `Refactor`. Not `Added`, `Adding`, or `Fixes`.
-- The subject is at most 65 characters in total.
-- No trailing period.
+- Start with the subsystem, written as one capitalized word followed by a colon and a space: `Sim:`, `Render:`, `App:`, `Docs:`, `Plans:`, `Skills:`, `Hooks:`, `Build:`.
+- Use an imperative verb: `Add`, `Drop`, `Fix`, `Rename`, `Move`, `Refactor`. Don't use `Added`, `Adding`, or `Fixes`.
+- Keep the subject to at most 65 characters in total.
+- Don't end the subject with a period.
 
 ## Body rules
 
@@ -32,7 +32,7 @@ Most commits don't need a body. Add one only when the diff can't explain *why* t
 
 If there is a body:
 
-- One blank line between subject and body.
+- Put one blank line between subject and body.
 - Keep each line at most 72 characters. Wrap lines by hand.
 - Keep it to at most 12 lines, not counting the trailer and its blank line.
 - Don't narrate in the first person, such as `I added` or `I fixed`.

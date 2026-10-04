@@ -258,6 +258,6 @@ Expected: both hashes equal those in build/perf/before.txt; the Windows real tim
 
 ### Task 8: Review and commit
 
-Step 1: Review the staged diff via the reviewing skill, as implementing-features step 7 describes, and present the findings to Evan.
+Step 1: Review the staged diff via the reviewing skill, as implementing-features step 7 describes, and present the findings to the user.
 
 Step 2: Commit once, via the commit-hygiene skill, with the subject `Medium: Sample fields by matching stop places` and a body naming the stop places, the comparisons that replace resolving each entry, and the before and after times and resolve shares.

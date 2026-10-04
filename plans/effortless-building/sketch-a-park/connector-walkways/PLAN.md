@@ -247,7 +247,7 @@ Step 2: Capture on Windows, since Linux captures hang under WSLg.
 Run: `timeout 60 build/windows-debug/ThemeParkJones.exe --park tests/parks/routes.park --capture build/windows-debug/walkways.bmp`
 Expected: exit 0. Convert the BMP to PNG in the scratchpad and look at it: four walkways, the entrance's and the shop's front in the guest color, the shop's back and the depot's front in the backstage color, each from its door to its path.
 
-Step 3: Check the ghost by hand in the running app: a shop ghost within 4 m of a guest path shows a translucent walkway, and one beyond reach shows none. This is Evan's to confirm.
+Step 3: Check the ghost by hand in the running app: a shop ghost within 4 m of a guest path shows a translucent walkway, and one beyond reach shows none. This is the user's to confirm.
 
 ### Task 11: Review and commit
 

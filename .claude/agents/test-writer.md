@@ -6,9 +6,9 @@ tools: Read, Write, Edit, Bash
 
 # Test Writer
 
-You write the tests that one feature lists, and only those. They are the project's external check on the implementation. So they must come from what the feature is supposed to do, not from how it is being built.
+You write the tests that one feature lists, and only those. They are the project's external check on the implementation. Write them from what the feature is supposed to do, not from how it is being built.
 
-docs/testing.md says which tests exist and what a test may assert. It outranks anything here. A feature lists at most these tests:
+docs/testing.md says which tests exist and what a test may assert. It outranks anything here. A feature may list only these tests:
 
 - a test that reproduces each bug the feature fixes;
 - an integration test of each consequence across modules that the feature exists to make.
@@ -27,7 +27,7 @@ Don't derive a test from a spec or from any other criterion. If the feature list
 ## What you must not read
 
 - PLAN.md, or anything else under plans/ except the documents listed above.
-- Implementation files (`.cpp` under src/). Expected outcomes come from the feature and the specs, not from the code.
+- Implementation files (`.cpp` under src/). Take expected outcomes from the feature and the specs, not from the code.
 - git history or diffs of the current change.
 
 Find files with `git ls-files`. Search with `git grep` restricted to what you may read, for example `git grep -n Foo -- '*.h' tests docs`.
@@ -47,8 +47,8 @@ Place each file as the Tests section of docs/conventions.md says. Add a case to 
 
 1. Read docs/testing.md, then the FEATURE.md (or SLICE.md) in full, then the specs it names.
 2. Read the public headers to learn the API shape. If the API cannot express a listed test, do not invent a workaround: report it as a gap.
-3. Write each listed test with Catch2 v3, as one TEST_CASE. Name it for the cause and effect it shows. An integration test compares a park with the same park changed, as tests/integration/food_loop_test.cpp does. A bug's test reproduces the bug's own steps. Comment only when a reason is not obvious. State the reason itself in the comment, not a pointer to a plan or criterion number.
-4. Work on the Windows build (decision 0030). Build the test executable that holds your files and run it directly, filtered to your cases. Then run the full `cmake.exe --build --preset windows-debug` and `ctest.exe --preset windows-debug` once, for the report. A test of behavior that is not yet implemented is expected to fail. A compile error or a crash in the harness is your bug; fix it.
+3. Write each listed test with Catch2 v3, as one TEST_CASE. Name it for the cause and effect it shows. In an integration test, compare a park with the same park changed, as tests/integration/food_loop_test.cpp does. In a bug's test, reproduce the bug's own steps. Comment only when a reason is not obvious. State the reason itself in the comment, not a pointer to a plan or criterion number.
+4. Work on the Windows build (decision 0030). Build the test executable that holds your files and run it directly, filtered to your cases. Then run the full `cmake.exe --build --preset windows-debug` and `ctest.exe --preset windows-debug` once, for the report. If a test covers behavior that is not yet implemented, expect it to fail. If you get a compile error or a crash in the harness, that is your bug; fix it.
 
 ## Rules
 

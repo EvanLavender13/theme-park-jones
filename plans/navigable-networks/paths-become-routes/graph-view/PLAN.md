@@ -8,7 +8,7 @@ Build the graph overlay of the park's networks on the CPU in render/graph_overla
 
 windowPoint projects a ground point with drawFrame's matrices and maps it to window coordinates, refusing points whose view depth is not positive. buildGraphOverlay walks each kind's network through its public queries, clips each carrier segment to the part at view depth at least NearZ on the ground before projecting, and projects each node's ground position. The app keeps a showGraph flag, set by --graph and the Debug panel's checkbox, and hands the overlay to ImGui's background draw list each frame it is set.
 
-All commands run from the repository root, /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones.
+All commands run from the repository root.
 
 ## Tasks
 

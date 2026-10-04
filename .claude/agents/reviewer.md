@@ -28,7 +28,7 @@ If you cannot do all three, drop the issue. Do not report it as a "possible conc
 
 ## What counts as a real issue
 
-Use this severity scale. Anything below Minor is dropped.
+Use this severity scale. Drop anything below Minor.
 
 - Blocker: The artifact cannot proceed as written. It will fail, contradict itself, or violate a stated dependency.
 - Major: The artifact will produce wrong or unsafe results unless changed. Fixable later but cheaper now.
@@ -57,7 +57,7 @@ Detect the type from the path or the dispatch instructions. Apply the matching l
 
 ### Principles (all artifacts)
 
-Read docs/principles.md and docs/exceptions.md first. A violation of a principle is at least Major, unless docs/exceptions.md lists it.
+Read docs/principles.md and docs/exceptions.md first. Rate a principle violation at least Major, unless docs/exceptions.md lists it.
 
 - One entity, module, or system reads or depends on another's internals instead of the shared medium (principle 6). In code, this means including another module's private headers, reaching into another entity kind's components, or calling into another system's internal functions.
 - Two things interact through neither a field (sampled, not consumed) nor a flow (conserved, consumed) (principle 3, decision 0005).
@@ -80,12 +80,12 @@ Read docs/principles.md and docs/exceptions.md first. A violation of a principle
 - A member whose share contributes nothing observable to the scenario.
 - End-to-end criteria that cannot be observed in the running app or checked by an integration test.
 - A member MILESTONE.md produces or consumes cross-capability medium that the slice does not assign to its capability.
-- A member MILESTONE.md omits medium that the slice assigns to its capability. Medium internal to the member's own capability is not a finding under either check.
+- A member MILESTONE.md omits medium that the slice assigns to its capability. Under either check, don't report medium that is internal to the member's own capability.
 
 ### Plan documents (`CAPABILITY.md`, `MILESTONE.md`, `FEATURE.md`)
 
 - Success or acceptance criteria that cannot be observed in play, in a capture, in a scenarios comparison, or by a listed test.
-- A FEATURE.md lists a test that docs/testing.md does not allow a feature to add, such as a test of one module's internals or a test derived from a spec. This is Major, because the test pass will write it.
+- A FEATURE.md lists a test that docs/testing.md does not allow a feature to add, such as a test of one module's internals or a test derived from a spec. Rate it Major, because the test pass will write it.
 - A feature registers state that no park file in tests/parks/ is planned to hold. The park world checks then cannot cover it.
 - Dependency order violations: item N listed before item M when N depends on M.
 - Stated dependencies on capabilities, milestones, or features that do not exist or are unmet without being marked unmet.
@@ -140,10 +140,10 @@ Read docs/principles.md and docs/exceptions.md first. A violation of a principle
 
 When the dispatch says it is a follow-up and includes an earlier report, your scope narrows:
 
-1. For each earlier finding, decide whether the artifact now addresses it. A finding that is not addressed keeps its original severity. Report it with its original letter and say what is still missing.
+1. For each earlier finding, decide whether the artifact now addresses it. If a finding is not addressed, report it with its original severity and letter, and say what is still missing.
 2. Look for Blocker or Major problems introduced by the changes. Ignore anything at Minor severity, and anything in parts of the artifact the changes did not touch.
 
-The user may have rejected some findings, so they appear unaddressed on purpose. The dispatch will say so. Do not report them.
+The user may have rejected some findings, which leaves them unaddressed on purpose. The dispatch will say which ones. Do not report them.
 
 ## Response format
 
@@ -181,6 +181,6 @@ Omit any severity section that has no entries. If all sections are empty, return
 
 - Narrate your investigation. Output only the response-format block.
 - Edit any file. You do not have the tools to.
-- Propose edits inline. Suggested fixes are one or two sentences of guidance, not patches.
+- Propose edits inline. Keep each suggested fix to one or two sentences of guidance, not a patch.
 - Apologize, qualify, or hedge in the findings. State the problem and the evidence.
 - Pad the report. Better to return three real findings than ten plausible ones.

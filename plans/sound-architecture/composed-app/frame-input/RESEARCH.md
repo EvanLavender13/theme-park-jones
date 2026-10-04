@@ -28,7 +28,7 @@ Sources: src/app/main.cpp runLoop; src/sim/world.h SIM_TICK_SECONDS; https://gaf
 
 ## Does the orbit camera join the library?
 
-The cursor's ground and entity take the camera's view, and input mapping fills the orbit camera's CameraInput. The orbit camera needs no window but builds into the executable, and main.cpp's cameraView helper turns it into a CameraView. The milestone puts every window-free app component in tpj_app_core, so the orbit camera moves there now and the helper becomes orbitCameraView beside it. Evan chose this.
+The cursor's ground and entity take the camera's view, and input mapping fills the orbit camera's CameraInput. The orbit camera needs no window but builds into the executable, and main.cpp's cameraView helper turns it into a CameraView. The milestone puts every window-free app component in tpj_app_core, so the orbit camera moves there now and the helper becomes orbitCameraView beside it. The user chose this.
 
 Rejected: leaving the orbit camera in the executable — the input and cursor would depend on a header whose code the library cannot link, and cameraView would stay in main.cpp.
 

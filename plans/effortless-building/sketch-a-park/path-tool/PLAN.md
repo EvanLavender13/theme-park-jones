@@ -8,7 +8,7 @@ Let the player draw guest and backstage paths by clicking points, with a ghost c
 
 src/tools gains two ToolKinds, the drawn points in ToolState, snapToPath, and a path branch in pressPointer, releasePointer, and tentativeEdit, so the existing release contract carries ghost-equals-commit to paths. buildGhostMesh already draws an AddPath ghost, so the renderer changes only in its spec. The Tools panel adds the two tools, a finishing hint, and a Cancel path button.
 
-All commands run from the repository root, /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones.
+All commands run from the repository root.
 
 ## Tasks
 
@@ -323,10 +323,10 @@ Step 5: Run: `build/linux-debug/ThemeParkJones --park tests/parks/sketch.park --
 Expected: the Tools panel lists Look, Guest path, Backstage path, Place shop, Place depot, Move box, and Delete.
 
 Step 6: Dispatch the reviewer agent on the staged diff via the reviewing skill, with FEATURE.md, src/tools/SPEC.md, src/render/SPEC.md, src/app/SPEC.md, and docs/principles.md.
-Expected: Evan decides on each finding.
+Expected: the user decides on each finding.
 
-Step 7: Ask Evan to run build/windows-debug/ThemeParkJones.exe --park tests/parks/sketch.park and check criterion 8.
-Expected: Evan confirms it.
+Step 7: Ask the user to run build/windows-debug/ThemeParkJones.exe --park tests/parks/sketch.park and check criterion 8.
+Expected: the user confirms it.
 
 ### Task 11: Commit
 

@@ -29,7 +29,7 @@ Step 2: Give each moved header its directory wherever the spec names it.
 Run:
 
 ```bash
-cd /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones && python3 - <<'EOF'
+cd "$(git rev-parse --show-toplevel)" && python3 - <<'EOF'
 import re
 moves = {
     'session': ['park_session', 'park_file', 'park_file_requests', 'park_dialogs'],
@@ -83,7 +83,7 @@ Step 1: Move each component, rename its include guard, and rewrite its includes.
 Run:
 
 ```bash
-cd /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones
+cd "$(git rev-parse --show-toplevel)"
 move() {
   dir=$1; shift
   mkdir -p src/app/$dir
@@ -161,7 +161,7 @@ Step 1: Move them.
 Run:
 
 ```bash
-cd /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones/tests/app
+cd "$(git rev-parse --show-toplevel)/tests/app"
 mkdir -p session input scene
 git mv park_session_test.cpp park_file_test.cpp park_file_requests_test.cpp session/
 git mv cursor_test.cpp input_map_test.cpp interaction_test.cpp orbit_camera_test.cpp input/

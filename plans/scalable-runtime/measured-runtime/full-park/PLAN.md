@@ -292,7 +292,7 @@ Expected: about 1 MB; `guest paths 21  backstage paths 6`; `shops 30  depots 3`;
 
 ### Task 8: Check the same text on both Windows builds
 
-Amended: windows-debug ran over an hour without finishing the full warm-up, and Evan moved the Linux checks to release time, so the check uses a 60-tick warm-up on the two Windows builds.
+Amended: windows-debug ran over an hour without finishing the full warm-up, and the user moved the Linux checks to release time, so the check uses a 60-tick warm-up on the two Windows builds.
 
 Run: `build/windows-release/tpj_bench.exe --full-park build/full-release-60.park --warm-ticks 60 && build/windows-debug/tpj_bench.exe --full-park build/full-debug-60.park --warm-ticks 60 && cmp build/full-release-60.park build/full-debug-60.park && echo identical`
 Expected: `identical` (criterion 2).
@@ -305,7 +305,7 @@ Expected: no warnings; every test passes; tidy is clean (criterion 5).
 ### Task 10: The first report on the full park
 
 Run: `scripts/runtime-report.sh build/runtime-report/full-park-first.txt && scripts/runtime-report.sh --compare build/runtime-report/full-park-first.txt build/runtime-report/full-park-first.txt`
-Expected: `runtime-report: wrote ... in <m>m <ss>s`, and a comparison listing every stage of tests/parks/stress/full.park and winding-path.park on both builds, in microseconds, ending `clear 0 of 18`: six stages of full.park on windows-release and six of winding-path.park on each build. Put the comparison's lines and the time in the feature's report, with the full park's windows-release food-overlay median beside the 33 ms between ticks. If the report takes too long to wait for, say how long, for Evan's decision on fewer debug ticks.
+Expected: `runtime-report: wrote ... in <m>m <ss>s`, and a comparison listing every stage of tests/parks/stress/full.park and winding-path.park on both builds, in microseconds, ending `clear 0 of 18`: six stages of full.park on windows-release and six of winding-path.park on each build. Put the comparison's lines and the time in the feature's report, with the full park's windows-release food-overlay median beside the 33 ms between ticks. If the report takes too long to wait for, say how long, for the user's decision on fewer debug ticks.
 
 ### Task 11: Commit
 

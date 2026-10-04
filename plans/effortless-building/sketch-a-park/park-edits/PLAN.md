@@ -8,7 +8,7 @@ Add the five park commands, the physical-validity check as their only refusal, a
 
 src/sim/park/edits.cpp gathers a world's solids (footprints with their pose and size) and lines (ground lines with half their path's width) through the public queries, and judges each conflict with CONTACT_TOLERANCE: corners and line points against the square's limits, the separating axis test on four axes for solids, and a segment-to-rectangle distance in the solid's own frame for lines. isAccepted builds the command's solid or line and checks it against the others. applyCommand calls isAccepted first and changes nothing when it is false, so the query and the outcome are one decision. The scenario draws commands with keyed draws and queues one every tenth cycle.
 
-All commands run from the repository root, /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones.
+All commands run from the repository root.
 
 ## Tasks
 

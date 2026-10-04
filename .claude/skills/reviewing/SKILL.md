@@ -19,10 +19,10 @@ There are two reasons.
 1. Identify the artifact: one file, a set of files, a commit range, or the staged diff. If it's unclear, ask the user.
 2. Identify the artifact type: plan document, implementation plan, code change, or other. The subagent checks each type differently.
 3. Identify required context: the parent artifacts the reviewer must read.
-    - A `MILESTONE.md` review requires its `CAPABILITY.md`. If the milestone is a slice member, it also requires its `SLICE.md`.
-    - A `SLICE.md` review requires docs/vision.md and the CAPABILITY.md and MILESTONE.md of every existing member.
-    - A `FEATURE.md` and `PLAN.md` review requires its `MILESTONE.md`, the SPEC.md of every module the feature touches, and docs/principles.md.
-    - A code change requires FEATURE.md when one exists, the SPEC.md of every module it touches, and docs/principles.md.
+    - For a `MILESTONE.md` review, include its `CAPABILITY.md`. If the milestone is a slice member, also include its `SLICE.md`.
+    - For a `SLICE.md` review, include docs/vision.md and the CAPABILITY.md and MILESTONE.md of every existing member.
+    - For a `FEATURE.md` and `PLAN.md` review, include its `MILESTONE.md`, the SPEC.md of every module the feature touches, and docs/principles.md.
+    - For a code change, include FEATURE.md if one exists, the SPEC.md of every module the change touches, and docs/principles.md.
 
     Don't summarize these for the reviewer. Pass the paths so the reviewer reads them itself.
 4. Dispatch with the Agent tool: Use `subagent_type: reviewer`. Put only these in the dispatch prompt:
@@ -35,7 +35,7 @@ There are two reasons.
 6. Present the findings to the user verbatim: Don't summarize, reorder, soften, or add commentary. If this session filters the output, there was no point in using a fresh subagent.
 7. Ask the user what to act on: Don't propose fixes yourself. The user decides which findings to address and which skill to invoke next.
 
-Planning briefs are the exception. A planning skill may dispatch a review of its own brief (CAPABILITY.md, MILESTONE.md, SLICE.md, or FEATURE.md with PLAN.md) before approval. In that case, replace steps 6 and 7 with these:
+Planning briefs are the exception. If a planning skill dispatches a review of its own brief (CAPABILITY.md, MILESTONE.md, SLICE.md, or FEATURE.md with PLAN.md) before approval, replace steps 6 and 7 with these:
 
 - Fix Minor findings directly.
 - Fix Major findings directly when the fix follows from the principles and settled decisions and needs no new design choice.
@@ -43,7 +43,7 @@ Planning briefs are the exception. A planning skill may dispatch a review of its
 - Report the rest in one line, for example "review fixed A, B, and C".
 - Dispatch the follow-up review only when a Major fix changed a core definition that other plans rely on. Before you dispatch it, check the fix against every kind of edit or case the definition covers.
 
-Code reviews and reviews the user asks for directly still follow steps 6 and 7.
+For code reviews, and for reviews the user asks for directly, still follow steps 6 and 7.
 
 ## Dispatch hygiene
 
@@ -59,13 +59,13 @@ The reviewer needs the artifact, the context paths, and the type. Nothing else.
 
 ## Review budget
 
-A reviewer asked to find issues will keep finding smaller ones. So limit the number of reviews of one artifact.
+Limit the number of reviews of one artifact, because a reviewer asked to find issues will keep finding smaller ones.
 
 - Run one full review per artifact. Stage or commit the artifact first, so later fixes show up as a diff.
 - Run at most one follow-up review. Run it only when the full review had Blocker or Major findings and their fixes changed the design, not just the wording. The follow-up checks that each finding was addressed. It reports only Blocker or Major problems that the fixes introduced. It doesn't re-review untouched parts.
 - Don't run a third pass. Fix anything the follow-up finds without another review, or record it as an open question.
 
-Later stages catch what plan reviews miss: milestone and feature reviews against their parents, the separate test pass, and slice closing. A plan doesn't need to be flawless before it moves on.
+Later stages catch what plan reviews miss: milestone and feature reviews against their parents, the separate test pass, and slice closing. You can let a plan move on before it is flawless.
 
 ## Dispatch template
 

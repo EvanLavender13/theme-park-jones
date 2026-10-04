@@ -89,9 +89,9 @@ Splitting and joining paths. Smooth curves through area vertices and Bezier bend
 ## Open questions
 
 - How the networks are built from the paved ground. RESEARCH.md's evenly spread points linked to neighbors is the starting point, with two known gaps to close: which neighbors link, so a narrow path stays one line, and how widths on wide ground stay local to an edit. Resolved in ground-becomes-routes' planning, with its own tests of criteria 1 to 6.
-- The route distance tolerance and allowance. The criteria assume 10%. Resolved by measuring both parks and a large synthetic ground against a reference shortest walk in ground-becomes-routes; Evan decides if the measured error calls for a different tolerance.
+- The route distance tolerance and allowance. The criteria assume 10%. Resolved by measuring both parks and a large synthetic ground against a reference shortest walk in ground-becomes-routes; the user decides if the measured error calls for a different tolerance.
 - How near an edit the networks may change, and whether re-deriving them is fast enough to resolve a candidate on every pointer move, as previews do. Resolved by measuring in ground-becomes-routes; preview must still equal commit (principle 8).
-- Whether a park with plazas holds its tick and its previews within budget. Resolved by the plaza stress park's runtime report in ground-becomes-routes. Wider spacing on open ground and hierarchical routing are the fallbacks, and Evan chooses among them with the numbers in hand.
+- Whether a park with plazas holds its tick and its previews within budget. Resolved by the plaza stress park's runtime report in ground-becomes-routes. Wider spacing on open ground and hierarchical routing are the fallbacks, and the user chooses among them with the numbers in hand.
 - Snap reach, guide spacing, setback, the stamp's default size, and the re-choose distance are tuning values, set while planning layered-paving, ground-becomes-routes, and open-ground-guests and adjusted by drawing parks.
 
 ## Research notes

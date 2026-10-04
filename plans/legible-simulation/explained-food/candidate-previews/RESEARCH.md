@@ -2,7 +2,7 @@
 
 ## How should the candidate be kept current?
 
-Timed on warm.park on windows-debug, 40 runs each: making the candidate, a copy and a resolution, takes 1.73 ms; the ghost mesh from it 0.46 ms; the food overlay mesh 2.62 ms; and one tick 0.66 ms. The app runs at a vsync cap of about 6 ms a frame. Making the candidate and the ghost every frame, as first built, cost Evan about 60 fps while a shop ghost was shown, and the overlay, rebuilt every frame since food-overlay, was already the largest cost.
+Timed on warm.park on windows-debug, 40 runs each: making the candidate, a copy and a resolution, takes 1.73 ms; the ghost mesh from it 0.46 ms; the food overlay mesh 2.62 ms; and one tick 0.66 ms. The app runs at a vsync cap of about 6 ms a frame. Making the candidate and the ghost every frame, as first built, cost the user about 60 fps while a shop ghost was shown, and the overlay, rebuilt every frame since food-overlay, was already the largest cost.
 
 The candidate, the ghost, and the overlay change only when the world ticks, the edit changes, the highlight changes, or the overlay is shown or hidden, and a world changes only as it ticks. So a preview kept with the tick and edit it was made from, and meshes rebuilt only when it is made again or the highlight or checkbox changes, give the same pictures as rebuilding every frame, while a frame between ticks with a still cursor rebuilds nothing. The kept preview is emptied when the app replaces the world, as the park and guest meshes' records are. This is a cache decision 0027 would rather avoid, and it is taken because the frame rate needs it: keepPreview's rule, headless and tested, is the one place that decides when it is stale.
 

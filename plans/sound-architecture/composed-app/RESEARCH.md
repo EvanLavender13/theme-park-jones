@@ -4,7 +4,7 @@
 
 SDL3's main callbacks hand the loop to SDL: SDL_AppInit builds an appstate object, SDL_AppIterate runs a frame, SDL_AppEvent receives each event, and SDL_AppQuit tears down. SDL recommends them for platforms that demand event-driven control, such as the web and iOS. They also make the application one object rather than loop locals. Their cost here is threading: SDL_AppEvent can run concurrently with SDL_AppIterate for events pushed from other threads, and the app's file dialogs call back from other threads, so input state would need its own lock or queue. Teardown would move into SDL_AppQuit, and --hash would have to finish inside SDL_AppInit.
 
-An Application object run by main's own loop gets the same single owner of the app's state without those costs. The frame order stays in one function that reads top to bottom, as 0027 asks, and RAII owners release on return in reverse order. The vision targets the Windows desktop, so the portability the callbacks buy is not needed. Evan chose the own loop.
+An Application object run by main's own loop gets the same single owner of the app's state without those costs. The frame order stays in one function that reads top to bottom, as 0027 asks, and RAII owners release on return in reverse order. The vision targets the Windows desktop, so the portability the callbacks buy is not needed. The user chose the own loop.
 
 Rejected: SDL3's main callbacks — concurrency between events and frames, and teardown and --hash moved into callbacks, for a portability the project does not target.
 
@@ -44,7 +44,7 @@ Sources: https://en.cppreference.com/w/cpp/language/destructor — destruction o
 
 ## Where do the Debug panel's numbers and the graph drawing go?
 
-drawPanels gathers shop lines, the guest count, mean hunger, waiting guests, and meals eaten from shopRecord, guestRecord, parkGuests, parkBoxes, and unitsConsumed: all queries of what the park publishes, needing no window. That is legible's role, so a park summary in legible gives the numbers, tested in tpj_legible_tests as inspect.h is, and the Debug panel adds the frame rate and the camera and draws them. drawGraph is only ImGui draw-list calls over render's buildGraphOverlay, which already holds the logic, so it is an app component at the platform edge. Evan chose this placement.
+drawPanels gathers shop lines, the guest count, mean hunger, waiting guests, and meals eaten from shopRecord, guestRecord, parkGuests, parkBoxes, and unitsConsumed: all queries of what the park publishes, needing no window. That is legible's role, so a park summary in legible gives the numbers, tested in tpj_legible_tests as inspect.h is, and the Debug panel adds the frame rate and the camera and draws them. drawGraph is only ImGui draw-list calls over render's buildGraphOverlay, which already holds the logic, so it is an app component at the platform edge. The user chose this placement.
 
 Rejected: keeping the summary in app — a summary of the simulation would sit where only the app can use or test it, beside platform code.
 

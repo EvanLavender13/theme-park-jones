@@ -352,7 +352,7 @@ Expected: the build succeeds with no warnings.
 
 ### Task 8: Check the tooltip by hand
 
-Step 1: Ask Evan to run, from `build/windows-debug`, `./ThemeParkJones.exe --park ../../tests/parks/warm.park --overlay food`, hover the band near the shop and far from it, beyond the band, and over a panel, and uncheck Food overlay.
+Step 1: Ask the user to run, from `build/windows-debug`, `./ThemeParkJones.exe --park ../../tests/parks/warm.park --overlay food`, hover the band near the shop and far from it, beyond the band, and over a panel, and uncheck Food overlay.
 
 Expected (criterion 4): over the band, a tooltip with `Food` and a value, and one row for shop 7 whose term matches the value to the digit shown; beyond the band, over a panel, and with the overlay unchecked, no tooltip. A tooltip that lists a term not matching the value, or shows beyond the band, is a deviation to report.
 
@@ -382,6 +382,6 @@ Expected: `tidy: clean.`
 
 Step 1: Stage exactly the feature's paths: `git add plans/legible-simulation/explained-food/overlay-attribution src/legible src/app tests/legible`, and check `git status --short` shows nothing else staged.
 
-Step 2: Dispatch the reviewer on the staged diff, `git diff --cached`, with FEATURE.md, src/legible/SPEC.md, src/app/SPEC.md, docs/principles.md, and docs/decisions/0027-code-architecture.md as context, and give its findings to Evan verbatim.
+Step 2: Dispatch the reviewer on the staged diff, `git diff --cached`, with FEATURE.md, src/legible/SPEC.md, src/app/SPEC.md, docs/principles.md, and docs/decisions/0027-code-architecture.md as context, and give its findings to the user verbatim.
 
 Step 3: Commit through commit-hygiene with the subject `Legible: Attribute the food overlay on hover` and a body of at most 72-character lines saying that nearestGuestPathPlace finds the guest path place a ground point stands beside, and that while the overlay is shown a tooltip lists each shop's relief, route, wait, time, and term at the cursor's place, ending with the trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

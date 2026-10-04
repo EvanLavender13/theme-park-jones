@@ -82,7 +82,7 @@ replaces WALKWAY_JOINT_SEGMENTS. appendPath's and appendWalkway's comments name 
 - Miter or bevel joins inside a path, where a sharp bend narrows the ribbon or folds it: park-view left folds out of scope, and the player rarely draws one.
 - Ribbons of the same kind overlapping where they cross or meet: they are opaque in one color, so the overlap does not show, and only a translucent ghost crossing a same-kind ghost of itself would blend twice, which a single AddPath does only where its own line crosses itself.
 - A path whose whole ground line is shorter than its width, whose two joints overlap each other: rare, and it shows only as a darker translucent ghost.
-- Joints only at ends another path shares, with square dead ends: Evan chose round ends everywhere.
+- Joints only at ends another path shares, with square dead ends: the user chose round ends everywhere.
 - Depth bias or a draw order per kind in the pipelines: the lift settles it in the mesh (RESEARCH.md).
 
 ## Open questions

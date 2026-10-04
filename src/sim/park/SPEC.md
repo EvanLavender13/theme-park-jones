@@ -8,7 +8,7 @@ addParkIntent registers the intent types entrance, path, and box. Their componen
 
 Other modules read intent only through parkEntrances, parkPaths, and parkBoxes. Each returns every entity holding that kind of intent, in key order, as the public values ParkEntrance, ParkPath, and ParkBox. Other modules change intent only through commands.
 
-groundLine, footprintOf, and the sizes pathWidth, boxSize, ENTRANCE_SIZE, and PARK_SIZE are public. So the renderer, the tools, and routes measure the same shapes this module validates.
+groundLine, footprintOf, and the sizes pathWidth, boxSize, ENTRANCE_SIZE, and PARK_SIZE are public, so that the renderer, the tools, and routes measure the same shapes this module validates.
 
 ## Intent
 
@@ -32,25 +32,25 @@ Kinds are saved by name: guest, backstage, shop, and depot.
 
 A path's ground line is its curve as a line of CarrierPoints (sim/medium/SPEC.md). Each CarrierPoint is a ground position with its distance along the line. The ground line is a pure function of the path's points. The renderer, the validity check, and routes all use it, so what is drawn, what is refused, and what is walked are the same line.
 
-First, any point closer than MIN_POINT_SPACING to the last kept point is dropped. keptPoints returns the points kept. The line is a smooth curve that passes exactly through the kept points. A path of two kept points is straight. Distances start at 0 and strictly increase. The line is empty when a point is not finite or lies outside the park, or when fewer than two points are kept.
+First, if a point is closer than MIN_POINT_SPACING to the last kept point, it is dropped. keptPoints returns the points kept. The line is a smooth curve that passes exactly through the kept points. If a path has only two kept points, its line is straight. Distances start at 0 and strictly increase. The line is empty when a point is not finite or lies outside the park, or when fewer than two points are kept.
 
 ## Footprints
 
-footprintOf returns the rectangle a pose covers for a size: its width across the facing and its depth along it. It returns none when the pose is not finite or its facing has zero length. Its corners run front left, front right, back right, back left. So the front face runs from the first corner to the second, and the back face from the third to the fourth.
+footprintOf returns the rectangle a pose covers for a size: its width across the facing and its depth along it. It returns none when the pose is not finite or its facing has zero length. Its corners run front left, front right, back right, back left: the front face runs from the first corner to the second, and the back face from the third to the fourth.
 
 ## Physical validity
 
 A world is physically valid when no object leaves the park, no two solids overlap, and no path meets a solid. Solids are the footprints of the entrance and the boxes. A path occupies its ground line widened by half its pathWidth.
 
-Objects that only touch, within CONTACT_TOLERANCE, never conflict, whatever rounding their facings bring. Paths never conflict with each other: where they cross, routes derives a junction. An object with no footprint or with an empty ground line makes the world invalid. Only a hand-written save can hold one. isPhysicallyValid returns whether a world is valid.
+If objects only touch, within CONTACT_TOLERANCE, they never conflict, whatever rounding their facings bring. Paths never conflict with each other: where they cross, routes derives a junction. If an object has no footprint or has an empty ground line, the world is invalid. Only a hand-written save can hold such an object. isPhysicallyValid returns whether a world is valid.
 
 ## Commands
 
 Five commands change intent: AddPath, AddBox, MoveBox, DeletePath, and DeleteBox. No command moves or deletes the entrance. Tools submit commands to the command queue, so they apply between ticks.
 
-On a valid world, a command is accepted exactly when it names what it acts on and the world it describes is physically valid. isAccepted returns whether it would be. applyCommand changes nothing when the command is not accepted. So what a ghost shows as valid is what its commit does.
+On a valid world, a command is accepted exactly when it names what it acts on and the world it describes is physically valid. isAccepted returns whether it would be. If the command is not accepted, applyCommand changes nothing. A ghost shown as valid always matches what its commit does.
 
-An accepted command leaves exactly the intent it describes and changes nothing else:
+If a command is accepted, it leaves exactly the intent it describes and changes nothing else:
 
 - AddPath and AddBox each add one entity from the key counter.
 - MoveBox replaces a box's pose and keeps its key and kind.

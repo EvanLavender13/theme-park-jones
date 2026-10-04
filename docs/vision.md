@@ -2,9 +2,9 @@
 
 Theme Park Jones is a theme park game in the lineage of RollerCoaster Tycoon. It sits between Parkitect (simple stylized graphics, easy building, staff management) and Planet Coaster (gridless, powerful coaster building). Its simulation should feel meaningful beyond cashflow and worker micromanagement.
 
-The core feeling is this: the player plays around with a vague idea and ends up with something that looks good. They don't hand-place window panes, fight pixel alignment, or wonder what a theme park building should look like. The player is an art director, not a bricklayer. The player states intent at a high level, authored systems turn it into something coherent, and the player curates rather than constructs.
+The core feeling is this: the player plays around with a vague idea and ends up with something that looks good. They don't hand-place window panes, fight pixel alignment, or wonder what a theme park building should look like. The player decides how things should look and does not place every piece by hand. The player states intent at a high level, authored systems turn it into something coherent, and the player curates rather than constructs.
 
-The biggest complaint about existing games is that Planet Coaster 2 offers nothing but manual placement of tiny individual pieces. That is why the project starts with building.
+The project starts with building because the biggest complaint about existing games is that Planet Coaster 2 offers nothing but manual placement of tiny individual pieces.
 
 The target is a plausible theme park. It is not a realistic one, and not an unconstrained sandbox. The counterexample is coaster-builder tools that are really CAD and rendering software: they give maximum control, but nothing is at stake, so there is no game.
 
@@ -21,7 +21,7 @@ The target is a plausible theme park. It is not a realistic one, and not an unco
 
 - Realistic-feeling rides with stylized graphics.
 - Procedural building.
-- Procedural painting of nature and paths. Paths want structure; nature wants scatter.
+- Procedural painting of nature and paths. Paths should look structured, and nature should look scattered.
 - A compelling simulation.
 
 ## First slice

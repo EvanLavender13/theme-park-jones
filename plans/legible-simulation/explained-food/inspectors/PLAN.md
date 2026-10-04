@@ -1074,7 +1074,7 @@ Expected: `0`. With no click there is no Inspector, so the capture shows the par
 
 ### Task 12: Check the Inspector by hand
 
-Step 1: Ask Evan to run, from `build/windows-debug`, `./ThemeParkJones.exe --park ../../tests/parks/warm.park --ticks 3000`, and with Look selected to:
+Step 1: Ask the user to run, from `build/windows-debug`, `./ThemeParkJones.exe --park ../../tests/parks/warm.park --ticks 3000`, and with Look selected to:
 
 - click a walking guest's body, from a low camera, then click another guest;
 - click the shop's roof, then its side;
@@ -1112,6 +1112,6 @@ Expected: `tidy: clean.`
 
 Step 1: Stage exactly the feature's paths: `git add plans/legible-simulation/explained-food/inspectors src/legible src/render src/app tests/legible tests/render`, and check `git status --short` shows nothing else staged.
 
-Step 2: Dispatch the reviewer on the staged diff, `git diff --cached`, with FEATURE.md, src/legible/SPEC.md, src/render/SPEC.md, src/app/SPEC.md, docs/principles.md, and docs/decisions/0027-code-architecture.md as context, and give its findings to Evan verbatim.
+Step 2: Dispatch the reviewer on the staged diff, `git diff --cached`, with FEATURE.md, src/legible/SPEC.md, src/render/SPEC.md, src/app/SPEC.md, docs/principles.md, and docs/decisions/0027-code-architecture.md as context, and give its findings to the user verbatim.
 
 Step 3: Commit through commit-hygiene with the subject `Legible: Inspect guests and shops` and a body of at most 72-character lines saying that a Look click picks the entrance, box, or guest the cursor's ray first meets as drawn, that inspectSubject builds a guest's or shop's rows and a guest's last choice from their records every frame, and that the app draws them in the Inspector window and marks the subject, ending with the trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

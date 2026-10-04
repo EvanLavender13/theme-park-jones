@@ -26,11 +26,11 @@ registeredScenarios lists the synthetic scenarios. Each is named and seeded, and
 - random park edits, with the guests and shops they affect
 - a food shop whose supply is cut and restored
 
-This way, every part of the simulation whose arithmetic or ordering could differ between builds shows up in the compared output.
+This way, if any part of the simulation's arithmetic or ordering could differ between builds, it shows up in the compared output.
 
 ## Output
 
-tpj_scenarios [--ticks n] [file...] writes, for each scenario and then each park file, a line after resolution and after every one of n cycles. Then it writes the sim math table's results, then the keyed draws' results. A scenario's line is `scenario <name> tick <t> hash <h>`, and a file's line is `file <path> tick <t> hash <h>`. h is the world's hash as 16 lowercase hexadecimal digits. Two builds that simulate identically write identical output. Timings go to standard error, so they never enter the compared output. It exits with a nonzero status and a message for an unknown option, a malformed --ticks, or a file it cannot read or load.
+tpj_scenarios [--ticks n] [file...] writes, for each scenario and then each park file, a line after resolution and after every one of n cycles. Then it writes the sim math table's results, then the keyed draws' results. A scenario's line is `scenario <name> tick <t> hash <h>`, and a file's line is `file <path> tick <t> hash <h>`. h is the world's hash as 16 lowercase hexadecimal digits. If two builds simulate identically, they write identical output. Timings go to standard error, so they never enter the compared output. If an option is unknown, --ticks is malformed, or a file cannot be read or loaded, it exits with a nonzero status and a message.
 
 tpj_scenarios --compare left right exits with status 0 when the two outputs hold the same lines. Otherwise it prints the first line where they differ, from each side, and exits with status 1. It exits with status 2 when it is not given two files or cannot read one. Use this comparison to show that work leaves the simulation unchanged.
 
@@ -38,10 +38,10 @@ tpj_scenarios --compare left right exits with status 0 when the two outputs hold
 
 tpj_scenarios --slice-parks fed warm cut makes the boxes-and-tubes slice's parks from fed:
 
-- warm is the park after WARM_TICKS cycles. That is long enough that a guest waits at the shop and a shipment is in transit.
+- warm is the park after WARM_TICKS cycles, which is long enough for a guest to be waiting at the shop and a shipment to be in transit.
 - cut is warm one cycle later with its backstage paths deleted, so the shop's supply is gone from the first tick.
 
-tests/parks/fed.park, warm.park, and cut.park are its output. Running it again picks up a change to the simulation's rules. It writes no file when it fails.
+tests/parks/fed.park, warm.park, and cut.park are its output. If the simulation's rules change, running it again remakes the parks under the new rules. It writes no file when it fails.
 
 ## The full park
 
@@ -52,7 +52,7 @@ makeFullPark makes the stress park at the size the game means to support:
 - three depots
 - 2,000 guests spread evenly along the paths
 
-By default it is stepped a minute into play (FULL_PARK_WARM_TICKS). Every shop is reachable and supplied. If that would not hold, it throws std::logic_error naming the edit or the shop. So any park it gives is valid, and none of its shops is starved. Its save is the same text on every build. tpj_bench --full-park writes it to tests/parks/stress/full.park (bench/SPEC.md).
+By default it is stepped a minute into play (FULL_PARK_WARM_TICKS). Every shop is reachable and supplied. If that would not hold, it throws std::logic_error naming the edit or the shop. Every park it gives is valid, and none of its shops is starved. Its save is the same text on every build. tpj_bench --full-park writes it to tests/parks/stress/full.park (bench/SPEC.md).
 
 ## Cross-build check
 

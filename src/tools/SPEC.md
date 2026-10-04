@@ -10,7 +10,7 @@ A ToolState holds one tool, of a ToolKind: None, GuestPath, BackstagePath, Place
 
 selectTool changes the tool and drops anything held or drawn without committing it. movePointer records where the pointer meets the ground, or that it meets none, as when it is over a panel. pressPointer and releasePointer are the primary button going down and up.
 
-A release commits exactly the edit tentativeEdit showed just before it, so what the player sees in the ghost is what gets committed. A tool refuses nothing. It commits its edit whether or not the simulation will accept it, and only the simulation refuses edits (principle 5). Neither tentativeEdit nor highlightedEntity changes anything.
+When the button is released, the tool commits exactly the edit tentativeEdit showed just before, so what the player sees in the ghost is what gets committed. A tool refuses nothing. It commits its edit whether or not the simulation will accept it, and only the simulation refuses edits (principle 5). Neither tentativeEdit nor highlightedEntity changes anything.
 
 ## Picking
 
@@ -20,10 +20,10 @@ boxAt gives the box whose footprint holds a ground point. pathAt gives the path 
 
 Look (ToolKind None) edits nothing.
 
-Guest path and Backstage path draw a path of their kind. Each click adds a point. The point snaps onto a nearby path of the same kind, so the new path joins it. Clicking the last point again finishes and commits the path. The ghost shows the path through the drawn points and the pointer. A path of fewer than two points commits nothing.
+Guest path and Backstage path draw a path of their kind. Each click adds a point. The point snaps onto a nearby path of the same kind, so the new path joins it. Clicking the last point again finishes and commits the path. The ghost shows the path through the drawn points and the pointer. If the drawn path has fewer than two points, finishing it commits nothing.
 
 Place shop and Place depot place a box at the pointer. Pressing puts the box down, and dragging before release turns it to face the drag. The next box faces the same way as the last.
 
-Move box marks the box under the pointer, and dragging moves it, keeping its facing. A click without a drag commits nothing.
+Move box marks the box under the pointer, and dragging moves it, keeping its facing. If the player clicks without dragging, nothing is committed.
 
 Delete removes the box under the pointer. If there is no box, it removes the path under the pointer. The ghost shows what it removes.

@@ -4,7 +4,7 @@
 
 Deterministic lockstep games treat a tick as a function of the state and the inputs applied at that tick. Factorio's clients hold the full game state and receive only input actions, which each client applies at the same tick. Replays in such games are a starting state plus a log of commands per tick. The commands are inputs to the simulation, not part of its state.
 
-For this project, that means the command queue is a separate object passed to the cycle, which empties it. The world value never holds pending commands, so copies, hashes, and saves never meet them, and command types need no visitFields until replays want to record them. Evan chose this.
+For this project, that means the command queue is a separate object passed to the cycle, which empties it. The world value never holds pending commands, so copies, hashes, and saves never meet them, and command types need no visitFields until replays want to record them. The user chose this.
 
 Rejected: a queue inside the world, covered by copy, equality, and hash. Every command type would need visitFields, and saves would carry commands that have not yet happened.
 

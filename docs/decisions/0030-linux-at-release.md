@@ -10,7 +10,7 @@ Decision 0026 moved iteration to windows-debug but kept linux-debug, with Addres
 
 Each change is checked on Windows. A change is finished when windows-debug builds without warnings, its tests pass, and scripts/tidy.sh is clean. tidy keeps reading linux-debug's compile commands, which need linux-debug configured, not built. The pre-push hook runs the same three checks.
 
-Linux is checked at release. scripts/release-check.sh builds linux-debug with AddressSanitizer and UBSan, warnings as errors, runs its tests, and runs the cross-build check (decision 0022). It is run before a release, and whenever Evan asks.
+Linux is checked at release. scripts/release-check.sh builds linux-debug with AddressSanitizer and UBSan, warnings as errors, runs its tests, and runs the cross-build check (decision 0022). It is run before a release, and whenever the user asks.
 
 Work that must leave the simulation unchanged, as decision 0028 requires of engineering capabilities, shows it on Windows. It compares tpj_scenarios's windows-debug output over the scenarios and tests/parks/*.park, before and after, with tpj_scenarios --compare. The cross-build check, which compares Windows with Linux, runs at release.
 

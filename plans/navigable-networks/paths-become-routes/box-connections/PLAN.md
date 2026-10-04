@@ -8,7 +8,7 @@ Derive connectors from the entrance's and boxes' doors to the nearest same-kind 
 
 The path-networks resolver gathers each kind's doors from parkEntrances and parkBoxes, finds each door's connection place with nearestPlace over a network of the path carriers alone, and appends a two-point connector carrier for each door within reach. Each connection enters the existing stop grouping and joining as one more meeting, between the connector's end and the path, and each connector's door node is anchored to its entity. The graph overlay flags lines whose carrier is not a path and gives each node its anchor, and the app picks colors and radii from them.
 
-All commands run from the repository root, /mnt/c/Users/EvanUhhh/source/repos/ThemeParkJones.
+All commands run from the repository root.
 
 ## Tasks
 

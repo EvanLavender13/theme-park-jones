@@ -6,7 +6,7 @@ The simulation: the park's state and the rules that change it. It holds a world 
 
 The target tpj_sim links only tpj_core and EnTT. It never depends on rendering, windowing, or input (principle 10). The sim's tests link it alone, so a violation fails the build.
 
-Modules inside the sim register their component types, systems, swap functions, resolvers, finishers, and commands with a WorldSchema. Each kind's internal components are private to its module, and only shared-medium components are public (decision 0016). Code outside the sim reaches the world through these headers:
+Modules inside the sim register their component types, systems, swap functions, resolvers, finishers, and commands with a WorldSchema. Each kind's internal components are private to its module, and only shared-medium components are public (decision 0016). Outside the sim, code reaches the world through these headers:
 
 - sim/world.h
 - sim/entity_key.h
@@ -18,7 +18,7 @@ Modules inside the sim register their component types, systems, swap functions, 
 
 ## The tick cycle
 
-The world advances only through stepWorld, one fixed tick of SIM_TICK_SECONDS at a time. So frame rate never changes what a tick does. Each call runs one cycle:
+The world advances only through stepWorld, one fixed tick of SIM_TICK_SECONDS at a time, so frame rate never changes what a tick does. Each call runs one cycle:
 
 1. A pending resolution runs first.
 2. The systems step in registration order.
@@ -29,13 +29,13 @@ The world advances only through stepWorld, one fixed tick of SIM_TICK_SECONDS at
 
 stepWorld(world) is the same cycle with no commands.
 
-isStepping, isResolving, and isFinishing are each true exactly while their stage runs. So a function meant for one stage can refuse callers from any other.
+isStepping, isResolving, and isFinishing are each true exactly while their stage runs. If a function is meant for one stage, it can use them to refuse callers from any other stage.
 
 ## Entity keys
 
-Every entity has a stable EntityKey. A component refers to another entity by its key, never by entt::entity, because EnTT recycles its identifiers. Keys from createEntity come from a counter the world holds, and they are never reused.
+Every entity has a stable EntityKey. When a component refers to another entity, it uses the entity's key, not its entt::entity, because EnTT recycles its identifiers. Keys from createEntity come from a counter the world holds, and they are never reused.
 
-Resolvers create entities with createDerivedEntity. Its key is a pure function of an owner key, a purpose, and an index, and it never collides with a counter key. createDerivedEntity reuses an entity that already holds its key.
+Resolvers create entities with createDerivedEntity. Its key is a pure function of an owner key, a purpose, and an index, and it never collides with a counter key. If an entity already holds the derived key, createDerivedEntity reuses that entity.
 
 ## Schemas and the park
 
@@ -50,41 +50,41 @@ makeParkSchema returns the park's schema, which is exactly what addPark register
 5. guests
 6. last, the routes finisher, which drops the previous networks after every finisher that reads them
 
-makeNewPark(seed) gives the new-park template (sim/park/SPEC.md) with that schema. Park files load with that schema. A scenario that adds synthetic entities calls addPark and then registers them.
+makeNewPark(seed) gives the new-park template (sim/park/SPEC.md) with that schema. Park files load with that schema. If a scenario adds synthetic entities, it calls addPark and then registers them.
 
 ## Copies, equality, and hashes
 
 copyWorld, worldsEqual, and hashWorld walk registered types in registration order and entities in key order, never in EnTT storage order. Two worlds are equal exactly when the walk sees the same values in both, with doubles compared by their bits. The hash is a 64-bit function of those values alone. The walk covers the seed, the tick, the key counter, every registered component, and whether resolution is pending.
 
-In debug builds the walk refuses with WorldInvariantError a world that holds state it cannot cover: an unregistered component, an entity with no key, or a NaN.
+In debug builds, if a world holds state the walk cannot cover, the walk refuses it with WorldInvariantError. Such state is an unregistered component, an entity with no key, or a NaN.
 
 ## Commands
 
-Commands are values of types that their owning module registers with addCommand. The module applies them with its applyCommand. Commands wait in a CommandQueue outside the world, so copies, hashes, and saves never hold them. stepWorld empties the queue. A queue holding a command of an unregistered type is refused before anything changes.
+Commands are values of types that their owning module registers with addCommand. The module applies them with its applyCommand. Commands wait in a CommandQueue outside the world, so copies, hashes, and saves never hold them. stepWorld empties the queue. If a queue holds a command of an unregistered type, the queue is refused before anything changes.
 
 ## Resolution
 
 Resolvers derive the world's derived data from its intent alone, never from state. Registration order is dependency order, so a resolver may depend only on resolvers registered before it. A resolution runs every resolver once and then every finisher once, each in registration order. Resolvers never draw from the key counter.
 
-A finisher completes work that needs every resolver's output, such as comparing it with the previous resolution's output. It may change only state that its module's spec says a resolution invalidates. Examples are stepped entries the new resolution no longer matches, and places held on a re-derived network. A finisher changes no state in a world's first resolution. So loading the save of a resolved world and resolving gives the world saved.
+A finisher completes work that needs every resolver's output, such as comparing it with the previous resolution's output. It may change only state that its module's spec says a resolution invalidates. Examples are stepped entries the new resolution no longer matches, and places held on a re-derived network. In a world's first resolution, finishers change no state, so loading the save of a resolved world and resolving it gives the world saved.
 
-Resolution is pending from a world's construction until its first resolution. It is pending again from each applied command until the next resolution. A new or loaded world is resolved in full before its first tick. A cycle that applies no command runs no resolver.
+Resolution is pending from a world's construction until its first resolution. It is pending again from each applied command until the next resolution. A new or loaded world is resolved in full before its first tick. If a cycle applies no command, it runs no resolver.
 
 ## Candidates
 
-makeCandidate copies a world, applies commands to the copy, and resolves it without stepping. The original world is unchanged. Take a world that has just finished a cycle. A candidate made from it equals the world you would get by queuing the same commands for that cycle. So a preview is exact (principle 8, decision 0025).
+makeCandidate copies a world, applies commands to the copy, and resolves it without stepping. The original world is unchanged. If a world has just finished a cycle, a candidate made from it equals the world that queuing the same commands for that cycle would give. Previews rely on this to be exact (principle 8, decision 0025).
 
 ## Random draws
 
 Draws are keyed, never sequential. A draw is a pure function of its DrawKey: the world's seed, an entity key, a purpose, the tick, and an index. drawKey fills the seed and tick from a world. Draws give the same values in any order, in a copy, and on every build. Drawing changes nothing in the world, so there is no generator state to copy or save.
 
-drawBits gives 64 bits. drawUniform gives a uniformly distributed double in [0, 1). drawPick gives an index with probability proportional to its weight, from one draw, and never picks a zero weight. drawPick refuses weights it cannot pick from in proportion.
+drawBits gives 64 bits. drawUniform gives a uniformly distributed double in [0, 1). drawPick gives an index with probability proportional to its weight, from one draw, and never picks a zero weight. If drawPick cannot pick from the weights in proportion, it refuses them.
 
 Simulation code draws only through these functions. It never uses the standard library's distributions, whose results differ between implementations (decision 0019).
 
 ## Saves
 
-saveWorld writes a world's intent and state as text, and loadWorld reads it back. A save is canonical: equal worlds give identical text, however they were built. A save never holds derived data, commands, or whether resolution is pending. The loaded world has the saved seed, tick, key counter, entities, intent, and state, with resolution pending. So loading the save of a resolved world and resolving gives a world equal to the one saved.
+saveWorld writes a world's intent and state as text, and loadWorld reads it back. A save is canonical: equal worlds give identical text, however they were built. A save never holds derived data, commands, or whether resolution is pending. The loaded world has the saved seed, tick, key counter, entities, intent, and state, with resolution pending. If the saved world was resolved, resolving the loaded world gives a world equal to it.
 
 Park files are hand-readable and hand-editable, and the format is a contract with them. The text opens with the line `tpj-park 1`, then seed, tick, and next-key lines. Sections follow. Each section is headed by a registered type's name in brackets. It has one line per entity that holds the type, in key order. Each line holds the key, then each field as name=value in visitFields order. An [entities] section lists counter keys whose entities hold no saved component.
 
@@ -97,7 +97,7 @@ Values are written this way:
 - A vector is its elements between [ and ].
 - A struct is its fields as name=value between { and }.
 
-loadWorld accepts carriage returns, blank lines, a last line with no line feed, and any number that std::from_chars reads in full. So a hand-written save loads, and it may re-save with numbers spelled differently. For anything else it cannot read, loadWorld throws LoadError, whose message and line() name the line. saveWorld throws std::invalid_argument for an enum value with no name.
+loadWorld accepts carriage returns, blank lines, a last line with no line feed, and any number that std::from_chars reads in full. A hand-written save loads, though it may re-save with numbers spelled differently. If loadWorld meets anything else it cannot read, it throws LoadError, whose message and line() name the line. saveWorld throws std::invalid_argument for an enum value with no name.
 
 ## Determinism
 

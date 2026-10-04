@@ -9,29 +9,29 @@ description: Use whenever the user wants to plan a capability, a durable quality
 
 Take a capability concept. Produce CAPABILITY.md. It defines the quality the capability deepens, its foundation, the fields and flows it uses, and the first milestones that establish it.
 
-A capability is a lasting domain, not a finite deliverable. It starts with a foundation, which the first milestones make real. After that it deepens indefinitely, as later milestones are drawn from the backlog. This skill plans the foundation and the first milestones, not the capability's whole future.
+A capability is a lasting domain, not a finite deliverable. It starts with a foundation, which the first milestones build. After that it deepens indefinitely, as later milestones are drawn from the backlog. This skill plans the foundation and the first milestones, not the capability's whole future.
 
 ## Naming
 
 Name a capability after a quality it increases, a discipline it practices, or a principle it implements. Don't name it after a feature or an object it builds.
 
-A quality deepens indefinitely and is never done: `legible-simulation`, `effortless-building`, `plausible-operations`. The same is true of a principle's implementation. For example, `shared-medium` implements principles 3 and 6, and it deepens with every new kind of field, flow, and network. A feature or object, such as `food-shops` or `coaster-editor`, reaches a done state and then collects unrelated milestones. The first kind is a capability. The second is a feature named like a capability. It strains the structure by the third milestone added after it feels finished.
+A quality deepens indefinitely and is never done: `legible-simulation`, `effortless-building`, `plausible-operations`. The same is true of a principle's implementation. For example, `shared-medium` implements principles 3 and 6, and it deepens with every new kind of field, flow, and network. A feature or object, such as `food-shops` or `coaster-editor`, reaches a done state and then collects unrelated milestones. The first kind is a capability. The second is a feature named like a capability. By the third milestone added after it feels finished, it no longer fits the structure.
 
-If a capability is named for a principle, cite the principle in its Summary. Its foundation criteria must include the checks that back the principle. docs/principles.md says which principles code can violate.
+If a capability is named for a principle, cite the principle in its Summary. Its foundation criteria must include the checks for that principle. docs/principles.md says which principles code can violate.
 
-An engineering capability deepens a property of the software that a player would not miss if the machine were infinitely fast and the code never changed again. Performance and code structure are examples, as in `sound-architecture` (decision 0028). Name it after that property. Its Medium section says it introduces no fields or flows. Its foundation criteria are checks it owns. Its work may change code in any module, but only if observable behavior does not change:
+An engineering capability deepens a property of the software that a player would not miss if the machine were infinitely fast and the code never changed again. Performance and code structure are examples, as in `sound-architecture` (decision 0028). Name it after that property. In its Medium section, say that it introduces no fields or flows. Make its foundation criteria checks that the capability owns. Its work may change code in any module, but only if observable behavior does not change:
 
 - Existing tests pass unchanged.
 - Where the simulation is touched, tpj_scenarios's output is identical before and after (decision 0030).
-- A public contract changes only together with its module's SPEC.md.
+- If a public contract changes, its module's SPEC.md changes with it.
 
-Test the name before you commit to it. Ask whether a tenth milestone could land in it two years from now without the name feeling wrong. If yes, the name will last. If the name implies a finish line, rework it.
+Test the name before you commit to it. Ask whether a tenth milestone could land in it two years from now without the name feeling wrong. If yes, the name will last. If the name implies the capability can be finished, rework it.
 
 Treat content-heavy domains the same way. A catalog of shops or rides grows by adding instances, which is not the same as deepening a quality. Name the capability after the quality the content serves.
 
 ## Hard gate
 
-Do not invoke a planning or implementing skill until the user has approved CAPABILITY.md. Do not write a MILESTONE.md, code, or scaffolding. Even a small capability gets a brief.
+Do not invoke a planning or implementing skill until the user has approved CAPABILITY.md. Do not write a MILESTONE.md, code, or scaffolding. Write a brief even for a small capability.
 
 From here you may call only three skills:
 
@@ -56,7 +56,7 @@ Create a task for each item. Complete them in order.
 11. Self-review, and fix problems inline. Look for:
     - Placeholders.
     - Contradictions.
-    - Foundation criteria that imply a finish line.
+    - Foundation criteria that imply the capability can be finished.
     - Scope that reaches into another quality.
     - Interactions that bypass the medium.
 12. Review. Stage CAPABILITY.md and RESEARCH.md, then dispatch the reviewer with `reviewing`. If a slice names this capability, give it SLICE.md as context. Handle the findings as `reviewing` describes for planning briefs. Fix Minor findings and settled Major findings yourself. Bring the user only the Major findings that need a design choice, and report the rest in one line.
@@ -72,9 +72,9 @@ Plan only to the next loop. Uncertainty compounds, and it invalidates anything c
 
 Don't define a completed state. Write foundation criteria that show the domain is established and ready to deepen. Don't write success criteria that imply completion.
 
-A weak foundation fails the brief. If the foundation produces nothing on its own, it is too abstract; suggest splitting it.
+If the foundation is weak, the brief fails. If the foundation produces nothing on its own, it is too abstract; suggest splitting it.
 
-Stay inside the quality. Work that deepens a different quality belongs to a different capability. Name that capability and hand the work back instead of absorbing it.
+Stay inside the quality. If work deepens a different quality, it belongs to a different capability. Name that capability and hand the work back instead of absorbing it.
 
 ## Output format
 
@@ -87,7 +87,7 @@ One paragraph. The quality, discipline, or principle this capability deepens, an
 
 ## Foundation criteria
 
-Concrete, observable conditions that show the foundation is established. They mark readiness to deepen, not a finish line.
+Concrete, observable conditions that show the foundation is established. They mark readiness to deepen, not completion.
 
 ## Medium
 

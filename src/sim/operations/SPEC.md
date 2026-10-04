@@ -25,37 +25,37 @@ Other modules call operations.h for:
 
 ## Supply
 
-A shop is supplied when the backstage network connects it to a depot. nearestDepot returns the depot with the shortest backstage route, or none. A shop is starved when it has no backstage connection, or its connection reaches no depot. A starved shop can be placed, and it simply gets no supplies (principle 5).
+A shop is supplied when the backstage network connects it to a depot. nearestDepot returns the depot with the shortest backstage route, or none. A shop is starved when it has no backstage connection, or its connection reaches no depot. If a shop is starved, it can still be placed, and it simply gets no supplies (principle 5).
 
-A supplied shop keeps its stock topped up by ordering from its nearest depot. It orders whenever what it holds plus what it has on order falls to REORDER_POINT, and it orders up to ORDER_UP_TO. Orders take ORDER_DELAY to reach the depot. Supplies travel back at SUPPLY_SPEED, so they take longer on a longer backstage route. A depot is an unlimited source.
+If a shop is supplied, it keeps its stock topped up by ordering from its nearest depot. It orders whenever what it holds plus what it has on order falls to REORDER_POINT, and it orders up to ORDER_UP_TO. Orders take ORDER_DELAY to reach the depot. Supplies travel back at SUPPLY_SPEED, so they take longer on a longer backstage route. A depot is an unlimited source.
 
-A shop whose depot is deleted reorders from another depot at once. A shop never holds more than ORDER_UP_TO, counting what is on its way. A depot that can no longer reach a shop sends its orders back unfilled.
+If a shop's depot is deleted, the shop reorders from another depot at once. A shop never holds more than ORDER_UP_TO, counting what is on its way. If a depot can no longer reach a shop, it sends the shop's orders back unfilled.
 
-Every unit is accounted for when shops, depots, or routes are deleted. Orders and supplies in transit to a deleted endpoint go back to their sender, or are consumed with a named cause. So the supplies created always equal the orders filled, and the meals created always equal the supplies served (principle 3).
+Every unit is accounted for when shops, depots, or routes are deleted, so the supplies created always equal the orders filled, and the meals created always equal the supplies served (principle 3). If an order or supply is in transit to an endpoint that is deleted, it goes back to its sender or is consumed with a named cause.
 
 ## Service
 
-A shop serves the guests who visit it, one at a time, at most one per SERVICE_INTERVAL, while it holds supplies. So its meals are limited by the scarcest of demand, supply, and service rate. Visits are served in the order they arrived. A served guest's visit comes back with a meal, in the same packet timing. So a returned visit with a meal means the guest was served, and one without a meal means it was not.
+A shop serves the guests who visit it, one at a time, at most one per SERVICE_INTERVAL, while it holds supplies. Its meals are limited by the scarcest of demand, supply, and service rate. Visits are served in the order they arrived. When a guest is served, its visit comes back with a meal, in the same packet timing. If a visit comes back with a meal, the guest was served, and if it comes back without a meal, the guest was not.
 
-A starved shop turns away, with no meal, every queued guest beyond the supplies it holds or has on the way. It turns away only those, since supplies already shipped always arrive. A supplied shop never turns a guest away, however long its queue.
+If a shop is starved, it turns away, with no meal, every queued guest beyond the supplies it holds or has on the way. It turns away only those, since supplies already shipped always arrive. If a shop is supplied, it never turns a guest away, however long its queue.
 
-When a shop is deleted, the guests waiting at it get their visits back with no meal. A visit or meal sent to a guest who has left is consumed as abandoned.
+When a shop is deleted, the guests waiting at it get their visits back with no meal. If a visit or meal is sent to a guest who has left, it is consumed as abandoned.
 
 ## Food offer
 
-Each shop tells guests what it offers through the entry field food-offer. It publishes one OfferEntry at its guest anchor, holding:
+Each shop publishes what it offers to guests in the entry field food-offer. It publishes one OfferEntry at its guest anchor, holding:
 
 - the hunger a meal relieves, on a scale from 0 to 1;
 - the ticks the next guest to arrive would wait to be served;
 - whether it has meals at all.
 
-A starved shop offers no relief, no wait, and no meals. A shop with no guest connection publishes nothing.
+If a shop is starved, it offers no relief, no wait, and no meals. If a shop has no guest connection, it publishes nothing.
 
-The wait is exact under two assumptions: no other visit arrives, and supplies come as the shop expects. Then the next guest is served in the cycle the wait says. A newly placed shop, or one in a candidate, offers at once, before it has stepped. An edit that cuts or restores a shop's supply route changes its offer from that tick.
+The wait is exact under two assumptions: no other visit arrives, and supplies come as the shop expects. Then the next guest is served in the cycle the wait says. If a shop is newly placed, or is in a candidate, it offers at once, before it has stepped. If an edit cuts or restores a shop's supply route, the shop's offer changes from that tick.
 
 ## Inspection
 
-shopRecord(world, key) returns a shop's inspection record for display (decision 0025). The record holds its stock, its queue, what it has on order, whether it is starved, and its limiting factor. The record is computed, not stored. So it adds nothing to a save, and a candidate's shops have theirs at once.
+shopRecord(world, key) returns a shop's inspection record for display (decision 0025). The record holds its stock, its queue, what it has on order, whether it is starved, and its limiting factor. The record is computed, not stored, so it adds nothing to a save, and a candidate's shops have theirs at once.
 
 The limiting factor is NoSupplyRoute for a starved shop. Otherwise it is:
 
