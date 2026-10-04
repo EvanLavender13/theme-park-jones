@@ -339,8 +339,8 @@ std::vector<SampledEntry<double>> sampleKeptField(const World &world, const Netw
                                                   const Place &place) {
   std::vector<SampledEntry<double>> sampled;
   sampleKeptFieldAt<F>(world, network, std::span<const Place>(&place, 1),
-                       [&sampled](size_t /*index*/, std::vector<SampledEntry<double>> &entries) {
-                         sampled = std::move(entries);
+                       [&sampled](size_t /*index*/, const SampledEntry<double> &entry) {
+                         sampled.push_back(entry);
                        });
   return sampled;
 }

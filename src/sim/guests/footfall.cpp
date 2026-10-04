@@ -132,13 +132,10 @@ void carryFootfall(World &world) {
 
 } // namespace
 
-std::vector<double> HungryFootfall::sampleEdge(const EdgeSample<double> &sample) {
-  std::vector<double> values;
-  values.reserve(sample.Along.size());
+void HungryFootfall::sampleEdge(const EdgeSample<double> &sample, std::vector<double> &out) {
   for (const EdgeEntry<double> &entry : sample.Along) {
-    values.push_back(entry.Value);
+    out.push_back(entry.Value);
   }
-  return values;
 }
 
 double HungryFootfall::readKept(double value, uint64_t ticks) {

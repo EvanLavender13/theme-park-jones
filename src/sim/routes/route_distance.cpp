@@ -139,7 +139,7 @@ std::optional<RouteEntry> routeEntryOn(const World &world, const Network &networ
 
 } // namespace
 
-std::vector<RouteEntry> sampleRouteEdge(const EdgeSample<RouteEntry> &sample) {
+void sampleRouteEdge(const EdgeSample<RouteEntry> &sample, std::vector<RouteEntry> &out) {
   std::optional<RouteEntry> best;
   // The From end's entries come first, so it wins ties.
   for (const RouteEntry &entry : sample.AtFrom) {
@@ -148,10 +148,9 @@ std::vector<RouteEntry> sampleRouteEdge(const EdgeSample<RouteEntry> &sample) {
   for (const RouteEntry &entry : sample.AtTo) {
     keepLeast(best, viaTo(sample.Edge, entry, sample.ToOffset));
   }
-  if (!best) {
-    return {};
+  if (best) {
+    out.push_back(*best);
   }
-  return {*best};
 }
 
 std::optional<RouteEntry> routeEntryAt(const World &world, PathKind kind, const Network &network,

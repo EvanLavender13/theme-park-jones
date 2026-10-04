@@ -38,6 +38,10 @@ Put a module's tests under tests/, in the directory named for the module. Those 
 
 If a file is in no unit, it fails the check. Add each new module or test directory to the table before it lands. cmake/check_layers.cmake scans src and tests for includes that break the rule. It runs in ctest as "layer check passes on the tree".
 
+## Memory in loops
+
+Don't allocate inside loops in per-tick or per-frame code. Allocate buffers once and reuse them. If you find an allocation in such a loop, fix it now; don't defer it.
+
 ## Tests
 
 The tests live under tests/, and docs/testing.md says which tests exist.

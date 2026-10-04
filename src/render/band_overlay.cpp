@@ -43,13 +43,11 @@ ParkPoint unitStep(const CarrierPoint &from, const CarrierPoint &to) {
   return {dx / length, dz / length};
 }
 
-// The distances the band samples along a carrier: its points', its stops', and each positive
-// multiple of OVERLAY_SPACING below its length, ascending, each once.
-std::vector<double> sampleDistances(const Carrier &carrier) {
+// Fills distances with those the band samples along a carrier: its points', its stops', and each
+// positive multiple of OVERLAY_SPACING below its length, ascending, each once.
+void sampleDistances(const Carrier &carrier, std::vector<double> &distances) {
   const double length = carrier.Points.back().Distance;
-  std::vector<double> distances;
-  distances.reserve(carrier.Points.size() + carrier.Stops.size() +
-                    static_cast<size_t>(length / OVERLAY_SPACING));
+  distances.clear();
   for (const CarrierPoint &point : carrier.Points) {
     distances.push_back(point.Distance);
   }
@@ -62,7 +60,6 @@ std::vector<double> sampleDistances(const Carrier &carrier) {
   std::ranges::sort(distances);
   const auto [first, last] = std::ranges::unique(distances);
   distances.erase(first, last);
-  return distances;
 }
 
 // The line's direction at a distance along it: its first segment's at the first point, its last
@@ -89,7 +86,7 @@ ParkPoint directionAt(const std::vector<CarrierPoint> &points, double distance) 
 
 // Adds a row of three vertices for each sample, left edge, center, and right edge, and joins each
 // row to the next with four triangles facing up.
-void appendBand(ParkMesh &mesh, const std::vector<BandRow> &rows) {
+void appendBand(ParkMesh &mesh, std::span<const BandRow> rows) {
   const auto first = static_cast<uint32_t>(mesh.Vertices.size());
   for (const BandRow &row : rows) {
     const ParkPoint right{-row.Direction.Z, row.Direction.X};
@@ -135,8 +132,7 @@ Rgba rampColor(double value, double full) {
   if (isnan(value) || value <= 0.0) {
     return OVERLAY_ZERO_COLOR;
   }
-  const double scaled =
-      std::min(value / full, 1.0) * static_cast<double>(OVERLAY_RAMP.size() - 1);
+  const double scaled = std::min(value / full, 1.0) * static_cast<double>(OVERLAY_RAMP.size() - 1);
   const size_t index = std::min(static_cast<size_t>(scaled), OVERLAY_RAMP.size() - 2);
   const auto fraction = static_cast<float>(scaled - static_cast<double>(index));
   const Rgba &low = OVERLAY_RAMP[index];
@@ -155,21 +151,23 @@ ParkMesh buildBandOverlay(const World &world, const OverlayValues &values, doubl
     }
   }
   const Network &network = parkNetwork(world, PathKind::Guest);
-  // Each band line's rows, colored once every row's value is known.
+  // Each band line's carrier and its rows' range in rows, colored once every row's value is known.
   struct BandLine {
     const Carrier *Line = nullptr;
-    std::vector<BandRow> Rows;
+    size_t First = 0;
+    size_t Count = 0;
   };
   std::vector<BandLine> lines;
+  std::vector<BandRow> rows;
   std::vector<Place> places;
+  std::vector<double> distances;
   // Carriers come in key order, and a connector's key is no path's.
   for (const Carrier &carrier : network.carriers()) {
     if (!std::ranges::binary_search(guestPaths, carrier.Key)) {
       continue;
     }
-    const std::vector<double> distances = sampleDistances(carrier);
-    std::vector<BandRow> rows;
-    rows.reserve(distances.size());
+    sampleDistances(carrier, distances);
+    const size_t first = rows.size();
     for (const double distance : distances) {
       const Place place{carrier.Key, distance};
       const std::optional<GroundPoint> at = network.groundPoint(place);
@@ -179,22 +177,24 @@ ParkMesh buildBandOverlay(const World &world, const OverlayValues &values, doubl
       rows.push_back({*at, directionAt(carrier.Points, distance), OVERLAY_ZERO_COLOR});
       places.push_back(place);
     }
-    if (!rows.empty()) {
-      lines.push_back({&carrier, std::move(rows)});
+    if (rows.size() > first) {
+      lines.push_back({&carrier, first, rows.size() - first});
     }
   }
   const std::vector<double> shades = values(places);
+  for (size_t i = 0; i < rows.size(); ++i) {
+    rows[i].Color = rampColor(shades.at(i), full);
+  }
   ParkMesh mesh;
-  size_t next = 0;
-  for (BandLine &line : lines) {
-    for (BandRow &row : line.Rows) {
-      row.Color = rampColor(shades.at(next), full);
-      ++next;
-    }
+  // Three vertices and twelve indices a row, and two cones a line.
+  mesh.Vertices.reserve(3 * rows.size() + 2 * lines.size() * (JOINT_SEGMENTS + 2));
+  mesh.Indices.reserve(12 * rows.size() + 2 * lines.size() * 3 * JOINT_SEGMENTS);
+  for (const BandLine &line : lines) {
+    const std::span<const BandRow> lineRows(rows.data() + line.First, line.Count);
     const std::vector<CarrierPoint> &points = line.Line->Points;
-    appendBand(mesh, line.Rows);
-    appendCone(mesh, line.Rows.front(), unitStep(points[1], points[0]));
-    appendCone(mesh, line.Rows.back(), unitStep(points[points.size() - 2], points.back()));
+    appendBand(mesh, lineRows);
+    appendCone(mesh, lineRows.front(), unitStep(points[1], points[0]));
+    appendCone(mesh, lineRows.back(), unitStep(points[points.size() - 2], points.back()));
   }
   return mesh;
 }

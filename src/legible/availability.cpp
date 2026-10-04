@@ -50,36 +50,19 @@ std::optional<OfferEntry> suppliedOffer(const World &world,
   return offer;
 }
 
-// The availability given each reachable source's route entries, sources ascending, with each
-// source's supplied offer from offerOf. Every value an availability gives is computed here, so a
-// place's value is the same however it is asked for.
-template <typename OfferOf>
-Availability availabilityWith(const AvailabilityDefinition &definition,
-                              std::span<const SampledEntry<RouteEntry>> routes,
-                              const OfferOf &offerOf) {
-  Availability availability;
-  EntityKey previous = NULL_KEY;
-  for (const SampledEntry<RouteEntry> &route : routes) {
-    // Sources come in ascending order, and only a source's first entry counts.
-    if (route.Source == previous) {
-      continue;
-    }
-    previous = route.Source;
-    const std::optional<OfferEntry> offer = offerOf(route.Source);
-    if (!offer) {
-      continue;
-    }
-    AvailabilityContribution contribution;
-    contribution.Shop = route.Source;
-    contribution.Relief = offer->Relief;
-    contribution.Distance = route.Value.Distance;
-    contribution.Wait = static_cast<double>(offer->Wait) * SIM_TICK_SECONDS;
-    contribution.Time = contribution.Distance / REFERENCE_SPEED + contribution.Wait;
-    contribution.Term = contribution.Relief * discount(definition.Curve, contribution.Time);
-    availability.Value += contribution.Term;
-    availability.Contributions.push_back(contribution);
-  }
-  return availability;
+// The source's contribution through its route entry and its supplied offer. availabilityAt and
+// availabilityValues both compute every term here, so a place's value is the same however it is
+// asked for.
+AvailabilityContribution contributionOf(const AvailabilityDefinition &definition, EntityKey source,
+                                        const RouteEntry &route, const OfferEntry &offer) {
+  AvailabilityContribution contribution;
+  contribution.Shop = source;
+  contribution.Relief = offer.Relief;
+  contribution.Distance = route.Distance;
+  contribution.Wait = static_cast<double>(offer.Wait) * SIM_TICK_SECONDS;
+  contribution.Time = contribution.Distance / REFERENCE_SPEED + contribution.Wait;
+  contribution.Term = contribution.Relief * discount(definition.Curve, contribution.Time);
+  return contribution;
 }
 
 } // namespace
@@ -87,11 +70,25 @@ Availability availabilityWith(const AvailabilityDefinition &definition,
 Availability availabilityAt(const World &world, const AvailabilityDefinition &definition,
                             const Place &place) {
   const Network &network = parkNetwork(world, PathKind::Guest);
-  const std::vector<SampledEntry<RouteEntry>> routes =
-      sampleField<RouteDistance<PathKind::Guest>>(world, network, place);
-  return availabilityWith(definition, routes, [&](EntityKey source) {
-    return suppliedOffer(world, definition, network, source);
-  });
+  Availability availability;
+  EntityKey previous = NULL_KEY;
+  for (const SampledEntry<RouteEntry> &route :
+       sampleField<RouteDistance<PathKind::Guest>>(world, network, place)) {
+    // Sources come in ascending order, and only a source's first entry counts.
+    if (route.Source == previous) {
+      continue;
+    }
+    previous = route.Source;
+    const std::optional<OfferEntry> offer = suppliedOffer(world, definition, network, route.Source);
+    if (!offer) {
+      continue;
+    }
+    const AvailabilityContribution contribution =
+        contributionOf(definition, route.Source, route.Value, *offer);
+    availability.Value += contribution.Term;
+    availability.Contributions.push_back(contribution);
+  }
+  return availability;
 }
 
 std::vector<double> availabilityValues(const World &world, const AvailabilityDefinition &definition,
@@ -110,9 +107,25 @@ std::vector<double> availabilityValues(const World &world, const AvailabilityDef
         ->second;
   };
   std::vector<double> values(places.size(), 0.0);
+  // Each place's last counted source, since only a source's first entry at a place counts.
+  std::vector<EntityKey> counted(places.size(), NULL_KEY);
+  // Along an edge, entries come one source at a time, so the next entry's offer is usually the
+  // last one's.
+  EntityKey lastSource = NULL_KEY;
+  std::optional<OfferEntry> lastOffer;
   sampleFieldAtPlaces<RouteDistance<PathKind::Guest>>(
-      world, network, places, [&](size_t index, std::span<const SampledEntry<RouteEntry>> routes) {
-        values[index] = availabilityWith(definition, routes, offerOf).Value;
+      world, network, places, [&](size_t index, const SampledEntry<RouteEntry> &route) {
+        if (route.Source == counted[index]) {
+          return;
+        }
+        counted[index] = route.Source;
+        if (route.Source != lastSource) {
+          lastSource = route.Source;
+          lastOffer = offerOf(route.Source);
+        }
+        if (lastOffer) {
+          values[index] += contributionOf(definition, route.Source, route.Value, *lastOffer).Term;
+        }
       });
   return values;
 }

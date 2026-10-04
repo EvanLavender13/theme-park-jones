@@ -130,11 +130,13 @@ concept FieldDefinition = requires {
   { F::Kind } -> std::convertible_to<FieldKind>;
 };
 
-// A field whose owner reads places inside an edge by its own rule:
-//   static std::vector<Entry> sampleEdge(const EdgeSample<Entry> &sample);
+// A field whose owner reads places inside an edge by its own rule, which appends the entries at
+// the sample's place to out:
+//   static void sampleEdge(const EdgeSample<Entry> &sample, std::vector<Entry> &out);
 template <typename F>
-concept HasEdgeRule = FieldDefinition<F> && requires(const EdgeSample<typename F::Entry> &sample) {
-  { F::sampleEdge(sample) } -> std::same_as<std::vector<typename F::Entry>>;
+concept HasEdgeRule = FieldDefinition<F> && requires(const EdgeSample<typename F::Entry> &sample,
+                                                     std::vector<typename F::Entry> &out) {
+  { F::sampleEdge(sample, out) } -> std::same_as<void>;
 };
 
 // A kept field: a scalar field whose owner reads a kept entry by its own rule, given the entry's
@@ -369,6 +371,8 @@ template <typename Entry> struct SampleScratch {
   std::vector<uint32_t> Positions;
   std::vector<uint32_t> Inside;
   EdgeSample<Entry> Edge;
+  // The entries the field's rule makes at one place.
+  std::vector<Entry> Made;
 };
 
 // Appends the source's entries whose places resolve to the node: exactly those at its stop
@@ -425,32 +429,24 @@ bool gatherEdgeSample(const Network &network, const Slot &slot, const NetworkEdg
   return !sample.AtFrom.empty() || !sample.AtTo.empty() || !sample.Along.empty();
 }
 
-// A run of consecutive places strictly inside one edge: their indices, their positions, and each
-// one's entries, kept across runs so they allocate only while they grow.
+// A run of consecutive places strictly inside one edge: their indices and positions, kept across
+// runs so they allocate only while they grow.
 template <typename Entry> struct SampleRun {
   std::vector<size_t> Indices;
   std::vector<EdgePosition> Positions;
-  std::vector<std::vector<SampledEntry<Entry>>> Entries;
 };
 
-// Hands visit(index, entries) the entries from the slots at each place of the run, in the run's
-// order, and empties the run: those at exactly the place, or what the field's sampleEdge makes of
-// each slot's entries gathered once for the run's edge.
+// Hands visit(index, entry) each entry from the slots at the run's places, one slot at a time and,
+// for each slot, the run's places in order, and empties the run: those at exactly the place, or
+// what the field's sampleEdge makes of each slot's entries gathered once for the run's edge.
 template <FieldDefinition F, typename Slot, typename ReadFor, typename Visit>
 void finishRun(const Network &network, std::span<const Place> places,
                std::span<const Slot *const> slots, ReadFor &readFor,
                SampleRun<typename F::Entry> &run, SampleScratch<typename F::Entry> &scratch,
                Visit &visit) {
   using Entry = typename F::Entry;
-  const size_t count = run.Indices.size();
-  if (count == 0) {
+  if (run.Indices.empty()) {
     return;
-  }
-  if (run.Entries.size() < count) {
-    run.Entries.resize(count);
-  }
-  for (size_t k = 0; k < count; ++k) {
-    run.Entries[k].clear();
   }
   const NetworkEdge &edge = network.edges()[run.Positions.front().Edge];
   for (const Slot *slot : slots) {
@@ -459,32 +455,32 @@ void finishRun(const Network &network, std::span<const Place> places,
       if (!gatherEdgeSample(network, *slot, edge, scratch, read)) {
         continue;
       }
-      for (size_t k = 0; k < count; ++k) {
+      for (size_t k = 0; k < run.Indices.size(); ++k) {
         scratch.Edge.FromOffset = run.Positions[k].FromOffset;
         scratch.Edge.ToOffset = run.Positions[k].ToOffset;
-        for (const Entry &value : F::sampleEdge(scratch.Edge)) {
-          run.Entries[k].push_back({slot->Source, value});
+        scratch.Made.clear();
+        F::sampleEdge(scratch.Edge, scratch.Made);
+        for (const Entry &value : scratch.Made) {
+          visit(run.Indices[k], SampledEntry<Entry>{slot->Source, value});
         }
       }
     } else {
-      for (size_t k = 0; k < count; ++k) {
+      for (size_t k = 0; k < run.Indices.size(); ++k) {
         for (const uint32_t i : positionsAt(*slot, places[run.Indices[k]])) {
-          run.Entries[k].push_back({slot->Source, read(i)});
+          visit(run.Indices[k], SampledEntry<Entry>{slot->Source, read(i)});
         }
       }
     }
-  }
-  for (size_t k = 0; k < count; ++k) {
-    visit(run.Indices[k], run.Entries[k]);
   }
   run.Indices.clear();
   run.Positions.clear();
 }
 
-// Hands visit(index, entries) each place's entries from the slots, in the places' order, and each
-// place's in the slots' order: at a node what atNode appends for each slot, strictly inside an
-// edge those at exactly the place or what the field's sampleEdge makes of the gathered entries,
-// and none where the place does not resolve. Consecutive places strictly inside one edge share
+// Hands visit(index, entry) each entry from the slots at each place, with the place's index: at a
+// node what atNode appends for each slot, strictly inside an edge those at exactly the place or
+// what the field's sampleEdge makes of the gathered entries, and none where the place does not
+// resolve. Each place's entries arrive in the slots' order, but along one edge the places' entries
+// interleave, one slot at a time. Consecutive places strictly inside one edge share
 // each slot's gathered entries, so only the field's rule runs at each of them. readFor(slot)
 // gives the function reading a position of that slot.
 template <FieldDefinition F, typename Slot, typename ReadFor, typename AtNode, typename Visit>
@@ -508,14 +504,16 @@ void sampleSlotsAt(const Network &network, std::span<const Place> places,
       }
     }
     finishRun<F>(network, places, slots, readFor, run, scratch, visit);
-    single.clear();
     if (position) {
+      single.clear();
       const uint32_t node = std::get<NodePosition>(*position).Node;
       for (const Slot *slot : slots) {
         atNode(*slot, node, scratch, single, readFor(*slot));
       }
+      for (const SampledEntry<Entry> &entry : single) {
+        visit(index, entry);
+      }
     }
-    visit(index, single);
   }
   finishRun<F>(network, places, slots, readFor, run, scratch, visit);
 }
@@ -572,8 +570,8 @@ const FieldSlot<typename F::Entry> *sourceSlot(const World &world, EntityKey sou
   return resolved != nullptr ? find(resolved->Slots) : nullptr;
 }
 
-// The slots' entries at each of the places on the network, handed to visit(index, entries) in the
-// places' order, as sampleSlotsAt gives them for field slots.
+// The slots' entries at each of the places on the network, handed to visit(index, entry) as
+// sampleSlotsAt gives them for field slots.
 template <FieldDefinition F, typename Visit>
 void sampleFieldSlotsAt(const Network &network, std::span<const Place> places,
                         std::span<const FieldSlot<typename F::Entry> *const> slots, Visit visit) {
@@ -595,11 +593,10 @@ std::vector<SampledEntry<typename F::Entry>>
 sampleSlots(const Network &network, const Place &place,
             const std::vector<const FieldSlot<typename F::Entry> *> &slots) {
   std::vector<SampledEntry<typename F::Entry>> sampled;
-  sampleFieldSlotsAt<F>(
-      network, std::span<const Place>(&place, 1), slots,
-      [&sampled](size_t /*index*/, std::vector<SampledEntry<typename F::Entry>> &entries) {
-        sampled = std::move(entries);
-      });
+  sampleFieldSlotsAt<F>(network, std::span<const Place>(&place, 1), slots,
+                        [&sampled](size_t /*index*/, const SampledEntry<typename F::Entry> &entry) {
+                          sampled.push_back(entry);
+                        });
   return sampled;
 }
 
@@ -609,8 +606,8 @@ template <KeptFieldDefinition F>
 std::vector<SampledEntry<double>> sampleKeptField(const World &world, const Network &network,
                                                   const Place &place);
 
-// A kept field's entries at each of the places on the network, as sampleFieldAtPlaces gives them.
-// Defined in sim/medium/kept_field.h.
+// A kept field's entries at each of the places on the network, handed to visit(index, entry) as
+// sampleFieldAtPlaces gives them. Defined in sim/medium/kept_field.h.
 template <KeptFieldDefinition F, typename Visit>
 void sampleKeptFieldAt(const World &world, const Network &network, std::span<const Place> places,
                        Visit visit);
@@ -632,24 +629,23 @@ std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world, con
 }
 
 // The field's entries at each of the places on the network, exactly as sampleField gives them at
-// each, handed to visit(index, entries), with entries a std::span<const SampledEntry<Entry>> valid
-// during the call, in the places' order. Consecutive places strictly inside one edge share each
-// source's lookups of its entries at the edge's ends and along it. Keeps nothing after it returns.
+// each, handed to visit(index, entry), with entry a const SampledEntry<Entry> &. Each place's
+// entries arrive in the order sampleField gives them, but along one edge the places' entries
+// interleave, one source at a time, and a place with no entries gets no call. Consecutive places
+// strictly inside one edge share each source's lookups of its entries at the edge's ends and along
+// it. Keeps nothing after it returns.
 template <FieldDefinition F, typename Visit>
 void sampleFieldAtPlaces(const World &world, const Network &network, std::span<const Place> places,
                          Visit visit) {
   using Entry = typename F::Entry;
-  const auto handOn = [&visit](size_t index, std::vector<SampledEntry<Entry>> &entries) {
-    visit(index, std::span<const SampledEntry<Entry>>(entries));
-  };
   if constexpr (KeptFieldDefinition<F>) {
-    sampleKeptFieldAt<F>(world, network, places, handOn);
+    sampleKeptFieldAt<F>(world, network, places, visit);
   } else {
     const entt::entity entity = world.findEntity(fieldKey(F::Name));
     const std::vector<const FieldSlot<Entry> *> slots =
         entity == entt::null ? std::vector<const FieldSlot<Entry> *>{}
                              : layeredSlots<F>(world, entity);
-    sampleFieldSlotsAt<F>(network, places, slots, handOn);
+    sampleFieldSlotsAt<F>(network, places, slots, visit);
   }
 }
 
