@@ -306,34 +306,42 @@ void sampleKeptSlotAtNode(const Network &network, const KeptSlot &slot, uint32_t
   }
 }
 
+template <KeptFieldDefinition F, typename Visit>
+void sampleKeptFieldAt(const World &world, const Network &network, std::span<const Place> places,
+                       Visit visit) {
+  const KeptEntries<F> *kept = findKeptEntries<F>(world);
+  std::vector<const KeptSlot *> slots;
+  if (kept != nullptr) {
+    slots.reserve(kept->Slots.size());
+    for (const KeptSlot &slot : kept->Slots) {
+      slots.push_back(&slot);
+    }
+  }
+  sampleSlotsAt<F>(
+      network, places, std::span<const KeptSlot *const>(slots),
+      [&world](const KeptSlot &slot) {
+        return
+            [&slot, &world](uint32_t i) { return readKeptEntry<F>(slot.Entries[i], world.Tick); };
+      },
+      [&network](const KeptSlot &slot, uint32_t node, SampleScratch<double> &scratch,
+                 std::vector<SampledEntry<double>> &sampled, auto read) {
+        if constexpr (HasNodeRule<F>) {
+          sampleKeptSlotAtNode<F>(network, slot, node, scratch, sampled, read);
+        } else {
+          sampleSlotAtNode(network, slot, node, scratch, sampled, read);
+        }
+      },
+      visit);
+}
+
 template <KeptFieldDefinition F>
 std::vector<SampledEntry<double>> sampleKeptField(const World &world, const Network &network,
                                                   const Place &place) {
   std::vector<SampledEntry<double>> sampled;
-  const KeptEntries<F> *kept = findKeptEntries<F>(world);
-  if (kept == nullptr) {
-    return sampled;
-  }
-  const std::optional<NetworkPosition> position = network.resolve(place);
-  if (!position) {
-    return sampled;
-  }
-  SampleScratch<double> scratch;
-  for (const KeptSlot &slot : kept->Slots) {
-    const auto read = [&slot, &world](uint32_t i) {
-      return readKeptEntry<F>(slot.Entries[i], world.Tick);
-    };
-    if (const auto *node = std::get_if<NodePosition>(&*position)) {
-      if constexpr (HasNodeRule<F>) {
-        sampleKeptSlotAtNode<F>(network, slot, node->Node, scratch, sampled, read);
-      } else {
-        sampleSlotAtNode(network, slot, node->Node, scratch, sampled, read);
-      }
-    } else {
-      sampleSlotInEdge<F>(network, slot, place, std::get<EdgePosition>(*position), scratch, sampled,
-                          read);
-    }
-  }
+  sampleKeptFieldAt<F>(world, network, std::span<const Place>(&place, 1),
+                       [&sampled](size_t /*index*/, std::vector<SampledEntry<double>> &entries) {
+                         sampled = std::move(entries);
+                       });
   return sampled;
 }
 
