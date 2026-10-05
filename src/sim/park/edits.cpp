@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iterator>
 #include <optional>
 #include <stddef.h>
 #include <stdint.h>
@@ -228,8 +229,8 @@ bool fits(const Line &line, const std::vector<Solid> &solids) {
          std::ranges::none_of(solids, [&line](const Solid &solid) { return meets(line, solid); });
 }
 
-// A point an AddPath's segments run through: an existing path point, or, when Existing is
-// NULL_KEY, a point the path adds.
+// A point an edit's segments run through: an existing path point, or, when Existing is NULL_KEY, a
+// point the edit adds.
 struct PlanPoint {
   ParkPoint At;
   EntityKey Existing = NULL_KEY;
@@ -241,24 +242,42 @@ struct PlacedPoint {
   double Along = 0.0;
 };
 
-// A segment of the world that an AddPath splits, and the plan points it splits at.
+// A segment of the world that an edit leaves in place but splits, and the plan points it splits
+// at.
 struct Split {
   EntityKey Segment = NULL_KEY;
   std::vector<PlacedPoint> At;
 };
 
-// What an accepted AddPath makes. Points holds each stop's point in stop order, a RepeatStop
-// sharing its earlier stop's, then each point a meeting adds, in the order found. Stops gives each
-// stop's entry in Points. Splits holds the world's segments the path splits, in ascending key
-// order. Drawn holds, for each of the path's own segments from stop i to stop i + 1, the points it
-// runs through between them. Both list their points in order of Along. Crossings holds the entries
-// in Points where a meeting splits a segment, in the order found.
-struct PathPlan {
+// A segment an edit adds or reshapes: the one Key holds, or, when Key is NULL_KEY, a new one. It
+// runs from plan point From to plan point To and splits at the points it runs Through, in order of
+// Along.
+struct PlanLine {
+  EntityKey Key = NULL_KEY;
+  PathKind Kind = PathKind::Guest;
+  double Width = 0.0;
+  size_t From = 0;
+  size_t To = 0;
+  std::vector<PlacedPoint> Through;
+};
+
+// What an accepted edit makes. Points holds the points its lines and splits run through: for
+// AddPath, each stop's point in stop order, a RepeatStop sharing its earlier stop's, then each
+// point a meeting adds, in the order found. Stops gives each AddPath stop's entry in Points.
+// Splits holds the segments the edit leaves in place but splits, in ascending key order, each
+// with its points in order of Along. Lines holds the segments it adds or reshapes: for AddPath,
+// the one from stop i to stop i + 1 at index i. Crossings holds the entries in Points where a
+// meeting splits a segment, in the order found. Destroyed holds the keys it destroys, segments
+// first. If Moved is not NULL_KEY, that existing point moves to MovedTo.
+struct EditPlan {
   std::vector<PlanPoint> Points;
   std::vector<size_t> Stops;
   std::vector<Split> Splits;
-  std::vector<std::vector<PlacedPoint>> Drawn;
+  std::vector<PlanLine> Lines;
   std::vector<size_t> Crossings;
+  std::vector<EntityKey> Destroyed;
+  EntityKey Moved = NULL_KEY;
+  ParkPoint MovedTo;
 };
 
 // Whether the key holds a path point that some segment uses, every such segment of the kind.
@@ -285,6 +304,57 @@ const ParkSegment *findSegment(const std::vector<ParkSegment> &segments, EntityK
   return found != segments.end() && found->Key == key ? &*found : nullptr;
 }
 
+bool endsAt(const ParkSegment &segment, EntityKey point) {
+  return segment.From == point || segment.To == point;
+}
+
+// The segments that end at the point, in ascending key order.
+std::vector<ParkSegment> segmentsAt(const std::vector<ParkSegment> &segments, EntityKey point) {
+  std::vector<ParkSegment> at;
+  std::ranges::copy_if(segments, std::back_inserter(at),
+                       [point](const ParkSegment &segment) { return endsAt(segment, point); });
+  return at;
+}
+
+// The segments that don't end at the point, in ascending key order.
+std::vector<ParkSegment> segmentsNotAt(const std::vector<ParkSegment> &segments, EntityKey point) {
+  std::vector<ParkSegment> notAt;
+  std::ranges::copy_if(segments, std::back_inserter(notAt),
+                       [point](const ParkSegment &segment) { return !endsAt(segment, point); });
+  return notAt;
+}
+
+// The segment's end that is not the point.
+EntityKey farEnd(const ParkSegment &segment, EntityKey point) {
+  return segment.From == point ? segment.To : segment.From;
+}
+
+// The target as a stop, for stopPosition.
+PathStop stopOf(const PointTarget &target) {
+  return std::visit([](const auto &stop) { return PathStop{stop}; }, target);
+}
+
+// The position of the path point the key holds, or none.
+std::optional<ParkPoint> positionOf(const World &world, EntityKey key) {
+  const PathPointIntent *point = findIntent<PathPointIntent>(world, key);
+  return point == nullptr ? std::nullopt : std::optional<ParkPoint>(point->At);
+}
+
+// The two segments a deleted point merges, the lower key first: exactly two segments use the
+// point, and their far ends are different points other than it.
+std::optional<std::pair<ParkSegment, ParkSegment>> mergingPair(const std::vector<ParkSegment> &at,
+                                                               EntityKey point) {
+  if (at.size() != 2) {
+    return std::nullopt;
+  }
+  const EntityKey lowFar = farEnd(at[0], point);
+  const EntityKey highFar = farEnd(at[1], point);
+  if (lowFar == highFar || lowFar == point || highFar == point) {
+    return std::nullopt;
+  }
+  return std::pair{at[0], at[1]};
+}
+
 // Whether the stop names what it lands on, of the kind.
 bool isStopOfKind(const World &world, const std::vector<ParkSegment> &segments,
                   const PathStop &stop, PathKind kind) {
@@ -304,7 +374,7 @@ bool isStopOfKind(const World &world, const std::vector<ParkSegment> &segments,
 
 // The entry in the plan's points for the existing path point, added at its position if there is
 // none.
-size_t pointEntry(PathPlan &plan, EntityKey key, ParkPoint at) {
+size_t pointEntry(EditPlan &plan, EntityKey key, ParkPoint at) {
   const auto found = std::ranges::find(plan.Points, key, &PlanPoint::Existing);
   if (found != plan.Points.end()) {
     return static_cast<size_t>(found - plan.Points.begin());
@@ -323,7 +393,7 @@ bool place(std::vector<PlacedPoint> &on, size_t point, double along) {
 }
 
 // The points the world's segment splits at, starting none.
-std::vector<PlacedPoint> &splitOf(PathPlan &plan, EntityKey segment) {
+std::vector<PlacedPoint> &splitOf(EditPlan &plan, EntityKey segment) {
   const auto found = std::ranges::find(plan.Splits, segment, &Split::Segment);
   if (found != plan.Splits.end()) {
     return found->At;
@@ -332,7 +402,7 @@ std::vector<PlacedPoint> &splitOf(PathPlan &plan, EntityKey segment) {
   return plan.Splits.back().At;
 }
 
-void markCrossing(PathPlan &plan, size_t point) {
+void markCrossing(EditPlan &plan, size_t point) {
   if (std::ranges::find(plan.Crossings, point) == plan.Crossings.end()) {
     plan.Crossings.push_back(point);
   }
@@ -340,7 +410,7 @@ void markCrossing(PathPlan &plan, size_t point) {
 
 // The point for a crossing: a point the plan already has within MIN_SEGMENT_LENGTH of it, as where
 // a path doubles back across a segment, or else a new one.
-size_t crossingPoint(PathPlan &plan, ParkPoint at) {
+size_t crossingPoint(EditPlan &plan, ParkPoint at) {
   const auto near = std::ranges::find_if(plan.Points, [at](const PlanPoint &point) {
     const double dx = point.At.X - at.X;
     const double dz = point.At.Z - at.Z;
@@ -353,11 +423,11 @@ size_t crossingPoint(PathPlan &plan, ParkPoint at) {
   return plan.Points.size() - 1;
 }
 
-// The plan's stop points, and the points of OnSegment and OnDrawnSegment stops on the segments
-// they name.
-PathPlan planStops(const AddPath &command, const std::vector<ParkPoint> &positions) {
-  PathPlan plan;
-  plan.Drawn.resize(command.Stops.size() - 1);
+// The plan's stop points, a line between each two stops, and the points of OnSegment and
+// OnDrawnSegment stops on the segments they name.
+EditPlan planStops(const AddPath &command, const std::vector<ParkPoint> &positions) {
+  EditPlan plan;
+  std::vector<std::vector<PlacedPoint>> drawn(command.Stops.size() - 1);
   for (size_t i = 0; i < command.Stops.size(); ++i) {
     const PathStop &stop = command.Stops[i];
     if (const auto *on = std::get_if<OnPoint>(&stop)) {
@@ -371,20 +441,35 @@ PathPlan planStops(const AddPath &command, const std::vector<ParkPoint> &positio
     if (const auto *onSegment = std::get_if<OnSegment>(&stop)) {
       place(splitOf(plan, onSegment->Segment), plan.Stops[i], onSegment->Along);
     } else if (const auto *onDrawn = std::get_if<OnDrawnSegment>(&stop)) {
-      place(plan.Drawn[onDrawn->Stop], plan.Stops[i], onDrawn->Along);
+      place(drawn[onDrawn->Stop], plan.Stops[i], onDrawn->Along);
     }
+  }
+  for (size_t i = 0; i + 1 < command.Stops.size(); ++i) {
+    plan.Lines.push_back(PlanLine{NULL_KEY, command.Kind, pathWidth(command.Kind), plan.Stops[i],
+                                  plan.Stops[i + 1], std::move(drawn[i])});
   }
   return plan;
 }
 
-// The ends of the path's own segment from stop k to stop k + 1.
-std::pair<ParkPoint, ParkPoint> drawnEnds(const PathPlan &plan, size_t k) {
-  return {plan.Points[plan.Stops[k]].At, plan.Points[plan.Stops[k + 1]].At};
+// The ends of the plan's line k.
+std::pair<ParkPoint, ParkPoint> lineEnds(const EditPlan &plan, size_t k) {
+  return {plan.Points[plan.Lines[k].From].At, plan.Points[plan.Lines[k].To].At};
 }
 
-// Adds the point where the path's own segment k meets the world's segment, if they meet.
-void meetWorldSegment(PathPlan &plan, size_t k, const ParkSegment &segment) {
-  const auto [a0, a1] = drawnEnds(plan, k);
+// Whether every line of the plan has a ground line between its ends.
+bool linesHaveGround(const EditPlan &plan) {
+  for (size_t k = 0; k < plan.Lines.size(); ++k) {
+    const auto [from, to] = lineEnds(plan, k);
+    if (segmentLine(from, to).empty()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Adds the point where the plan's line k meets the world's segment, if they meet.
+void meetWorldSegment(EditPlan &plan, size_t k, const ParkSegment &segment) {
+  const auto [a0, a1] = lineEnds(plan, k);
   const ParkPoint b0{segment.Line.front().X, segment.Line.front().Z};
   const ParkPoint b1{segment.Line.back().X, segment.Line.back().Z};
   const std::optional<Meeting> meeting = meetingOf(a0, a1, b0, b1);
@@ -394,14 +479,14 @@ void meetWorldSegment(PathPlan &plan, size_t k, const ParkSegment &segment) {
   size_t point = 0;
   bool placed = false;
   if (meeting->Kind == MeetingKind::AEndOnB) {
-    point = plan.Stops[k + meeting->End];
+    point = meeting->End == 0 ? plan.Lines[k].From : plan.Lines[k].To;
     placed = place(splitOf(plan, segment.Key), point, meeting->AlongB);
   } else if (meeting->Kind == MeetingKind::BEndOnA) {
     point = pointEntry(plan, meeting->End == 0 ? segment.From : segment.To, meeting->At);
-    placed = place(plan.Drawn[k], point, meeting->AlongA);
+    placed = place(plan.Lines[k].Through, point, meeting->AlongA);
   } else {
     point = crossingPoint(plan, meeting->At);
-    placed = place(plan.Drawn[k], point, meeting->AlongA);
+    placed = place(plan.Lines[k].Through, point, meeting->AlongA);
     placed = place(splitOf(plan, segment.Key), point, meeting->AlongB) || placed;
   }
   if (placed) {
@@ -409,10 +494,10 @@ void meetWorldSegment(PathPlan &plan, size_t k, const ParkSegment &segment) {
   }
 }
 
-// Adds the point where the path's own earlier segment m meets its own segment k, if they meet.
-void meetDrawnSegment(PathPlan &plan, size_t m, size_t k) {
-  const auto [a0, a1] = drawnEnds(plan, m);
-  const auto [b0, b1] = drawnEnds(plan, k);
+// Adds the point where the plan's earlier line m meets its line k, if they meet.
+void meetLines(EditPlan &plan, size_t m, size_t k) {
+  const auto [a0, a1] = lineEnds(plan, m);
+  const auto [b0, b1] = lineEnds(plan, k);
   const std::optional<Meeting> meeting = meetingOf(a0, a1, b0, b1);
   if (!meeting) {
     return;
@@ -420,39 +505,39 @@ void meetDrawnSegment(PathPlan &plan, size_t m, size_t k) {
   size_t point = 0;
   bool placed = false;
   if (meeting->Kind == MeetingKind::AEndOnB) {
-    point = plan.Stops[m + meeting->End];
-    placed = place(plan.Drawn[k], point, meeting->AlongB);
+    point = meeting->End == 0 ? plan.Lines[m].From : plan.Lines[m].To;
+    placed = place(plan.Lines[k].Through, point, meeting->AlongB);
   } else if (meeting->Kind == MeetingKind::BEndOnA) {
-    point = plan.Stops[k + meeting->End];
-    placed = place(plan.Drawn[m], point, meeting->AlongA);
+    point = meeting->End == 0 ? plan.Lines[k].From : plan.Lines[k].To;
+    placed = place(plan.Lines[m].Through, point, meeting->AlongA);
   } else {
     point = crossingPoint(plan, meeting->At);
-    placed = place(plan.Drawn[m], point, meeting->AlongA);
-    placed = place(plan.Drawn[k], point, meeting->AlongB) || placed;
+    placed = place(plan.Lines[m].Through, point, meeting->AlongA);
+    placed = place(plan.Lines[k].Through, point, meeting->AlongB) || placed;
   }
   if (placed) {
     markCrossing(plan, point);
   }
 }
 
-// Adds the points where each of the path's own segments meets a world segment of the kind, in
-// ascending key order, and then each of its own earlier segments.
-void addMeetings(PathPlan &plan, const std::vector<ParkSegment> &segments, PathKind kind) {
-  for (size_t k = 0; k < plan.Drawn.size(); ++k) {
-    for (const ParkSegment &segment : segments) {
-      if (segment.Kind == kind && !segment.Line.empty()) {
+// Adds the points where each of the plan's lines meets a segment of its kind that the edit leaves
+// in place, in ascending key order, and then each of the plan's earlier lines.
+void addMeetings(EditPlan &plan, const std::vector<ParkSegment> &kept) {
+  for (size_t k = 0; k < plan.Lines.size(); ++k) {
+    for (const ParkSegment &segment : kept) {
+      if (segment.Kind == plan.Lines[k].Kind && !segment.Line.empty()) {
         meetWorldSegment(plan, k, segment);
       }
     }
     for (size_t m = 0; m < k; ++m) {
-      meetDrawnSegment(plan, m, k);
+      meetLines(plan, m, k);
     }
   }
 }
 
 // Whether each part from the first position through the placed points to the last has a ground
 // line and fits the solids, at the width.
-bool runFits(const PathPlan &plan, ParkPoint first, const std::vector<PlacedPoint> &through,
+bool runFits(const EditPlan &plan, ParkPoint first, const std::vector<PlacedPoint> &through,
              ParkPoint last, double width, const std::vector<Solid> &solids) {
   ParkPoint from = first;
   const auto fitsTo = [&](ParkPoint to) {
@@ -466,29 +551,47 @@ bool runFits(const PathPlan &plan, ParkPoint first, const std::vector<PlacedPoin
          fitsTo(last);
 }
 
-// Whether every part of every segment the path splits or adds has a ground line and fits the
-// solids. A part bends at most MIN_SEGMENT_LENGTH from its segment's line where an end lies on it.
-bool partsFit(const World &world, const PathPlan &plan, const std::vector<ParkSegment> &segments,
-              const std::vector<Solid> &solids, PathKind kind) {
+// Whether every part of every segment the plan splits, adds, or reshapes has a ground line and
+// fits the solids. A part bends at most MIN_SEGMENT_LENGTH from its segment's line where an end
+// lies on it.
+bool partsFit(const World &world, const EditPlan &plan, const std::vector<ParkSegment> &kept,
+              const std::vector<Solid> &solids) {
   for (const Split &split : plan.Splits) {
     // A split segment has a ground line, so both of its ends are path points.
-    const ParkSegment &segment = *findSegment(segments, split.Segment);
+    const ParkSegment &segment = *findSegment(kept, split.Segment);
     if (!runFits(plan, findIntent<PathPointIntent>(world, segment.From)->At, split.At,
                  findIntent<PathPointIntent>(world, segment.To)->At, segment.Width, solids)) {
       return false;
     }
   }
-  for (size_t k = 0; k < plan.Drawn.size(); ++k) {
-    const auto [from, to] = drawnEnds(plan, k);
-    if (!runFits(plan, from, plan.Drawn[k], to, pathWidth(kind), solids)) {
+  for (size_t k = 0; k < plan.Lines.size(); ++k) {
+    const auto [from, to] = lineEnds(plan, k);
+    if (!runFits(plan, from, plan.Lines[k].Through, to, plan.Lines[k].Width, solids)) {
       return false;
     }
   }
   return true;
 }
 
+// The plan with its meetings sorted, or none when a part of a segment it splits, adds, or
+// reshapes has no ground line or meets a solid.
+std::optional<EditPlan> finishPlan(const World &world, EditPlan plan,
+                                   const std::vector<ParkSegment> &kept) {
+  for (Split &split : plan.Splits) {
+    std::ranges::sort(split.At, {}, &PlacedPoint::Along);
+  }
+  for (PlanLine &line : plan.Lines) {
+    std::ranges::sort(line.Through, {}, &PlacedPoint::Along);
+  }
+  std::ranges::sort(plan.Splits, {}, &Split::Segment);
+  if (!partsFit(world, plan, kept, solidsOf(world))) {
+    return std::nullopt;
+  }
+  return plan;
+}
+
 // The plan of an AddPath the world accepts, or none when it refuses it.
-std::optional<PathPlan> planPath(const World &world, const AddPath &command) {
+std::optional<EditPlan> planPath(const World &world, const AddPath &command) {
   if (!isKnown(command.Kind) || command.Stops.size() < 2) {
     return std::nullopt;
   }
@@ -499,25 +602,228 @@ std::optional<PathPlan> planPath(const World &world, const AddPath &command) {
       })) {
     return std::nullopt;
   }
-  PathPlan plan = planStops(command, *positions);
-  for (size_t k = 0; k < plan.Drawn.size(); ++k) {
-    const auto [from, to] = drawnEnds(plan, k);
-    if (segmentLine(from, to).empty()) {
-      return std::nullopt;
-    }
-  }
-  addMeetings(plan, segments, command.Kind);
-  for (Split &split : plan.Splits) {
-    std::ranges::sort(split.At, {}, &PlacedPoint::Along);
-  }
-  for (std::vector<PlacedPoint> &drawn : plan.Drawn) {
-    std::ranges::sort(drawn, {}, &PlacedPoint::Along);
-  }
-  std::ranges::sort(plan.Splits, {}, &Split::Segment);
-  if (!partsFit(world, plan, segments, solidsOf(world), command.Kind)) {
+  EditPlan plan = planStops(command, *positions);
+  if (!linesHaveGround(plan)) {
     return std::nullopt;
   }
+  addMeetings(plan, segments);
+  return finishPlan(world, std::move(plan), segments);
+}
+
+// Whether the MovePoint's target names what it lands on, of the kind, other than the moved point
+// and the segments at it.
+bool isTargetOfKind(const World &world, const std::vector<ParkSegment> &segments,
+                    const MovePoint &command, PathKind kind) {
+  if (const auto *on = std::get_if<OnPoint>(&command.To)) {
+    return on->Point != command.Point && isPointOfKind(world, segments, on->Point, kind);
+  }
+  if (const auto *on = std::get_if<OnSegment>(&command.To)) {
+    return isStopOfKind(world, segments, *on, kind) &&
+           !endsAt(*findSegment(segments, on->Segment), command.Point);
+  }
+  return true;
+}
+
+// The plan of a MovePoint the world accepts, or none when it refuses it.
+std::optional<EditPlan> planMove(const World &world, const MovePoint &command) {
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  const std::vector<ParkSegment> at = segmentsAt(segments, command.Point);
+  if (findIntent<PathPointIntent>(world, command.Point) == nullptr || at.empty() ||
+      std::ranges::any_of(
+          at, [&at](const ParkSegment &segment) { return segment.Kind != at.front().Kind; })) {
+    return std::nullopt;
+  }
+  const std::optional<ParkPoint> position = stopPosition(world, stopOf(command.To));
+  if (!isTargetOfKind(world, segments, command, at.front().Kind) || !position) {
+    return std::nullopt;
+  }
+  const auto *onPoint = std::get_if<OnPoint>(&command.To);
+  EditPlan plan;
+  size_t moved = 0;
+  if (onPoint != nullptr) {
+    moved = pointEntry(plan, onPoint->Point, *position);
+  } else {
+    plan.Points.push_back(PlanPoint{*position, command.Point});
+    plan.Moved = command.Point;
+    plan.MovedTo = *position;
+  }
+  for (const ParkSegment &segment : at) {
+    const EntityKey far = farEnd(segment, command.Point);
+    if (onPoint != nullptr && far == onPoint->Point) {
+      plan.Destroyed.push_back(segment.Key);
+      continue;
+    }
+    const std::optional<ParkPoint> farAt = positionOf(world, far);
+    if (far == command.Point || !farAt) {
+      return std::nullopt;
+    }
+    const size_t farEntry = pointEntry(plan, far, *farAt);
+    plan.Lines.push_back(PlanLine{segment.Key,
+                                  segment.Kind,
+                                  segment.Width,
+                                  segment.From == command.Point ? moved : farEntry,
+                                  segment.To == command.Point ? moved : farEntry,
+                                  {}});
+  }
+  const std::vector<ParkSegment> kept = segmentsNotAt(segments, command.Point);
+  if (onPoint != nullptr) {
+    plan.Destroyed.push_back(command.Point);
+    // A target left with no segment goes too.
+    const bool targetUsed =
+        !plan.Lines.empty() || std::ranges::any_of(kept, [onPoint](const ParkSegment &segment) {
+          return endsAt(segment, onPoint->Point);
+        });
+    if (!targetUsed) {
+      plan.Destroyed.push_back(onPoint->Point);
+    }
+  }
+  if (const auto *onSegment = std::get_if<OnSegment>(&command.To)) {
+    place(splitOf(plan, onSegment->Segment), moved, onSegment->Along);
+  }
+  if (!linesHaveGround(plan)) {
+    return std::nullopt;
+  }
+  addMeetings(plan, kept);
+  return finishPlan(world, std::move(plan), kept);
+}
+
+// The plan of an InsertPoint the world accepts, or none when it refuses it. Both parts lie along
+// the segment, which has met everything it meets already, so the plan finds no meetings.
+std::optional<EditPlan> planInsert(const World &world, const InsertPoint &command) {
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  const ParkSegment *segment = findSegment(segments, command.Segment);
+  if (segment == nullptr || segment->Line.empty() || !std::isfinite(command.Along) ||
+      command.Along <= 0.0 || command.Along >= 1.0) {
+    return std::nullopt;
+  }
+  const std::optional<ParkPoint> at =
+      stopPosition(world, OnSegment{command.Segment, command.Along});
+  if (!at) {
+    return std::nullopt;
+  }
+  EditPlan plan;
+  plan.Points.push_back(PlanPoint{*at, NULL_KEY});
+  place(splitOf(plan, command.Segment), 0, command.Along);
+  return finishPlan(world, std::move(plan), segments);
+}
+
+// The plan of a DeletePoint the world accepts, or none when it refuses it.
+std::optional<EditPlan> planDelete(const World &world, const DeletePoint &command) {
+  if (findIntent<PathPointIntent>(world, command.Point) == nullptr) {
+    return std::nullopt;
+  }
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  const std::vector<ParkSegment> at = segmentsAt(segments, command.Point);
+  const std::vector<ParkSegment> kept = segmentsNotAt(segments, command.Point);
+  EditPlan plan;
+  if (const auto pair = mergingPair(at, command.Point)) {
+    const auto &[low, high] = *pair;
+    const EntityKey lowFar = farEnd(low, command.Point);
+    const EntityKey highFar = farEnd(high, command.Point);
+    const std::optional<ParkPoint> lowAt = positionOf(world, lowFar);
+    const std::optional<ParkPoint> highAt = positionOf(world, highFar);
+    if (!lowAt || !highAt) {
+      return std::nullopt;
+    }
+    const size_t lowEntry = pointEntry(plan, lowFar, *lowAt);
+    const size_t highEntry = pointEntry(plan, highFar, *highAt);
+    plan.Lines.push_back(PlanLine{low.Key,
+                                  low.Kind,
+                                  std::max(low.Width, high.Width),
+                                  low.From == command.Point ? highEntry : lowEntry,
+                                  low.To == command.Point ? highEntry : lowEntry,
+                                  {}});
+    plan.Destroyed = {high.Key, command.Point};
+    if (!linesHaveGround(plan)) {
+      return std::nullopt;
+    }
+    addMeetings(plan, kept);
+    return finishPlan(world, std::move(plan), kept);
+  }
+  // Every segment at the point goes, and each far end no other segment uses.
+  std::vector<EntityKey> unused;
+  for (const ParkSegment &segment : at) {
+    plan.Destroyed.push_back(segment.Key);
+    const EntityKey far = farEnd(segment, command.Point);
+    if (far != command.Point && findIntent<PathPointIntent>(world, far) != nullptr &&
+        std::ranges::none_of(kept,
+                             [far](const ParkSegment &other) { return endsAt(other, far); })) {
+      unused.push_back(far);
+    }
+  }
+  plan.Destroyed.push_back(command.Point);
+  std::ranges::sort(unused);
+  const auto repeated = std::ranges::unique(unused);
+  unused.erase(repeated.begin(), repeated.end());
+  plan.Destroyed.insert(plan.Destroyed.end(), unused.begin(), unused.end());
   return plan;
+}
+
+// Makes what the plan describes. Destroyed keys go first. Each plan point's key is its existing
+// point's, or a new point's, in the plan's order. Each split segment ends at its first point, and
+// new parts run on through the rest to its old end. Each line runs through its points: a reshaped
+// line keeps its key for its first part, and every other part takes a new key.
+void applyPlan(World &world, const EditPlan &plan) {
+  for (const EntityKey key : plan.Destroyed) {
+    world.destroyEntity(key);
+  }
+  const auto addSegment = [&world](PathKind kind, EntityKey from, EntityKey to, double width) {
+    const EntityKey key = world.createEntity();
+    world.Registry.emplace<PathSegmentIntent>(world.findEntity(key),
+                                              PathSegmentIntent{kind, from, to, width});
+  };
+  std::vector<EntityKey> keys;
+  for (const PlanPoint &point : plan.Points) {
+    if (point.Existing != NULL_KEY) {
+      keys.push_back(point.Existing);
+    } else {
+      const EntityKey key = world.createEntity();
+      world.Registry.emplace<PathPointIntent>(world.findEntity(key), PathPointIntent{point.At});
+      keys.push_back(key);
+    }
+  }
+  if (plan.Moved != NULL_KEY) {
+    world.Registry.get<PathPointIntent>(world.findEntity(plan.Moved)).At = plan.MovedTo;
+  }
+  for (const Split &split : plan.Splits) {
+    PathSegmentIntent &segment =
+        world.Registry.get<PathSegmentIntent>(world.findEntity(split.Segment));
+    const PathSegmentIntent was = segment;
+    segment.To = keys[split.At.front().Point];
+    for (size_t k = 0; k < split.At.size(); ++k) {
+      const EntityKey to = k + 1 < split.At.size() ? keys[split.At[k + 1].Point] : was.To;
+      addSegment(was.Kind, keys[split.At[k].Point], to, was.Width);
+    }
+  }
+  for (const PlanLine &line : plan.Lines) {
+    EntityKey from = keys[line.From];
+    bool first = true;
+    const auto addPart = [&](EntityKey to) {
+      if (first && line.Key != NULL_KEY) {
+        world.Registry.get<PathSegmentIntent>(world.findEntity(line.Key)) =
+            PathSegmentIntent{line.Kind, from, to, line.Width};
+      } else {
+        addSegment(line.Kind, from, to, line.Width);
+      }
+      first = false;
+      from = to;
+    };
+    for (const PlacedPoint &placed : line.Through) {
+      addPart(keys[placed.Point]);
+    }
+    addPart(keys[line.To]);
+  }
+}
+
+// The ground position of each of the plan's crossings, or none without a plan.
+std::vector<ParkPoint> crossingsOf(const std::optional<EditPlan> &plan) {
+  std::vector<ParkPoint> crossings;
+  if (plan) {
+    for (const size_t point : plan->Crossings) {
+      crossings.push_back(plan->Points[point].At);
+    }
+  }
+  return crossings;
 }
 
 } // namespace
@@ -528,6 +834,9 @@ void addParkEdits(WorldSchema &schema) {
   schema.addCommand<MoveBox>();
   schema.addCommand<DeleteSegment>();
   schema.addCommand<DeleteBox>();
+  schema.addCommand<MovePoint>();
+  schema.addCommand<InsertPoint>();
+  schema.addCommand<DeletePoint>();
 }
 
 std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop) {
@@ -585,14 +894,66 @@ std::optional<std::vector<ParkPoint>> stopPositions(const World &world, const Ad
 }
 
 std::vector<ParkPoint> pathCrossings(const World &world, const AddPath &path) {
-  const std::optional<PathPlan> plan = planPath(world, path);
-  std::vector<ParkPoint> crossings;
-  if (plan) {
-    for (const size_t point : plan->Crossings) {
-      crossings.push_back(plan->Points[point].At);
-    }
+  return crossingsOf(planPath(world, path));
+}
+
+std::vector<ParkPoint> pathCrossings(const World &world, const MovePoint &move) {
+  return crossingsOf(planMove(world, move));
+}
+
+std::vector<ParkPoint> pathCrossings(const World &world, const DeletePoint &del) {
+  return crossingsOf(planDelete(world, del));
+}
+
+std::vector<ParkSegment> movedSegments(const World &world, const MovePoint &move) {
+  const std::optional<ParkPoint> to = stopPosition(world, stopOf(move.To));
+  if (findIntent<PathPointIntent>(world, move.Point) == nullptr || !to) {
+    return {};
   }
-  return crossings;
+  const auto *onPoint = std::get_if<OnPoint>(&move.To);
+  const EntityKey movedKey = onPoint != nullptr ? onPoint->Point : move.Point;
+  std::vector<ParkSegment> moved;
+  for (ParkSegment segment : segmentsAt(parkSegments(world), move.Point)) {
+    const EntityKey far = farEnd(segment, move.Point);
+    const std::optional<ParkPoint> farAt = positionOf(world, far);
+    if ((onPoint != nullptr && far == onPoint->Point) || far == move.Point || !farAt) {
+      continue;
+    }
+    if (segment.From == move.Point) {
+      segment.From = movedKey;
+      segment.Line = segmentLine(*to, *farAt);
+    } else {
+      segment.To = movedKey;
+      segment.Line = segmentLine(*farAt, *to);
+    }
+    moved.push_back(std::move(segment));
+  }
+  return moved;
+}
+
+std::optional<ParkSegment> mergedSegment(const World &world, const DeletePoint &del) {
+  const std::optional<std::pair<ParkSegment, ParkSegment>> pair =
+      mergingPair(segmentsAt(parkSegments(world), del.Point), del.Point);
+  if (!pair) {
+    return std::nullopt;
+  }
+  const auto &[low, high] = *pair;
+  const EntityKey highFar = farEnd(high, del.Point);
+  const std::optional<ParkPoint> lowAt = positionOf(world, farEnd(low, del.Point));
+  const std::optional<ParkPoint> highAt = positionOf(world, highFar);
+  if (!lowAt || !highAt) {
+    return std::nullopt;
+  }
+  ParkSegment merged = low;
+  merged.Width = std::max(low.Width, high.Width);
+  if (low.From == del.Point) {
+    merged.From = highFar;
+    merged.Line = segmentLine(*highAt, *lowAt);
+  } else {
+    merged.To = highFar;
+    merged.Line = segmentLine(*lowAt, *highAt);
+  }
+  return merged;
 }
 
 bool isAccepted(const World &world, const AddPath &command) {
@@ -624,47 +985,21 @@ bool isAccepted(const World &world, const DeleteBox &command) {
   return findIntent<BoxIntent>(world, command.Box) != nullptr;
 }
 
+bool isAccepted(const World &world, const MovePoint &command) {
+  return planMove(world, command).has_value();
+}
+
+bool isAccepted(const World &world, const InsertPoint &command) {
+  return planInsert(world, command).has_value();
+}
+
+bool isAccepted(const World &world, const DeletePoint &command) {
+  return planDelete(world, command).has_value();
+}
+
 void applyCommand(World &world, const AddPath &command) {
-  const std::optional<PathPlan> plan = planPath(world, command);
-  if (!plan) {
-    return;
-  }
-  const auto addSegment = [&world](PathKind kind, EntityKey from, EntityKey to, double width) {
-    const EntityKey key = world.createEntity();
-    world.Registry.emplace<PathSegmentIntent>(world.findEntity(key),
-                                              PathSegmentIntent{kind, from, to, width});
-  };
-  // Each plan point's key: its existing point's, or a new point's, in the plan's order.
-  std::vector<EntityKey> keys;
-  for (const PlanPoint &point : plan->Points) {
-    if (point.Existing != NULL_KEY) {
-      keys.push_back(point.Existing);
-    } else {
-      const EntityKey key = world.createEntity();
-      world.Registry.emplace<PathPointIntent>(world.findEntity(key), PathPointIntent{point.At});
-      keys.push_back(key);
-    }
-  }
-  // Each split segment ends at its first point, and new parts run on through the rest to its old
-  // end.
-  for (const Split &split : plan->Splits) {
-    PathSegmentIntent &segment =
-        world.Registry.get<PathSegmentIntent>(world.findEntity(split.Segment));
-    const PathSegmentIntent was = segment;
-    segment.To = keys[split.At.front().Point];
-    for (size_t k = 0; k < split.At.size(); ++k) {
-      const EntityKey to = k + 1 < split.At.size() ? keys[split.At[k + 1].Point] : was.To;
-      addSegment(was.Kind, keys[split.At[k].Point], to, was.Width);
-    }
-  }
-  // Each of the path's own segments runs through the points on it.
-  for (size_t i = 0; i < plan->Drawn.size(); ++i) {
-    EntityKey from = keys[plan->Stops[i]];
-    for (const PlacedPoint &placed : plan->Drawn[i]) {
-      addSegment(command.Kind, from, keys[placed.Point], pathWidth(command.Kind));
-      from = keys[placed.Point];
-    }
-    addSegment(command.Kind, from, keys[plan->Stops[i + 1]], pathWidth(command.Kind));
+  if (const std::optional<EditPlan> plan = planPath(world, command)) {
+    applyPlan(world, *plan);
   }
 }
 
@@ -706,6 +1041,24 @@ void applyCommand(World &world, const DeleteSegment &command) {
 void applyCommand(World &world, const DeleteBox &command) {
   if (isAccepted(world, command)) {
     world.destroyEntity(command.Box);
+  }
+}
+
+void applyCommand(World &world, const MovePoint &command) {
+  if (const std::optional<EditPlan> plan = planMove(world, command)) {
+    applyPlan(world, *plan);
+  }
+}
+
+void applyCommand(World &world, const InsertPoint &command) {
+  if (const std::optional<EditPlan> plan = planInsert(world, command)) {
+    applyPlan(world, *plan);
+  }
+}
+
+void applyCommand(World &world, const DeletePoint &command) {
+  if (const std::optional<EditPlan> plan = planDelete(world, command)) {
+    applyPlan(world, *plan);
   }
 }
 

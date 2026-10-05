@@ -19,6 +19,7 @@ enum class ToolKind : uint8_t {
   PlaceShop,
   PlaceDepot,
   MoveBox,
+  EditPath,
   Delete
 };
 
@@ -28,6 +29,8 @@ inline constexpr double MIN_FACING_DRAG = 1.0;
 inline constexpr double SNAP_REACH = 2.0;
 // A path tool's press this near its last stop finishes the path, in meters.
 inline constexpr double FINISH_REACH = 1.0;
+// A press or hover this near a path point picks it, in meters.
+inline constexpr double POINT_REACH = 2.0;
 
 // One tool and what it holds. Change it only through selectTool, movePointer, pressPointer, and
 // releasePointer.
@@ -36,17 +39,23 @@ struct ToolState {
   // Where the pointer meets the ground, if it does.
   std::optional<ParkPoint> Pointer;
   bool Holding = false;
+  // Whether the pointer has met the ground anywhere new since the press took hold.
+  bool Dragged = false;
   // The place tools' facing for the next box.
   double FacingX = 0.0;
   double FacingZ = -1.0;
   // Holding with a place tool: where the box lands and how it faces.
   Pose Landing;
-  // Holding with MoveBox: the box, its pose at the press, the offset of its position from the
-  // pointer then, and where it would move.
+  // Holding with MoveBox: the box, the offset of its position from the pointer at the press, and
+  // where it would move.
   EntityKey Held = NULL_KEY;
-  Pose HeldFrom;
   ParkPoint GrabOffset;
   Pose Target;
+  // Holding with EditPath on a point: Held is the point, and PointTo where the drag would put it
+  // before snapping. GrabOffset is the offset of its position from the pointer at the press.
+  ParkPoint PointTo;
+  // Holding with EditPath on a segment: the point the release inserts.
+  std::optional<InsertPoint> Inserting;
   // A path tool's stops so far.
   std::vector<PathStop> Drawn;
 };
@@ -78,6 +87,12 @@ std::optional<EntityKey> segmentAt(const World &world, ParkPoint point);
 // one segment uses it and every segment at it has the kind.
 PathStop snapStop(const World &world, PathKind kind, const std::vector<PathStop> &drawn,
                   ParkPoint point);
+// The path point nearest the point within POINT_REACH, of either kind. Ties go to the lower key.
+std::optional<EntityKey> pointAt(const World &world, ParkPoint point);
+// Where a dragged path point at the place moves to: snapStop's target for a path of the point's
+// kind with no stops drawn, leaving out the point and every segment at it, or a new point at the
+// place when no segment uses the point.
+PointTarget snapPoint(const World &world, EntityKey point, ParkPoint at);
 
 // Where a path tool's first click would start the path, its kind, and whether it would join a
 // point or segment there.

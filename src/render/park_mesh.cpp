@@ -197,6 +197,13 @@ void appendSegmentAt(ParkMesh &mesh, const std::vector<CarrierPoint> &line, doub
               color);
 }
 
+// Adds a flat disc of the radius centered on the point, the lift above the ground.
+void appendDisc(ParkMesh &mesh, ParkPoint at, double radius, float lift, Rgba color) {
+  const CarrierPoint center{at.X, at.Z, 0.0};
+  appendJoint(mesh, center, {1.0, 0.0}, radius, lift, color);
+  appendJoint(mesh, center, {-1.0, 0.0}, radius, lift, color);
+}
+
 // Adds a segment as appendSegment does, GHOST_LIFT higher.
 void appendGhostSegment(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &line,
                         double width, Rgba color) {
@@ -223,6 +230,50 @@ void appendGhostPath(ParkMesh &mesh, const World &world, const AddPath &path, Rg
     }
   }
   for (const ParkPoint &at : pathCrossings(world, path)) {
+    appendJoinMark(mesh, at);
+  }
+}
+
+// Adds a moved point's ghost: its segments where they would lie, in their kind's ghost color, a
+// join mark at its target when that is a point or segment, and one at each place a moved segment
+// crosses one.
+void appendGhostMove(ParkMesh &mesh, const World &world, const MovePoint &move,
+                     const ParkEdit &edit) {
+  const std::vector<ParkSegment> moved = movedSegments(world, move);
+  if (!moved.empty()) {
+    const Rgba color = ghostColor(world, edit, pathColor(moved.front().Kind));
+    for (const ParkSegment &segment : moved) {
+      appendGhostSegment(mesh, segment.Kind, segment.Line, segment.Width, color);
+    }
+  }
+  if (!std::holds_alternative<NewPoint>(move.To)) {
+    const PathStop target = std::visit([](const auto &stop) { return PathStop{stop}; }, move.To);
+    if (const std::optional<ParkPoint> at = stopPosition(world, target)) {
+      appendJoinMark(mesh, *at);
+    }
+  }
+  for (const ParkPoint &at : pathCrossings(world, move)) {
+    appendJoinMark(mesh, at);
+  }
+}
+
+// Adds a deleted point's ghost: when accepted, each segment at the point in the delete tint; the
+// segment it merges two into, in its kind's ghost color; and a join mark at each place the merged
+// segment crosses one.
+void appendGhostDeletePoint(ParkMesh &mesh, const World &world, const DeletePoint &del,
+                            const ParkEdit &edit) {
+  if (isAccepted(world, edit)) {
+    for (const ParkSegment &segment : parkSegments(world)) {
+      if (segment.From == del.Point || segment.To == del.Point) {
+        appendEntity(mesh, world, segment.Key, DELETE_TINT);
+      }
+    }
+  }
+  if (const std::optional<ParkSegment> merged = mergedSegment(world, del)) {
+    appendGhostSegment(mesh, merged->Kind, merged->Line, merged->Width,
+                       ghostColor(world, edit, pathColor(merged->Kind)));
+  }
+  for (const ParkPoint &at : pathCrossings(world, del)) {
     appendJoinMark(mesh, at);
   }
 }
@@ -255,15 +306,11 @@ void appendPathStart(ParkMesh &mesh, PathKind kind, ParkPoint at, bool joins) {
 }
 
 void appendJoinMark(ParkMesh &mesh, ParkPoint at) {
-  const CarrierPoint center{at.X, at.Z, 0.0};
-  appendJoint(mesh, center, {1.0, 0.0}, JOIN_MARK_RADIUS, JOIN_MARK_LIFT, JOIN_MARK_COLOR);
-  appendJoint(mesh, center, {-1.0, 0.0}, JOIN_MARK_RADIUS, JOIN_MARK_LIFT, JOIN_MARK_COLOR);
+  appendDisc(mesh, at, JOIN_MARK_RADIUS, JOIN_MARK_LIFT, JOIN_MARK_COLOR);
 }
 
 void appendFinishMark(ParkMesh &mesh, ParkPoint at) {
-  const CarrierPoint center{at.X, at.Z, 0.0};
-  appendJoint(mesh, center, {1.0, 0.0}, FINISH_MARK_RADIUS, FINISH_MARK_LIFT, FINISH_MARK_COLOR);
-  appendJoint(mesh, center, {-1.0, 0.0}, FINISH_MARK_RADIUS, FINISH_MARK_LIFT, FINISH_MARK_COLOR);
+  appendDisc(mesh, at, FINISH_MARK_RADIUS, FINISH_MARK_LIFT, FINISH_MARK_COLOR);
 }
 
 void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
@@ -371,6 +418,12 @@ void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color)
       return;
     }
   }
+  for (const ParkPathPoint &point : parkPathPoints(world)) {
+    if (point.Key == key) {
+      appendDisc(mesh, point.At, JOIN_MARK_RADIUS, JOIN_MARK_LIFT, color);
+      return;
+    }
+  }
 }
 
 ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
@@ -388,7 +441,18 @@ ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
     }
   } else if (const auto *path = std::get_if<AddPath>(&edit)) {
     appendGhostPath(mesh, world, *path, ghostColor(world, edit, pathColor(path->Kind)));
-  } else if (isAccepted(world, edit)) {
+  } else if (const auto *movePoint = std::get_if<MovePoint>(&edit)) {
+    appendGhostMove(mesh, world, *movePoint, edit);
+  } else if (const auto *insert = std::get_if<InsertPoint>(&edit)) {
+    if (const std::optional<ParkPoint> at =
+            stopPosition(world, OnSegment{insert->Segment, insert->Along})) {
+      appendJoinMark(mesh, *at);
+    }
+  } else if (const auto *deletePoint = std::get_if<DeletePoint>(&edit)) {
+    appendGhostDeletePoint(mesh, world, *deletePoint, edit);
+  } else if ((std::holds_alternative<DeleteSegment>(edit) ||
+              std::holds_alternative<DeleteBox>(edit)) &&
+             isAccepted(world, edit)) {
     const EntityKey key = std::holds_alternative<DeleteSegment>(edit)
                               ? std::get<DeleteSegment>(edit).Segment
                               : std::get<DeleteBox>(edit).Box;

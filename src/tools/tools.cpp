@@ -57,16 +57,17 @@ bool isKindsPoint(const std::vector<ParkSegment> &segments, EntityKey point, Pat
   return used;
 }
 
-// The nearest of the kind's points within SNAP_REACH of the click. Points come in ascending key
-// order, and only a strictly nearer one replaces the nearest, so ties go to the lower key.
+// The nearest of the kind's points within SNAP_REACH of the click, other than the excluded one.
+// Points come in ascending key order, and only a strictly nearer one replaces the nearest, so ties
+// go to the lower key.
 std::optional<Snap> nearestPointSnap(const std::vector<ParkPathPoint> &points,
                                      const std::vector<ParkSegment> &segments, PathKind kind,
-                                     ParkPoint click) {
+                                     ParkPoint click, EntityKey excluded) {
   std::optional<Snap> nearest;
   for (const ParkPathPoint &candidate : points) {
     const double distance = distanceBetween(click, candidate.At);
-    if (distance <= SNAP_REACH && (!nearest || distance < nearest->Distance) &&
-        isKindsPoint(segments, candidate.Key, kind)) {
+    if (candidate.Key != excluded && distance <= SNAP_REACH &&
+        (!nearest || distance < nearest->Distance) && isKindsPoint(segments, candidate.Key, kind)) {
       nearest = Snap{OnPoint{candidate.Key}, distance};
     }
   }
@@ -134,11 +135,12 @@ std::optional<Snap> nearestDrawnSegmentSnap(const World &world, PathKind kind,
   return nearest;
 }
 
-// The nearest place within SNAP_REACH of the click on a segment of the kind, or the segment's end
-// point when that place lies within MIN_SEGMENT_LENGTH of it. Ties go to the lower key.
+// The nearest place within SNAP_REACH of the click on a segment of the kind that doesn't end at
+// the excluded point, or the segment's end point when that place lies within MIN_SEGMENT_LENGTH of
+// it. Ties go to the lower key.
 std::optional<Snap> nearestSegmentSnap(const std::vector<ParkPathPoint> &points,
                                        const std::vector<ParkSegment> &segments, PathKind kind,
-                                       ParkPoint click) {
+                                       ParkPoint click, EntityKey excluded) {
   const auto positionOf = [&points](EntityKey key) -> std::optional<ParkPoint> {
     const auto found = std::ranges::lower_bound(points, key, {}, &ParkPathPoint::Key);
     return found != points.end() && found->Key == key ? std::optional<ParkPoint>(found->At)
@@ -148,7 +150,8 @@ std::optional<Snap> nearestSegmentSnap(const std::vector<ParkPathPoint> &points,
   for (const ParkSegment &segment : segments) {
     const std::optional<ParkPoint> from = positionOf(segment.From);
     const std::optional<ParkPoint> to = positionOf(segment.To);
-    if (segment.Kind != kind || segment.Line.empty() || !from || !to) {
+    if (segment.Kind != kind || segment.Line.empty() || !from || !to || segment.From == excluded ||
+        segment.To == excluded) {
       continue;
     }
     const double t = alongSegment(click, *from, *to);
@@ -238,16 +241,64 @@ std::optional<Pose> boxPose(const World &world, EntityKey key) {
   return std::nullopt;
 }
 
+// The InsertPoint a click at the point makes on the segment under it, or none.
+std::optional<InsertPoint> insertAt(const World &world, ParkPoint point) {
+  const std::optional<EntityKey> key = segmentAt(world, point);
+  if (!key) {
+    return std::nullopt;
+  }
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Key != *key) {
+      continue;
+    }
+    const std::optional<ParkPoint> from = stopPosition(world, OnPoint{segment.From});
+    const std::optional<ParkPoint> to = stopPosition(world, OnPoint{segment.To});
+    if (!from || !to) {
+      return std::nullopt;
+    }
+    return InsertPoint{*key, alongSegment(point, *from, *to)};
+  }
+  return std::nullopt;
+}
+
+// Edit path's edit: the held point's move once it has been dragged, the held insert, or, while not
+// holding, the insert a click away from any point would make.
+std::optional<ParkEdit> editPathEdit(const ToolState &tool, const World &world) {
+  if (tool.Holding && tool.Held != NULL_KEY) {
+    if (!tool.Dragged) {
+      return std::nullopt;
+    }
+    return MovePoint{tool.Held, snapPoint(world, tool.Held, tool.PointTo)};
+  }
+  if (tool.Holding && tool.Inserting) {
+    return *tool.Inserting;
+  }
+  if (tool.Holding || !tool.Pointer || pointAt(world, *tool.Pointer)) {
+    return std::nullopt;
+  }
+  if (const std::optional<InsertPoint> insert = insertAt(world, *tool.Pointer)) {
+    return *insert;
+  }
+  return std::nullopt;
+}
+
 } // namespace
 
 void selectTool(ToolState &tool, ToolKind kind) {
   tool.Kind = kind;
   tool.Holding = false;
+  tool.Dragged = false;
   tool.Held = NULL_KEY;
+  tool.Inserting.reset();
   tool.Drawn.clear();
 }
 
 void movePointer(ToolState &tool, std::optional<ParkPoint> ground) {
+  // A hold counts as a drag only once the ground point changes, since a recomputed position can
+  // differ from the one at the press by rounding alone.
+  if (tool.Holding && ground && !(tool.Pointer && *tool.Pointer == *ground)) {
+    tool.Dragged = true;
+  }
   tool.Pointer = ground;
   if (!tool.Holding || !ground) {
     return;
@@ -262,6 +313,8 @@ void movePointer(ToolState &tool, std::optional<ParkPoint> ground) {
   } else if (tool.Kind == ToolKind::MoveBox) {
     tool.Target.X = ground->X + tool.GrabOffset.X;
     tool.Target.Z = ground->Z + tool.GrabOffset.Z;
+  } else if (tool.Kind == ToolKind::EditPath && tool.Held != NULL_KEY) {
+    tool.PointTo = ParkPoint{ground->X + tool.GrabOffset.X, ground->Z + tool.GrabOffset.Z};
   }
 }
 
@@ -269,6 +322,7 @@ void pressPointer(ToolState &tool, const World &world) {
   if (tool.Holding) {
     return;
   }
+  tool.Dragged = false;
   if (tool.Kind == ToolKind::Delete) {
     tool.Holding = true;
   } else if (isPathTool(tool.Kind) && tool.Pointer) {
@@ -288,9 +342,20 @@ void pressPointer(ToolState &tool, const World &world) {
     if (pose) {
       tool.Holding = true;
       tool.Held = *key;
-      tool.HeldFrom = *pose;
       tool.Target = *pose;
       tool.GrabOffset = ParkPoint{pose->X - tool.Pointer->X, pose->Z - tool.Pointer->Z};
+    }
+  } else if (tool.Kind == ToolKind::EditPath && tool.Pointer) {
+    const std::optional<EntityKey> point = pointAt(world, *tool.Pointer);
+    const std::optional<ParkPoint> at = point ? stopPosition(world, OnPoint{*point}) : std::nullopt;
+    if (at) {
+      tool.Holding = true;
+      tool.Held = *point;
+      tool.PointTo = *at;
+      tool.GrabOffset = ParkPoint{at->X - tool.Pointer->X, at->Z - tool.Pointer->Z};
+    } else if (const std::optional<InsertPoint> insert = insertAt(world, *tool.Pointer)) {
+      tool.Holding = true;
+      tool.Inserting = *insert;
     }
   }
 }
@@ -308,7 +373,9 @@ std::optional<ParkEdit> releasePointer(ToolState &tool, const World &world) {
     tool.Drawn.clear();
   }
   tool.Holding = false;
+  tool.Dragged = false;
   tool.Held = NULL_KEY;
+  tool.Inserting.reset();
   return edit;
 }
 
@@ -327,14 +394,20 @@ std::optional<ParkEdit> tentativeEdit(const ToolState &tool, const World &world)
     return std::nullopt;
   }
   if (tool.Kind == ToolKind::MoveBox) {
-    if (tool.Holding && !(tool.Target == tool.HeldFrom)) {
+    if (tool.Holding && tool.Dragged) {
       return MoveBox{tool.Held, tool.Target};
     }
     return std::nullopt;
   }
+  if (tool.Kind == ToolKind::EditPath) {
+    return editPathEdit(tool, world);
+  }
   if (tool.Kind == ToolKind::Delete && tool.Pointer) {
     if (const std::optional<EntityKey> box = boxAt(world, *tool.Pointer)) {
       return DeleteBox{*box};
+    }
+    if (const std::optional<EntityKey> point = pointAt(world, *tool.Pointer)) {
+      return DeletePoint{*point};
     }
     if (const std::optional<EntityKey> segment = segmentAt(world, *tool.Pointer)) {
       return DeleteSegment{*segment};
@@ -367,6 +440,9 @@ std::optional<ParkPoint> pathFinish(const ToolState &tool, const World &world) {
 std::optional<EntityKey> highlightedEntity(const ToolState &tool, const World &world) {
   if (tool.Kind == ToolKind::MoveBox && !tool.Holding && tool.Pointer) {
     return boxAt(world, *tool.Pointer);
+  }
+  if (tool.Kind == ToolKind::EditPath && !tool.Holding && tool.Pointer) {
+    return pointAt(world, *tool.Pointer);
   }
   return std::nullopt;
 }
@@ -405,7 +481,7 @@ PathStop snapStop(const World &world, PathKind kind, const std::vector<PathStop>
                   ParkPoint point) {
   const std::vector<ParkPathPoint> points = parkPathPoints(world);
   const std::vector<ParkSegment> segments = parkSegments(world);
-  const std::optional<Snap> onPoint = nearestPointSnap(points, segments, kind, point);
+  const std::optional<Snap> onPoint = nearestPointSnap(points, segments, kind, point, NULL_KEY);
   const std::optional<Snap> onDrawn = nearestDrawnSnap(world, kind, drawn, point);
   // An existing point wins a tie with a drawn stop's.
   if (onDrawn && (!onPoint || onDrawn->Distance < onPoint->Distance)) {
@@ -414,7 +490,7 @@ PathStop snapStop(const World &world, PathKind kind, const std::vector<PathStop>
   if (onPoint) {
     return onPoint->Stop;
   }
-  const std::optional<Snap> onSegment = nearestSegmentSnap(points, segments, kind, point);
+  const std::optional<Snap> onSegment = nearestSegmentSnap(points, segments, kind, point, NULL_KEY);
   const std::optional<Snap> onDrawnSegment = nearestDrawnSegmentSnap(world, kind, drawn, point);
   // An existing segment wins a tie with a drawn one.
   if (onDrawnSegment && (!onSegment || onDrawnSegment->Distance < onSegment->Distance)) {
@@ -424,6 +500,43 @@ PathStop snapStop(const World &world, PathKind kind, const std::vector<PathStop>
     return onSegment->Stop;
   }
   return NewPoint{point};
+}
+
+std::optional<EntityKey> pointAt(const World &world, ParkPoint point) {
+  std::optional<EntityKey> nearest;
+  double nearestDistance = 0.0;
+  for (const ParkPathPoint &candidate : parkPathPoints(world)) {
+    const double distance = distanceBetween(point, candidate.At);
+    if (distance <= POINT_REACH && (!nearest || distance < nearestDistance)) {
+      nearest = candidate.Key;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+PointTarget snapPoint(const World &world, EntityKey point, ParkPoint at) {
+  const std::vector<ParkPathPoint> points = parkPathPoints(world);
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  const auto used = std::ranges::find_if(segments, [point](const ParkSegment &segment) {
+    return segment.From == point || segment.To == point;
+  });
+  if (used == segments.end()) {
+    return NewPoint{at};
+  }
+  std::optional<Snap> snap = nearestPointSnap(points, segments, used->Kind, at, point);
+  if (!snap) {
+    snap = nearestSegmentSnap(points, segments, used->Kind, at, point);
+  }
+  if (snap) {
+    if (const auto *onPoint = std::get_if<OnPoint>(&snap->Stop)) {
+      return *onPoint;
+    }
+    if (const auto *onSegment = std::get_if<OnSegment>(&snap->Stop)) {
+      return *onSegment;
+    }
+  }
+  return NewPoint{at};
 }
 
 } // namespace tpj
