@@ -8,12 +8,12 @@ next-key 18
 2 x=-0 z=-129 facing-x=0 facing-z=0
 
 [path-point]
-3 x=0.1 z=-3.25 radius=3
-4 x=17 z=4 radius=3
+3 x=0.1 z=-3.25 radius=0
+4 x=17 z=4 radius=0
 5 x=17 z=4 radius=-1
 6 x=300 z=-128 radius=1e+300
 7 x=5e-324 z=-0 radius=0
-8 x=40 z=40 radius=3
+8 x=40 z=40 radius=0
 
 [path-segment]
 9 kind=guest from=3 to=4 width=3

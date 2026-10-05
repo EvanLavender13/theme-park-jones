@@ -338,10 +338,72 @@ ChosenEdit deletingPointUnderGuests(const World &before) {
   REQUIRE(pointKey != NULL_KEY);
   const DeletePoint del{pointKey};
   // Without a merge, this edit would only delete segments, as deletingGuestSegment already does.
-  REQUIRE(mergedSegment(before, del).has_value());
+  // The point merges its two segments when their far ends differ.
+  std::vector<EntityKey> farEnds;
+  for (const ParkSegment &segment : parkSegments(before)) {
+    if (segment.From == pointKey || segment.To == pointKey) {
+      farEnds.push_back(segment.From == pointKey ? segment.To : segment.From);
+    }
+  }
+  REQUIRE(farEnds.size() == 2);
+  REQUIRE(farEnds[0] != farEnds[1]);
   return {"deleting a guest point between two segments guests stand on, merging the segments "
           "under them",
           del};
+}
+
+// The first corner, in key order of its point, whose two segments are both of guest kind, where a
+// guest stands on at least one of the two.
+std::optional<ParkCorner> guestCornerUnderGuests(const World &world) {
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  for (const ParkCorner &corner : parkCorners(world)) {
+    std::vector<ParkSegment> atPoint;
+    for (const ParkSegment &segment : segments) {
+      if (segment.From == corner.Point || segment.To == corner.Point) {
+        atPoint.push_back(segment);
+      }
+    }
+    if (atPoint.size() != 2) {
+      continue;
+    }
+    const bool bothGuest = std::ranges::all_of(
+        atPoint, [](const ParkSegment &segment) { return segment.Kind == PathKind::Guest; });
+    const bool guestOnOne = std::ranges::any_of(
+        atPoint, [&](const ParkSegment &segment) { return someGuestStandsOn(world, segment.Key); });
+    if (bothGuest && guestOnOne) {
+      return corner;
+    }
+  }
+  return std::nullopt;
+}
+
+// Both segments at the corner keep their keys and take a new shape along the arc, so the guests on
+// them are carried onto it, and the networks and route distance are derived again.
+ChosenEdit roundingCornerUnderGuests(const World &before) {
+  const std::optional<ParkCorner> corner = guestCornerUnderGuests(before);
+  REQUIRE(corner.has_value());
+  const ParkCorner found = corner.value_or(ParkCorner{});
+  // With no radius that fits, the corner would stay sharp, and no ground line would change.
+  REQUIRE(found.MaxRadius > 0.0);
+  return {"rounding a guest corner between two segments guests stand on to half the largest radius "
+          "that fits, reshaping the segments under them",
+          SetCornerRadius{found.Point, found.MaxRadius / 2.0}};
+}
+
+// The segment keeps its key and its ground line and only its width changes, so the guests on it
+// stay on the same carrier.
+ChosenEdit narrowingSegmentUnderGuests(const World &before) {
+  const EntityKey segmentKey = guestSegmentUnderGuestHeadingToShop(before);
+  REQUIRE(segmentKey != NULL_KEY);
+  std::optional<double> width;
+  for (const ParkSegment &segment : parkSegments(before)) {
+    if (segment.Key == segmentKey) {
+      width = segment.Width;
+    }
+  }
+  REQUIRE(width.has_value());
+  return {"narrowing a guest segment guests stand on, heading to the shop, to half its width",
+          SetSegmentWidth{segmentKey, width.value_or(0.0) / 2.0}};
 }
 
 // The edits of warm.park, made from the world as a cycle leaves it. Each requires the state it was
@@ -355,7 +417,9 @@ std::vector<ChosenEdit> chosenEdits(const World &before) {
                                 deletingShop(before),
                                 movingPointUnderGuests(before),
                                 insertingPointUnderGuests(before),
-                                deletingPointUnderGuests(before)};
+                                deletingPointUnderGuests(before),
+                                roundingCornerUnderGuests(before),
+                                narrowingSegmentUnderGuests(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);
     REQUIRE(isAccepted(before, chosen.Edit));

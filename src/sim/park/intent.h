@@ -61,7 +61,7 @@ struct FootprintSize {
 constexpr double pathWidth(PathKind kind) { return kind == PathKind::Guest ? 3.0 : 2.0; }
 
 // The corner radius a new path point takes, in meters.
-inline constexpr double DEFAULT_CORNER_RADIUS = 3.0;
+inline constexpr double DEFAULT_CORNER_RADIUS = 0.0;
 
 constexpr FootprintSize boxSize(BoxKind kind) {
   return kind == BoxKind::Shop ? FootprintSize{8.0, 6.0} : FootprintSize{12.0, 8.0};
@@ -85,6 +85,23 @@ struct ParkPathPoint {
   double Radius = 0.0;
 
   bool operator==(const ParkPathPoint &) const = default;
+};
+
+// The corner a path point makes where exactly two segments meet, as other modules read it: its
+// point's key and position, the unit direction along each of its two segments, the lower-keyed
+// segment's first, and the unit direction into the corner, halfway between them. Radius is the
+// radius the corner is rounded with, at most MaxRadius, the largest that fits. Middle is the
+// arc's middle, where the two segments' ground lines meet.
+struct ParkCorner {
+  EntityKey Point = NULL_KEY;
+  ParkPoint At;
+  std::array<ParkPoint, 2> Along;
+  ParkPoint Toward;
+  double Radius = 0.0;
+  double MaxRadius = 0.0;
+  ParkPoint Middle;
+
+  bool operator==(const ParkCorner &) const = default;
 };
 
 // A path segment's intent, as other modules read it: its kind, its two points, its width, and its
@@ -117,6 +134,8 @@ void addParkIntent(WorldSchema &schema);
 std::vector<ParkEntrance> parkEntrances(const World &world);
 std::vector<ParkPathPoint> parkPathPoints(const World &world);
 std::vector<ParkSegment> parkSegments(const World &world);
+// Every corner, in ascending key order of its point.
+std::vector<ParkCorner> parkCorners(const World &world);
 std::vector<ParkBox> parkBoxes(const World &world);
 
 // The new-park template with the schema and the seed, resolution pending: an entrance on the

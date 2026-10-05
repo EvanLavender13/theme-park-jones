@@ -51,4 +51,12 @@ std::optional<ParkPoint> Interaction::pathFinish(const World &world) const {
   return tpj::pathFinish(Tool, world);
 }
 
+std::vector<ParkPoint> Interaction::radiusHandles(const World &world) const {
+  return tpj::radiusHandles(Tool, world);
+}
+
+std::optional<EditHandle> Interaction::hoveredHandle(const World &world) const {
+  return tpj::hoveredHandle(Tool, world);
+}
+
 } // namespace tpj

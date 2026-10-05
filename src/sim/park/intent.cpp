@@ -1,9 +1,7 @@
 #include "sim/park/intent.h"
 
-#include "sim/park/geometry.h"
 #include "sim/park/internal/components.h"
-
-#include <cmath>
+#include "sim/park/internal/layout.h"
 
 #include <utility>
 #include <vector>
@@ -21,24 +19,6 @@ template <typename T, typename ToValue> auto collectIntent(const World &world, T
     }
   }
   return result;
-}
-
-// The path point the key holds, or null.
-const PathPointIntent *findPoint(const World &world, EntityKey key) {
-  const entt::entity entity = world.findEntity(key);
-  return entity == entt::null ? nullptr : world.Registry.try_get<PathPointIntent>(entity);
-}
-
-// The segment's ground line: empty unless its ends are two different path points and its width is
-// finite and above zero.
-std::vector<CarrierPoint> lineOf(const World &world, const PathSegmentIntent &segment) {
-  const PathPointIntent *from = findPoint(world, segment.From);
-  const PathPointIntent *to = findPoint(world, segment.To);
-  if (from == nullptr || to == nullptr || segment.From == segment.To ||
-      !std::isfinite(segment.Width) || !(segment.Width > 0.0)) {
-    return {};
-  }
-  return segmentLine(from->At, to->At);
 }
 
 } // namespace
@@ -62,13 +42,9 @@ std::vector<ParkPathPoint> parkPathPoints(const World &world) {
   });
 }
 
-std::vector<ParkSegment> parkSegments(const World &world) {
-  return collectIntent<PathSegmentIntent>(
-      world, [&world](EntityKey key, const PathSegmentIntent &segment) {
-        return ParkSegment{key,        segment.Kind,  segment.From,
-                           segment.To, segment.Width, lineOf(world, segment)};
-      });
-}
+std::vector<ParkSegment> parkSegments(const World &world) { return segmentsOf(layoutOf(world)); }
+
+std::vector<ParkCorner> parkCorners(const World &world) { return cornersOf(layoutOf(world)); }
 
 std::vector<ParkBox> parkBoxes(const World &world) {
   return collectIntent<BoxIntent>(

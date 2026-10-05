@@ -56,4 +56,15 @@ std::optional<Footprint> footprintOf(const Pose &pose, FootprintSize size) {
                     corner(-halfDepth, halfWidth), corner(-halfDepth, -halfWidth)}};
 }
 
+double cornerRadiusFor(const ParkCorner &corner, double depth) {
+  if (!(depth > 0.0)) {
+    return 0.0;
+  }
+  const double dot = corner.Along[0].X * corner.Along[1].X + corner.Along[0].Z * corner.Along[1].Z;
+  // The sine of half the angle between the two segments, below 1 because they don't run straight
+  // on.
+  const double sine = std::sqrt((1.0 - dot) / 2.0);
+  return depth * sine / (1.0 - sine);
+}
+
 } // namespace tpj

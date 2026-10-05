@@ -121,13 +121,29 @@ struct DeletePoint {
   bool operator==(const DeletePoint &) const = default;
 };
 
-// Registers AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint, and
-// DeletePoint, in that order.
+// The path point's corner radius, held exactly as given.
+struct SetCornerRadius {
+  EntityKey Point = NULL_KEY;
+  double Radius = 0.0;
+
+  bool operator==(const SetCornerRadius &) const = default;
+};
+
+// The segment's width, held exactly as given.
+struct SetSegmentWidth {
+  EntityKey Segment = NULL_KEY;
+  double Width = 0.0;
+
+  bool operator==(const SetSegmentWidth &) const = default;
+};
+
+// Registers AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
+// DeletePoint, SetCornerRadius, and SetSegmentWidth, in that order.
 void addParkEdits(WorldSchema &schema);
 
-// A tentative or committed edit to park intent: one of the eight commands.
+// A tentative or committed edit to park intent: one of the ten commands.
 using ParkEdit = std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint,
-                              InsertPoint, DeletePoint>;
+                              InsertPoint, DeletePoint, SetCornerRadius, SetSegmentWidth>;
 
 // The stop's ground position: a NewPoint's own, an OnPoint's point's, or the place Along of the way
 // from an OnSegment's segment's From point to its To point. None when the stop names no path point,
@@ -149,17 +165,11 @@ std::vector<ParkPoint> pathCrossings(const World &world, const AddPath &path);
 std::vector<ParkPoint> pathCrossings(const World &world, const MovePoint &move);
 std::vector<ParkPoint> pathCrossings(const World &world, const DeletePoint &del);
 
-// Each segment at the moved point, in ascending key order, as it would lie after the move and
-// before any split: its end at the point is at the target, and an OnPoint target's key replaces
-// the point's. Leaves out a segment between the point and an OnPoint target. Empty when the move
-// names no path point or its target has no position. Given whether or not the world accepts the
-// move.
-std::vector<ParkSegment> movedSegments(const World &world, const MovePoint &move);
-// The segment the deletion would merge the point's two segments into, before any split: the
-// lower-keyed one, its end at the point moved to the other's far end, with the wider width. None
-// when the point doesn't have exactly two segments with different far ends. Given whether or not
-// the world accepts the deletion.
-std::optional<ParkSegment> mergedSegment(const World &world, const DeletePoint &del);
+// Each segment the edit adds, or whose ground line or width it changes, as it would lie after the
+// edit, in ascending key order, a new segment with the key the commit would give it. Given whether
+// or not the world refuses the edit for meeting a solid. Empty when the edit names nothing it acts
+// on, when a segment it adds or reshapes has no ground line, and for edits of boxes.
+std::vector<ParkSegment> editedSegments(const World &world, const ParkEdit &edit);
 
 // Whether the command would be applied to the world: it describes a physical object, names what it
 // acts on, and conflicts with nothing: no footprints overlap, no segment comes within half its
@@ -172,6 +182,8 @@ bool isAccepted(const World &world, const DeleteBox &command);
 bool isAccepted(const World &world, const MovePoint &command);
 bool isAccepted(const World &world, const InsertPoint &command);
 bool isAccepted(const World &world, const DeletePoint &command);
+bool isAccepted(const World &world, const SetCornerRadius &command);
+bool isAccepted(const World &world, const SetSegmentWidth &command);
 
 // Whether the command the edit holds would be applied to the world.
 bool isAccepted(const World &world, const ParkEdit &edit);
@@ -189,6 +201,8 @@ void applyCommand(World &world, const DeleteBox &command);
 void applyCommand(World &world, const MovePoint &command);
 void applyCommand(World &world, const InsertPoint &command);
 void applyCommand(World &world, const DeletePoint &command);
+void applyCommand(World &world, const SetCornerRadius &command);
+void applyCommand(World &world, const SetSegmentWidth &command);
 
 // Whether every solid and line has its geometry, stays in the park, and conflicts with no other.
 bool isPhysicallyValid(const World &world);
