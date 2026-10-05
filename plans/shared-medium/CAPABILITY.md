@@ -141,6 +141,8 @@ It is useful on its own. The principles promise exact attribution, exact conserv
 
 2. `affordable-sampling`: sampling a field compares each entry's place with the network's stop places and the sampled edge's bounds, instead of resolving the place. A park with guests then steps quickly. Depends on: first-field-and-flow.
 
+3. `carrier-widths`: every carrier gets a walkable width, with queries for the width and direction at a place, and carryOver keeps a place at its ground position when its ground survives an edit under a different carrier key. It is a member of the good-paths slice. Depends on: first-field-and-flow.
+
 Later milestones come from the deepening candidates, once the slice has shown where the medium is under strain.
 
 ## Deepening candidates
