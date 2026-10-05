@@ -242,7 +242,7 @@ PathLayout layoutOf(const World &world) {
   return layout;
 }
 
-std::vector<ParkSegment> segmentsOf(const PathLayout &layout) {
+PathGround groundOf(const PathLayout &layout) {
   std::vector<std::vector<CarrierPoint>> lines = straightLines(layout);
   std::vector<ParkPoint> arcs;
   const std::vector<Rounding> roundings = roundingsOf(layout, lines, arcs);
@@ -285,16 +285,16 @@ std::vector<ParkSegment> segmentsOf(const PathLayout &layout) {
     segments.push_back(
         ParkSegment{key, intent.Kind, intent.From, intent.To, intent.Width, std::move(line)});
   }
-  return segments;
-}
-
-std::vector<ParkCorner> cornersOf(const PathLayout &layout) {
-  std::vector<ParkPoint> arcs;
   std::vector<ParkCorner> corners;
-  for (const Rounding &rounding : roundingsOf(layout, straightLines(layout), arcs)) {
+  corners.reserve(roundings.size());
+  for (const Rounding &rounding : roundings) {
     corners.push_back(rounding.Corner);
   }
-  return corners;
+  return PathGround{std::move(segments), std::move(corners)};
 }
+
+std::vector<ParkSegment> segmentsOf(const PathLayout &layout) { return groundOf(layout).Segments; }
+
+std::vector<ParkCorner> cornersOf(const PathLayout &layout) { return groundOf(layout).Corners; }
 
 } // namespace tpj

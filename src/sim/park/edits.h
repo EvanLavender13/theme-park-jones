@@ -4,6 +4,7 @@
 #include "sim/command_queue.h"
 #include "sim/entity_key.h"
 #include "sim/park/intent.h"
+#include "sim/park/surface.h"
 #include "sim/schema.h"
 #include "sim/world.h"
 
@@ -170,6 +171,11 @@ std::vector<ParkPoint> pathCrossings(const World &world, const DeletePoint &del)
 // or not the world refuses the edit for meeting a solid. Empty when the edit names nothing it acts
 // on, when a segment it adds or reshapes has no ground line, and for edits of boxes.
 std::vector<ParkSegment> editedSegments(const World &world, const ParkEdit &edit);
+
+// The pieces and edge lines of each segment and point whose part of the surface the edit changes,
+// as they would lie after the edit, in ascending key order of their owners. Empty when
+// editedSegments is.
+PavedSurface editedSurface(const World &world, const ParkEdit &edit);
 
 // Whether the command would be applied to the world: it describes a physical object, names what it
 // acts on, and conflicts with nothing: no footprints overlap, no segment comes within half its

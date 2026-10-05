@@ -4,6 +4,7 @@
 #include "sim/entity_key.h"
 #include "sim/park/intent.h"
 #include "sim/park/internal/components.h"
+#include "sim/park/surface.h"
 #include "sim/world.h"
 
 #include <vector>
@@ -27,11 +28,31 @@ struct PathLayout {
   std::vector<LayoutSegment> Segments;
 };
 
+// Each segment with its ground line, rounded at its corners, in ascending key order, and each
+// corner, in ascending key order of its point.
+struct PathGround {
+  std::vector<ParkSegment> Segments;
+  std::vector<ParkCorner> Corners;
+};
+
 PathLayout layoutOf(const World &world);
+PathGround groundOf(const PathLayout &layout);
 // Each segment with its ground line, rounded at its corners, in ascending key order.
 std::vector<ParkSegment> segmentsOf(const PathLayout &layout);
 // Each corner, in ascending key order of its point.
 std::vector<ParkCorner> cornersOf(const PathLayout &layout);
+// The paved surface the layout's segments make, given its ground.
+PavedSurface surfaceOf(const PathLayout &layout, const PathGround &ground);
+// The part of that surface that belongs to each point in focus, which is in ascending key order,
+// and to each segment that ends at one of them. Unless hide is true, its edge lines are left
+// whole, without hiding the parts that lie inside paving joined to them.
+PavedSurface surfaceAround(const PathLayout &layout, const PathGround &ground,
+                           const std::vector<EntityKey> &focus, bool hide);
+// The points, in ascending key order, whose part of the surface can change when the segments at
+// the given points change: those points, and the points of each segment whose paving or edge
+// lines can reach theirs.
+std::vector<EntityKey> pointsAffected(const PathLayout &layout, const PathGround &ground,
+                                      const std::vector<EntityKey> &points);
 
 } // namespace tpj
 

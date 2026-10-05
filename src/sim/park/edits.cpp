@@ -11,6 +11,7 @@
 #include <cmath>
 #include <iterator>
 #include <optional>
+#include <span>
 #include <stddef.h>
 #include <stdint.h>
 #include <utility>
@@ -105,18 +106,23 @@ bool leavesPark(const Line &line) {
   });
 }
 
-// The least and greatest projections of the footprint's corners onto the axis.
-std::pair<double, double> extentAlong(const Footprint &footprint, const ParkPoint &axis) {
+// The least and greatest projections of the corners onto the axis.
+std::pair<double, double> extentOf(std::span<const ParkPoint> corners, const ParkPoint &axis) {
   const auto project = [&axis](const ParkPoint &corner) {
     return corner.X * axis.X + corner.Z * axis.Z;
   };
-  double least = project(footprint.Corners[0]);
+  double least = project(corners[0]);
   double greatest = least;
-  for (const ParkPoint &corner : footprint.Corners) {
+  for (const ParkPoint &corner : corners) {
     least = std::min(least, project(corner));
     greatest = std::max(greatest, project(corner));
   }
   return {least, greatest};
+}
+
+// The least and greatest projections of the footprint's corners onto the axis.
+std::pair<double, double> extentAlong(const Footprint &footprint, const ParkPoint &axis) {
+  return extentOf(footprint.Corners, axis);
 }
 
 // Whether the two footprints' extents along the axis share more than CONTACT_TOLERANCE.
@@ -134,85 +140,39 @@ bool overlaps(const Solid &a, const Solid &b) {
          overlapAlong(a.Shape, b.Shape, b.Shape.Right);
 }
 
-// The point in the solid's frame: X along its Forward and Z along its Right, from its position.
-ParkPoint toLocal(const Solid &solid, const CarrierPoint &point) {
-  const double dx = point.X - solid.At.X;
-  const double dz = point.Z - solid.At.Z;
-  return {dx * solid.Shape.Forward.X + dz * solid.Shape.Forward.Z,
-          dx * solid.Shape.Right.X + dz * solid.Shape.Right.Z};
-}
+// Edges shorter than this, in meters, give no axis to the separating axis test.
+constexpr double LEAST_EDGE = 1e-9;
 
-// Whether the segment from a to b enters the box |x| <= halfX, |z| <= halfZ: Liang and Barsky's
-// clip against both slabs.
-bool entersBox(const ParkPoint &a, const ParkPoint &b, double halfX, double halfZ) {
-  double enter = 0.0;
-  double leave = 1.0;
-  const auto clip = [&enter, &leave](double start, double delta, double half) {
-    if (delta == 0.0) {
-      return std::abs(start) <= half;
-    }
-    double low = (-half - start) / delta;
-    double high = (half - start) / delta;
-    if (low > high) {
-      std::swap(low, high);
-    }
-    enter = std::max(enter, low);
-    leave = std::min(leave, high);
-    return enter <= leave;
+// Whether the piece and the solid's footprint overlap by more than CONTACT_TOLERANCE: the
+// separating axis test over the footprint's axes and the normal of each of the piece's edges.
+bool meets(const SurfacePiece &piece, const Solid &solid) {
+  const std::span<const ParkPoint> corners = pieceCorners(piece);
+  const auto overlapOn = [&corners, &solid](const ParkPoint &axis) {
+    const auto [pieceLeast, pieceGreatest] = extentOf(corners, axis);
+    const auto [solidLeast, solidGreatest] = extentOf(solid.Shape.Corners, axis);
+    return std::min(pieceGreatest, solidGreatest) - std::max(pieceLeast, solidLeast) >
+           CONTACT_TOLERANCE;
   };
-  return clip(a.X, b.X - a.X, halfX) && clip(a.Z, b.Z - a.Z, halfZ);
-}
-
-double squaredDistanceToBox(const ParkPoint &point, double halfX, double halfZ) {
-  const double dx = std::max(std::abs(point.X) - halfX, 0.0);
-  const double dz = std::max(std::abs(point.Z) - halfZ, 0.0);
-  return dx * dx + dz * dz;
-}
-
-double squaredDistanceToSegment(const ParkPoint &point, const ParkPoint &a, const ParkPoint &b) {
-  const double dx = b.X - a.X;
-  const double dz = b.Z - a.Z;
-  const double length = dx * dx + dz * dz;
-  double t = 0.0;
-  if (length > 0.0) {
-    t = std::clamp(((point.X - a.X) * dx + (point.Z - a.Z) * dz) / length, 0.0, 1.0);
+  if (!overlapOn(solid.Shape.Forward) || !overlapOn(solid.Shape.Right)) {
+    return false;
   }
-  const double ex = a.X + dx * t - point.X;
-  const double ez = a.Z + dz * t - point.Z;
-  return ex * ex + ez * ez;
-}
-
-// Whether some segment of the line lies nearer the solid's rectangle than its half width less
-// CONTACT_TOLERANCE. A segment that enters the rectangle lies at distance zero; otherwise the
-// least distance is from an end to the rectangle or from a corner to the segment.
-bool meets(const Line &line, const Solid &solid) {
-  const double halfDepth = solid.Size.Depth / 2.0;
-  const double halfWidth = solid.Size.Width / 2.0;
-  const double reach = line.HalfWidth - CONTACT_TOLERANCE;
-  const std::array<ParkPoint, 4> corners{
-      ParkPoint{halfDepth, -halfWidth}, ParkPoint{halfDepth, halfWidth},
-      ParkPoint{-halfDepth, halfWidth}, ParkPoint{-halfDepth, -halfWidth}};
-  for (size_t i = 1; i < line.Points.size(); ++i) {
-    const ParkPoint a = toLocal(solid, line.Points[i - 1]);
-    const ParkPoint b = toLocal(solid, line.Points[i]);
-    if (entersBox(a, b, halfDepth, halfWidth)) {
-      return true;
-    }
-    double nearest = std::min(squaredDistanceToBox(a, halfDepth, halfWidth),
-                              squaredDistanceToBox(b, halfDepth, halfWidth));
-    for (const ParkPoint &corner : corners) {
-      nearest = std::min(nearest, squaredDistanceToSegment(corner, a, b));
-    }
-    if (nearest < reach * reach) {
-      return true;
+  for (size_t i = 0; i < corners.size(); ++i) {
+    const ParkPoint &from = corners[i];
+    const ParkPoint &to = corners[(i + 1) % corners.size()];
+    const double dx = to.X - from.X;
+    const double dz = to.Z - from.Z;
+    const double length = std::sqrt(dx * dx + dz * dz);
+    if (length >= LEAST_EDGE && !overlapOn(ParkPoint{-dz / length, dx / length})) {
+      return false;
     }
   }
-  return false;
+  return true;
 }
 
-// Whether the solid stays in the park and conflicts with no line and no other solid. A solid
-// holding the same key is the one being moved, so it is skipped.
-bool fits(const Solid &solid, const std::vector<Solid> &solids, const std::vector<Line> &lines) {
+// Whether the solid stays in the park and conflicts with no piece of paving and no other solid. A
+// solid holding the same key is the one being moved, so it is skipped.
+bool fits(const Solid &solid, const std::vector<Solid> &solids,
+          const std::vector<SurfacePiece> &pieces) {
   if (leavesPark(solid)) {
     return false;
   }
@@ -221,13 +181,13 @@ bool fits(const Solid &solid, const std::vector<Solid> &solids, const std::vecto
       })) {
     return false;
   }
-  return std::ranges::none_of(lines, [&solid](const Line &line) { return meets(line, solid); });
+  return std::ranges::none_of(pieces,
+                              [&solid](const SurfacePiece &piece) { return meets(piece, solid); });
 }
 
-// Whether the line stays in the park and meets no solid.
-bool fits(const Line &line, const std::vector<Solid> &solids) {
-  return !leavesPark(line) &&
-         std::ranges::none_of(solids, [&line](const Solid &solid) { return meets(line, solid); });
+// Whether the piece meets no solid.
+bool fits(const SurfacePiece &piece, const std::vector<Solid> &solids) {
+  return std::ranges::none_of(solids, [&piece](const Solid &solid) { return meets(piece, solid); });
 }
 
 // A point an edit's segments run through: an existing path point, or, when Existing is NULL_KEY, a
@@ -885,35 +845,147 @@ template <typename Store> void applyPlan(Store &store, const EditPlan &plan) {
   }
 }
 
-// Each segment the plan adds, or whose ground line or width it changes, as it would lie after the
-// plan, in ascending key order.
-std::vector<ParkSegment> editedBy(const World &world, const EditPlan &plan) {
-  PathLayout layout = layoutOf(world);
-  const std::vector<ParkSegment> before = segmentsOf(layout);
-  LayoutStore store(layout, world.nextKey());
+// What a plan changes, as it would lie after the plan: each segment it adds or whose ground line or
+// width it changes, and the surface of each owner whose part of the surface it changes, each in
+// ascending key order.
+struct Edited {
+  std::vector<ParkSegment> Segments;
+  PavedSurface Surface;
+};
+
+// The pieces and edge lines of after whose owner's pieces or edge lines differ from before's. Both
+// hold the surface of the same owners.
+PavedSurface changedOwners(const PavedSurface &before, const PavedSurface &after) {
+  // Each owner's run of items in a list in ascending owner order.
+  const auto runOf = [](const auto &items, EntityKey owner) {
+    return std::ranges::equal_range(items, owner, {}, [](const auto &item) { return item.Owner; });
+  };
+  const auto sameEdges = [&before, &after](const auto &was, const auto &is) {
+    return std::ranges::equal(was, is, [&before, &after](const EdgeLine &x, const EdgeLine &y) {
+      return x.Kind == y.Kind && std::ranges::equal(edgePoints(before, x), edgePoints(after, y));
+    });
+  };
+  PavedSurface changed;
+  for (auto first = after.Pieces.begin(); first != after.Pieces.end();) {
+    const auto run = runOf(after.Pieces, first->Owner);
+    if (!std::ranges::equal(runOf(before.Pieces, first->Owner), run)) {
+      changed.Pieces.insert(changed.Pieces.end(), run.begin(), run.end());
+    }
+    first = run.end();
+  }
+  for (auto first = after.Edges.begin(); first != after.Edges.end();) {
+    const auto run = runOf(after.Edges, first->Owner);
+    if (!sameEdges(runOf(before.Edges, first->Owner), run)) {
+      for (const EdgeLine &edge : run) {
+        const std::span<const ParkPoint> points = edgePoints(after, edge);
+        changed.Edges.push_back(
+            EdgeLine{edge.Kind, edge.Owner, changed.EdgePoints.size(), points.size()});
+        changed.EdgePoints.insert(changed.EdgePoints.end(), points.begin(), points.end());
+      }
+    }
+    first = run.end();
+  }
+  return changed;
+}
+
+// The points whose surface an edit can change: each end of each segment it adds, removes, or
+// changes, before and after it.
+std::vector<EntityKey> pointsChanged(const std::vector<ParkSegment> &before,
+                                     const std::vector<ParkSegment> &after) {
+  std::vector<EntityKey> points;
+  const auto differs = [](const ParkSegment *was, const ParkSegment &is) {
+    return was == nullptr || was->From != is.From || was->To != is.To || was->Line != is.Line ||
+           was->Width != is.Width;
+  };
+  for (const ParkSegment &segment : after) {
+    if (differs(findSegment(before, segment.Key), segment)) {
+      points.push_back(segment.From);
+      points.push_back(segment.To);
+    }
+  }
+  for (const ParkSegment &segment : before) {
+    if (differs(findSegment(after, segment.Key), segment)) {
+      points.push_back(segment.From);
+      points.push_back(segment.To);
+    }
+  }
+  std::ranges::sort(points);
+  points.erase(std::unique(points.begin(), points.end()), points.end());
+  return points;
+}
+
+// What editedBy finds: only the pieces of the surface it changes, which is all the validity check
+// needs, or the pieces and edge lines, as the edit would be drawn.
+enum class Wanted { Pieces, Drawing };
+
+// The points, and the other end of each segment at one of them, before or after.
+std::vector<EntityKey> withFarEnds(const std::vector<ParkSegment> &before,
+                                   const std::vector<ParkSegment> &after,
+                                   std::vector<EntityKey> points) {
+  const std::vector<EntityKey> changed = points;
+  for (const std::vector<ParkSegment> *segments : {&before, &after}) {
+    for (const ParkSegment &segment : *segments) {
+      if (std::ranges::binary_search(changed, segment.From) ||
+          std::ranges::binary_search(changed, segment.To)) {
+        points.push_back(segment.From);
+        points.push_back(segment.To);
+      }
+    }
+  }
+  std::ranges::sort(points);
+  points.erase(std::unique(points.begin(), points.end()), points.end());
+  return points;
+}
+
+Edited editedBy(const World &world, const EditPlan &plan, Wanted wanted) {
+  const PathLayout before = layoutOf(world);
+  const PathGround groundBefore = groundOf(before);
+  PathLayout after = before;
+  LayoutStore store(after, world.nextKey());
   applyPlan(store, plan);
-  std::vector<ParkSegment> edited;
-  for (ParkSegment &segment : segmentsOf(layout)) {
-    const ParkSegment *was = findSegment(before, segment.Key);
+  PathGround groundAfter = groundOf(after);
+  std::vector<EntityKey> points = pointsChanged(groundBefore.Segments, groundAfter.Segments);
+  // A segment's paving at one end depends on whether its other end is free, which can change
+  // whenever a changed point loses or gains a segment.
+  points = withFarEnds(groundBefore.Segments, groundAfter.Segments, points);
+  const bool drawing = wanted == Wanted::Drawing;
+  if (drawing) {
+    // Paving that changes can hide or show the edge lines of paving near it, before and after.
+    const std::vector<EntityKey> nearBefore = pointsAffected(before, groundBefore, points);
+    const std::vector<EntityKey> nearAfter = pointsAffected(after, groundAfter, points);
+    points.insert(points.end(), nearBefore.begin(), nearBefore.end());
+    points.insert(points.end(), nearAfter.begin(), nearAfter.end());
+    std::ranges::sort(points);
+    points.erase(std::unique(points.begin(), points.end()), points.end());
+  }
+  Edited edited;
+  edited.Surface = changedOwners(surfaceAround(before, groundBefore, points, drawing),
+                                 surfaceAround(after, groundAfter, points, drawing));
+  for (ParkSegment &segment : groundAfter.Segments) {
+    const ParkSegment *was = findSegment(groundBefore.Segments, segment.Key);
     if (was == nullptr || was->Line != segment.Line || was->Width != segment.Width) {
-      edited.push_back(std::move(segment));
+      edited.Segments.push_back(std::move(segment));
     }
   }
   return edited;
 }
 
-// The plan when the world accepts it: every segment it adds or changes has a ground line and fits
-// the solids.
+// The plan when the world accepts it: every segment it adds or changes has a ground line that stays
+// in the park, and every piece of the surface it adds or changes meets no solid.
 std::optional<EditPlan> acceptedPlan(const World &world, std::optional<EditPlan> plan) {
   if (!plan) {
     return std::nullopt;
   }
   const std::vector<Solid> solids = solidsOf(world);
+  const Edited edited = editedBy(world, *plan, Wanted::Pieces);
   const bool fitting =
-      std::ranges::all_of(editedBy(world, *plan), [&solids](const ParkSegment &segment) {
-        const std::optional<Line> line = lineOf(segment);
-        return line && fits(*line, solids);
-      });
+      std::ranges::all_of(edited.Segments,
+                          [](const ParkSegment &segment) {
+                            const std::optional<Line> line = lineOf(segment);
+                            return line && !leavesPark(*line);
+                          }) &&
+      std::ranges::all_of(edited.Surface.Pieces,
+                          [&solids](const SurfacePiece &piece) { return fits(piece, solids); });
   return fitting ? std::move(plan) : std::nullopt;
 }
 
@@ -1041,6 +1113,44 @@ std::vector<ParkPoint> pathCrossings(const World &world, const DeletePoint &del)
   return crossingsOf(acceptedPlan(world, planOf(world, del)));
 }
 
+namespace {
+
+// The pieces of the park's surface that can reach the solid. Every piece of a point's or of a
+// segment's lies within the length and width of one of the point's segments from the point, so
+// only the points that near the solid's bounds and their segments are built.
+std::vector<SurfacePiece> piecesNear(const World &world, const Solid &solid) {
+  const PathLayout layout = layoutOf(world);
+  const PathGround ground = groundOf(layout);
+  const auto [leastX, greatestX] = extentOf(solid.Shape.Corners, ParkPoint{1.0, 0.0});
+  const auto [leastZ, greatestZ] = extentOf(solid.Shape.Corners, ParkPoint{0.0, 1.0});
+  const auto positionOf = [&layout](EntityKey key) {
+    return std::ranges::lower_bound(layout.Points, key, {}, &LayoutPoint::Key)->Intent.At;
+  };
+  std::vector<EntityKey> focus;
+  for (const ParkSegment &segment : ground.Segments) {
+    if (segment.Line.empty()) {
+      continue;
+    }
+    const ParkPoint from = positionOf(segment.From);
+    const ParkPoint to = positionOf(segment.To);
+    const double dx = to.X - from.X;
+    const double dz = to.Z - from.Z;
+    const double reach = std::sqrt(dx * dx + dz * dz) + segment.Width + CONTACT_TOLERANCE;
+    for (const auto &[key, at] : {std::pair{segment.From, from}, std::pair{segment.To, to}}) {
+      const double outX = std::max({leastX - at.X, at.X - greatestX, 0.0});
+      const double outZ = std::max({leastZ - at.Z, at.Z - greatestZ, 0.0});
+      if (outX * outX + outZ * outZ <= reach * reach) {
+        focus.push_back(key);
+      }
+    }
+  }
+  std::ranges::sort(focus);
+  focus.erase(std::unique(focus.begin(), focus.end()), focus.end());
+  return surfaceAround(layout, ground, focus, false).Pieces;
+}
+
+} // namespace
+
 bool isAccepted(const World &world, const AddPath &command) {
   return acceptedPlan(world, planOf(world, command)).has_value();
 }
@@ -1050,7 +1160,7 @@ bool isAccepted(const World &world, const AddBox &command) {
     return false;
   }
   const std::optional<Solid> solid = solidOf(NULL_KEY, command.At, boxSize(command.Kind));
-  return solid && fits(*solid, solidsOf(world), linesOf(world));
+  return solid && fits(*solid, solidsOf(world), piecesNear(world, *solid));
 }
 
 bool isAccepted(const World &world, const MoveBox &command) {
@@ -1059,7 +1169,7 @@ bool isAccepted(const World &world, const MoveBox &command) {
     return false;
   }
   const std::optional<Solid> solid = solidOf(command.Box, command.At, boxSize(box->Kind));
-  return solid && fits(*solid, solidsOf(world), linesOf(world));
+  return solid && fits(*solid, solidsOf(world), piecesNear(world, *solid));
 }
 
 bool isAccepted(const World &world, const DeleteSegment &command) {
@@ -1160,20 +1270,33 @@ void applyCommand(World &world, const SetSegmentWidth &command) {
   }
 }
 
-std::vector<ParkSegment> editedSegments(const World &world, const ParkEdit &edit) {
+namespace {
+
+// What the edit changes, or nothing when it names nothing it acts on, or a segment it adds or
+// reshapes has no ground line, which leaves it nothing it can show.
+Edited editedOf(const World &world, const ParkEdit &edit) {
   const std::optional<EditPlan> plan =
       std::visit([&world](const auto &command) { return planOf(world, command); }, edit);
   if (!plan) {
     return {};
   }
-  std::vector<ParkSegment> edited = editedBy(world, *plan);
-  // A segment the edit adds or reshapes with no ground line makes the edit name nothing it can
-  // show.
-  if (std::ranges::any_of(edited,
+  Edited edited = editedBy(world, *plan, Wanted::Drawing);
+  if (std::ranges::any_of(edited.Segments,
                           [](const ParkSegment &segment) { return segment.Line.empty(); })) {
     return {};
   }
   return edited;
+}
+
+} // namespace
+
+std::vector<ParkSegment> editedSegments(const World &world, const ParkEdit &edit) {
+  return editedOf(world, edit).Segments;
+}
+
+PavedSurface editedSurface(const World &world, const ParkEdit &edit) {
+  Edited edited = editedOf(world, edit);
+  return edited.Segments.empty() ? PavedSurface{} : std::move(edited.Surface);
 }
 
 bool isPhysicallyValid(const World &world) {
@@ -1194,7 +1317,11 @@ bool isPhysicallyValid(const World &world) {
       }
     }
   }
-  return std::ranges::all_of(lines, [&solids](const Line &line) { return fits(line, solids); });
+  if (std::ranges::any_of(lines, [](const Line &line) { return leavesPark(line); })) {
+    return false;
+  }
+  return std::ranges::all_of(parkSurface(world).Pieces,
+                             [&solids](const SurfacePiece &piece) { return fits(piece, solids); });
 }
 
 bool isAccepted(const World &world, const ParkEdit &edit) {
