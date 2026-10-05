@@ -42,15 +42,18 @@ template <typename Visitor> void visitFields(Visitor &visitor, CarrierStop &stop
 }
 
 // A line with a stable key that edges are stretches of, such as a drawn path or a box's connector.
-// Its stops cut it into edges, the first at 0 and the last at its length.
+// Its stops cut it into edges, the first at 0 and the last at its length. Its width is how wide a
+// mover can walk across it, the same along its whole length.
 struct Carrier {
   EntityKey Key = NULL_KEY;
+  double Width = 0.0;
   std::vector<CarrierPoint> Points;
   std::vector<CarrierStop> Stops;
 };
 
 template <typename Visitor> void visitFields(Visitor &visitor, Carrier &carrier) {
   visitor.field("key", carrier.Key);
+  visitor.field("width", carrier.Width);
   visitor.field("points", carrier.Points);
   visitor.field("stops", carrier.Stops);
 }
@@ -98,6 +101,14 @@ struct GroundPoint {
   bool operator==(const GroundPoint &) const = default;
 };
 
+// A unit vector on the ground.
+struct GroundDirection {
+  double X = 0.0;
+  double Z = 0.0;
+
+  bool operator==(const GroundDirection &) const = default;
+};
+
 // A place at a node.
 struct NodePosition {
   uint32_t Node = 0;
@@ -123,9 +134,9 @@ class Network {
 public:
   Network() = default;
   // Sorts carriers by key and anchors by node. Throws std::invalid_argument for a repeated or null
-  // carrier key, a carrier's points or stops out of order, missing, or not finite, a stop's node
-  // not below nodeCount, a node no carrier stops at, or an anchor on a missing, null, or already
-  // anchored node.
+  // carrier key, a carrier's width not finite and above zero, a carrier's points or stops out of
+  // order, missing, or not finite, a stop's node not below nodeCount, a node no carrier stops at,
+  // or an anchor on a missing, null, or already anchored node.
   Network(std::vector<Carrier> carriers, uint32_t nodeCount, std::vector<NodeAnchor> anchors);
 
   // In ascending key order.
@@ -157,6 +168,12 @@ public:
   // The place's ground position, interpolated by distance between carrier points. None where
   // resolve gives none.
   [[nodiscard]] std::optional<GroundPoint> groundPoint(const Place &place) const;
+  // The walkable width of the place's carrier. None where resolve gives none.
+  [[nodiscard]] std::optional<double> widthAt(const Place &place) const;
+  // The unit direction toward higher distances along the place's carrier: that of the polyline
+  // piece ahead of the place, or of the last piece at the carrier's end. None where resolve gives
+  // none, or where that piece has no length on the ground.
+  [[nodiscard]] std::optional<GroundDirection> directionAt(const Place &place) const;
   // The place whose ground position is nearest the point, ties to the lower carrier key and then
   // the lower distance. None for an empty network or a point that is not finite.
   [[nodiscard]] std::optional<Place> nearestPlace(GroundPoint point) const;
