@@ -203,6 +203,17 @@ std::optional<PathStop> nextStop(const ToolState &tool, const World &world) {
   return stop;
 }
 
+// Whether the world accepts the path through the stops so far and the next stop. Before the first
+// stop, there is no path to refuse.
+bool acceptsStop(const ToolState &tool, const World &world, const PathStop &next) {
+  if (tool.Drawn.empty()) {
+    return true;
+  }
+  AddPath path{drawnKind(tool.Kind), tool.Drawn};
+  path.Stops.push_back(next);
+  return isAccepted(world, path);
+}
+
 // A path tool's edit: the stops so far, followed by the next stop while not holding.
 std::optional<ParkEdit> pathEdit(const ToolState &tool, const World &world) {
   std::vector<PathStop> stops = tool.Drawn;
@@ -262,7 +273,9 @@ void pressPointer(ToolState &tool, const World &world) {
     tool.Holding = true;
   } else if (isPathTool(tool.Kind) && tool.Pointer) {
     if (const std::optional<PathStop> next = nextStop(tool, world)) {
-      tool.Drawn.push_back(*next);
+      if (acceptsStop(tool, world, *next)) {
+        tool.Drawn.push_back(*next);
+      }
     } else {
       tool.Holding = true;
     }
