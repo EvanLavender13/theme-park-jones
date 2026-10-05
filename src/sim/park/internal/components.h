@@ -1,23 +1,43 @@
 #ifndef TPJ_SIM_PARK_INTERNAL_COMPONENTS_H
 #define TPJ_SIM_PARK_INTERNAL_COMPONENTS_H
 
+#include "sim/entity_key.h"
 #include "sim/park/intent.h"
 
 #include <vector>
 
 namespace tpj {
 
-// A path the player drew: its kind and the points they clicked, in order.
-struct PathIntent {
-  PathKind Kind = PathKind::Guest;
-  std::vector<ParkPoint> Points;
+// A point that path segments share: its ground position, and the radius of the corner it makes
+// when exactly two segments meet there.
+struct PathPointIntent {
+  ParkPoint At;
+  double Radius = DEFAULT_CORNER_RADIUS;
 
-  bool operator==(const PathIntent &) const = default;
+  bool operator==(const PathPointIntent &) const = default;
 };
 
-template <typename Visitor> void visitFields(Visitor &visitor, PathIntent &path) {
-  visitor.field("kind", path.Kind);
-  visitor.field("points", path.Points);
+template <typename Visitor> void visitFields(Visitor &visitor, PathPointIntent &point) {
+  visitor.field("x", point.At.X);
+  visitor.field("z", point.At.Z);
+  visitor.field("radius", point.Radius);
+}
+
+// A straight piece of path between two path points.
+struct PathSegmentIntent {
+  PathKind Kind = PathKind::Guest;
+  EntityKey From = NULL_KEY;
+  EntityKey To = NULL_KEY;
+  double Width = 0.0;
+
+  bool operator==(const PathSegmentIntent &) const = default;
+};
+
+template <typename Visitor> void visitFields(Visitor &visitor, PathSegmentIntent &segment) {
+  visitor.field("kind", segment.Kind);
+  visitor.field("from", segment.From);
+  visitor.field("to", segment.To);
+  visitor.field("width", segment.Width);
 }
 
 // A box the player placed.

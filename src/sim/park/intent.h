@@ -2,6 +2,7 @@
 #define TPJ_SIM_PARK_INTENT_H
 
 #include "sim/entity_key.h"
+#include "sim/medium/network.h"
 #include "sim/schema.h"
 #include "sim/world.h"
 
@@ -55,7 +56,12 @@ struct FootprintSize {
   double Depth = 0.0;
 };
 
+// The width a new segment of the kind takes, in meters. Until navigable-networks' wide-routes,
+// routes gives every carrier of the kind this width.
 constexpr double pathWidth(PathKind kind) { return kind == PathKind::Guest ? 3.0 : 2.0; }
+
+// The corner radius a new path point takes, in meters.
+inline constexpr double DEFAULT_CORNER_RADIUS = 3.0;
 
 constexpr FootprintSize boxSize(BoxKind kind) {
   return kind == BoxKind::Shop ? FootprintSize{8.0, 6.0} : FootprintSize{12.0, 8.0};
@@ -71,13 +77,27 @@ struct ParkEntrance {
   bool operator==(const ParkEntrance &) const = default;
 };
 
-// A path's intent, as other modules read it: its kind and the points the player clicked, in order.
-struct ParkPath {
+// A path point's intent, as other modules read it: its ground position, and the radius of the
+// corner it makes when exactly two segments meet there.
+struct ParkPathPoint {
+  EntityKey Key = NULL_KEY;
+  ParkPoint At;
+  double Radius = 0.0;
+
+  bool operator==(const ParkPathPoint &) const = default;
+};
+
+// A path segment's intent, as other modules read it: its kind, its two points, its width, and its
+// ground line, which is empty when the segment has no physical shape.
+struct ParkSegment {
   EntityKey Key = NULL_KEY;
   PathKind Kind = PathKind::Guest;
-  std::vector<ParkPoint> Points;
+  EntityKey From = NULL_KEY;
+  EntityKey To = NULL_KEY;
+  double Width = 0.0;
+  std::vector<CarrierPoint> Line;
 
-  bool operator==(const ParkPath &) const = default;
+  bool operator==(const ParkSegment &) const = default;
 };
 
 // A box's intent, as other modules read it.
@@ -89,16 +109,19 @@ struct ParkBox {
   bool operator==(const ParkBox &) const = default;
 };
 
-// Registers the private intent component types entrance, path, and box, in that order.
+// Registers the private intent component types entrance, path-point, path-segment, and box, in
+// that order.
 void addParkIntent(WorldSchema &schema);
 
 // Every entity holding that kind of intent, in ascending key order.
 std::vector<ParkEntrance> parkEntrances(const World &world);
-std::vector<ParkPath> parkPaths(const World &world);
+std::vector<ParkPathPoint> parkPathPoints(const World &world);
+std::vector<ParkSegment> parkSegments(const World &world);
 std::vector<ParkBox> parkBoxes(const World &world);
 
 // The new-park template with the schema and the seed, resolution pending: an entrance on the
-// park's edge facing in, and a guest path running into the park from in front of it.
+// park's edge facing in, and a guest path of one segment running into the park from in front of
+// it.
 World makeNewPark(std::shared_ptr<const WorldSchema> schema, uint64_t seed);
 
 } // namespace tpj

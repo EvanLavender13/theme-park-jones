@@ -45,7 +45,7 @@ std::optional<EntityKey> ghostShop(const World &world, const World &candidate,
 }
 
 // Where the shop's guest connector meets a guest path in the candidate: the first place at its
-// last stop's node on a guest path's carrier, or none.
+// last stop's node on a guest segment's carrier, or none.
 std::optional<Place> connectionPlace(const World &candidate, EntityKey shop) {
   const Network &network = parkNetwork(candidate, PathKind::Guest);
   const std::vector<Carrier> &carriers = network.carriers();
@@ -54,10 +54,10 @@ std::optional<Place> connectionPlace(const World &candidate, EntityKey shop) {
   if (connector == carriers.end() || connector->Stops.empty()) {
     return std::nullopt;
   }
-  const std::vector<ParkPath> paths = parkPaths(candidate);
+  const std::vector<ParkSegment> segments = parkSegments(candidate);
   for (const Place &place : network.stopPlaces(connector->Stops.back().Node)) {
-    const bool onGuestPath = std::ranges::any_of(paths, [&place](const ParkPath &path) {
-      return path.Kind == PathKind::Guest && path.Key == place.Carrier;
+    const bool onGuestPath = std::ranges::any_of(segments, [&place](const ParkSegment &segment) {
+      return segment.Kind == PathKind::Guest && segment.Key == place.Carrier;
     });
     if (onGuestPath) {
       return place;

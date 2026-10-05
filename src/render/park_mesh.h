@@ -63,11 +63,28 @@ inline constexpr Rgba INVALID_TINT{0.95f, 0.15f, 0.15f, 0.5f};
 inline constexpr Rgba DELETE_TINT{1.0f, 0.55f, 0.1f, 0.6f};
 inline constexpr Rgba HIGHLIGHT_TINT{1.0f, 1.0f, 1.0f, 0.35f};
 
-// Adds the path's flat ribbon along its ground line at pathLift(kind), with a round joint beyond
-// each end, or nothing when the line is empty.
-void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &points);
-// The same path in the color given.
-void appendPath(ParkMesh &mesh, PathKind kind, const std::vector<ParkPoint> &points, Rgba color);
+// Adds a segment's flat ribbon along its ground line, the width wide, at pathLift(kind), with a
+// round joint beyond each end, or nothing when the line has fewer than two points.
+void appendSegment(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &line,
+                   double width, Rgba color);
+
+// A ghost marks each stop where an added path joins a point or segment with a flat disc of this
+// radius, this high, in this color.
+inline constexpr double JOIN_MARK_RADIUS = 1.0;
+inline constexpr float JOIN_MARK_LIFT = 0.06f;
+inline constexpr Rgba JOIN_MARK_COLOR{0.15f, 0.85f, 0.95f, 0.9f};
+
+// Adds a join mark centered on the point.
+void appendJoinMark(ParkMesh &mesh, ParkPoint at);
+
+// Ghost and highlighted segments lie this far above the park's paths, so they never tie in depth
+// with the ribbons and joints beneath them.
+inline constexpr float GHOST_LIFT = 0.01f;
+
+// Adds the ghost of where a path of the kind would start before its first click: a translucent
+// disc of its width in its color, GHOST_LIFT above its paths, with a join mark when it would join a
+// point or segment there.
+void appendPathStart(ParkMesh &mesh, PathKind kind, ParkPoint at, bool joins);
 
 // A round joint beyond a ribbon's end is a half disc of this many segments.
 inline constexpr uint32_t JOINT_SEGMENTS = 16;
@@ -109,8 +126,8 @@ void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha);
 // starved mark over each starved shop.
 ParkMesh buildParkMesh(const World &world);
 
-// Adds the box or path the key holds as buildParkMesh draws it, in the color. Nothing when the key
-// holds neither.
+// Adds the box or segment the key holds as buildParkMesh draws it, in the color, a segment
+// GHOST_LIFT higher. Nothing when the key holds neither.
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
 
 // The ghost of an edit on a world: translucent in its kind's color when accepted, INVALID_TINT when

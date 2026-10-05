@@ -11,12 +11,12 @@ namespace tpj {
 std::optional<PathPlace> nearestGuestPathPlace(const World &world, GroundPoint point) {
   const Network &network = parkNetwork(world, PathKind::Guest);
   std::optional<PathPlace> nearest;
-  // Paths come in ascending key order, and only a strictly nearer one replaces the nearest.
-  for (const ParkPath &path : parkPaths(world)) {
-    if (path.Kind != PathKind::Guest) {
+  // Segments come in ascending key order, and only a strictly nearer one replaces the nearest.
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Kind != PathKind::Guest) {
       continue;
     }
-    const std::optional<Place> place = network.nearestPlaceOn(path.Key, point);
+    const std::optional<Place> place = network.nearestPlaceOn(segment.Key, point);
     if (!place) {
       continue;
     }

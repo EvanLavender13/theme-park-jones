@@ -10,19 +10,13 @@
 
 namespace tpj {
 
-// A point closer than this to the last kept point of a path is dropped.
-inline constexpr double MIN_POINT_SPACING = 0.01;
-// A ground line segment takes one point per this many meters of chord, and at least
-// MIN_SEGMENT_SAMPLES.
-inline constexpr double GROUND_LINE_SPACING = 1.0;
-inline constexpr int MIN_SEGMENT_SAMPLES = 8;
+// Two positions closer together than this, in meters, make no ground line.
+inline constexpr double MIN_SEGMENT_LENGTH = 0.01;
 
-// The points in order, without any closer than MIN_POINT_SPACING to the last kept one.
-std::vector<ParkPoint> keptPoints(const std::vector<ParkPoint> &points);
-
-// The path's centripetal Catmull-Rom curve through its points as a line with distances, or an empty
-// line when a point is not finite or outside the park, or fewer than two points are kept.
-std::vector<CarrierPoint> groundLine(const std::vector<ParkPoint> &points);
+// The straight ground line from one position to the other: two CarrierPoints, at distance 0 and
+// at the length between them. Empty when either position is not finite or lies outside the park,
+// or the two lie closer together than MIN_SEGMENT_LENGTH.
+std::vector<CarrierPoint> segmentLine(ParkPoint from, ParkPoint to);
 
 // The rectangle a box or entrance covers. Forward and Right are unit directions.
 struct Footprint {

@@ -4,7 +4,7 @@ The park's editing tools: what the player's pointer does to the park. A tool nev
 
 ## Boundary
 
-A ToolState holds one tool, of a ToolKind: None, GuestPath, BackstagePath, PlaceShop, PlaceDepot, MoveBox, or Delete. The app drives it with four calls: selectTool, movePointer, pressPointer, and releasePointer. The app reads tentativeEdit, the edit the ghost shows, and highlightedEntity, the entity the tool marks. boxAt, pathAt, and snapToPath are the picking queries the tools use.
+A ToolState holds one tool, of a ToolKind: None, GuestPath, BackstagePath, PlaceShop, PlaceDepot, MoveBox, or Delete. The app drives it with four calls: selectTool, movePointer, pressPointer, and releasePointer. The app reads tentativeEdit, the edit the ghost shows, and highlightedEntity, the entity the tool marks. boxAt, segmentAt, and snapStop are the picking queries the tools use.
 
 ## Input
 
@@ -14,16 +14,18 @@ When the button is released, the tool commits exactly the edit tentativeEdit sho
 
 ## Picking
 
-boxAt gives the box whose footprint holds a ground point. pathAt gives the path whose width covers the point. If several do, it gives the first in key order. Neither gives the entrance. snapToPath moves a point onto the nearest line of a path of the given kind when one lies within SNAP_REACH. Otherwise it leaves the point where it is. A path never snaps onto a line of the other kind.
+boxAt gives the box whose footprint holds a ground point. segmentAt gives the segment whose width covers the point. If several do, it gives the first in key order. Neither gives the entrance.
+
+snapStop gives the stop a path tool's click makes. If a path point of the tool's kind, or a point an earlier stop of the path being drawn makes, lies within SNAP_REACH, the stop is the nearest such point. The path's last stop is left out, because a click there finishes the path. Otherwise, if a segment of the kind, or a segment between two stops of the path being drawn, passes within SNAP_REACH, the stop is the place on the nearest such segment nearest the click, or the segment's end point when that place lies within MIN_SEGMENT_LENGTH of it. Otherwise the stop is a new point at the click. A point is a kind's when at least one segment uses it and every segment at it has that kind, so a path never snaps onto a point or segment of the other kind.
 
 ## Tools
 
 Look (ToolKind None) edits nothing.
 
-Guest path and Backstage path draw a path of their kind. Each click adds a point. The point snaps onto a nearby path of the same kind, so the new path joins it. Clicking the last point again finishes and commits the path. The ghost shows the path through the drawn points and the pointer. If the drawn path has fewer than two points, finishing it commits nothing.
+Guest path and Backstage path draw a path of their kind. Each click adds the stop snapStop gives. A click near a point or segment of the same kind joins the path there, and a segment it joins splits there when the path commits. Clicking the last stop again finishes and commits the path. The ghost shows the path through the stops and the pointer, and marks each stop that joins a point or segment. Before the first click, pathStart gives where that click would start the path and whether it would join a point or segment there, so the ghost can show it. If the drawn path has fewer than two stops, finishing it commits nothing.
 
 Place shop and Place depot place a box at the pointer. Pressing puts the box down, and dragging before release turns it to face the drag. The next box faces the same way as the last.
 
 Move box marks the box under the pointer, and dragging moves it, keeping its facing. If the player clicks without dragging, nothing is committed.
 
-Delete removes the box under the pointer. If there is no box, it removes the path under the pointer. The ghost shows what it removes.
+Delete removes the box under the pointer. If there is no box, it removes the segment under the pointer, and any point no other segment uses. The ghost shows what it removes.

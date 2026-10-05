@@ -1,6 +1,6 @@
-// The food loop on a checked-in park: cutting the backstage paths of tests/parks/warm.park, which
-// supply its shop, leaves its guests hungrier than the same park uncut. This compares a park with
-// itself cut, so it is not a standard the sim's park world checks prove over every park file.
+// The food loop on a checked-in park: cutting the backstage segments of tests/parks/warm.park,
+// which supply its shop, leaves its guests hungrier than the same park uncut. This compares a park
+// with itself cut, so it is not a standard the sim's park world checks prove over every park file.
 
 #include "support/park_files.h"
 
@@ -67,18 +67,18 @@ TEST_CASE("Cutting a shop's supply route leaves guests hungrier than in the same
   World warm = openPark(parkFile("warm.park"));
   World cut = copyWorld(warm);
   CommandQueue cutting;
-  for (const ParkPath &path : parkPaths(cut)) {
-    if (path.Kind == PathKind::Backstage) {
-      cutting.push(DeletePath{path.Key});
+  for (const ParkSegment &segment : parkSegments(cut)) {
+    if (segment.Kind == PathKind::Backstage) {
+      cutting.push(DeleteSegment{segment.Key});
     }
   }
   REQUIRE_FALSE(cutting.empty());
   // Both step the cycle that applies the cut, so they stand at the same tick from then on.
   stepWorld(warm);
   stepWorld(cut, cutting);
-  const std::vector<ParkPath> left = parkPaths(cut);
+  const std::vector<ParkSegment> left = parkSegments(cut);
   REQUIRE(std::ranges::none_of(
-      left, [](const ParkPath &path) { return path.Kind == PathKind::Backstage; }));
+      left, [](const ParkSegment &segment) { return segment.Kind == PathKind::Backstage; }));
 
   const std::map<EntityKey, uint64_t> warmAtStart = mealsEatenBy(warm);
   const std::map<EntityKey, uint64_t> cutAtStart = mealsEatenBy(cut);

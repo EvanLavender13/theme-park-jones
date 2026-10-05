@@ -42,12 +42,12 @@ std::optional<Solid> solidOf(EntityKey key, const Pose &pose, FootprintSize size
   return Solid{key, pose, size, *shape};
 }
 
-std::optional<Line> lineOf(PathKind kind, const std::vector<ParkPoint> &points) {
-  std::vector<CarrierPoint> line = groundLine(points);
-  if (line.empty()) {
+// The segment's ground line with half its width, or none when the line is empty.
+std::optional<Line> lineOf(const ParkSegment &segment) {
+  if (segment.Line.empty()) {
     return std::nullopt;
   }
-  return Line{std::move(line), pathWidth(kind) / 2.0};
+  return Line{segment.Line, segment.Width / 2.0};
 }
 
 // Every entrance's and box's footprint, skipping any with none.
@@ -66,11 +66,11 @@ std::vector<Solid> solidsOf(const World &world) {
   return solids;
 }
 
-// Every path's ground line, skipping any that is empty.
+// Every segment's ground line, skipping any that is empty.
 std::vector<Line> linesOf(const World &world) {
   std::vector<Line> lines;
-  for (const ParkPath &path : parkPaths(world)) {
-    if (std::optional<Line> line = lineOf(path.Kind, path.Points)) {
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (std::optional<Line> line = lineOf(segment)) {
       lines.push_back(std::move(*line));
     }
   }
@@ -227,22 +227,214 @@ bool fits(const Line &line, const std::vector<Solid> &solids) {
          std::ranges::none_of(solids, [&line](const Solid &solid) { return meets(line, solid); });
 }
 
+// A segment an AddPath splits: its key, and the indices of the stops on it in order of Along.
+struct Split {
+  EntityKey Segment = NULL_KEY;
+  std::vector<size_t> Stops;
+};
+
+// What an accepted AddPath makes: each stop's position, the segments it splits in ascending key
+// order, and, for each of its own segments, the indices of the later stops on it in order of
+// Along.
+struct PathPlan {
+  std::vector<ParkPoint> Positions;
+  std::vector<Split> Splits;
+  std::vector<std::vector<size_t>> DrawnSplits;
+};
+
+// Whether the key holds a path point that some segment uses, every such segment of the kind.
+bool isPointOfKind(const World &world, const std::vector<ParkSegment> &segments, EntityKey point,
+                   PathKind kind) {
+  if (findIntent<PathPointIntent>(world, point) == nullptr) {
+    return false;
+  }
+  bool used = false;
+  for (const ParkSegment &segment : segments) {
+    if (segment.From == point || segment.To == point) {
+      if (segment.Kind != kind) {
+        return false;
+      }
+      used = true;
+    }
+  }
+  return used;
+}
+
+// The segment the key holds, or null. The segments are in ascending key order.
+const ParkSegment *findSegment(const std::vector<ParkSegment> &segments, EntityKey key) {
+  const auto found = std::ranges::lower_bound(segments, key, {}, &ParkSegment::Key);
+  return found != segments.end() && found->Key == key ? &*found : nullptr;
+}
+
+// Whether the stop names what it lands on, of the kind.
+bool isStopOfKind(const World &world, const std::vector<ParkSegment> &segments,
+                  const PathStop &stop, PathKind kind) {
+  if (const auto *on = std::get_if<OnPoint>(&stop)) {
+    return isPointOfKind(world, segments, on->Point, kind);
+  }
+  if (const auto *on = std::get_if<OnSegment>(&stop)) {
+    const ParkSegment *segment = findSegment(segments, on->Segment);
+    return std::isfinite(on->Along) && on->Along > 0.0 && on->Along < 1.0 && segment != nullptr &&
+           segment->Kind == kind && !segment->Line.empty();
+  }
+  if (const auto *on = std::get_if<OnDrawnSegment>(&stop)) {
+    return std::isfinite(on->Along) && on->Along > 0.0 && on->Along < 1.0;
+  }
+  return true;
+}
+
+// For each of the path's own segments, the stops on it in order of Along, or none when a part it
+// splits into has no ground line.
+std::optional<std::vector<std::vector<size_t>>> planDrawnSplits(const AddPath &command,
+                                                                const std::vector<ParkPoint> &at) {
+  std::vector<std::vector<size_t>> splits(command.Stops.size() - 1);
+  for (size_t i = 0; i < command.Stops.size(); ++i) {
+    if (const auto *on = std::get_if<OnDrawnSegment>(&command.Stops[i])) {
+      splits[on->Stop].push_back(i);
+    }
+  }
+  for (size_t k = 0; k < splits.size(); ++k) {
+    std::ranges::sort(splits[k], {}, [&command](size_t stop) {
+      return std::get<OnDrawnSegment>(command.Stops[stop]).Along;
+    });
+    ParkPoint from = at[k];
+    for (const size_t stop : splits[k]) {
+      if (segmentLine(from, at[stop]).empty()) {
+        return std::nullopt;
+      }
+      from = at[stop];
+    }
+    if (!splits[k].empty() && segmentLine(from, at[k + 1]).empty()) {
+      return std::nullopt;
+    }
+  }
+  return splits;
+}
+
+// The plan of an AddPath the world accepts, or none when it refuses it.
+std::optional<PathPlan> planPath(const World &world, const AddPath &command) {
+  if (!isKnown(command.Kind) || command.Stops.size() < 2) {
+    return std::nullopt;
+  }
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  std::optional<std::vector<ParkPoint>> positions = stopPositions(world, command);
+  if (!positions || !std::ranges::all_of(command.Stops, [&](const PathStop &stop) {
+        return isStopOfKind(world, segments, stop, command.Kind);
+      })) {
+    return std::nullopt;
+  }
+  std::optional<std::vector<std::vector<size_t>>> drawnSplits =
+      planDrawnSplits(command, *positions);
+  if (!drawnSplits) {
+    return std::nullopt;
+  }
+  PathPlan plan{std::move(*positions), {}, std::move(*drawnSplits)};
+  const std::vector<Solid> solids = solidsOf(world);
+  for (size_t i = 0; i + 1 < plan.Positions.size(); ++i) {
+    std::vector<CarrierPoint> points = segmentLine(plan.Positions[i], plan.Positions[i + 1]);
+    if (points.empty() || !fits(Line{std::move(points), pathWidth(command.Kind) / 2.0}, solids)) {
+      return std::nullopt;
+    }
+  }
+  for (size_t i = 0; i < command.Stops.size(); ++i) {
+    if (const auto *on = std::get_if<OnSegment>(&command.Stops[i])) {
+      const auto split = std::ranges::find(plan.Splits, on->Segment, &Split::Segment);
+      if (split == plan.Splits.end()) {
+        plan.Splits.push_back(Split{on->Segment, {i}});
+      } else {
+        split->Stops.push_back(i);
+      }
+    }
+  }
+  std::ranges::sort(plan.Splits, {}, &Split::Segment);
+  for (Split &split : plan.Splits) {
+    const auto along = [&command](size_t stop) {
+      return std::get<OnSegment>(command.Stops[stop]).Along;
+    };
+    std::ranges::sort(split.Stops, {}, along);
+    // Each part of the split segment, from its From point through its stops to its To point, must
+    // have a ground line. The segment has one, so both of its ends are path points.
+    const ParkSegment &segment = *findSegment(segments, split.Segment);
+    ParkPoint from = findIntent<PathPointIntent>(world, segment.From)->At;
+    for (const size_t stop : split.Stops) {
+      if (segmentLine(from, plan.Positions[stop]).empty()) {
+        return std::nullopt;
+      }
+      from = plan.Positions[stop];
+    }
+    if (segmentLine(from, findIntent<PathPointIntent>(world, segment.To)->At).empty()) {
+      return std::nullopt;
+    }
+  }
+  return plan;
+}
+
 } // namespace
 
 void addParkEdits(WorldSchema &schema) {
   schema.addCommand<AddPath>();
   schema.addCommand<AddBox>();
   schema.addCommand<MoveBox>();
-  schema.addCommand<DeletePath>();
+  schema.addCommand<DeleteSegment>();
   schema.addCommand<DeleteBox>();
 }
 
-bool isAccepted(const World &world, const AddPath &command) {
-  if (!isKnown(command.Kind)) {
-    return false;
+std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop) {
+  if (const auto *at = std::get_if<NewPoint>(&stop)) {
+    return at->At;
   }
-  const std::optional<Line> line = lineOf(command.Kind, keptPoints(command.Points));
-  return line && fits(*line, solidsOf(world));
+  if (const auto *on = std::get_if<OnPoint>(&stop)) {
+    const PathPointIntent *point = findIntent<PathPointIntent>(world, on->Point);
+    return point == nullptr ? std::nullopt : std::optional<ParkPoint>(point->At);
+  }
+  if (std::holds_alternative<RepeatStop>(stop) || std::holds_alternative<OnDrawnSegment>(stop)) {
+    return std::nullopt;
+  }
+  const auto &on = std::get<OnSegment>(stop);
+  const PathSegmentIntent *segment = findIntent<PathSegmentIntent>(world, on.Segment);
+  if (segment == nullptr) {
+    return std::nullopt;
+  }
+  const PathPointIntent *from = findIntent<PathPointIntent>(world, segment->From);
+  const PathPointIntent *to = findIntent<PathPointIntent>(world, segment->To);
+  if (from == nullptr || to == nullptr) {
+    return std::nullopt;
+  }
+  return ParkPoint{from->At.X + on.Along * (to->At.X - from->At.X),
+                   from->At.Z + on.Along * (to->At.Z - from->At.Z)};
+}
+
+std::optional<std::vector<ParkPoint>> stopPositions(const World &world, const AddPath &path) {
+  std::vector<ParkPoint> positions;
+  for (const PathStop &stop : path.Stops) {
+    if (const auto *repeat = std::get_if<RepeatStop>(&stop)) {
+      if (repeat->Stop >= positions.size()) {
+        return std::nullopt;
+      }
+      positions.push_back(positions[repeat->Stop]);
+      continue;
+    }
+    if (const auto *on = std::get_if<OnDrawnSegment>(&stop)) {
+      if (on->Stop + 1 >= positions.size()) {
+        return std::nullopt;
+      }
+      const ParkPoint &from = positions[on->Stop];
+      const ParkPoint &to = positions[on->Stop + 1];
+      positions.push_back(
+          ParkPoint{from.X + on->Along * (to.X - from.X), from.Z + on->Along * (to.Z - from.Z)});
+      continue;
+    }
+    const std::optional<ParkPoint> position = stopPosition(world, stop);
+    if (!position) {
+      return std::nullopt;
+    }
+    positions.push_back(*position);
+  }
+  return positions;
+}
+
+bool isAccepted(const World &world, const AddPath &command) {
+  return planPath(world, command).has_value();
 }
 
 bool isAccepted(const World &world, const AddBox &command) {
@@ -262,8 +454,8 @@ bool isAccepted(const World &world, const MoveBox &command) {
   return solid && fits(*solid, solidsOf(world), linesOf(world));
 }
 
-bool isAccepted(const World &world, const DeletePath &command) {
-  return findIntent<PathIntent>(world, command.Path) != nullptr;
+bool isAccepted(const World &world, const DeleteSegment &command) {
+  return findIntent<PathSegmentIntent>(world, command.Segment) != nullptr;
 }
 
 bool isAccepted(const World &world, const DeleteBox &command) {
@@ -271,12 +463,53 @@ bool isAccepted(const World &world, const DeleteBox &command) {
 }
 
 void applyCommand(World &world, const AddPath &command) {
-  if (!isAccepted(world, command)) {
+  const std::optional<PathPlan> plan = planPath(world, command);
+  if (!plan) {
     return;
   }
-  const EntityKey key = world.createEntity();
-  world.Registry.emplace<PathIntent>(world.findEntity(key),
-                                     PathIntent{command.Kind, keptPoints(command.Points)});
+  const auto addPoint = [&world](ParkPoint at) {
+    const EntityKey key = world.createEntity();
+    world.Registry.emplace<PathPointIntent>(world.findEntity(key), PathPointIntent{at});
+    return key;
+  };
+  const auto addSegment = [&world](PathKind kind, EntityKey from, EntityKey to, double width) {
+    const EntityKey key = world.createEntity();
+    world.Registry.emplace<PathSegmentIntent>(world.findEntity(key),
+                                              PathSegmentIntent{kind, from, to, width});
+  };
+  // Each stop's point: a new one for a NewPoint or an OnSegment, in stop order, and an earlier
+  // stop's for a RepeatStop.
+  std::vector<EntityKey> points;
+  for (size_t i = 0; i < command.Stops.size(); ++i) {
+    if (const auto *on = std::get_if<OnPoint>(&command.Stops[i])) {
+      points.push_back(on->Point);
+    } else if (const auto *repeat = std::get_if<RepeatStop>(&command.Stops[i])) {
+      points.push_back(points[repeat->Stop]);
+    } else {
+      points.push_back(addPoint(plan->Positions[i]));
+    }
+  }
+  // Each split segment ends at its first stop, and new parts run on through the rest to its old
+  // end.
+  for (const Split &split : plan->Splits) {
+    PathSegmentIntent &segment =
+        world.Registry.get<PathSegmentIntent>(world.findEntity(split.Segment));
+    const PathSegmentIntent was = segment;
+    segment.To = points[split.Stops.front()];
+    for (size_t k = 0; k < split.Stops.size(); ++k) {
+      const EntityKey to = k + 1 < split.Stops.size() ? points[split.Stops[k + 1]] : was.To;
+      addSegment(was.Kind, points[split.Stops[k]], to, was.Width);
+    }
+  }
+  // Each of the path's own segments runs through the later stops on it.
+  for (size_t i = 0; i + 1 < points.size(); ++i) {
+    EntityKey from = points[i];
+    for (const size_t stop : plan->DrawnSplits[i]) {
+      addSegment(command.Kind, from, points[stop], pathWidth(command.Kind));
+      from = points[stop];
+    }
+    addSegment(command.Kind, from, points[i + 1], pathWidth(command.Kind));
+  }
 }
 
 void applyCommand(World &world, const AddBox &command) {
@@ -294,9 +527,23 @@ void applyCommand(World &world, const MoveBox &command) {
   world.Registry.get<BoxIntent>(world.findEntity(command.Box)).At = command.At;
 }
 
-void applyCommand(World &world, const DeletePath &command) {
-  if (isAccepted(world, command)) {
-    world.destroyEntity(command.Path);
+void applyCommand(World &world, const DeleteSegment &command) {
+  if (!isAccepted(world, command)) {
+    return;
+  }
+  const PathSegmentIntent segment = *findIntent<PathSegmentIntent>(world, command.Segment);
+  world.destroyEntity(command.Segment);
+  // A point the segment leaves with no segment goes with it.
+  const auto used = [&world](EntityKey point) {
+    return std::ranges::any_of(world.keys(), [&world, point](EntityKey key) {
+      const PathSegmentIntent *other = findIntent<PathSegmentIntent>(world, key);
+      return other != nullptr && (other->From == point || other->To == point);
+    });
+  };
+  for (const EntityKey point : {segment.From, segment.To}) {
+    if (findIntent<PathPointIntent>(world, point) != nullptr && !used(point)) {
+      world.destroyEntity(point);
+    }
   }
 }
 
@@ -309,9 +556,9 @@ void applyCommand(World &world, const DeleteBox &command) {
 bool isPhysicallyValid(const World &world) {
   const std::vector<Solid> solids = solidsOf(world);
   const std::vector<Line> lines = linesOf(world);
-  // An entrance or box with no footprint, or a path with an empty ground line, is not valid.
+  // An entrance or box with no footprint, or a segment with an empty ground line, is not valid.
   if (solids.size() != parkEntrances(world).size() + parkBoxes(world).size() ||
-      lines.size() != parkPaths(world).size()) {
+      lines.size() != parkSegments(world).size()) {
     return false;
   }
   for (size_t i = 0; i < solids.size(); ++i) {

@@ -97,10 +97,10 @@ GraphOverlay buildGraphOverlay(const World &world, const CameraView &view, float
   if (!(width > 0.0f) || !(height > 0.0f)) {
     return overlay;
   }
-  // parkPaths gives paths in ascending key order, so their keys can be searched.
+  // parkSegments gives segments in ascending key order, so their keys can be searched.
   std::vector<EntityKey> pathKeys;
-  for (const ParkPath &path : parkPaths(world)) {
-    pathKeys.push_back(path.Key);
+  for (const ParkSegment &segment : parkSegments(world)) {
+    pathKeys.push_back(segment.Key);
   }
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
     appendLines(overlay, parkNetwork(world, kind), kind, pathKeys, view, width, height);

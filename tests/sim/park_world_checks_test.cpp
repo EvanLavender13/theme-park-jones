@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -52,11 +53,11 @@ constexpr std::array UNHELD_TYPES{
                "copies and saves, or any candidate holds one"},
 };
 
-// A second shop beside warm.park's shop, facing guest path 2 along x = 0 and backing onto
-// backstage path 6 along x = 12: its front door, at (3.5, 106.8), is 3.5 m from the guest path,
-// and its back door, at (9.5, 106.8), is 2.5 m from the backstage path, so both doors are within
-// a connector's reach. Its footprint, z from 102.8 to 110.8, clears the first shop's, which
-// starts at z = 111, and guest path 5, which leaves guest path 2's end at z = 100.
+// A second shop beside warm.park's shop, facing the guest segments along x = 0 and backing onto
+// the backstage segment along x = 12: its front door, at (3.5, 106.8), is 3.5 m from the guest
+// segments, and its back door, at (9.5, 106.8), is 2.5 m from the backstage segment, so both doors
+// are within a connector's reach. Its footprint, z from 102.8 to 110.8, clears the first shop's,
+// which starts at z = 111, and the guest segment along z = 100.
 constexpr Pose SECOND_SHOP{6.5, 106.8, -1.0, 0.0};
 
 struct ParkFile {
@@ -129,15 +130,15 @@ bool someGuest(const World &world, GuestActivity activity, EntityKey target) {
   });
 }
 
-// A guest path that a guest heading to a shop stands on.
-EntityKey guestPathUnderGuestHeadingToShop(const World &world) {
+// A guest segment that a guest heading to a shop stands on.
+EntityKey guestSegmentUnderGuestHeadingToShop(const World &world) {
   for (const GuestRecord &record : guestsOf(world)) {
     if (record.Activity != GuestActivity::HeadingToShop) {
       continue;
     }
-    for (const ParkPath &path : parkPaths(world)) {
-      if (path.Kind == PathKind::Guest && path.Key == record.At.Carrier) {
-        return path.Key;
+    for (const ParkSegment &segment : parkSegments(world)) {
+      if (segment.Kind == PathKind::Guest && segment.Key == record.At.Carrier) {
+        return segment.Key;
       }
     }
   }
@@ -159,12 +160,60 @@ struct ChosenEdit {
   ParkEdit Edit;
 };
 
-// Guests standing on the path, some heading to the shop, are carried off a network that loses a
+// Guests standing on the segment, some heading to the shop, are carried off a network that loses a
 // carrier, and route distance and the networks are derived again.
-ChosenEdit deletingGuestPath(const World &before) {
-  const EntityKey path = guestPathUnderGuestHeadingToShop(before);
-  REQUIRE(path != NULL_KEY);
-  return {"deleting a guest path guests stand on, heading to the shop", DeletePath{path}};
+ChosenEdit deletingGuestSegment(const World &before) {
+  const EntityKey segment = guestSegmentUnderGuestHeadingToShop(before);
+  REQUIRE(segment != NULL_KEY);
+  return {"deleting a guest segment guests stand on, heading to the shop", DeleteSegment{segment}};
+}
+
+// The unit direction square to the segment, from its From point to its To point turned a quarter.
+ParkPoint squareToSegment(const World &world, EntityKey segmentKey) {
+  std::optional<ParkPoint> from;
+  std::optional<ParkPoint> to;
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Key == segmentKey) {
+      from = stopPosition(world, OnPoint{segment.From});
+      to = stopPosition(world, OnPoint{segment.To});
+    }
+  }
+  REQUIRE(from.has_value());
+  REQUIRE(to.has_value());
+  const ParkPoint fromPoint = from.value_or(ParkPoint{});
+  const ParkPoint toPoint = to.value_or(ParkPoint{});
+  const double alongX = toPoint.X - fromPoint.X;
+  const double alongZ = toPoint.Z - fromPoint.Z;
+  const double length = std::sqrt((alongX * alongX) + (alongZ * alongZ));
+  REQUIRE(length > 0.0);
+  return {-alongZ / length, alongX / length};
+}
+
+// The segment guests stand on splits at its middle and its far part takes a new key, so the guests
+// there are carried onto the new carrier, and the networks and route distance are derived again.
+// The new point lies 6 m from the middle, square to the segment, on whichever side the world
+// accepts, so the path meets nothing but the segment it ends on.
+ChosenEdit addingPathEndingOnGuestSegment(const World &before) {
+  const EntityKey segmentKey = guestSegmentUnderGuestHeadingToShop(before);
+  REQUIRE(segmentKey != NULL_KEY);
+  const OnSegment middle{segmentKey, 0.5};
+  const std::optional<ParkPoint> middlePosition = stopPosition(before, middle);
+  REQUIRE(middlePosition.has_value());
+  const ParkPoint middlePoint = middlePosition.value_or(ParkPoint{});
+  const ParkPoint square = squareToSegment(before, segmentKey);
+  constexpr double OFFSET = 6.0;
+  for (const double side : {1.0, -1.0}) {
+    const ParkPoint start{middlePoint.X + (side * OFFSET * square.X),
+                          middlePoint.Z + (side * OFFSET * square.Z)};
+    const AddPath add{PathKind::Guest, {NewPoint{start}, middle}};
+    if (isAccepted(before, ParkEdit{add})) {
+      return {"a guest path ending on the middle of a segment guests stand on, splitting the "
+              "segment under them",
+              add};
+    }
+  }
+  FAIL("neither side of the guest segment accepts a path ending on its middle");
+  return {};
 }
 
 // A new shop is connected to both networks, supplied, and offered.
@@ -192,7 +241,8 @@ ChosenEdit deletingShop(const World &before) {
 // chosen for, so a change to warm.park that loses that state fails here rather than quietly
 // checking less.
 std::vector<ChosenEdit> chosenEdits(const World &before) {
-  std::vector<ChosenEdit> edits{deletingGuestPath(before), addingShop(before),
+  std::vector<ChosenEdit> edits{deletingGuestSegment(before),
+                                addingPathEndingOnGuestSegment(before), addingShop(before),
                                 deletingShop(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);

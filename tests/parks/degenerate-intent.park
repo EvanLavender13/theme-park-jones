@@ -1,18 +1,29 @@
 tpj-park 1
 seed 99
 tick 12
-next-key 9
+next-key 18
 
 [entrance]
 1 x=0 z=126.5 facing-x=0 facing-z=-1
-8 x=-0 z=-129 facing-x=0 facing-z=0
+2 x=-0 z=-129 facing-x=0 facing-z=0
 
-[path]
-2 kind=guest points=[{x=0.1 z=-3.25} {x=17 z=4} {x=17 z=4} {x=300 z=-128}]
-3 kind=backstage points=[{x=5e-324 z=-0}]
-4 kind=guest points=[]
+[path-point]
+3 x=0.1 z=-3.25 radius=3
+4 x=17 z=4 radius=3
+5 x=17 z=4 radius=-1
+6 x=300 z=-128 radius=1e+300
+7 x=5e-324 z=-0 radius=0
+8 x=40 z=40 radius=3
+
+[path-segment]
+9 kind=guest from=3 to=4 width=3
+10 kind=guest from=4 to=5 width=3
+11 kind=guest from=5 to=6 width=3
+12 kind=backstage from=7 to=7 width=2
+13 kind=backstage from=3 to=99 width=2
+14 kind=guest from=3 to=15 width=0
 
 [box]
-5 kind=shop x=-20.5 z=60 facing-x=3 facing-z=4
-6 kind=depot x=1e+300 z=-128 facing-x=0 facing-z=0
-7 kind=shop x=-0 z=0 facing-x=-1.7976931348623157e+308 facing-z=1e-310
+15 kind=shop x=-20.5 z=60 facing-x=3 facing-z=4
+16 kind=depot x=1e+300 z=-128 facing-x=0 facing-z=0
+17 kind=shop x=-0 z=0 facing-x=-1.7976931348623157e+308 facing-z=1e-310

@@ -13,7 +13,7 @@ WorldMeshes SceneSync::syncWorld(const World &world, uint64_t generation) {
     Kept = {};
     meshes.FrameCamera = true;
   }
-  DrawnIntent current{parkEntrances(world), parkPaths(world), parkBoxes(world)};
+  DrawnIntent current{parkEntrances(world), parkSegments(world), parkBoxes(world)};
   if (Intent != current) {
     Intent = std::move(current);
     meshes.Park = true;

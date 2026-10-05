@@ -1,10 +1,14 @@
 tpj-park 1
 seed 1
 tick 0
-next-key 3
+next-key 5
 
 [entrance]
 1 x=0 z=126.5 facing-x=0 facing-z=-1
 
-[path]
-2 kind=guest points=[{x=0 z=123} {x=0 z=103}]
+[path-point]
+2 x=0 z=123 radius=3
+3 x=0 z=103 radius=3
+
+[path-segment]
+4 kind=guest from=2 to=3 width=3

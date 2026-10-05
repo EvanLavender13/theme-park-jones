@@ -4,7 +4,7 @@ This module serves the navigable-networks capability (plans/navigable-networks).
 
 ## Boundary
 
-routes reads intent only through parkPaths, parkEntrances, parkBoxes, groundLine, and footprintOf (sim/park/SPEC.md, decision 0025). It publishes networks in the medium's Network type and route distance in the medium's fields (sim/medium/SPEC.md). Other modules read both through parkNetwork, previousNetwork, the Network type's queries, sampleField, and routeEntryAt, not through how they were derived.
+routes reads intent only through parkSegments, parkEntrances, parkBoxes, and footprintOf (sim/park/SPEC.md, decision 0025). It publishes networks in the medium's Network type and route distance in the medium's fields (sim/medium/SPEC.md). Other modules read both through parkNetwork, previousNetwork, the Network type's queries, sampleField, and routeEntryAt, not through how they were derived.
 
 addRoutes registers the derived type PreviousNetwork, the resolver path-networks, and route distance's two fields and its resolver. makeParkSchema calls it after addParkEdits. addDropPreviousNetworks registers the finisher that removes the previous networks. addPark calls it after every finisher that reads them.
 
@@ -12,7 +12,7 @@ addRoutes registers the derived type PreviousNetwork, the resolver path-networks
 
 Each resolution derives one network for each PathKind from intent alone, so saves never hold networks (principle 1). parkNetwork returns a kind's network. Before the world's first resolution, it returns an empty network.
 
-A kind's network has a carrier for each path of that kind, keyed by the path's key and following its ground line. It also has a carrier for each connector. Every carrier, a path's or a connector's, has its kind's path width (pathWidth, sim/park/SPEC.md). Every edge is a stretch of a drawn line or a connector, measured along it (principle 4). Paths of different kinds never share a node, even where they cross.
+A kind's network has a carrier for each segment of that kind whose ground line is not empty, keyed by the segment's key and following its ground line. It also has a carrier for each connector. Every carrier, a segment's or a connector's, has its kind's path width (pathWidth, sim/park/SPEC.md). Every edge is a stretch of a segment or a connector, measured along it (principle 4). Paths of different kinds never share a node, even where they cross.
 
 Where lines of one kind cross or come within JUNCTION_TOLERANCE of each other, they join at a node. These all give junctions:
 
@@ -21,7 +21,7 @@ Where lines of one kind cross or come within JUNCTION_TOLERANCE of each other, t
 - a line through another line's point;
 - a collinear overlap.
 
-A line also meets itself where it crosses or doubles back. If nodes are closer together along a carrier than JUNCTION_TOLERANCE, they are one node.
+If nodes are closer together along a carrier than JUNCTION_TOLERANCE, they are one node.
 
 ## Connectors
 

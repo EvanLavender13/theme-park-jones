@@ -144,10 +144,10 @@ Rgba rampColor(double value, double full) {
 } // namespace
 
 ParkMesh buildBandOverlay(const World &world, const OverlayValues &values, double full) {
-  std::vector<EntityKey> guestPaths;
-  for (const ParkPath &path : parkPaths(world)) {
-    if (path.Kind == PathKind::Guest) {
-      guestPaths.push_back(path.Key);
+  std::vector<EntityKey> guestSegments;
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Kind == PathKind::Guest) {
+      guestSegments.push_back(segment.Key);
     }
   }
   const Network &network = parkNetwork(world, PathKind::Guest);
@@ -161,9 +161,9 @@ ParkMesh buildBandOverlay(const World &world, const OverlayValues &values, doubl
   std::vector<BandRow> rows;
   std::vector<Place> places;
   std::vector<double> distances;
-  // Carriers come in key order, and a connector's key is no path's.
+  // Carriers come in key order, and a connector's key is no segment's.
   for (const Carrier &carrier : network.carriers()) {
-    if (!std::ranges::binary_search(guestPaths, carrier.Key)) {
+    if (!std::ranges::binary_search(guestSegments, carrier.Key)) {
       continue;
     }
     sampleDistances(carrier, distances);

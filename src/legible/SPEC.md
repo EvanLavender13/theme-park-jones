@@ -38,7 +38,7 @@ Food availability is FOOD_AVAILABILITY, in food.h. Its sources are shops' food o
 
 ## Path places
 
-foodNear(world, point, reach) gives food availability at the guest path place nearest a ground point, if that place lies within the reach, and none otherwise. It never picks a place on a connector. Ties between paths go to the lower key. The straight-line distance only locates the point beside the paths. What is explained there is measured along routes (principle 4).
+foodNear(world, point, reach) gives food availability at the guest path place nearest a ground point, if that place lies within the reach, and none otherwise. It never picks a place on a connector. Ties between segments go to the lower key. The straight-line distance only locates the point beside the paths. What is explained there is measured along routes (principle 4).
 
 ## Previews
 

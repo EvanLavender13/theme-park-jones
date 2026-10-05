@@ -20,9 +20,9 @@ SliceParks makeSliceParks(std::string_view text, uint64_t warmTicks) {
   parks.Warm = saveWorld(world);
   // Deleting in a cycle, not in the text, lets the resolution clear the shop's stepped offer.
   CommandQueue cut;
-  for (const ParkPath &path : parkPaths(world)) {
-    if (path.Kind == PathKind::Backstage) {
-      cut.push(DeletePath{path.Key});
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Kind == PathKind::Backstage) {
+      cut.push(DeleteSegment{segment.Key});
     }
   }
   stepWorld(world, cut);

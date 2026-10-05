@@ -22,13 +22,151 @@ double segmentDistance(ParkPoint point, const CarrierPoint &from, const CarrierP
   return sqrt(ex * ex + ez * ez);
 }
 
-// The nearest point to a point on the segment between two distinct ground line points.
-ParkPoint nearestOnSegment(ParkPoint point, const CarrierPoint &from, const CarrierPoint &to) {
+// How far along the line between two distinct positions the point's nearest place on it lies, as
+// a fraction from 0 at the first to 1 at the second.
+double alongSegment(ParkPoint point, ParkPoint from, ParkPoint to) {
   const double dx = to.X - from.X;
   const double dz = to.Z - from.Z;
-  const double t = std::clamp(
-      ((point.X - from.X) * dx + (point.Z - from.Z) * dz) / (dx * dx + dz * dz), 0.0, 1.0);
-  return ParkPoint{from.X + dx * t, from.Z + dz * t};
+  return std::clamp(((point.X - from.X) * dx + (point.Z - from.Z) * dz) / (dx * dx + dz * dz), 0.0,
+                    1.0);
+}
+
+double distanceBetween(ParkPoint a, ParkPoint b) {
+  const double dx = b.X - a.X;
+  const double dz = b.Z - a.Z;
+  return sqrt(dx * dx + dz * dz);
+}
+
+// A stop a click snaps to, and how far from the click it lies.
+struct Snap {
+  PathStop Stop;
+  double Distance = 0.0;
+};
+
+// Whether the point is the kind's: some segment uses it, and every one that does has the kind.
+bool isKindsPoint(const std::vector<ParkSegment> &segments, EntityKey point, PathKind kind) {
+  bool used = false;
+  for (const ParkSegment &segment : segments) {
+    if (segment.From == point || segment.To == point) {
+      if (segment.Kind != kind) {
+        return false;
+      }
+      used = true;
+    }
+  }
+  return used;
+}
+
+// The nearest of the kind's points within SNAP_REACH of the click. Points come in ascending key
+// order, and only a strictly nearer one replaces the nearest, so ties go to the lower key.
+std::optional<Snap> nearestPointSnap(const std::vector<ParkPathPoint> &points,
+                                     const std::vector<ParkSegment> &segments, PathKind kind,
+                                     ParkPoint click) {
+  std::optional<Snap> nearest;
+  for (const ParkPathPoint &candidate : points) {
+    const double distance = distanceBetween(click, candidate.At);
+    if (distance <= SNAP_REACH && (!nearest || distance < nearest->Distance) &&
+        isKindsPoint(segments, candidate.Key, kind)) {
+      nearest = Snap{OnPoint{candidate.Key}, distance};
+    }
+  }
+  return nearest;
+}
+
+// The nearest point a drawn stop makes within SNAP_REACH of the click, as a RepeatStop. It leaves
+// out the last stop, which a press finishes the path on instead, and stops on existing points,
+// which nearestPointSnap finds.
+std::optional<Snap> nearestDrawnSnap(const World &world, PathKind kind,
+                                     const std::vector<PathStop> &drawn, ParkPoint click) {
+  const std::optional<std::vector<ParkPoint>> at = stopPositions(world, AddPath{kind, drawn});
+  std::optional<Snap> nearest;
+  for (size_t i = 0; at && i + 1 < drawn.size(); ++i) {
+    const double distance = distanceBetween(click, (*at)[i]);
+    const bool made = std::holds_alternative<NewPoint>(drawn[i]) ||
+                      std::holds_alternative<OnSegment>(drawn[i]) ||
+                      std::holds_alternative<OnDrawnSegment>(drawn[i]);
+    if (made && distance <= SNAP_REACH && (!nearest || distance < nearest->Distance)) {
+      nearest = Snap{RepeatStop{i}, distance};
+    }
+  }
+  return nearest;
+}
+
+// The stop that names the point a drawn stop makes: the stop itself for an OnPoint, its earlier
+// stop for a RepeatStop, and a RepeatStop of it otherwise.
+PathStop pointOfDrawn(const std::vector<PathStop> &drawn, size_t stop) {
+  if (std::holds_alternative<OnPoint>(drawn[stop])) {
+    return drawn[stop];
+  }
+  if (const auto *repeat = std::get_if<RepeatStop>(&drawn[stop])) {
+    return pointOfDrawn(drawn, repeat->Stop);
+  }
+  return RepeatStop{stop};
+}
+
+// The nearest place within SNAP_REACH of the click on a segment between two drawn stops, or that
+// segment's end point when the place lies within MIN_SEGMENT_LENGTH of it.
+std::optional<Snap> nearestDrawnSegmentSnap(const World &world, PathKind kind,
+                                            const std::vector<PathStop> &drawn, ParkPoint click) {
+  const std::optional<std::vector<ParkPoint>> at = stopPositions(world, AddPath{kind, drawn});
+  std::optional<Snap> nearest;
+  for (size_t k = 0; at && k + 1 < drawn.size(); ++k) {
+    const ParkPoint from = (*at)[k];
+    const ParkPoint to = (*at)[k + 1];
+    const double length = distanceBetween(from, to);
+    if (length < MIN_SEGMENT_LENGTH) {
+      continue;
+    }
+    const double t = alongSegment(click, from, to);
+    const double distance =
+        distanceBetween(click, {from.X + t * (to.X - from.X), from.Z + t * (to.Z - from.Z)});
+    if (distance > SNAP_REACH || (nearest && distance >= nearest->Distance)) {
+      continue;
+    }
+    if (t * length < MIN_SEGMENT_LENGTH) {
+      nearest = Snap{pointOfDrawn(drawn, k), distance};
+    } else if ((1.0 - t) * length < MIN_SEGMENT_LENGTH) {
+      nearest = Snap{pointOfDrawn(drawn, k + 1), distance};
+    } else {
+      nearest = Snap{OnDrawnSegment{k, t}, distance};
+    }
+  }
+  return nearest;
+}
+
+// The nearest place within SNAP_REACH of the click on a segment of the kind, or the segment's end
+// point when that place lies within MIN_SEGMENT_LENGTH of it. Ties go to the lower key.
+std::optional<Snap> nearestSegmentSnap(const std::vector<ParkPathPoint> &points,
+                                       const std::vector<ParkSegment> &segments, PathKind kind,
+                                       ParkPoint click) {
+  const auto positionOf = [&points](EntityKey key) -> std::optional<ParkPoint> {
+    const auto found = std::ranges::lower_bound(points, key, {}, &ParkPathPoint::Key);
+    return found != points.end() && found->Key == key ? std::optional<ParkPoint>(found->At)
+                                                      : std::nullopt;
+  };
+  std::optional<Snap> nearest;
+  for (const ParkSegment &segment : segments) {
+    const std::optional<ParkPoint> from = positionOf(segment.From);
+    const std::optional<ParkPoint> to = positionOf(segment.To);
+    if (segment.Kind != kind || segment.Line.empty() || !from || !to) {
+      continue;
+    }
+    const double t = alongSegment(click, *from, *to);
+    const ParkPoint place{from->X + t * (to->X - from->X), from->Z + t * (to->Z - from->Z)};
+    const double distance = distanceBetween(click, place);
+    if (distance > SNAP_REACH || (nearest && distance >= nearest->Distance)) {
+      continue;
+    }
+    const double length = distanceBetween(*from, *to);
+    if (t * length < MIN_SEGMENT_LENGTH) {
+      nearest = Snap{OnPoint{segment.From}, distance};
+    } else if ((1.0 - t) * length < MIN_SEGMENT_LENGTH) {
+      nearest = Snap{OnPoint{segment.To}, distance};
+    } else {
+      nearest = Snap{OnSegment{segment.Key, t}, distance};
+    }
+  }
+  return nearest;
 }
 
 bool isPlaceTool(ToolKind kind) {
@@ -47,35 +185,36 @@ PathKind drawnKind(ToolKind kind) {
   return kind == ToolKind::GuestPath ? PathKind::Guest : PathKind::Backstage;
 }
 
-// The point a path tool's press would append: the snapped pointer, unless it lies within
-// FINISH_REACH of the last drawn point, where a press finishes the path instead.
-std::optional<ParkPoint> nextPoint(const ToolState &tool, const World &world) {
+// The stop a path tool's press would append: the snapped pointer, unless it lies within
+// FINISH_REACH of the last stop, where a press finishes the path instead.
+std::optional<PathStop> nextStop(const ToolState &tool, const World &world) {
   if (!tool.Pointer) {
     return std::nullopt;
   }
-  const ParkPoint point = snapToPath(world, drawnKind(tool.Kind), *tool.Pointer);
+  const PathStop stop = snapStop(world, drawnKind(tool.Kind), tool.Drawn, *tool.Pointer);
   if (!tool.Drawn.empty()) {
-    const double dx = point.X - tool.Drawn.back().X;
-    const double dz = point.Z - tool.Drawn.back().Z;
-    if (dx * dx + dz * dz <= FINISH_REACH * FINISH_REACH) {
+    AddPath path{drawnKind(tool.Kind), tool.Drawn};
+    path.Stops.push_back(stop);
+    const std::optional<std::vector<ParkPoint>> at = stopPositions(world, path);
+    if (at && distanceBetween(at->back(), (*at)[at->size() - 2]) <= FINISH_REACH) {
       return std::nullopt;
     }
   }
-  return point;
+  return stop;
 }
 
-// A path tool's edit: the drawn points, followed by the next point while not holding.
+// A path tool's edit: the stops so far, followed by the next stop while not holding.
 std::optional<ParkEdit> pathEdit(const ToolState &tool, const World &world) {
-  std::vector<ParkPoint> points = tool.Drawn;
-  if (!tool.Holding && !points.empty()) {
-    if (const std::optional<ParkPoint> next = nextPoint(tool, world)) {
-      points.push_back(*next);
+  std::vector<PathStop> stops = tool.Drawn;
+  if (!tool.Holding && !stops.empty()) {
+    if (const std::optional<PathStop> next = nextStop(tool, world)) {
+      stops.push_back(*next);
     }
   }
-  if (points.size() < 2) {
+  if (stops.size() < 2) {
     return std::nullopt;
   }
-  return AddPath{drawnKind(tool.Kind), std::move(points)};
+  return AddPath{drawnKind(tool.Kind), std::move(stops)};
 }
 
 // The pose the box the key holds has, if it holds one.
@@ -122,7 +261,7 @@ void pressPointer(ToolState &tool, const World &world) {
   if (tool.Kind == ToolKind::Delete) {
     tool.Holding = true;
   } else if (isPathTool(tool.Kind) && tool.Pointer) {
-    if (const std::optional<ParkPoint> next = nextPoint(tool, world)) {
+    if (const std::optional<PathStop> next = nextStop(tool, world)) {
       tool.Drawn.push_back(*next);
     } else {
       tool.Holding = true;
@@ -184,11 +323,23 @@ std::optional<ParkEdit> tentativeEdit(const ToolState &tool, const World &world)
     if (const std::optional<EntityKey> box = boxAt(world, *tool.Pointer)) {
       return DeleteBox{*box};
     }
-    if (const std::optional<EntityKey> path = pathAt(world, *tool.Pointer)) {
-      return DeletePath{*path};
+    if (const std::optional<EntityKey> segment = segmentAt(world, *tool.Pointer)) {
+      return DeleteSegment{*segment};
     }
   }
   return std::nullopt;
+}
+
+std::optional<PathStart> pathStart(const ToolState &tool, const World &world) {
+  if (!isPathTool(tool.Kind) || !tool.Drawn.empty() || !tool.Pointer) {
+    return std::nullopt;
+  }
+  const PathStop stop = snapStop(world, drawnKind(tool.Kind), tool.Drawn, *tool.Pointer);
+  const std::optional<ParkPoint> at = stopPosition(world, stop);
+  if (!at) {
+    return std::nullopt;
+  }
+  return PathStart{*at, drawnKind(tool.Kind), !std::holds_alternative<NewPoint>(stop)};
 }
 
 std::optional<EntityKey> highlightedEntity(const ToolState &tool, const World &world) {
@@ -216,39 +367,41 @@ std::optional<EntityKey> boxAt(const World &world, ParkPoint point) {
   return std::nullopt;
 }
 
-std::optional<EntityKey> pathAt(const World &world, ParkPoint point) {
-  for (const ParkPath &path : parkPaths(world)) {
-    const std::vector<CarrierPoint> line = groundLine(path.Points);
-    const double half = 0.5 * pathWidth(path.Kind);
+std::optional<EntityKey> segmentAt(const World &world, ParkPoint point) {
+  for (const ParkSegment &segment : parkSegments(world)) {
+    const std::vector<CarrierPoint> &line = segment.Line;
     for (size_t i = 0; i + 1 < line.size(); ++i) {
-      if (segmentDistance(point, line[i], line[i + 1]) <= half) {
-        return path.Key;
+      if (segmentDistance(point, line[i], line[i + 1]) <= 0.5 * segment.Width) {
+        return segment.Key;
       }
     }
   }
   return std::nullopt;
 }
 
-ParkPoint snapToPath(const World &world, PathKind kind, ParkPoint point) {
-  ParkPoint snapped = point;
-  std::optional<double> nearest;
-  for (const ParkPath &path : parkPaths(world)) {
-    if (path.Kind != kind) {
-      continue;
-    }
-    const std::vector<CarrierPoint> line = groundLine(path.Points);
-    for (size_t i = 0; i + 1 < line.size(); ++i) {
-      const ParkPoint candidate = nearestOnSegment(point, line[i], line[i + 1]);
-      const double dx = candidate.X - point.X;
-      const double dz = candidate.Z - point.Z;
-      const double distance = sqrt(dx * dx + dz * dz);
-      if (distance <= SNAP_REACH && (!nearest || distance < *nearest)) {
-        snapped = candidate;
-        nearest = distance;
-      }
-    }
+PathStop snapStop(const World &world, PathKind kind, const std::vector<PathStop> &drawn,
+                  ParkPoint point) {
+  const std::vector<ParkPathPoint> points = parkPathPoints(world);
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  const std::optional<Snap> onPoint = nearestPointSnap(points, segments, kind, point);
+  const std::optional<Snap> onDrawn = nearestDrawnSnap(world, kind, drawn, point);
+  // An existing point wins a tie with a drawn stop's.
+  if (onDrawn && (!onPoint || onDrawn->Distance < onPoint->Distance)) {
+    return onDrawn->Stop;
   }
-  return snapped;
+  if (onPoint) {
+    return onPoint->Stop;
+  }
+  const std::optional<Snap> onSegment = nearestSegmentSnap(points, segments, kind, point);
+  const std::optional<Snap> onDrawnSegment = nearestDrawnSegmentSnap(world, kind, drawn, point);
+  // An existing segment wins a tie with a drawn one.
+  if (onDrawnSegment && (!onSegment || onDrawnSegment->Distance < onSegment->Distance)) {
+    return onDrawnSegment->Stop;
+  }
+  if (onSegment) {
+    return onSegment->Stop;
+  }
+  return NewPoint{point};
 }
 
 } // namespace tpj
