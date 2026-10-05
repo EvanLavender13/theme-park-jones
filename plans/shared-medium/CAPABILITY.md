@@ -4,76 +4,163 @@
 
 shared-medium implements principles 3 and 6. Things in the park interact only through fields and flows, and nothing reads another thing's internals.
 
-This capability owns the medium itself. It supplies the network type that fields and flows live on, the interface for publishing and sampling fields with per-source attribution, and the ledger that moves conserved flow units between endpoints with a delay. It owns the mechanism, not any particular field or flow: food offer, route distance, and supplies belong to the capabilities that produce them.
+This capability owns the medium itself. It supplies three things:
 
-Its value is that every other capability can meet the others without wiring. Every interaction then conserves what it should (principle 3), explains where it came from (principle 8), and does not depend on the order systems run in (principle 10). It deepens with every new kind of field, flow, network, and storage, and never finishes.
+- the network type that fields and flows live on;
+- the interface for publishing and sampling fields, with per-source attribution;
+- the ledger that moves conserved flow units between endpoints with a delay.
+
+It owns the mechanism, not any particular field or flow. Food offer, route distance, and supplies belong to the capabilities that produce them.
+
+With the medium, every capability can meet the others without wiring. Every interaction then:
+
+- conserves what it should (principle 3);
+- explains where it came from (principle 8);
+- doesn't depend on the order systems run in (principle 10).
+
+The capability grows with every new kind of field, flow, network, and storage, and it never finishes.
 
 ## Foundation criteria
 
-- On random synthetic networks, sampling any field at any network place returns its per-source entries in a fixed source order. A scalar field's value equals the ordered sum of those entries, bit for bit.
-- A place with no sources is a legitimate sample: it has no entries and a scalar value of zero.
-- A value published while stepping tick N becomes visible at tick N+1, never earlier. The medium's work for one tick gives the same world, and the same state hash, whatever order the producers run in.
-- Each cycle runs in a fixed order: step the tick, swap the buffers so the tick's publications become readable, apply queued intent commands, then resolve if intent changed. Resolution re-derives the world from intent and publishes directly into what samplers read, so nothing stepped is still pending when it writes. A source's stepped entries, readable for the tick after they are published, take precedence over its resolved ones, and a resolution that changes a source's resolved entries clears its stepped ones, so the next tick samples every change resolution made. After the player removes a path between ticks N and N+1, tick N+1 samples no route distance entries on the removed edge and no offer that depended on it. Producers run in the order their inputs require: networks, then what depends on them. A resolved world, committed or candidate, can be sampled at once without stepping, and resolving a candidate copy gives the same fields as committing the same intent and resolving.
-- Every flow unit of every kind is in exactly one state: in transit, held at an endpoint, or consumed. This includes units whose endpoint has been removed, which the ledger accounts for by a rule settled in the first milestone. For each kind, units created equal units in transit plus units held plus units consumed. This holds exactly, in every tick of randomized synthetic runs.
-- A packet sent at tick t with delay d, where d is at least one tick to match next-tick visibility, is delivered to its destination endpoint's stock at the start of tick t+d. Changes to the network in between do not affect this.
-- The medium's state is part of the world as deterministic-simulation defines it. A copy of the world stepped forward equals the original stepped forward, and the state hash covers every field entry, packet, and stock.
-- A mechanical check fails the build when a file includes another module's private headers (principle 6, decision 0016). It passes on the tree, and fails on a planted violation.
+When you sample any field at any network place, you get its per-source entries in a fixed source order. A scalar field's value equals the ordered sum of those entries, bit for bit.
+
+If a place has no sources, sampling it is still legitimate. The sample has no entries and a scalar value of zero.
+
+If a value is published while stepping tick N, it becomes visible at tick N+1, never earlier. The medium's work for one tick gives the same world and the same state hash, whatever order the producers run in.
+
+Each cycle runs in a fixed order:
+
+1. Step the tick.
+2. Swap the buffers, so the tick's publications become readable.
+3. Apply queued intent commands.
+4. Resolve, if intent changed.
+
+Resolution re-derives the world from intent and publishes straight into what samplers read. Nothing stepped is still pending when it writes.
+
+A source's stepped entries are readable for the tick after they are published. They take precedence over the source's resolved entries. If a resolution changes a source's resolved entries, it clears the source's stepped ones, so the next tick samples every change resolution made. If the player removes a path between ticks N and N+1, tick N+1 samples no route distance entries on the removed edge and no offer that depended on it.
+
+Producers run in the order their inputs require: networks first, then what depends on them.
+
+A resolved world, committed or candidate, can be sampled at once without stepping. Resolving a candidate copy gives the same fields as committing the same intent and resolving.
+
+Every flow unit of every kind is in exactly one state:
+
+- in transit;
+- held at an endpoint;
+- consumed.
+
+This includes units whose endpoint has been removed. The ledger accounts for them by a rule settled in the first milestone. For each kind, units created equal units in transit plus units held plus units consumed. This holds exactly, in every tick.
+
+If a packet is sent at tick t with delay d, it is delivered to its destination endpoint's stock at the start of tick t+d. The delay d is at least one tick, to match next-tick visibility. Changes to the network in between don't affect delivery.
+
+The medium's state is part of the world as deterministic-simulation defines it. A copy of the world stepped forward equals the original stepped forward. The state hash covers every field entry, packet, and stock.
+
+The park files in tests/parks/ hold the medium's state, so the park world checks cover its copies, saves, and hashes. The cross-build check covers the medium through tpj_scenarios's synthetic scenario for fields and flows. Check the other properties by playing the game, as docs/testing.md says.
+
+A mechanical check fails the build when a file includes another module's private headers (principle 6, decision 0016). It passes on the tree, and it fails on a planted violation.
 
 ## Medium
 
-This capability introduces the medium's machinery rather than any park field or flow of its own:
+This capability adds the medium's machinery, not any park field or flow of its own. The machinery has three parts: networks, fields, and flows.
 
-- Networks: nodes, and edges with lengths, published by navigable-networks from path intent. Every edge is a stretch of a carrier: a line with a stable key, such as a drawn path or a box's connector. A network place is a carrier and a distance along it, and it is what every field is sampled at. Because carriers come from intent, a place held across a re-derivation survives edges being split or merged under it. The network type offers one carry-over operation, which a holder applies to its own places using the networks from before and after a re-derivation, so nobody reads another's internals. There are three outcomes. A place on an unchanged carrier keeps its spot. A place on a carrier whose geometry changed moves to the point on the same carrier nearest its old ground position. A place on a carrier that no longer exists resolves to no place, which is a legitimate state that the holder handles. In synthetic networks each edge is its own carrier. A node may be anchored to an entity, so a shop or depot can find the places where it meets a network without reading how the network was derived. A nearest-point query lets a ground position find its place. Routing and route distance belong to navigable-networks.
-- Fields: a producer publishes per-source entries at places. A consumer samples a place and receives the entries in a fixed source order. An entry field, such as food offer or route distance, carries typed entries and has no total. A scalar field, such as food availability or hungry footfall, also has a value: the ordered sum of its entries. Publications made while stepping are double-buffered and visible from the next tick. Resolution runs after the swap that ends a tick, and its publications are visible at once, so a preview needs no stepping (decision 0025, principle 8). Resolved entries are derived and stepped entries are state, and a sample prefers a source's stepped entries (first-field-and-flow's layer rule).
-- Flows: integer units of a named kind, created at an endpoint, moved as packets between endpoints, held in endpoint stocks, and consumed. Creating and consuming are the only ways a unit enters or leaves a kind, so a conversion such as supplies into meals is recorded as both. A sender supplies each packet's delay, sampled from route distance. The ledger keeps the packet in transit until its arrival tick, independent of the network. A packet may carry an opaque endpoint handle for its units, so a shop can address a meal to the guest whose visit it served without knowing anything else about the guest.
+A network is nodes, and edges with lengths. navigable-networks publishes the networks, deriving them from path intent. Every edge is a stretch of a carrier. A carrier is a line with a stable key, such as a drawn path or a box's connector. In synthetic networks, each edge is its own carrier.
 
-Every other capability is on the other side: navigable-networks publishes networks and route distance, plausible-operations publishes food offer and moves supplies and meals, believable-guests publishes footfall and sends guest visits, and legible-simulation samples everything for overlays and previews. The slice's medium map in plans/slices/boxes-and-tubes/SLICE.md names each of these.
+A network place is a carrier and a distance along it. Every field is sampled at places. Carriers come from intent, so if a holder keeps a place across a re-derivation, the place survives edges being split or merged under it.
+
+The network type offers one carry-over operation. A holder applies it to its own places, using the networks from before and after a re-derivation, so nobody reads another's internals. It has three outcomes:
+
+- If the place's carrier is unchanged, the place keeps its spot.
+- If the carrier's geometry changed, the place moves to the point on the same carrier nearest its old ground position.
+- If the carrier no longer exists, the place resolves to no place. This is a legitimate state, and the holder handles it.
+
+A node may be anchored to an entity. A shop or depot can then find the places where it meets a network without reading how the network was derived. A nearest-point query finds the place for a ground position. Routing and route distance belong to navigable-networks.
+
+In a field, a producer publishes per-source entries at places. A consumer samples a place and gets the entries in a fixed source order. There are two kinds of field:
+
+- An entry field, such as food offer or route distance, carries typed entries and has no total.
+- A scalar field, such as food availability or hungry footfall, also has a value: the ordered sum of its entries.
+
+Publications made while stepping are double-buffered and become visible on the next tick. Resolution runs after the swap that ends a tick, and its publications are visible at once, so a preview needs no stepping (decision 0025, principle 8).
+
+Resolved entries are derived, and stepped entries are state. If a source has stepped entries, a sample uses them instead of its resolved ones (first-field-and-flow's layer rule).
+
+A flow is integer units of a named kind. Units are created at an endpoint, moved as packets between endpoints, held in endpoint stocks, and consumed. Creating and consuming are the only ways a unit enters or leaves a kind. A conversion, such as supplies into meals, is recorded as both.
+
+The sender gives each packet's delay, sampled from route distance. The ledger keeps the packet in transit until its arrival tick, independent of the network.
+
+A packet may carry an opaque endpoint handle for its units. With it, a shop can address a meal to the guest whose visit it served without knowing anything else about the guest.
+
+Every other capability is on the other side of the medium:
+
+- navigable-networks publishes networks and route distance;
+- plausible-operations publishes food offer and moves supplies and meals;
+- believable-guests publishes footfall and sends guest visits;
+- legible-simulation samples everything for overlays and previews.
+
+The slice's medium map in plans/slices/boxes-and-tubes/SLICE.md names each of these.
 
 ## Principles
 
-- Principle 3 is at risk when a new interaction bypasses the medium. Conservation is checked by randomized ledger tests at every tick. Every cross-capability interaction must appear in a slice or capability medium map, and reviews check that.
+- Principle 3 is at risk when a new interaction bypasses the medium. Conservation is a property of the ledger: for each kind, units created equal units in transit, held, and consumed. Every interaction between capabilities must appear in a slice or capability medium map, and reviews check that.
 - Principle 6 is at risk when a module's private components are included elsewhere. The include check enforces it, and decision 0016 keeps private components out of public headers.
-- Principle 10 is at risk from summation order and update order. Ordered entries and next-tick visibility address both. They are checked by running producers in shuffled order and comparing state hashes.
-- Principle 8 depends on attribution being exact. The ordered-sum identity is tested bit for bit.
-- Principle 2 is at risk when a source, endpoint, or network element is removed while the medium still refers to it. Empty samples are legitimate, and what happens to units held by, or in transit to, a removed endpoint is settled by first-field-and-flow: packets go back to their sender, units with neither endpoint left are consumed as undeliverable, and a removed endpoint's stock goes to the entities its units are addressed to or is consumed as discarded.
+- Principle 10 is at risk from summation order and update order. Ordered entries and next-tick visibility address both. The park world checks show that two runs give the same state, and the cross-build check compares the builds players run.
+- Principle 8 depends on attribution being exact. The ordered-sum identity holds bit for bit.
+- Principle 2 is at risk when a source, endpoint, or network element is removed while the medium still refers to it. Empty samples are legitimate. first-field-and-flow settled what happens to units held by, or in transit to, a removed endpoint:
+  - packets go back to their sender;
+  - units with neither endpoint left are consumed as undeliverable;
+  - a removed endpoint's stock goes to the entities its units are addressed to, or is consumed as discarded.
 - Principle 4 is kept by sampling only at network places. Distances between places are measured only along the network, by navigable-networks. The one straight-line measure in the medium is the nearest-point query, and it is used only to snap a ground position onto the network.
 
 ## Dependencies
 
-- deterministic-simulation: the world as a copyable, hashable value, and the tick the medium's buffers swap on. Unmet; to be planned first, as the first member of the boxes-and-tubes slice.
+- deterministic-simulation: the world as a copyable, hashable value, and the tick that the medium's buffers swap on: met (world-as-value, the first member of the boxes-and-tubes slice).
 - tpj_sim with EnTT (decisions 0016 and 0022): met.
-- navigable-networks: publishes the park's real networks. Not needed for the foundation, which is tested on synthetic networks.
+- navigable-networks: publishes the park's real networks. The foundation doesn't need it, because the foundation runs on synthetic networks.
 
 ## Foundation
 
-A network type, the field interface with entry and scalar fields, and the flow ledger, all proved on synthetic networks with no park content. This is the smallest version that lets the other slice members exchange anything at all. It produces value on its own, because the properties the principles promise (exact attribution, exact conservation, order independence) are established and tested once, here, instead of separately in every capability that uses them.
+The foundation is three pieces, built on synthetic networks with no park content:
+
+- a network type;
+- the field interface, with entry and scalar fields;
+- the flow ledger.
+
+It is the smallest version that lets the other slice members exchange anything at all.
+
+It is useful on its own. The principles promise exact attribution, exact conservation, and order independence. The foundation establishes these once, here, instead of separately in every capability that uses them.
 
 ## Milestones
 
-1. `first-field-and-flow`: the network type with carriers, places that survive re-derivation, entity anchors, and a nearest-point query, entry and scalar fields with per-source attribution, next-tick visibility while stepping, and immediate visibility during resolution, the flow ledger with integer packets, delays, endpoint stocks, and creation and consumption accounting, and the private-header check, tested on synthetic networks. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's first milestone.
+1. `first-field-and-flow`: the first version of the medium, tested on synthetic networks. It includes:
+   - the network type, with carriers, places that survive re-derivation, entity anchors, and a nearest-point query;
+   - entry and scalar fields with per-source attribution, visible on the next tick while stepping and at once during resolution;
+   - the flow ledger, with integer packets, delays, endpoint stocks, and accounting for creation and consumption;
+   - the private-header check.
 
-2. `affordable-sampling`: sampling a field by comparing each entry's place with the network's stop places and the sampled edge's bounds instead of resolving it, so a park with guests steps quickly. Depends on: first-field-and-flow.
+   It is a member of the boxes-and-tubes slice. Depends on: deterministic-simulation's first milestone.
 
-Later milestones are drawn from the deepening candidates once the slice has shown where the medium strains.
+2. `affordable-sampling`: sampling a field compares each entry's place with the network's stop places and the sampled edge's bounds, instead of resolving the place. A park with guests then steps quickly. Depends on: first-field-and-flow.
+
+Later milestones come from the deepening candidates, once the slice has shown where the medium is under strain.
 
 ## Deepening candidates
 
-- Ground-domain fields: fields sampled at ground positions that spread over open ground rather than along routes, such as noise and smell. Gated on: a mechanic that needs one.
-- On-demand fields: storage that evaluates emitters at query time instead of holding published entries. Gated on: a field whose published form would be too large or too costly to keep current.
-- Change-driven resolution: consumers learn when the context they sample changed meaningfully, so most of the world rests most of the time (design notes, "Resolution over time"). Gated on: profiling showing per-tick sampling cost matters.
-- Edge capacity: flows limited by the capacity of the network they cross, as decision 0018 anticipates for supplies. Gated on: a flow whose congestion the player should manage.
-- Agent-backed flows: a flow whose units are carried by visible agents without changing the ledger interface its consumers see (decision 0018).
-- Generic field enumeration: the medium lists its fields and their kinds, so tooling can offer an overlay for any field without per-field code (design notes, "Legibility").
+- Ground-domain fields: fields sampled at ground positions that spread over open ground instead of along routes, such as noise and smell. Gated on: a mechanic that needs one.
+- On-demand fields: storage that evaluates emitters when a field is queried, instead of holding published entries. Gated on: a field whose published form would be too large, or too costly to keep current.
+- Change-driven resolution: consumers learn when the context they sample has changed in a way that matters, so most of the world can rest most of the time (design notes, "Resolution over time"). Gated on: profiling that shows the per-tick cost of sampling matters.
+- Edge capacity: flows limited by the capacity of the network they cross, as decision 0018 expects for supplies. Gated on: a flow whose congestion the player should manage.
+- Agent-backed flows: a flow whose units are carried by visible agents, without changing the ledger interface its consumers see (decision 0018).
+- Generic field enumeration: the medium lists its fields and their kinds, so tooling can offer an overlay for any field without code written for each field (design notes, "Legibility").
 
 ## Open questions
 
-- How long a sampled world and its double buffers take to copy and hash at slice scale, and so whether candidate copies stay cheap enough to rebuild on every preview update. Resolved by measurement once deterministic-simulation's copy and hash exist.
+- How long does a sampled world, with its double buffers, take to copy and hash at slice scale? The answer decides whether candidate copies stay cheap enough to rebuild on every preview update. Measure it once deterministic-simulation's copy and hash exist.
 
 ## Research notes
 
-- Influence maps are the prior art for fields. Network-based influence maps match principle 4. Per-source attribution is not standard and must be kept deliberately.
-- OpenTTD's integer cargo packets, which carry their own transit time, fit the flow ledger.
-- Double-buffering gives order-independent ticks.
-- A plain include scan is the practical principle 6 check with GCC.
+- Influence maps are the prior art for fields. Influence maps built on a network match principle 4. Per-source attribution isn't standard, so the medium has to keep it on purpose.
+- OpenTTD's cargo packets hold integer amounts and carry their own transit time. That design fits the flow ledger.
+- Double-buffering makes a tick's result independent of the order systems run in.
+- With GCC, a plain include scan is the practical way to check principle 6.
 
-Depth is in RESEARCH.md.
+The details are in RESEARCH.md.
