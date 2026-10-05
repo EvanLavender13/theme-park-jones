@@ -52,7 +52,7 @@ When a guest arrives at its target shop, it sends the shop a visit through the g
 
 ## Carrying across an edit
 
-When the player edits the park, each guest keeps its ground position if its path survives the edit. If a guest's path or connector is deleted, the guest moves to the nearest point of the guest network. Carrying changes only where guests stand. If a guest is waiting, it keeps waiting. If it is heading to a shop, it keeps its target until its next walk. In a candidate, guests stand where committing the candidate's edit would put them (principle 8).
+When the player edits the park, each guest keeps its ground position if a path or connector still runs over it, even one with a new key, as when an edit splits a path. The guest stays on its own path or connector if that one still runs over its ground. If the guest is carried onto another one that runs the other way there, it turns, so it keeps walking the same way over the ground. If nothing runs over where the guest stood, but its own path or connector is still there with a new shape, the guest moves to the nearest point of it. If its path or connector is deleted, the guest moves to the nearest point of the guest network. Carrying changes only where guests stand and which way they walk. If a guest is waiting, it keeps waiting. If it is heading to a shop, it keeps its target until its next walk. In a candidate, guests stand where committing the candidate's edit would put them (principle 8).
 
 ## Hungry footfall
 
@@ -63,9 +63,9 @@ fieldValue of hungry footfall anywhere inside a stretch is that stretch's value.
 Across an edit:
 
 - if a stretch is untouched, it keeps its value exactly;
-- if a stretch is split, its value stays with the half holding its middle;
+- if a stretch is split, its value stays with the part holding its middle, even if that part has a new key;
 - if stretches are joined, their values add;
-- if a path is deleted, its footfall is dropped.
+- if a path is deleted, its footfall is dropped, except where another path runs over a stretch's middle.
 
 ## Inspection
 
