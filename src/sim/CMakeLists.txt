@@ -13,6 +13,7 @@ add_library(tpj_sim STATIC
     park/edits.cpp
     park/geometry.cpp
     park/intent.cpp
+    park/meetings.cpp
     park_schema.cpp
     routes/networks.cpp
     routes/route_distance.cpp

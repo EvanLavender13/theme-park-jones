@@ -267,7 +267,7 @@ Step 2: In park_mesh.h, change the comment above JOIN_MARK_RADIUS to:
 // crosses one, with a flat disc of this radius, this high, in this color.
 ```
 
-Run: `cmake.exe --build --preset windows-debug --target ThemeParkJones`
+Run: `cmake.exe --build --preset windows-debug --target tpj_app`
 Expected: the build finishes with no warnings and no errors.
 
 ### Task 9: Make the full park again
@@ -306,7 +306,7 @@ Expected: `tidy: clean.`
 
 Step 4: Build the release app, which is the one the user plays.
 
-Run: `cmake.exe --build --preset windows-release --target ThemeParkJones`
+Run: `cmake.exe --build --preset windows-release --target tpj_app`
 Expected: the build finishes with no warnings and no errors.
 
 Step 5: Play criteria 1 to 4 in `build/windows-debug/ThemeParkJones.exe`, as FEATURE.md describes them, and note what you saw for the report. Task 9's output confirms criterion 5.

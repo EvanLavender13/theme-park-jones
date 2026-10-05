@@ -216,6 +216,30 @@ ChosenEdit addingPathEndingOnGuestSegment(const World &before) {
   return {};
 }
 
+// A guest path drawn across the segment guests stand on joins it where they cross: both split at a
+// new point the path adds, so the guests on the segment's far part are carried onto a new carrier,
+// and the networks and route distance are derived again. The path's ends lie 6 m from the
+// segment's middle, square to it, one on each side.
+ChosenEdit addingPathCrossingGuestSegment(const World &before) {
+  const EntityKey segmentKey = guestSegmentUnderGuestHeadingToShop(before);
+  REQUIRE(segmentKey != NULL_KEY);
+  const std::optional<ParkPoint> middlePosition = stopPosition(before, OnSegment{segmentKey, 0.5});
+  REQUIRE(middlePosition.has_value());
+  const ParkPoint middlePoint = middlePosition.value_or(ParkPoint{});
+  const ParkPoint square = squareToSegment(before, segmentKey);
+  constexpr double OFFSET = 6.0;
+  const ParkPoint oneSide{middlePoint.X + (OFFSET * square.X), middlePoint.Z + (OFFSET * square.Z)};
+  const ParkPoint otherSide{middlePoint.X - (OFFSET * square.X),
+                            middlePoint.Z - (OFFSET * square.Z)};
+  const AddPath add{PathKind::Guest, {NewPoint{oneSide}, NewPoint{otherSide}}};
+  REQUIRE(isAccepted(before, ParkEdit{add}));
+  // Without a crossing, this edit would only add a free-standing path and check nothing new.
+  REQUIRE_FALSE(pathCrossings(before, add).empty());
+  return {"a guest path crossing the middle of a segment guests stand on, splitting the segment "
+          "under them",
+          add};
+}
+
 // A new shop is connected to both networks, supplied, and offered.
 ChosenEdit addingShop(const World &before) {
   const AddBox add{BoxKind::Shop, SECOND_SHOP};
@@ -241,9 +265,9 @@ ChosenEdit deletingShop(const World &before) {
 // chosen for, so a change to warm.park that loses that state fails here rather than quietly
 // checking less.
 std::vector<ChosenEdit> chosenEdits(const World &before) {
-  std::vector<ChosenEdit> edits{deletingGuestSegment(before),
-                                addingPathEndingOnGuestSegment(before), addingShop(before),
-                                deletingShop(before)};
+  std::vector<ChosenEdit> edits{
+      deletingGuestSegment(before), addingPathEndingOnGuestSegment(before),
+      addingPathCrossingGuestSegment(before), addingShop(before), deletingShop(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);
     REQUIRE(isAccepted(before, chosen.Edit));

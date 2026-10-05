@@ -8,14 +8,14 @@ addParkIntent registers the intent types entrance, path-point, path-segment, and
 
 Other modules read intent only through parkEntrances, parkPathPoints, parkSegments, and parkBoxes. Each returns every entity holding that kind of intent, in key order, as the public values ParkEntrance, ParkPathPoint, ParkSegment, and ParkBox. Other modules change intent only through commands.
 
-segmentLine, stopPosition, stopPositions, footprintOf, and the sizes pathWidth, MIN_SEGMENT_LENGTH, DEFAULT_CORNER_RADIUS, boxSize, ENTRANCE_SIZE, and PARK_SIZE are public, so that the renderer, the tools, and routes measure the same shapes this module validates.
+segmentLine, stopPosition, stopPositions, pathCrossings, footprintOf, and the sizes pathWidth, MIN_SEGMENT_LENGTH, DEFAULT_CORNER_RADIUS, boxSize, ENTRANCE_SIZE, and PARK_SIZE are public, so that the renderer, the tools, and routes measure the same shapes this module validates.
 
 ## Intent
 
 The park is a square PARK_SIZE on a side, centered on the origin of the ground.
 
 - A path point has a ground position and a corner radius. The radius is for the corner the point makes when exactly two segments meet there. Nothing uses it yet.
-- A path segment has a kind, guest or backstage, its two path points, From and To, and a width. Segments share a point where the player joined them. Routes also joins segments of one kind where they cross (sim/routes/SPEC.md).
+- A path segment has a kind, guest or backstage, its two path points, From and To, and a width. Segments share a point where the player joined them, and where a path was drawn across them. Routes also joins segments of one kind wherever they cross, whether or not they share a point there (sim/routes/SPEC.md).
 - A box has a kind, shop or depot, and a pose.
 - An entrance has a pose.
 
@@ -61,6 +61,14 @@ If a command is accepted, it leaves exactly the intent it describes and changes 
 - MoveBox replaces a box's pose and keeps its key and kind.
 - DeleteSegment destroys the segment, and each of its points that no other segment uses.
 - DeleteBox destroys the box.
+
+Where a segment AddPath adds meets another segment of its kind, the two join. The other segment can be one already in the park or another one the path adds.
+
+- If each end of each segment lies within MIN_SEGMENT_LENGTH of the line through the other, the segments lie along one line. They don't meet, and neither splits.
+- Otherwise, if an end of one segment lies within MIN_SEGMENT_LENGTH of the other segment, and farther than MIN_SEGMENT_LENGTH from both of the other's ends, the other segment splits at that end's point.
+- Otherwise, if the segments cross, AddPath adds a point at the crossing, with DEFAULT_CORNER_RADIUS, and both split there.
+
+If they meet within MIN_SEGMENT_LENGTH of an end of each, nothing splits. A segment that meets several others splits at each of their points, in order along it, together with any OnSegment or OnDrawnSegment stops on it, as described above. pathCrossings gives the ground position of each point where AddPath splits a segment this way, other than at an OnSegment or OnDrawnSegment stop. It gives none if the world refuses the path.
 
 Everything a command adds takes a key from the key counter. A pose or position is kept exactly as given.
 

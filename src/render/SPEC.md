@@ -47,7 +47,7 @@ A ghost shows what an edit would do before it is committed. It is drawn by the s
 buildGhostMesh(world, edit, candidate) gives the edit's ghost:
 
 - an added or moved box, or an added path's segments, translucent in its kind's color, or in an invalid tint when the world refuses the edit
-- a mark at each stop where an added path joins a point or segment, in JOIN_MARK_COLOR
+- a mark at each stop where an added path joins a point or segment, and at each place pathCrossings gives, in JOIN_MARK_COLOR
 - the entity an accepted delete would remove, in a delete tint
 
 With the candidate world, the ghost also shows the candidate's walkways and starved marks. Where one of these lies on a committed one, it blends into it. Only the walkways the edit adds or moves, and the shops it would starve, stand out. When the delete tool hovers a backstage segment, the ghost marks each shop the deletion leaves with no depot. buildGhostMesh(world, edit) makes the candidate itself. If a caller already holds the candidate, the caller passes it instead.

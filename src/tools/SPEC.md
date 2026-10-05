@@ -10,7 +10,7 @@ A ToolState holds one tool, of a ToolKind: None, GuestPath, BackstagePath, Place
 
 selectTool changes the tool and drops anything held or drawn without committing it. movePointer records where the pointer meets the ground, or that it meets none, as when it is over a panel. pressPointer and releasePointer are the primary button going down and up.
 
-When the button is released, the tool commits exactly the edit tentativeEdit showed just before, so what the player sees in the ghost is what gets committed. A tool refuses nothing. It commits its edit whether or not the simulation will accept it, and only the simulation refuses edits (principle 5). Neither tentativeEdit nor highlightedEntity changes anything.
+When the button is released, the tool commits exactly the edit tentativeEdit showed just before, so what the player sees in the ghost is what gets committed. A tool commits its edit whether or not the simulation will accept it, and only the simulation refuses edits (principle 5). A path tool asks the simulation before it adds a stop, as described under Tools. Neither tentativeEdit nor highlightedEntity changes anything.
 
 ## Picking
 
@@ -22,7 +22,7 @@ snapStop gives the stop a path tool's click makes. If a path point of the tool's
 
 Look (ToolKind None) edits nothing.
 
-Guest path and Backstage path draw a path of their kind. Each click adds the stop snapStop gives. A click near a point or segment of the same kind joins the path there, and a segment it joins splits there when the path commits. Clicking the last stop again finishes and commits the path. The ghost shows the path through the stops and the pointer, and marks each stop that joins a point or segment. Before the first click, pathStart gives where that click would start the path and whether it would join a point or segment there, so the ghost can show it. If the drawn path has fewer than two stops, finishing it commits nothing.
+Guest path and Backstage path draw a path of their kind. Each click adds the stop snapStop gives. If the world would refuse the path through the stops so far and that stop, as when it runs through a box, the click adds nothing, and the ghost stays in the invalid tint until the pointer moves somewhere valid. The first click always adds its stop. A click near a point or segment of the same kind joins the path there, and a segment it joins splits there when the path commits. Where the path crosses a segment of its kind, or itself, both split and share a point there when it commits. Clicking the last stop again finishes and commits the path. The ghost shows the path through the stops and the pointer, and marks each stop that joins a point or segment, and each place where the path crosses one. Before the first click, pathStart gives where that click would start the path and whether it would join a point or segment there, so the ghost can show it. If the drawn path has fewer than two stops, finishing it commits nothing.
 
 Place shop and Place depot place a box at the pointer. Pressing puts the box down, and dragging before release turns it to face the drag. The next box faces the same way as the last.
 
