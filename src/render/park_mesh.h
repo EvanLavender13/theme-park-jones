@@ -86,6 +86,24 @@ inline constexpr Rgba FINISH_MARK_COLOR{0.25f, 0.95f, 0.35f, 0.9f};
 // Adds a finish mark centered on the point.
 void appendFinishMark(ParkMesh &mesh, ParkPoint at);
 
+// Edit path's radius handles are flat discs of this radius, this high, in this color when not
+// hovered.
+inline constexpr double RADIUS_HANDLE_SIZE = 0.6;
+inline constexpr float HANDLE_LIFT = 0.07f;
+inline constexpr Rgba HANDLE_COLOR{0.95f, 0.95f, 0.95f, 0.8f};
+
+// Adds a radius handle centered on the point.
+void appendRadiusHandle(ParkMesh &mesh, ParkPoint at, Rgba color);
+
+// A segment's side marks are strips this wide along the inside of each side.
+inline constexpr double SIDE_MARK_WIDTH = 0.3;
+
+// Adds a strip along the inside of each side of the segment, in the color, twice GHOST_LIFT above
+// its kind's paths. Nothing when it has no ground line.
+void appendSides(ParkMesh &mesh, const ParkSegment &segment, Rgba color);
+// The same strips for the segment the key holds. Nothing when the key holds no segment.
+void appendSides(ParkMesh &mesh, const World &world, EntityKey segment, Rgba color);
+
 // Ghost and highlighted segments lie this far above the park's paths, so they never tie in depth
 // with the ribbons and joints beneath them.
 inline constexpr float GHOST_LIFT = 0.01f;
@@ -140,9 +158,10 @@ ParkMesh buildParkMesh(const World &world);
 // JOIN_MARK_RADIUS at JOIN_MARK_LIFT. Nothing when the key holds none of these.
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
 
-// The ghost of an edit on a world: translucent in its kind's color when accepted, INVALID_TINT when
-// not, and DELETE_TINT for a deletion, followed by the candidate's walkways and starved marks when
-// a candidate is given.
+// The ghost of an edit on a world: the box it adds or moves, and every segment it adds or reshapes,
+// translucent in its kind's color when accepted and INVALID_TINT when not; what an accepted
+// deletion removes, in DELETE_TINT; and its join marks; followed by the candidate's walkways and
+// starved marks when a candidate is given.
 ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
                         const std::optional<World> &candidate);
 // The same ghost with the candidate makeCandidate gives for the edit when it is accepted, and none

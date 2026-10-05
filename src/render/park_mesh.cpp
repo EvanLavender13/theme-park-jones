@@ -95,21 +95,21 @@ void appendBlock(ParkMesh &mesh, const Footprint &footprint, float base, float t
 }
 
 // An edit's ghost color for a kind's color: translucent when accepted, the invalid tint when not.
-Rgba ghostColor(const World &world, const ParkEdit &edit, Rgba color) {
-  return isAccepted(world, edit) ? Rgba{color.R, color.G, color.B, GHOST_ALPHA} : INVALID_TINT;
+Rgba ghostColor(bool accepted, Rgba color) {
+  return accepted ? Rgba{color.R, color.G, color.B, GHOST_ALPHA} : INVALID_TINT;
 }
 
-// Adds the flat ribbon of the width along the line, the lift above the ground. The line has at
-// least two points, each distinct from the next.
-void appendRibbon(ParkMesh &mesh, const std::vector<CarrierPoint> &line, double width, float lift,
-                  Rgba color) {
+// Adds a flat band along the line, from one offset across it to another, each measured to the
+// right of the line's direction, the lift above the ground. The line has at least two points, each
+// distinct from the next.
+void appendBand(ParkMesh &mesh, const std::vector<CarrierPoint> &line, double from, double to,
+                float lift, Rgba color) {
   const auto first = static_cast<uint32_t>(mesh.Vertices.size());
-  const double half = 0.5 * width;
   for (size_t i = 0; i < line.size(); ++i) {
     const ParkPoint tangent = tangentAt(line, i);
     const ParkPoint right{-tangent.Z, tangent.X};
-    addVertex(mesh, line[i].X - right.X * half, lift, line[i].Z - right.Z * half, {}, 1.0f, color);
-    addVertex(mesh, line[i].X + right.X * half, lift, line[i].Z + right.Z * half, {}, 1.0f, color);
+    addVertex(mesh, line[i].X + right.X * from, lift, line[i].Z + right.Z * from, {}, 1.0f, color);
+    addVertex(mesh, line[i].X + right.X * to, lift, line[i].Z + right.Z * to, {}, 1.0f, color);
   }
   for (uint32_t i = 0; i + 1 < line.size(); ++i) {
     const uint32_t left0 = first + 2 * i;
@@ -118,6 +118,13 @@ void appendRibbon(ParkMesh &mesh, const std::vector<CarrierPoint> &line, double 
     const uint32_t right1 = left0 + 3;
     mesh.Indices.insert(mesh.Indices.end(), {left0, right0, left1, left1, right0, right1});
   }
+}
+
+// Adds the flat ribbon of the width along the line, the lift above the ground. The line has at
+// least two points, each distinct from the next.
+void appendRibbon(ParkMesh &mesh, const std::vector<CarrierPoint> &line, double width, float lift,
+                  Rgba color) {
+  appendBand(mesh, line, -0.5 * width, 0.5 * width, lift, color);
 }
 
 // Adds a flat half disc of the radius beyond a ribbon's end at the point, the lift above the
@@ -212,10 +219,9 @@ void appendGhostSegment(ParkMesh &mesh, PathKind kind, const std::vector<Carrier
   }
 }
 
-// Adds an added path's ghost: a segment between each two stops, in the color, then a join mark at
-// each stop that joins a point, a segment, or an earlier stop, and at each place the path crosses
-// one. Nothing when a stop has no position.
-void appendGhostPath(ParkMesh &mesh, const World &world, const AddPath &path, Rgba color) {
+// Adds an added path's straight segments between its stops, for a path the world refuses so that
+// editedSegments gives none. Nothing when a stop has no position.
+void appendStraightPath(ParkMesh &mesh, const World &world, const AddPath &path, Rgba color) {
   const std::optional<std::vector<ParkPoint>> positions = stopPositions(world, path);
   if (!positions) {
     return;
@@ -224,57 +230,58 @@ void appendGhostPath(ParkMesh &mesh, const World &world, const AddPath &path, Rg
     appendGhostSegment(mesh, path.Kind, segmentLine((*positions)[i], (*positions)[i + 1]),
                        pathWidth(path.Kind), color);
   }
-  for (size_t i = 0; i < positions->size(); ++i) {
-    if (!std::holds_alternative<NewPoint>(path.Stops[i])) {
-      appendJoinMark(mesh, (*positions)[i]);
-    }
-  }
-  for (const ParkPoint &at : pathCrossings(world, path)) {
-    appendJoinMark(mesh, at);
-  }
 }
 
-// Adds a moved point's ghost: its segments where they would lie, in their kind's ghost color, a
-// join mark at its target when that is a point or segment, and one at each place a moved segment
-// crosses one.
-void appendGhostMove(ParkMesh &mesh, const World &world, const MovePoint &move,
-                     const ParkEdit &edit) {
-  const std::vector<ParkSegment> moved = movedSegments(world, move);
-  if (!moved.empty()) {
-    const Rgba color = ghostColor(world, edit, pathColor(moved.front().Kind));
-    for (const ParkSegment &segment : moved) {
-      appendGhostSegment(mesh, segment.Kind, segment.Line, segment.Width, color);
-    }
-  }
-  if (!std::holds_alternative<NewPoint>(move.To)) {
-    const PathStop target = std::visit([](const auto &stop) { return PathStop{stop}; }, move.To);
-    if (const std::optional<ParkPoint> at = stopPosition(world, target)) {
-      appendJoinMark(mesh, *at);
-    }
-  }
-  for (const ParkPoint &at : pathCrossings(world, move)) {
-    appendJoinMark(mesh, at);
-  }
-}
-
-// Adds a deleted point's ghost: when accepted, each segment at the point in the delete tint; the
-// segment it merges two into, in its kind's ghost color; and a join mark at each place the merged
-// segment crosses one.
-void appendGhostDeletePoint(ParkMesh &mesh, const World &world, const DeletePoint &del,
-                            const ParkEdit &edit) {
-  if (isAccepted(world, edit)) {
+// Adds, in the delete tint, the box or segment a deletion removes, or every segment at a point
+// DeletePoint deletes.
+void appendDeleted(ParkMesh &mesh, const World &world, const ParkEdit &edit) {
+  if (const auto *del = std::get_if<DeletePoint>(&edit)) {
     for (const ParkSegment &segment : parkSegments(world)) {
-      if (segment.From == del.Point || segment.To == del.Point) {
+      if (segment.From == del->Point || segment.To == del->Point) {
         appendEntity(mesh, world, segment.Key, DELETE_TINT);
       }
     }
+  } else if (const auto *segment = std::get_if<DeleteSegment>(&edit)) {
+    appendEntity(mesh, world, segment->Segment, DELETE_TINT);
+  } else if (const auto *box = std::get_if<DeleteBox>(&edit)) {
+    appendEntity(mesh, world, box->Box, DELETE_TINT);
   }
-  if (const std::optional<ParkSegment> merged = mergedSegment(world, del)) {
-    appendGhostSegment(mesh, merged->Kind, merged->Line, merged->Width,
-                       ghostColor(world, edit, pathColor(merged->Kind)));
-  }
-  for (const ParkPoint &at : pathCrossings(world, del)) {
-    appendJoinMark(mesh, at);
+}
+
+// Adds a join mark at each stop where an added path joins a point, a segment, or an earlier stop,
+// at a moved point's target when it is a point or segment, at an inserted point's place, and at
+// each place pathCrossings gives.
+void appendJoinMarks(ParkMesh &mesh, const World &world, const ParkEdit &edit) {
+  if (const auto *path = std::get_if<AddPath>(&edit)) {
+    if (const std::optional<std::vector<ParkPoint>> positions = stopPositions(world, *path)) {
+      for (size_t i = 0; i < positions->size(); ++i) {
+        if (!std::holds_alternative<NewPoint>(path->Stops[i])) {
+          appendJoinMark(mesh, (*positions)[i]);
+        }
+      }
+    }
+    for (const ParkPoint &at : pathCrossings(world, *path)) {
+      appendJoinMark(mesh, at);
+    }
+  } else if (const auto *move = std::get_if<MovePoint>(&edit)) {
+    if (!std::holds_alternative<NewPoint>(move->To)) {
+      const PathStop target = std::visit([](const auto &stop) { return PathStop{stop}; }, move->To);
+      if (const std::optional<ParkPoint> at = stopPosition(world, target)) {
+        appendJoinMark(mesh, *at);
+      }
+    }
+    for (const ParkPoint &at : pathCrossings(world, *move)) {
+      appendJoinMark(mesh, at);
+    }
+  } else if (const auto *insert = std::get_if<InsertPoint>(&edit)) {
+    if (const std::optional<ParkPoint> at =
+            stopPosition(world, OnSegment{insert->Segment, insert->Along})) {
+      appendJoinMark(mesh, *at);
+    }
+  } else if (const auto *del = std::get_if<DeletePoint>(&edit)) {
+    for (const ParkPoint &at : pathCrossings(world, *del)) {
+      appendJoinMark(mesh, at);
+    }
   }
 }
 
@@ -311,6 +318,29 @@ void appendJoinMark(ParkMesh &mesh, ParkPoint at) {
 
 void appendFinishMark(ParkMesh &mesh, ParkPoint at) {
   appendDisc(mesh, at, FINISH_MARK_RADIUS, FINISH_MARK_LIFT, FINISH_MARK_COLOR);
+}
+
+void appendRadiusHandle(ParkMesh &mesh, ParkPoint at, Rgba color) {
+  appendDisc(mesh, at, RADIUS_HANDLE_SIZE, HANDLE_LIFT, color);
+}
+
+void appendSides(ParkMesh &mesh, const ParkSegment &segment, Rgba color) {
+  if (segment.Line.size() < 2) {
+    return;
+  }
+  const double half = 0.5 * segment.Width;
+  const double inset = std::min(SIDE_MARK_WIDTH, half);
+  const float lift = pathLift(segment.Kind) + 2.0f * GHOST_LIFT;
+  appendBand(mesh, segment.Line, -half, -half + inset, lift, color);
+  appendBand(mesh, segment.Line, half - inset, half, lift, color);
+}
+
+void appendSides(ParkMesh &mesh, const World &world, EntityKey segment, Rgba color) {
+  for (const ParkSegment &candidate : parkSegments(world)) {
+    if (candidate.Key == segment) {
+      appendSides(mesh, candidate, color);
+    }
+  }
 }
 
 void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
@@ -429,35 +459,35 @@ void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color)
 ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
                         const std::optional<World> &candidate) {
   ParkMesh mesh;
+  const bool accepted = isAccepted(world, edit);
   if (const auto *add = std::get_if<AddBox>(&edit)) {
     appendBox(mesh, add->At, boxSize(add->Kind), boxHeight(add->Kind),
-              ghostColor(world, edit, boxColor(add->Kind)));
+              ghostColor(accepted, boxColor(add->Kind)));
   } else if (const auto *move = std::get_if<MoveBox>(&edit)) {
     for (const ParkBox &box : parkBoxes(world)) {
       if (box.Key == move->Box) {
         appendBox(mesh, move->At, boxSize(box.Kind), boxHeight(box.Kind),
-                  ghostColor(world, edit, boxColor(box.Kind)));
+                  ghostColor(accepted, boxColor(box.Kind)));
       }
     }
-  } else if (const auto *path = std::get_if<AddPath>(&edit)) {
-    appendGhostPath(mesh, world, *path, ghostColor(world, edit, pathColor(path->Kind)));
-  } else if (const auto *movePoint = std::get_if<MovePoint>(&edit)) {
-    appendGhostMove(mesh, world, *movePoint, edit);
-  } else if (const auto *insert = std::get_if<InsertPoint>(&edit)) {
-    if (const std::optional<ParkPoint> at =
-            stopPosition(world, OnSegment{insert->Segment, insert->Along})) {
-      appendJoinMark(mesh, *at);
-    }
-  } else if (const auto *deletePoint = std::get_if<DeletePoint>(&edit)) {
-    appendGhostDeletePoint(mesh, world, *deletePoint, edit);
-  } else if ((std::holds_alternative<DeleteSegment>(edit) ||
-              std::holds_alternative<DeleteBox>(edit)) &&
-             isAccepted(world, edit)) {
-    const EntityKey key = std::holds_alternative<DeleteSegment>(edit)
-                              ? std::get<DeleteSegment>(edit).Segment
-                              : std::get<DeleteBox>(edit).Box;
-    appendEntity(mesh, world, key, DELETE_TINT);
   }
+  if (accepted) {
+    appendDeleted(mesh, world, edit);
+  }
+  const std::vector<ParkSegment> edited = editedSegments(world, edit);
+  if (const auto *path = std::get_if<AddPath>(&edit); path != nullptr && edited.empty()) {
+    appendStraightPath(mesh, world, *path, ghostColor(accepted, pathColor(path->Kind)));
+  }
+  for (const ParkSegment &segment : edited) {
+    appendGhostSegment(mesh, segment.Kind, segment.Line, segment.Width,
+                       ghostColor(accepted, pathColor(segment.Kind)));
+    // A narrower ghost lies inside the path it narrows, in the same color, so its new sides are
+    // marked.
+    if (std::holds_alternative<SetSegmentWidth>(edit)) {
+      appendSides(mesh, segment, JOIN_MARK_COLOR);
+    }
+  }
+  appendJoinMarks(mesh, world, edit);
   if (candidate) {
     appendWalkways(mesh, *candidate, GHOST_ALPHA);
     appendStarvedMarks(mesh, *candidate, GHOST_ALPHA);

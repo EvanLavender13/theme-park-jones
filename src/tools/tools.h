@@ -31,6 +31,28 @@ inline constexpr double SNAP_REACH = 2.0;
 inline constexpr double FINISH_REACH = 1.0;
 // A press or hover this near a path point picks it, in meters.
 inline constexpr double POINT_REACH = 2.0;
+// Edit path keeps a corner's radius handle at least this far from its point, in meters.
+inline constexpr double RADIUS_HANDLE_DEPTH = 3.0;
+// A press or hover this near a radius handle takes it, in meters.
+inline constexpr double HANDLE_REACH = 1.0;
+// A press or hover this near a segment's side takes it, in meters.
+inline constexpr double SIDE_REACH = 0.5;
+// Edit path sets a segment's width between these, in meters.
+inline constexpr double MIN_PATH_WIDTH = 1.5;
+inline constexpr double MAX_PATH_WIDTH = 16.0;
+
+// What an Edit path handle sets: a corner's radius, or a segment's width.
+enum class HandleKind : uint8_t { Radius, Side };
+
+// A handle Edit path takes hold of: a corner's radius handle, keyed by the corner's point, at At,
+// or a segment's sides, keyed by the segment.
+struct EditHandle {
+  HandleKind Kind = HandleKind::Radius;
+  EntityKey Key = NULL_KEY;
+  ParkPoint At;
+
+  bool operator==(const EditHandle &) const = default;
+};
 
 // One tool and what it holds. Change it only through selectTool, movePointer, pressPointer, and
 // releasePointer.
@@ -56,6 +78,12 @@ struct ToolState {
   ParkPoint PointTo;
   // Holding with EditPath on a segment: the point the release inserts.
   std::optional<InsertPoint> Inserting;
+  // Holding with EditPath on a radius handle or a segment's sides.
+  std::optional<EditHandle> Grabbed;
+  // For a radius handle, how much deeper the arc's middle lay than the pointer at the press, along
+  // the corner's Toward. For a side, the width at the press less twice the pointer's distance from
+  // the ground line.
+  double GrabFrom = 0.0;
   // A path tool's stops so far.
   std::vector<PathStop> Drawn;
 };
@@ -93,6 +121,20 @@ std::optional<EntityKey> pointAt(const World &world, ParkPoint point);
 // kind with no stops drawn, leaving out the point and every segment at it, or a new point at the
 // place when no segment uses the point.
 PointTarget snapPoint(const World &world, EntityKey point, ParkPoint at);
+// Where the corner's radius handle lies.
+ParkPoint radiusHandleOf(const ParkCorner &corner);
+// The point of the corner whose radius handle lies nearest the point within HANDLE_REACH. Ties go
+// to the lower key.
+std::optional<EntityKey> radiusHandleAt(const World &world, ParkPoint point);
+// The segment with a ground line whose side lies nearest the point within SIDE_REACH. Ties go to
+// the lower key.
+std::optional<EntityKey> sideAt(const World &world, ParkPoint point);
+// Where every corner's radius handle lies, in key order of its point, while EditPath is chosen and
+// nothing is held. Empty otherwise.
+std::vector<ParkPoint> radiusHandles(const ToolState &tool, const World &world);
+// The radius handle or segment's sides under the pointer that a press with EditPath would take,
+// while nothing is held. None otherwise.
+std::optional<EditHandle> hoveredHandle(const ToolState &tool, const World &world);
 
 // Where a path tool's first click would start the path, its kind, and whether it would join a
 // point or segment there.

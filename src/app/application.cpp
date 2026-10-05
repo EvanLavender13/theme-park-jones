@@ -94,9 +94,13 @@ bool Application::runFrames() {
 
     const bool lastFrame = FrameLimit > 0 && frame >= FrameLimit;
     // The meshes are updated after the panels, so a change of the checkbox shows in this frame.
-    const PreviewLook look{Interactions.highlighted(Session.world()), Interactions.subject(),
-                           Ui.shown().FoodOverlay, Interactions.pathStart(Session.world()),
-                           Interactions.pathFinish(Session.world())};
+    const PreviewLook look{Interactions.highlighted(Session.world()),
+                           Interactions.subject(),
+                           Ui.shown().FoodOverlay,
+                           Interactions.pathStart(Session.world()),
+                           Interactions.pathFinish(Session.world()),
+                           Interactions.radiusHandles(Session.world()),
+                           Interactions.hoveredHandle(Session.world())};
     if ((Scene.syncLook(remade, look) &&
          !uploadPreviewMeshes(renderer, Session.world(), Scene.preview(), look)) ||
         !drawFrame(renderer, view, drawData, lastFrame ? CapturePath : nullptr)) {

@@ -11,6 +11,7 @@
 
 #include <optional>
 #include <stdint.h>
+#include <vector>
 
 namespace tpj {
 
@@ -42,6 +43,10 @@ public:
   [[nodiscard]] std::optional<PathStart> pathStart(const World &world) const;
   // Where a click would finish the drawn path, as pathFinish gives it.
   [[nodiscard]] std::optional<ParkPoint> pathFinish(const World &world) const;
+  // Where Edit path's radius handles lie, as radiusHandles gives them.
+  [[nodiscard]] std::vector<ParkPoint> radiusHandles(const World &world) const;
+  // The handle under the pointer, as hoveredHandle gives it.
+  [[nodiscard]] std::optional<EditHandle> hoveredHandle(const World &world) const;
 
 private:
   uint64_t Generation;

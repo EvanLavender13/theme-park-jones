@@ -24,14 +24,16 @@ struct WorldMeshes {
 };
 
 // What the ghost and overlay meshes are built from besides the preview: the tool's highlight, the
-// Inspector's subject, whether the food overlay shows, and where a path tool's first click would
-// start the path.
+// Inspector's subject, whether the food overlay shows, where a path tool's first click would start
+// the path, and Edit path's radius handles and the handle under the pointer.
 struct PreviewLook {
   std::optional<EntityKey> Highlight;
   std::optional<InspectorSubject> Inspected;
   bool FoodOverlay = false;
   std::optional<PathStart> Start;
   std::optional<ParkPoint> Finish;
+  std::vector<ParkPoint> Handles;
+  std::optional<EditHandle> Hovered;
 
   bool operator==(const PreviewLook &) const = default;
 };
