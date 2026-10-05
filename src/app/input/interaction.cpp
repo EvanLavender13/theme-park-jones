@@ -47,4 +47,8 @@ std::optional<PathStart> Interaction::pathStart(const World &world) const {
   return tpj::pathStart(Tool, world);
 }
 
+std::optional<ParkPoint> Interaction::pathFinish(const World &world) const {
+  return tpj::pathFinish(Tool, world);
+}
+
 } // namespace tpj

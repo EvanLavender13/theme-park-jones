@@ -355,6 +355,15 @@ std::optional<PathStart> pathStart(const ToolState &tool, const World &world) {
   return PathStart{*at, drawnKind(tool.Kind), !std::holds_alternative<NewPoint>(stop)};
 }
 
+std::optional<ParkPoint> pathFinish(const ToolState &tool, const World &world) {
+  if (!isPathTool(tool.Kind) || tool.Drawn.size() < 2 || !tool.Pointer || nextStop(tool, world)) {
+    return std::nullopt;
+  }
+  const std::optional<std::vector<ParkPoint>> at =
+      stopPositions(world, AddPath{drawnKind(tool.Kind), tool.Drawn});
+  return at ? std::optional<ParkPoint>(at->back()) : std::nullopt;
+}
+
 std::optional<EntityKey> highlightedEntity(const ToolState &tool, const World &world) {
   if (tool.Kind == ToolKind::MoveBox && !tool.Holding && tool.Pointer) {
     return boxAt(world, *tool.Pointer);

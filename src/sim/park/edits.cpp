@@ -338,6 +338,21 @@ void markCrossing(PathPlan &plan, size_t point) {
   }
 }
 
+// The point for a crossing: a point the plan already has within MIN_SEGMENT_LENGTH of it, as where
+// a path doubles back across a segment, or else a new one.
+size_t crossingPoint(PathPlan &plan, ParkPoint at) {
+  const auto near = std::ranges::find_if(plan.Points, [at](const PlanPoint &point) {
+    const double dx = point.At.X - at.X;
+    const double dz = point.At.Z - at.Z;
+    return dx * dx + dz * dz <= MIN_SEGMENT_LENGTH * MIN_SEGMENT_LENGTH;
+  });
+  if (near != plan.Points.end()) {
+    return static_cast<size_t>(near - plan.Points.begin());
+  }
+  plan.Points.push_back(PlanPoint{at, NULL_KEY});
+  return plan.Points.size() - 1;
+}
+
 // The plan's stop points, and the points of OnSegment and OnDrawnSegment stops on the segments
 // they name.
 PathPlan planStops(const AddPath &command, const std::vector<ParkPoint> &positions) {
@@ -385,8 +400,7 @@ void meetWorldSegment(PathPlan &plan, size_t k, const ParkSegment &segment) {
     point = pointEntry(plan, meeting->End == 0 ? segment.From : segment.To, meeting->At);
     placed = place(plan.Drawn[k], point, meeting->AlongA);
   } else {
-    plan.Points.push_back(PlanPoint{meeting->At, NULL_KEY});
-    point = plan.Points.size() - 1;
+    point = crossingPoint(plan, meeting->At);
     placed = place(plan.Drawn[k], point, meeting->AlongA);
     placed = place(splitOf(plan, segment.Key), point, meeting->AlongB) || placed;
   }
@@ -412,8 +426,7 @@ void meetDrawnSegment(PathPlan &plan, size_t m, size_t k) {
     point = plan.Stops[k + meeting->End];
     placed = place(plan.Drawn[m], point, meeting->AlongA);
   } else {
-    plan.Points.push_back(PlanPoint{meeting->At, NULL_KEY});
-    point = plan.Points.size() - 1;
+    point = crossingPoint(plan, meeting->At);
     placed = place(plan.Drawn[m], point, meeting->AlongA);
     placed = place(plan.Drawn[k], point, meeting->AlongB) || placed;
   }

@@ -31,6 +31,7 @@ struct PreviewLook {
   std::optional<InspectorSubject> Inspected;
   bool FoodOverlay = false;
   std::optional<PathStart> Start;
+  std::optional<ParkPoint> Finish;
 
   bool operator==(const PreviewLook &) const = default;
 };

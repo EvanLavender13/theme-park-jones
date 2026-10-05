@@ -93,6 +93,10 @@ struct PathStart {
 // or the pointer is off the ground.
 std::optional<PathStart> pathStart(const ToolState &tool, const World &world);
 
+// Where a press would finish and commit the drawn path: its last stop's position, when at least two
+// stops are drawn and the pointer lies within FINISH_REACH of it. None otherwise.
+std::optional<ParkPoint> pathFinish(const ToolState &tool, const World &world);
+
 } // namespace tpj
 
 #endif
