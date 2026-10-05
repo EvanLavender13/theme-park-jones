@@ -116,19 +116,18 @@ It is useful on its own. A park can be drawn, reshaped, saved, and captured befo
 ## Milestones
 
 1. `sketch-a-park`: the new-park template with its entrance, and guest and backstage paths drawn by clicking points. Paths are centripetal Catmull-Rom curves with endpoint snapping. The player places, moves, and deletes shop and depot boxes. Ghosts show the overlap check, and edits are commands applied between ticks. Paths and boxes render, parks save and load, and the app has the --park, --ticks, and --hash options. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value.
+2. `path-network`: paths become a network of shared points joined by straight segments, each with its own width, and each bend with its own corner radius. The player draws, joins, splits, and reshapes them with visible snaps that one key suppresses, and undoes and redoes every edit. Joined paths draw as one paved surface, and boxes are refused against that surface as drawn. Shops and depots placed beside a path face it. Member of the good-paths slice. Depends on: sketch-a-park, and shared-medium's carrier-widths.
 
 Later milestones are drawn from the deepening candidates once the slice has been played.
 
 ## Deepening candidates
 
-- Reshaping paths: drag a path's points, insert and remove points, and split or join paths.
-- Undo and redo. Commands are values, so the history can be a list of them.
 - Freehand strokes: the player sketches a path by dragging, and the game simplifies and smooths it into the same curve intent.
-- Snapping guides: parallel offsets, angle hints, and alignment with nearby boxes. The game offers them but doesn't force them.
 - Moving the entrance, and parks with several entrances.
 - Box sizes and shapes: resizable footprints, and later procedural building forms resolved from context (decision 0004, docs/design-notes.md). Gated on: the slice's boxes working as shops.
 - Paths on terrain: paths that follow the ground, or climb it as ramps and stairs. Gated on: terrain editing.
-- Path styles and widths as intent, with queue lines as a kind of path.
+- Path styles as intent, with queue lines as a kind of path.
+- Snapping guides beyond path-network's: parallel offsets and alignment with nearby boxes.
 - Stamps beyond a square: other shapes, stamps the player saves from a selection, and stamps that stay grouped so the player can move and rescale them together.
 - Frontage as saved intent: a box is attached to a path by a distance along it, a side, and a setback. When the player reshapes the path, its boxes move with it.
 - A row tool that lays boxes along a stretch of path in one drag, after Cities: Skylines 2's Line Tool.

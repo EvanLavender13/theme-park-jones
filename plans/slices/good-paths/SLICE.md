@@ -93,7 +93,7 @@ Simulation output changes on purpose, because route lengths change from today's 
 - Planet Coaster 2's problems come from one merged surface: fusing by nearness, seams, delete overreach, and a snap the off switch misses. Here intent is points and segments, joins happen only at visible snaps and marked crossings, and the surface is derived.
 - Snaps feel right when their reach is in screen pixels, the smallest correction wins, a snap releases a little farther out than it caught, every satisfied guide is drawn, and one key turns them all off (SketchUp, Figma, tldraw).
 - Cities: Skylines splits a road where another crosses it and removes points left with nothing. Neither it nor its sequel can merge two segments at a point or undo without mods.
-- Build the surface at each point the way road games build intersections. Draw edge strips first and fills on top, so the edge line shows only on the outline. Clipper2's offset-and-back rounding was rejected because it also joins nearby separate paths.
+- Build the surface at each point the way road games build intersections. Each piece marks which of its edges are outline, and edge strips are drawn along those edges over the fills, so joins show no line and unjoined overlaps do (plans/effortless-building/path-network/RESEARCH.md). Clipper2's offset-and-back rounding was rejected because it also joins nearby separate paths.
 - A fixed sideways offset per guest from a hash of its key, with a slow drift, spreads guests across a path without crowd simulation.
 
 Depth is in RESEARCH.md.
