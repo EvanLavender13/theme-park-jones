@@ -1,20 +1,35 @@
 tpj-park 1
 seed 1
-tick 1921
-next-key 41
+tick 2021
+next-key 57
 
 [entrance]
 1 x=0 z=126.5 facing-x=0 facing-z=-1
 
-[path]
-2 kind=guest points=[{x=0 z=123} {x=0 z=100}]
-3 kind=guest points=[{x=0 z=110} {x=-30 z=110}]
-4 kind=guest points=[{x=-15 z=120} {x=-15 z=95}]
-5 kind=guest points=[{x=0 z=100} {x=20 z=100} {x=30 z=80}]
+[path-point]
+2 x=0 z=123 radius=3
+3 x=0 z=110 radius=3
+4 x=0 z=100 radius=3
+5 x=-15 z=110 radius=3
+6 x=-30 z=110 radius=3
+7 x=-15 z=120 radius=3
+8 x=-15 z=95 radius=3
+9 x=20 z=100 radius=3
+10 x=30 z=80 radius=3
+
+[path-segment]
+13 kind=guest from=2 to=3 width=3
+14 kind=guest from=3 to=4 width=3
+15 kind=guest from=3 to=5 width=3
+16 kind=guest from=5 to=6 width=3
+17 kind=guest from=7 to=5 width=3
+18 kind=guest from=5 to=8 width=3
+19 kind=guest from=4 to=9 width=3
+20 kind=guest from=9 to=10 width=3
 
 [box]
-7 kind=shop x=6.5 z=115 facing-x=-1 facing-z=0
-8 kind=depot x=12 z=80 facing-x=0 facing-z=1
+22 kind=shop x=6.5 z=115 facing-x=-1 facing-z=0
+23 kind=depot x=12 z=80 facing-x=0 facing-z=1
 
 [guest-route-distance-stepped]
 15522747434582363266 readable=[] pending=[]
@@ -26,53 +41,54 @@ next-key 41
 10571414569661708045 packets=[] stocks=[] created=40 consumed=[{cause=15009999800679116830 units=40}]
 
 [supplies-ledger]
-9330130345797689738 packets=[{arrival=2417 from=8 to=7 handle=7 units=16 delay=503 returning=false}] stocks=[{endpoint=7 handle=7 units=8}] created=40 consumed=[{cause=5294217641027253908 units=16}]
+9330130345797689738 packets=[{arrival=2517 from=23 to=22 handle=22 units=16 delay=503 returning=false}] stocks=[{endpoint=22 handle=22 units=8}] created=40 consumed=[{cause=5294217641027253908 units=16}]
 
 [guest-visits-ledger]
-9337894828722460918 packets=[{arrival=1973 from=7 to=12 handle=12 units=1 delay=90 returning=false}] stocks=[{endpoint=7 handle=21 units=1} {endpoint=7 handle=22 units=1} {endpoint=7 handle=24 units=1} {endpoint=7 handle=31 units=1}] created=20 consumed=[{cause=2651219658226310454 units=15}]
+9337894828722460918 packets=[{arrival=2073 from=22 to=30 handle=30 units=1 delay=90 returning=false}] stocks=[{endpoint=22 handle=26 units=1} {endpoint=22 handle=29 units=1} {endpoint=22 handle=35 units=1} {endpoint=22 handle=42 units=1} {endpoint=22 handle=43 units=1}] created=21 consumed=[{cause=2651219658226310454 units=15}]
 
 [meals-ledger]
-10950212800986056559 packets=[{arrival=1973 from=7 to=12 handle=12 units=1 delay=90 returning=false}] stocks=[] created=16 consumed=[{cause=18178447431631752357 units=15}]
+10950212800986056559 packets=[{arrival=2073 from=22 to=30 handle=30 units=1 delay=90 returning=false}] stocks=[] created=16 consumed=[{cause=18178447431631752357 units=15}]
 
 [shop-service]
-7 queue=[21 22 31 24] free-at=1973
+22 queue=[42 29 43 35 26] free-at=2073
 
 [food-offer-stepped]
 12622604716256766672 readable=[] pending=[]
 
 [guest]
-9 at={carrier=4 distance=2.746666666666499} forward=true activity=heading-to-shop hunger=0.665983156776696 hunger-rate=0.0005134796891107954 stay-until=2373 target=7 meal-relief=0.5 meals-eaten=1 last-meal={tick=623 before=0.48364328964767 after=0}
-10 at={carrier=5 distance=33.84666666666649} forward=true activity=wandering hunger=0.6830866029771334 hunger-rate=0.00048771316359266857 stay-until=2596 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=713 before=0.5944168145207794 after=0.09441681452077944}
-11 at={carrier=17408031415368500868 distance=1.6466666666666683} forward=true activity=wandering hunger=0.4864223849005372 hunger-rate=0.0006754244170590654 stay-until=2100 target=0 meal-relief=0.5 meals-eaten=2 last-meal={tick=1883 before=0.9614316814693509 after=0.4614316814693509}
-12 at={carrier=17408031415368500868 distance=0} forward=false activity=waiting hunger=0.7531028091572451 hunger-rate=0.0007106536272611235 stay-until=3323 target=7 meal-relief=0.5 meals-eaten=1 last-meal={tick=893 before=0.5232615339600837 after=0.02326153396008368}
-13 at={carrier=17125955698113728469 distance=0.1466666666666253} forward=true activity=wandering hunger=0.37172955710593386 hunger-rate=0.0003967231132400554 stay-until=3513 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=983 before=0.44560759164802416 after=0}
-14 at={carrier=2 distance=17.8466666666666} forward=true activity=wandering hunger=0.35161713546102097 hunger-rate=0.0007040720226105604 stay-until=2539 target=0 meal-relief=0.5 meals-eaten=2 last-meal={tick=1613 before=0.6354670245195774 after=0.13546702451957737}
-15 at={carrier=3 distance=0.9466666666666355} forward=true activity=wandering hunger=0.2898176247667095 hunger-rate=0.0003819331337395309 stay-until=2820 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1703 before=0.7069381347452336 after=0.2069381347452336}
-16 at={carrier=3 distance=13.453333333333452} forward=false activity=heading-to-shop hunger=0.6704877166653636 hunger-rate=0.0006177481072705282 stay-until=2372 target=7 meal-relief=0.5 meals-eaten=1 last-meal={tick=1343 before=0.8140470587702534 after=0.3140470587702534}
-17 at={carrier=5 distance=14.34666666666649} forward=true activity=wandering hunger=0.33289325353294286 hunger-rate=0.00043975330717694385 stay-until=3305 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1163 before=0.3799356974853981 after=0}
-18 at={carrier=4 distance=4.553333333333468} forward=false activity=wandering hunger=0.560443769008823 hunger-rate=0.0005261012188072131 stay-until=2712 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1253 before=0.709534256064415 after=0.209534256064415}
-19 at={carrier=4 distance=15.356666666667003} forward=false activity=heading-to-shop hunger=0.8980773244713317 hunger-rate=0.0005943719067571508 stay-until=2833 target=7 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-20 at={carrier=17408031415368500868 distance=1.4566666666669086} forward=false activity=heading-to-shop hunger=1 hunger-rate=0.0006354381660276247 stay-until=3040 target=7 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-21 at={carrier=17408031415368500868 distance=0} forward=false activity=waiting hunger=0.7251383202209793 hunger-rate=0.0007362107017392937 stay-until=3621 target=7 meal-relief=0.5 meals-eaten=1 last-meal={tick=1433 before=0.8666037084739269 after=0.36660370847392687}
-22 at={carrier=17408031415368500868 distance=0} forward=false activity=waiting hunger=0.8636120989518238 hunger-rate=0.0006073131977452984 stay-until=3131 target=7 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-23 at={carrier=3 distance=8.746666666666608} forward=true activity=wandering hunger=0.4096625959874941 hunger-rate=0.0006922298680493226 stay-until=3700 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1523 before=0.6348473383719094 after=0.13484733837190943}
-24 at={carrier=17408031415368500868 distance=0} forward=false activity=waiting hunger=0.7448621341269437 hunger-rate=0.0007243251145334046 stay-until=4197 target=7 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-25 at={carrier=5 distance=14.04333333333313} forward=true activity=wandering hunger=0.6512607684366175 hunger-rate=0.0004877057645953935 stay-until=3154 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-26 at={carrier=2 distance=5.953333333333343} forward=false activity=wandering hunger=0.29452445079059847 hunger-rate=0.0004894339771341306 stay-until=3478 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1793 before=0.7323663356945633 after=0.23236633569456333}
-27 at={carrier=3 distance=11.15666666666683} forward=false activity=heading-to-shop hunger=0.4109588924264856 hunger-rate=0.00042293967337947067 stay-until=3449 target=7 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-28 at={carrier=2 distance=16.75666666666685} forward=false activity=heading-to-shop hunger=0.6354947917104681 hunger-rate=0.000699152061472732 stay-until=3684 target=7 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-29 at={carrier=2 distance=6.356666666666762} forward=false activity=wandering hunger=0.47963732850456847 hunger-rate=0.00045390533363081134 stay-until=4068 target=0 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-30 at={carrier=2 distance=8.956666666666743} forward=false activity=heading-to-shop hunger=0.5318220462156529 hunger-rate=0.0006634627934703151 stay-until=4703 target=7 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-31 at={carrier=17408031415368500868 distance=0} forward=false activity=waiting hunger=0.58198401573516 hunger-rate=0.000649954711999249 stay-until=4422 target=7 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-32 at={carrier=2 distance=4.156666666666704} forward=false activity=wandering hunger=0.38393431031176484 hunger-rate=0.00038325392142162055 stay-until=4963 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-33 at={carrier=2 distance=9.243333333333316} forward=true activity=wandering hunger=0.38230690194032735 hunger-rate=0.00046896564580271687 stay-until=4062 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-34 at={carrier=2 distance=13.64333333333327} forward=true activity=wandering hunger=0.39119573578947836 hunger-rate=0.0005636670586179319 stay-until=4671 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-35 at={carrier=17408031415368500868 distance=0.45666666666668043} forward=false activity=heading-to-shop hunger=0.5044680661338606 hunger-rate=0.0006965164332598948 stay-until=4360 target=7 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-36 at={carrier=2 distance=8.44333333333331} forward=true activity=wandering hunger=0.22009324059156893 hunger-rate=0.0003840202610614541 stay-until=4700 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-37 at={carrier=2 distance=5.843333333333329} forward=true activity=wandering hunger=0.3653872510871343 hunger-rate=0.0005292150422724892 stay-until=5215 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-38 at={carrier=2 distance=3.2433333333333416} forward=true activity=wandering hunger=0.38837875171274466 hunger-rate=0.00038912346062795706 stay-until=3899 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-39 at={carrier=2 distance=0.6433333333333359} forward=true activity=wandering hunger=0.05391353311356501 hunger-rate=0.0005378717541818473 stay-until=5196 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-40 at={carrier=17125955698113728469 distance=0.043333333333333335} forward=true activity=wandering hunger=0.011262166398632664 hunger-rate=0.0005729318112013243 stay-until=4756 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+24 at={carrier=19 distance=14.346666666666527} forward=true activity=wandering hunger=0.5553517622630835 hunger-rate=0.0005061130061392921 stay-until=2023 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1263 before=0.6722242166156379 after=0.17222421661563792}
+25 at={carrier=15 distance=7.920000000000313} forward=false activity=heading-to-shop hunger=0.8632087283329571 hunger-rate=0.0005549191854298734 stay-until=2925 target=22 meal-relief=0.5 meals-eaten=1 last-meal={tick=623 before=0.587986626287451 after=0.08798662628745102}
+26 at={carrier=16482096002496794469 distance=0} forward=false activity=waiting hunger=0.5863288132726695 hunger-rate=0.0005676486746201219 stay-until=2889 target=22 meal-relief=0.5 meals-eaten=1 last-meal={tick=1803 before=0.9631490508801048 after=0.46314905088010483}
+27 at={carrier=20 distance=12.544692883329546} forward=false activity=wandering hunger=0.8862453758705796 hunger-rate=0.0003718673297996839 stay-until=2683 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+28 at={carrier=20 distance=18.17999999999972} forward=true activity=wandering hunger=0.620073426381329 hunger-rate=0.00047442496280131414 stay-until=3117 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=713 before=0.21715772324636828 after=0}
+29 at={carrier=16482096002496794469 distance=0} forward=false activity=waiting hunger=0.732839473871866 hunger-rate=0.0006123999122432147 stay-until=3676 target=22 meal-relief=0.5 meals-eaten=1 last-meal={tick=993 before=0.603904763998067 after=0.10390476399806703}
+30 at={carrier=16482096002496794469 distance=0} forward=false activity=waiting hunger=0.6022105879658777 hunger-rate=0.0005026799565658477 stay-until=3819 target=22 meal-relief=0.5 meals-eaten=1 last-meal={tick=822 before=0.4924214826293118 after=0}
+31 at={carrier=14 distance=5.146666666666605} forward=true activity=wandering hunger=0.3685559123413422 hunger-rate=0.00039333608574317 stay-until=2398 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1083 before=0.29425935506129763 after=0}
+32 at={carrier=16 distance=2.8233333333336113} forward=false activity=heading-to-shop hunger=0.6911406395825725 hunger-rate=0.0003843967837438664 stay-until=3044 target=22 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+33 at={carrier=13 distance=9.54666666666662} forward=true activity=wandering hunger=0.2848333713507241 hunger-rate=0.0003807819917606713 stay-until=3345 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1443 before=0.5651221621048174 after=0.06512216210481736}
+34 at={carrier=13 distance=1.7466666666666568} forward=true activity=wandering hunger=0.17204571982061378 hunger-rate=0.00043336453355318047 stay-until=4058 target=0 meal-relief=0.5 meals-eaten=2 last-meal={tick=1623 before=0.19501404009893303 after=0}
+35 at={carrier=16482096002496794469 distance=0} forward=false activity=waiting hunger=0.9102038719207606 hunger-rate=0.000696019021729021 stay-until=4011 target=22 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+36 at={carrier=14 distance=0.4466666666665945} forward=true activity=wandering hunger=0.3926572984498369 hunger-rate=0.0005213604928280438 stay-until=3478 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1353 before=0.5449098497335342 after=0.04490984973353418}
+37 at={carrier=13 distance=5.6466666666666505} forward=true activity=wandering hunger=0.42220175774803775 hunger-rate=0.0004741658009580773 stay-until=3926 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1533 before=0.6912830126814445 after=0.19128301268144454}
+38 at={carrier=13 distance=8.153333333333402} forward=false activity=heading-to-shop hunger=0.6331422259031039 hunger-rate=0.0007112155709679479 stay-until=2912 target=22 meal-relief=0.5 meals-eaten=1 last-meal={tick=1713 before=0.9147990456159399 after=0.41479904561593994}
+39 at={carrier=13 distance=5.953333333333343} forward=false activity=wandering hunger=0.295721431120896 hunger-rate=0.0005750517105128874 stay-until=4084 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1893 before=0.722689863885761 after=0.22268986388576095}
+40 at={carrier=16482096002496794469 distance=1.6466666666666683} forward=true activity=wandering hunger=0.22998076276716517 hunger-rate=0.0005438118020494386 stay-until=3688 target=0 meal-relief=0.5 meals-eaten=1 last-meal={tick=1983 before=0.7098597260913362 after=0.20985972609133619}
+41 at={carrier=15 distance=4.223333333333549} forward=false activity=heading-to-shop hunger=0.9829133488705664 hunger-rate=0.0007233466515139793 stay-until=3662 target=22 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+42 at={carrier=16482096002496794469 distance=0} forward=false activity=waiting hunger=0.9518054274228178 hunger-rate=0.0007010806498009814 stay-until=3583 target=22 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+43 at={carrier=16482096002496794469 distance=0} forward=false activity=waiting hunger=0.8850311498391334 hunger-rate=0.0006115769436733999 stay-until=4730 target=22 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+44 at={carrier=15 distance=12.02333333333349} forward=false activity=heading-to-shop hunger=0.6192671046037718 hunger-rate=0.0006311875275223592 stay-until=3237 target=22 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+45 at={carrier=15 distance=14.62333333333347} forward=false activity=heading-to-shop hunger=0.679009993232881 hunger-rate=0.0005262363680948589 stay-until=4886 target=22 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+46 at={carrier=14 distance=5.776666666666616} forward=true activity=wandering hunger=0.4522653992659864 hunger-rate=0.0006868848001400686 stay-until=4491 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+47 at={carrier=13 distance=0.17666666666663655} forward=true activity=heading-to-shop hunger=0.4729337914240969 hunger-rate=0.0007245011599156781 stay-until=4030 target=22 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+48 at={carrier=14 distance=0.5766666666666211} forward=true activity=wandering hunger=0.39035826178246963 hunger-rate=0.0003712891044198926 stay-until=3754 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+49 at={carrier=14 distance=4.976666666666609} forward=true activity=wandering hunger=0.5289617575603572 hunger-rate=0.0006827949531232156 stay-until=3579 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+50 at={carrier=14 distance=2.3766666666666123} forward=true activity=wandering hunger=0.46122789767275746 hunger-rate=0.0006534531149488819 stay-until=3767 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+51 at={carrier=13 distance=12.77666666666661} forward=true activity=wandering hunger=0.24306496227524357 hunger-rate=0.0006543003855709772 stay-until=3982 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+52 at={carrier=13 distance=10.17666666666663} forward=true activity=wandering hunger=0.46170638167159983 hunger-rate=0.000376491691822184 stay-until=4022 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+53 at={carrier=13 distance=7.576666666666649} forward=true activity=wandering hunger=0.48558749856311006 hunger-rate=0.0005919738711965678 stay-until=4602 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+54 at={carrier=13 distance=4.976666666666669} forward=true activity=wandering hunger=0.4476106469145991 hunger-rate=0.0006627803828414644 stay-until=4961 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+55 at={carrier=13 distance=2.3766666666666727} forward=true activity=wandering hunger=0.0867937560903267 hunger-rate=0.00048103315204039407 stay-until=3963 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+56 at={carrier=17125955698113728469 distance=1.7766666666666686} forward=true activity=wandering hunger=0.17092999993394153 hunger-rate=0.0004890201271125952 stay-until=5093 target=0 meal-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
 
 [hungry-footfall-kept]
-11741940842860801778 slots=[{source=11741940842860801778 entries=[{at={carrier=2 distance=4} value=1.5804762814130038 tick=1921} {at={carrier=2 distance=10.5} value=1.3731426192891742 tick=1921} {at={carrier=2 distance=18} value=0.7986350424330882 tick=1921} {at={carrier=3 distance=7.5} value=1.6498325311541728 tick=1921} {at={carrier=4 distance=4.999999999999993} value=0.5596148055475899 tick=1921} {at={carrier=4 distance=17.499999999999993} value=0.6631911631157121 tick=1921} {at={carrier=5 distance=21.493901542391857} value=1.0971541351663001 tick=1921} {at={carrier=17125955698113728469 distance=1} value=0.28555251088985684 tick=1921} {at={carrier=17408031415368500868 distance=1.75} value=4.459100340437584 tick=1921}]}] pending=[]
+11741940842860801778 slots=[{source=11741940842860801778 entries=[{at={carrier=13 distance=4} value=1.831219791468978 tick=2021} {at={carrier=13 distance=10.5} value=1.1645179991678665 tick=2021} {at={carrier=14 distance=5} value=0.5927558923026197 tick=2021} {at={carrier=15 distance=7.5} value=1.9203717912924347 tick=2021} {at={carrier=16 distance=7.5} value=0.5350768254256734 tick=2021} {at={carrier=18 distance=7.5} value=0.5842291082878607 tick=1857} {at={carrier=19 distance=10} value=0.42750421428330015 tick=2021} {at={carrier=20 distance=11.180339887498949} value=1.1429127504152277 tick=2021} {at={carrier=16482096002496794469 distance=1.75} value=5.231978939458717 tick=2021} {at={carrier=17125955698113728469 distance=1} value=0.3372081943277103 tick=2021}]}] pending=[]

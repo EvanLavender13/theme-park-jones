@@ -43,4 +43,8 @@ std::optional<EntityKey> Interaction::highlighted(const World &world) const {
   return highlightedEntity(Tool, world);
 }
 
+std::optional<PathStart> Interaction::pathStart(const World &world) const {
+  return tpj::pathStart(Tool, world);
+}
+
 } // namespace tpj

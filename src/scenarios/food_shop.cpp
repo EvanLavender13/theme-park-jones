@@ -89,15 +89,17 @@ void stepGuests(World &world) {
   sendUnits<GuestVisits>(world, key, shops[pick], key, 1, walk);
 }
 
-// The backstage path is deleted CUT_TICK ticks into every CUT_PERIOD and drawn again at the start
-// of the next.
+// The backstage segment is deleted CUT_TICK ticks into every CUT_PERIOD and drawn again at the
+// start of the next.
 constexpr uint64_t CUT_PERIOD = 1200;
 constexpr uint64_t CUT_TICK = 600;
 
-// tests/parks/routes.park's backstage path, which joins its shop's back door to its depot.
-AddPath supplyPath() { return AddPath{PathKind::Backstage, {{12.0, 122.0}, {12.0, 87.0}}}; }
+// tests/parks/routes.park's backstage segment, which joins its shop's back door to its depot.
+AddPath supplyPath() {
+  return AddPath{PathKind::Backstage, {NewPoint{{12.0, 122.0}}, NewPoint{{12.0, 87.0}}}};
+}
 
-// routes.park's shop, depot, and backstage path, and a shop far from any backstage path.
+// routes.park's shop, depot, and backstage segment, and a shop far from any backstage segment.
 void populateFoodShop(World &world) {
   applyCommand(world, AddBox{BoxKind::Shop, Pose{6.5, 115.0, -1.0, 0.0}});
   applyCommand(world, AddBox{BoxKind::Depot, Pose{12.0, 80.0, 0.0, 1.0}});
@@ -105,21 +107,21 @@ void populateFoodShop(World &world) {
   applyCommand(world, supplyPath());
 }
 
-// Deletes the backstage path CUT_TICK ticks into each CUT_PERIOD, and draws it again at the start
-// of the next.
+// Deletes the backstage segment CUT_TICK ticks into each CUT_PERIOD, and draws it again at the
+// start of the next.
 void queueCut(const World &world, CommandQueue &commands) {
   const uint64_t phase = world.Tick % CUT_PERIOD;
   if (phase != CUT_TICK && (phase != 0 || world.Tick == 0)) {
     return;
   }
   std::vector<EntityKey> backstage;
-  for (const ParkPath &path : parkPaths(world)) {
-    if (path.Kind == PathKind::Backstage) {
-      backstage.push_back(path.Key);
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Kind == PathKind::Backstage) {
+      backstage.push_back(segment.Key);
     }
   }
   if (phase == CUT_TICK && !backstage.empty()) {
-    commands.push(DeletePath{backstage.front()});
+    commands.push(DeleteSegment{backstage.front()});
   } else if (phase == 0 && backstage.empty()) {
     commands.push(supplyPath());
   }

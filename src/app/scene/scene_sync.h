@@ -6,6 +6,7 @@
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/world.h"
+#include "tools/tools.h"
 
 #include <optional>
 #include <stdint.h>
@@ -23,11 +24,13 @@ struct WorldMeshes {
 };
 
 // What the ghost and overlay meshes are built from besides the preview: the tool's highlight, the
-// Inspector's subject, and whether the food overlay shows.
+// Inspector's subject, whether the food overlay shows, and where a path tool's first click would
+// start the path.
 struct PreviewLook {
   std::optional<EntityKey> Highlight;
   std::optional<InspectorSubject> Inspected;
   bool FoodOverlay = false;
+  std::optional<PathStart> Start;
 
   bool operator==(const PreviewLook &) const = default;
 };
@@ -55,7 +58,7 @@ private:
   // The intent a park mesh was built from.
   struct DrawnIntent {
     std::vector<ParkEntrance> Entrances;
-    std::vector<ParkPath> Paths;
+    std::vector<ParkSegment> Segments;
     std::vector<ParkBox> Boxes;
 
     bool operator==(const DrawnIntent &) const = default;

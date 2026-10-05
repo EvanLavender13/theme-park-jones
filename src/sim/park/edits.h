@@ -7,6 +7,8 @@
 #include "sim/schema.h"
 #include "sim/world.h"
 
+#include <optional>
+#include <stddef.h>
 #include <variant>
 #include <vector>
 
@@ -15,10 +17,51 @@ namespace tpj {
 // Conflicts no deeper than this are contact, not overlap.
 inline constexpr double CONTACT_TOLERANCE = 0.001;
 
-// A path of the kind through the points, which the path keeps as keptPoints gives them.
+// A drawn path's stop at a new point.
+struct NewPoint {
+  ParkPoint At;
+
+  bool operator==(const NewPoint &) const = default;
+};
+
+// A drawn path's stop at an existing path point.
+struct OnPoint {
+  EntityKey Point = NULL_KEY;
+
+  bool operator==(const OnPoint &) const = default;
+};
+
+// A drawn path's stop on an existing segment, Along of the way from its From point to its To point.
+struct OnSegment {
+  EntityKey Segment = NULL_KEY;
+  double Along = 0.0;
+
+  bool operator==(const OnSegment &) const = default;
+};
+
+// A drawn path's stop at the point an earlier stop of the same path makes, given by that stop's
+// index, as when a path closes a loop on its own start.
+struct RepeatStop {
+  size_t Stop = 0;
+
+  bool operator==(const RepeatStop &) const = default;
+};
+
+// A drawn path's stop on one of its own earlier segments, the one from stop Stop to stop Stop + 1,
+// Along of the way from the first to the second.
+struct OnDrawnSegment {
+  size_t Stop = 0;
+  double Along = 0.0;
+
+  bool operator==(const OnDrawnSegment &) const = default;
+};
+
+using PathStop = std::variant<NewPoint, OnPoint, OnSegment, RepeatStop, OnDrawnSegment>;
+
+// A path of the kind through the stops, in order, joining the points and segments they name.
 struct AddPath {
   PathKind Kind = PathKind::Guest;
-  std::vector<ParkPoint> Points;
+  std::vector<PathStop> Stops;
 
   bool operator==(const AddPath &) const = default;
 };
@@ -39,10 +82,10 @@ struct MoveBox {
   bool operator==(const MoveBox &) const = default;
 };
 
-struct DeletePath {
-  EntityKey Path = NULL_KEY;
+struct DeleteSegment {
+  EntityKey Segment = NULL_KEY;
 
-  bool operator==(const DeletePath &) const = default;
+  bool operator==(const DeleteSegment &) const = default;
 };
 
 struct DeleteBox {
@@ -51,19 +94,29 @@ struct DeleteBox {
   bool operator==(const DeleteBox &) const = default;
 };
 
-// Registers AddPath, AddBox, MoveBox, DeletePath, and DeleteBox, in that order.
+// Registers AddPath, AddBox, MoveBox, DeleteSegment, and DeleteBox, in that order.
 void addParkEdits(WorldSchema &schema);
 
 // A tentative or committed edit to park intent: one of the five commands.
-using ParkEdit = std::variant<AddPath, AddBox, MoveBox, DeletePath, DeleteBox>;
+using ParkEdit = std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox>;
+
+// The stop's ground position: a NewPoint's own, an OnPoint's point's, or the place Along of the way
+// from an OnSegment's segment's From point to its To point. None when the stop names no path point,
+// or no segment whose two ends are path points, and for a RepeatStop or an OnDrawnSegment, which
+// only its path places.
+std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop);
+// Each of the path's stops' ground positions, a RepeatStop's being its earlier stop's, and an
+// OnDrawnSegment's the place Along of the way between its two stops. None when a stop has none, or
+// a RepeatStop or an OnDrawnSegment names a stop that is not earlier.
+std::optional<std::vector<ParkPoint>> stopPositions(const World &world, const AddPath &path);
 
 // Whether the command would be applied to the world: it describes a physical object, names what it
-// acts on, and conflicts with nothing: no footprints overlap, no path comes within half its width
-// of a footprint, and nothing leaves the park's square.
+// acts on, and conflicts with nothing: no footprints overlap, no segment comes within half its
+// width of a footprint, and nothing leaves the park's square.
 bool isAccepted(const World &world, const AddPath &command);
 bool isAccepted(const World &world, const AddBox &command);
 bool isAccepted(const World &world, const MoveBox &command);
-bool isAccepted(const World &world, const DeletePath &command);
+bool isAccepted(const World &world, const DeleteSegment &command);
 bool isAccepted(const World &world, const DeleteBox &command);
 
 // Whether the command the edit holds would be applied to the world.
@@ -77,7 +130,7 @@ void queueEdit(CommandQueue &queue, const ParkEdit &edit);
 void applyCommand(World &world, const AddPath &command);
 void applyCommand(World &world, const AddBox &command);
 void applyCommand(World &world, const MoveBox &command);
-void applyCommand(World &world, const DeletePath &command);
+void applyCommand(World &world, const DeleteSegment &command);
 void applyCommand(World &world, const DeleteBox &command);
 
 // Whether every solid and line has its geometry, stays in the park, and conflicts with no other.

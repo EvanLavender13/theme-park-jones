@@ -21,9 +21,9 @@ The capability never finishes. It grows with each new kind of stroke, each infer
 
 A new park is flat ground with an entrance at the middle of one edge and a short guest path leading in. Both are intent. The template is fixed. Moving the entrance is a deepening candidate.
 
-The player draws a guest path or a backstage path by clicking points. The path is a centripetal Catmull-Rom curve through those points. It shows as a ghost while the player draws, and it is committed when they finish.
+The player draws a guest path or a backstage path by clicking points. The path is a run of straight segments between those points. It shows as a ghost while the player draws, and it is committed when they finish.
 
-If an endpoint is within snapping reach of an existing path of the same kind, it snaps onto that path. The junction that navigable-networks derives is then the one the player meant.
+If a point is within snapping reach of a point or segment of the same kind, the path joins it there, and a segment splits where it is joined. The junction that navigable-networks derives is then the one the player meant.
 
 The player places, moves, and deletes shop and depot boxes. Each box has a fixed footprint and a facing. The player can also delete paths.
 
@@ -33,11 +33,11 @@ Physical validity is the only reason to refuse an edit (principle 5). An edit is
 
 - a box overlaps another box;
 - a path passes through a box;
-- a footprint or curve leaves the park's bounds.
+- a footprint or a segment's width leaves the park's bounds.
 
 The ghost of an invalid edit shows as invalid, and its commit is refused. A refused commit leaves the world unchanged.
 
-Bounds are checked along the whole curve, because a curve can swing outside the park between points that are inside it.
+Bounds are checked across each segment's whole width, not only at its points.
 
 Nothing else is refused. If a shop is far from any path, or a depot has no route, it is placed anyway and simply does poorly.
 
@@ -45,7 +45,7 @@ Tools never write to the world. Each commit is a command queued to deterministic
 
 Any sequence of add, move, and delete commands, in any order, leaves a legitimate world at every step (principle 2). Nothing crashes, and every derived part rebuilds.
 
-Intent is saved as the clicked points and box poses, not as sampled or meshed geometry (principle 1). If a park is saved after any sequence of commands, it loads back equal, through deterministic-simulation's walk. A committed placement derives exactly what its ghost showed.
+Intent is saved as path points, the segments between them, and box poses, not as sampled or meshed geometry (principle 1). If a park is saved after any sequence of commands, it loads back equal, through deterministic-simulation's walk. A committed placement derives exactly what its ghost showed.
 
 Paths render flat on the ground at their full width, and boxes render as boxes. Ghosts are drawn so they stand out from committed intent.
 
@@ -67,7 +67,7 @@ This capability adds no fields or flows. It produces three things, and decision 
 
 Park intent holds:
 
-- path curves by kind (guest, backstage);
+- path points, and segments between them by kind (guest, backstage);
 - boxes by kind (shop, depot), with position and facing;
 - the entrance.
 
@@ -82,7 +82,7 @@ This capability owns the park file's save and load commands and the new-park tem
 The physical-validity check reads only intent geometry and the park's bounds:
 
 - box footprints;
-- path curves;
+- segments' ground lines and widths;
 - the terrain square.
 
 ## Principles
@@ -122,7 +122,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 
 ## Deepening candidates
 
-- Freehand strokes: the player sketches a path by dragging, and the game simplifies and smooths it into the same curve intent.
+- Freehand strokes: the player sketches a path by dragging, and the game simplifies it into the same points and segments.
 - Moving the entrance, and parks with several entrances.
 - Box sizes and shapes: resizable footprints, and later procedural building forms resolved from context (decision 0004, docs/design-notes.md). Gated on: the slice's boxes working as shops.
 - Paths on terrain: paths that follow the ground, or climb it as ramps and stairs. Gated on: terrain editing.

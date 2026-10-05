@@ -18,20 +18,16 @@ namespace tpj {
 
 namespace {
 
-// One carrier for each path of the kind whose ground line is not empty, with no stops yet.
-// parkPaths gives paths in ascending key order, so the carriers are in it too.
-std::vector<Carrier> pathCarriers(const std::vector<ParkPath> &paths, PathKind kind) {
+// One carrier for each segment of the kind with a ground line, with no stops yet. parkSegments
+// gives segments in ascending key order, so the carriers are in it too.
+std::vector<Carrier> pathCarriers(const std::vector<ParkSegment> &segments, PathKind kind) {
   std::vector<Carrier> carriers;
-  for (const ParkPath &path : paths) {
-    if (path.Kind != kind) {
-      continue;
-    }
-    std::vector<CarrierPoint> line = groundLine(path.Points);
-    if (line.empty()) {
+  for (const ParkSegment &segment : segments) {
+    if (segment.Kind != kind || segment.Line.empty()) {
       continue;
     }
     carriers.push_back(
-        Carrier{.Key = path.Key, .Width = pathWidth(kind), .Points = std::move(line), .Stops = {}});
+        Carrier{.Key = segment.Key, .Width = pathWidth(kind), .Points = segment.Line, .Stops = {}});
   }
   return carriers;
 }
@@ -378,9 +374,9 @@ uint32_t addStops(std::vector<Carrier> &carriers, const std::vector<Meeting> &me
   return nodeCount;
 }
 
-Network deriveNetwork(const std::vector<ParkPath> &paths, const std::vector<Door> &doors,
+Network deriveNetwork(const std::vector<ParkSegment> &segments, const std::vector<Door> &doors,
                       PathKind kind) {
-  std::vector<Carrier> carriers = pathCarriers(paths, kind);
+  std::vector<Carrier> carriers = pathCarriers(segments, kind);
   std::vector<Meeting> meetings = findMeetings(carriers);
 
   // Each connector meets its path at its connection.
@@ -416,11 +412,11 @@ template <typename Visitor> void visitFields(Visitor &visitor, PreviousNetwork &
 }
 
 void resolvePathNetworks(World &world) {
-  const std::vector<ParkPath> paths = parkPaths(world);
+  const std::vector<ParkSegment> segments = parkSegments(world);
   const std::vector<ParkEntrance> entrances = parkEntrances(world);
   const std::vector<ParkBox> boxes = parkBoxes(world);
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
-    Network network = deriveNetwork(paths, doorsServing(entrances, boxes, kind), kind);
+    Network network = deriveNetwork(segments, doorsServing(entrances, boxes, kind), kind);
     const EntityKey key =
         world.createDerivedEntity(NULL_KEY, NETWORK_PURPOSE, static_cast<uint64_t>(kind));
     const entt::entity entity = world.findEntity(key);

@@ -11,12 +11,16 @@ namespace tpj {
 
 namespace {
 
-// The frame's ghost: the preview's edit with its candidate's walkways and starved marks, then the
-// highlight, then the inspected guest or shop's mark.
+// The frame's ghost: the preview's edit with its candidate's walkways and starved marks, then where
+// a path tool's first click would start the path, then the highlight, then the inspected guest or
+// shop's mark.
 ParkMesh ghostMesh(const World &world, const Preview &preview, const PreviewLook &look) {
   ParkMesh mesh;
   if (preview.Edit) {
     mesh = buildGhostMesh(world, *preview.Edit, preview.Candidate);
+  }
+  if (look.Start) {
+    appendPathStart(mesh, look.Start->Kind, look.Start->At, look.Start->Joins);
   }
   if (look.Highlight) {
     appendEntity(mesh, world, *look.Highlight, HIGHLIGHT_TINT);

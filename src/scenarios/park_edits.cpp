@@ -21,7 +21,7 @@ constexpr uint64_t EDIT_INTERVAL = 10;
 constexpr double REACH = PARK_SIZE / 2.0 + 8.0;
 // A path's next point lies at most this far from its last along each axis.
 constexpr double PATH_STEP = 40.0;
-// Weights of AddPath, AddBox, MoveBox, DeletePath, and DeleteBox.
+// Weights of AddPath, AddBox, MoveBox, DeleteSegment, and DeleteBox.
 constexpr std::array<uint64_t, 5> EDIT_WEIGHTS{3, 4, 3, 1, 1};
 
 // The cycle's next draw, in [0, 1).
@@ -50,14 +50,15 @@ AddPath drawPath(const World &world, uint64_t &index) {
   AddPath path{drawEdit(world, index) < 0.5 ? PathKind::Guest : PathKind::Backstage, {}};
   const size_t count = 2 + static_cast<size_t>(drawEdit(world, index) * 4.0);
   ParkPoint point{drawAround(world, index, REACH), drawAround(world, index, REACH)};
-  path.Points.push_back(point);
-  while (path.Points.size() < count) {
-    // One point in eight repeats the last, which the command drops.
+  path.Stops.emplace_back(NewPoint{point});
+  while (path.Stops.size() < count) {
+    // One point in eight repeats the last, which makes a segment too short, so the command is
+    // refused.
     if (drawEdit(world, index) >= 0.125) {
       point = ParkPoint{point.X + drawAround(world, index, PATH_STEP),
                         point.Z + drawAround(world, index, PATH_STEP)};
     }
-    path.Points.push_back(point);
+    path.Stops.emplace_back(NewPoint{point});
   }
   return path;
 }
@@ -78,7 +79,7 @@ void queueEdit(const World &world, CommandQueue &commands) {
     const EntityKey box = drawGivenKey(world, index);
     commands.push(MoveBox{box, drawPose(world, index)});
   } else if (kind == 3) {
-    commands.push(DeletePath{drawGivenKey(world, index)});
+    commands.push(DeleteSegment{drawGivenKey(world, index)});
   } else {
     commands.push(DeleteBox{drawGivenKey(world, index)});
   }

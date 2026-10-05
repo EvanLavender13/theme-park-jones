@@ -725,6 +725,18 @@ Expected: `21`
 
 If either command throws or prints an error, a rewritten layout or builder refuses an edit. Stop and report it.
 
+Deviation, fixed during implementation: on straight segments, guests ate at different times, so at the old WARM_TICKS of 1920 the shop had not yet reordered, and warm.park held no shipment in transit. The world checks' deletingShop requires one, and src/scenarios/SPEC.md says warm.park is taken late enough to hold one. WARM_TICKS in src/scenarios/slice_parks.h became 2020, six ticks after the shop's reorder leaves the depot, the same offset the old value had, and the slice parks were made again.
+
+### Changes after play
+
+Playing the feature before its commit found three gaps, which the user asked to fix in this feature:
+
+- Before the first click, nothing showed where the path would start or snap. tools gained pathStart, the app's PreviewLook carries it, and the ghost draws a disc of the path's width there, with a join mark when it would snap.
+- The delete tint flickered where neighboring segments' round ends overlap the deleted one, because both lay at one height. Ghost and highlighted segments now lie GHOST_LIFT above the park's paths.
+- A path could not snap onto its own earlier points or segments, so it could not close a loop or branch off itself. AddPath gained RepeatStop and OnDrawnSegment, stopPositions resolves both, and snapStop offers the drawn stops' points, leaving out the last, and the segments between drawn stops. A path that crosses itself without a click there waits for crossing-splits.
+
+The park, tools, render, and app specs say each of these.
+
 ### Task 18: Run the test pass
 
 The test pass comes after the parks, not before the implementation, because the chosen edit is made from warm.park, and no test builds until every reader has moved to segments.

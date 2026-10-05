@@ -24,9 +24,9 @@ enum class ToolKind : uint8_t {
 
 // A place drag nearer than this to where the box lands keeps the facing it had, in meters.
 inline constexpr double MIN_FACING_DRAG = 1.0;
-// A path tool snaps the pointer onto a same-kind path's ground line this near it, in meters.
+// A path tool snaps a click onto a point or segment of its kind this near it, in meters.
 inline constexpr double SNAP_REACH = 2.0;
-// A path tool's press this near its last drawn point finishes the path, in meters.
+// A path tool's press this near its last stop finishes the path, in meters.
 inline constexpr double FINISH_REACH = 1.0;
 
 // One tool and what it holds. Change it only through selectTool, movePointer, pressPointer, and
@@ -47,8 +47,8 @@ struct ToolState {
   Pose HeldFrom;
   ParkPoint GrabOffset;
   Pose Target;
-  // A path tool's points drawn so far.
-  std::vector<ParkPoint> Drawn;
+  // A path tool's stops so far.
+  std::vector<PathStop> Drawn;
 };
 
 // Sets the tool, dropping any hold without committing.
@@ -68,11 +68,30 @@ std::optional<EntityKey> highlightedEntity(const ToolState &tool, const World &w
 
 // The first box in key order whose footprint holds the point.
 std::optional<EntityKey> boxAt(const World &world, ParkPoint point);
-// The first path in key order whose ground line passes within half its width of the point.
-std::optional<EntityKey> pathAt(const World &world, ParkPoint point);
-// The nearest point to the given one on the ground line of a path of the kind, when one lies within
-// SNAP_REACH, and the point itself otherwise.
-ParkPoint snapToPath(const World &world, PathKind kind, ParkPoint point);
+// The first segment in key order whose ground line passes within half its width of the point.
+std::optional<EntityKey> segmentAt(const World &world, ParkPoint point);
+// The stop a click at the point makes for a path of the kind whose stops so far are drawn: the
+// nearest within SNAP_REACH of the path points of the kind and the points the drawn stops make,
+// leaving out the last, or else the nearest place within SNAP_REACH on a segment of the kind or a
+// segment between two drawn stops, or that segment's end point when the place lies within
+// MIN_SEGMENT_LENGTH of it, or else a new point at the click. A point is the kind's when at least
+// one segment uses it and every segment at it has the kind.
+PathStop snapStop(const World &world, PathKind kind, const std::vector<PathStop> &drawn,
+                  ParkPoint point);
+
+// Where a path tool's first click would start the path, its kind, and whether it would join a
+// point or segment there.
+struct PathStart {
+  ParkPoint At;
+  PathKind Kind = PathKind::Guest;
+  bool Joins = false;
+
+  bool operator==(const PathStart &) const = default;
+};
+
+// The path's start before its first click, or none when the tool draws no path, has a stop drawn,
+// or the pointer is off the ground.
+std::optional<PathStart> pathStart(const ToolState &tool, const World &world);
 
 } // namespace tpj
 

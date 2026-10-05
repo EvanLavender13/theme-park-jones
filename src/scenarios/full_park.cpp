@@ -20,8 +20,8 @@
 namespace tpj {
 namespace {
 
-// The template's guest path, which the full park replaces with its own.
-constexpr EntityKey TEMPLATE_PATH{2};
+// The template's guest segment, which the full park replaces with its own paths.
+constexpr EntityKey TEMPLATE_SEGMENT{4};
 // The backstage rows' z, each serving the shops in the cells beside it.
 constexpr std::array<double, 5> ROWS{-80.0, -40.0, 0.0, 40.0, 80.0};
 // The paths of each grid direction, 20 m apart from -90 m.
@@ -39,7 +39,7 @@ void applyAccepted(World &world, const Command &command, const std::string &what
 }
 
 void addPath(World &world, PathKind kind, ParkPoint from, ParkPoint to) {
-  applyAccepted(world, AddPath{kind, {from, to}},
+  applyAccepted(world, AddPath{kind, {NewPoint{from}, NewPoint{to}}},
                 std::format("the {} path from ({}, {}) to ({}, {})",
                             kind == PathKind::Guest ? "guest" : "backstage", from.X, from.Z, to.X,
                             to.Z));
@@ -56,7 +56,7 @@ double gridAt(double first, int step) { return first + 20.0 * static_cast<double
 
 // The entrance's path, the guest grid, the backstage spine and rows, the shops, and the depots.
 void layOut(World &world) {
-  applyAccepted(world, DeletePath{TEMPLATE_PATH}, "deleting the template's path");
+  applyAccepted(world, DeleteSegment{TEMPLATE_SEGMENT}, "deleting the template's segment");
   addPath(world, PathKind::Guest, {0.0, 123.0}, {0.0, 90.0});
   for (int i = 0; i < GRID_LINES; ++i) {
     const double x = gridAt(-90.0, i);

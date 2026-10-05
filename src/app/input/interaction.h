@@ -38,6 +38,8 @@ public:
   void movePointer(std::optional<ParkPoint> ground);
   [[nodiscard]] std::optional<ParkEdit> tentativeEdit(const World &world) const;
   [[nodiscard]] std::optional<EntityKey> highlighted(const World &world) const;
+  // Where the tool's first click would start a path, as pathStart gives it.
+  [[nodiscard]] std::optional<PathStart> pathStart(const World &world) const;
 
 private:
   uint64_t Generation;
