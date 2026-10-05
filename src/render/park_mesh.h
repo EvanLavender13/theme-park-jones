@@ -135,8 +135,9 @@ void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha);
 // starved mark over each starved shop.
 ParkMesh buildParkMesh(const World &world);
 
-// Adds the box or segment the key holds as buildParkMesh draws it, in the color, a segment
-// GHOST_LIFT higher. Nothing when the key holds neither.
+// Adds the box, segment, or path point the key holds, in the color: a box or segment shaped as
+// buildParkMesh draws it, a segment GHOST_LIFT higher, and a path point as a flat disc of
+// JOIN_MARK_RADIUS at JOIN_MARK_LIFT. Nothing when the key holds none of these.
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
 
 // The ghost of an edit on a world: translucent in its kind's color when accepted, INVALID_TINT when

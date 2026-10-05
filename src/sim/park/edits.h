@@ -94,11 +94,40 @@ struct DeleteBox {
   bool operator==(const DeleteBox &) const = default;
 };
 
-// Registers AddPath, AddBox, MoveBox, DeleteSegment, and DeleteBox, in that order.
+// Where MovePoint moves a point: a new position, another path point, or a place on a segment.
+using PointTarget = std::variant<NewPoint, OnPoint, OnSegment>;
+
+// The path point moves to the target, and every segment at it follows.
+struct MovePoint {
+  EntityKey Point = NULL_KEY;
+  PointTarget To;
+
+  bool operator==(const MovePoint &) const = default;
+};
+
+// A new point on the segment, Along of the way from its From point to its To point, splitting it
+// there.
+struct InsertPoint {
+  EntityKey Segment = NULL_KEY;
+  double Along = 0.0;
+
+  bool operator==(const InsertPoint &) const = default;
+};
+
+// The path point goes, and its two segments merge when it has exactly two.
+struct DeletePoint {
+  EntityKey Point = NULL_KEY;
+
+  bool operator==(const DeletePoint &) const = default;
+};
+
+// Registers AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint, and
+// DeletePoint, in that order.
 void addParkEdits(WorldSchema &schema);
 
-// A tentative or committed edit to park intent: one of the five commands.
-using ParkEdit = std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox>;
+// A tentative or committed edit to park intent: one of the eight commands.
+using ParkEdit = std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint,
+                              InsertPoint, DeletePoint>;
 
 // The stop's ground position: a NewPoint's own, an OnPoint's point's, or the place Along of the way
 // from an OnSegment's segment's From point to its To point. None when the stop names no path point,
@@ -114,6 +143,23 @@ std::optional<std::vector<ParkPoint>> stopPositions(const World &world, const Ad
 // other. Leaves out the points of OnSegment and OnDrawnSegment stops. In the order the meetings
 // are found. Empty when the world refuses the path.
 std::vector<ParkPoint> pathCrossings(const World &world, const AddPath &path);
+// The ground position of each point where the move or the merge splits a segment of its kind
+// because the two meet, leaving out a MovePoint's OnSegment target. In the order the meetings are
+// found. Empty when the world refuses the command.
+std::vector<ParkPoint> pathCrossings(const World &world, const MovePoint &move);
+std::vector<ParkPoint> pathCrossings(const World &world, const DeletePoint &del);
+
+// Each segment at the moved point, in ascending key order, as it would lie after the move and
+// before any split: its end at the point is at the target, and an OnPoint target's key replaces
+// the point's. Leaves out a segment between the point and an OnPoint target. Empty when the move
+// names no path point or its target has no position. Given whether or not the world accepts the
+// move.
+std::vector<ParkSegment> movedSegments(const World &world, const MovePoint &move);
+// The segment the deletion would merge the point's two segments into, before any split: the
+// lower-keyed one, its end at the point moved to the other's far end, with the wider width. None
+// when the point doesn't have exactly two segments with different far ends. Given whether or not
+// the world accepts the deletion.
+std::optional<ParkSegment> mergedSegment(const World &world, const DeletePoint &del);
 
 // Whether the command would be applied to the world: it describes a physical object, names what it
 // acts on, and conflicts with nothing: no footprints overlap, no segment comes within half its
@@ -123,6 +169,9 @@ bool isAccepted(const World &world, const AddBox &command);
 bool isAccepted(const World &world, const MoveBox &command);
 bool isAccepted(const World &world, const DeleteSegment &command);
 bool isAccepted(const World &world, const DeleteBox &command);
+bool isAccepted(const World &world, const MovePoint &command);
+bool isAccepted(const World &world, const InsertPoint &command);
+bool isAccepted(const World &world, const DeletePoint &command);
 
 // Whether the command the edit holds would be applied to the world.
 bool isAccepted(const World &world, const ParkEdit &edit);
@@ -137,6 +186,9 @@ void applyCommand(World &world, const AddBox &command);
 void applyCommand(World &world, const MoveBox &command);
 void applyCommand(World &world, const DeleteSegment &command);
 void applyCommand(World &world, const DeleteBox &command);
+void applyCommand(World &world, const MovePoint &command);
+void applyCommand(World &world, const InsertPoint &command);
+void applyCommand(World &world, const DeletePoint &command);
 
 // Whether every solid and line has its geometry, stays in the park, and conflicts with no other.
 bool isPhysicallyValid(const World &world);

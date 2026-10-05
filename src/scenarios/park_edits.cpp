@@ -21,8 +21,9 @@ constexpr uint64_t EDIT_INTERVAL = 10;
 constexpr double REACH = PARK_SIZE / 2.0 + 8.0;
 // A path's next point lies at most this far from its last along each axis.
 constexpr double PATH_STEP = 40.0;
-// Weights of AddPath, AddBox, MoveBox, DeleteSegment, and DeleteBox.
-constexpr std::array<uint64_t, 5> EDIT_WEIGHTS{3, 4, 3, 1, 1};
+// Weights of AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint, and
+// DeletePoint.
+constexpr std::array<uint64_t, 8> EDIT_WEIGHTS{3, 4, 3, 1, 1, 2, 1, 1};
 
 // The cycle's next draw, in [0, 1).
 double drawEdit(const World &world, uint64_t &index) {
@@ -80,8 +81,17 @@ void queueEdit(const World &world, CommandQueue &commands) {
     commands.push(MoveBox{box, drawPose(world, index)});
   } else if (kind == 3) {
     commands.push(DeleteSegment{drawGivenKey(world, index)});
-  } else {
+  } else if (kind == 4) {
     commands.push(DeleteBox{drawGivenKey(world, index)});
+  } else if (kind == 5) {
+    const EntityKey point = drawGivenKey(world, index);
+    const ParkPoint to{drawAround(world, index, REACH), drawAround(world, index, REACH)};
+    commands.push(MovePoint{point, NewPoint{to}});
+  } else if (kind == 6) {
+    const EntityKey segment = drawGivenKey(world, index);
+    commands.push(InsertPoint{segment, drawEdit(world, index)});
+  } else {
+    commands.push(DeletePoint{drawGivenKey(world, index)});
   }
 }
 

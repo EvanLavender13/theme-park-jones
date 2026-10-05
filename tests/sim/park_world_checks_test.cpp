@@ -261,13 +261,101 @@ ChosenEdit deletingShop(const World &before) {
   return {"deleting the shop", DeleteBox{shop}};
 }
 
+bool someGuestStandsOn(const World &world, EntityKey segment) {
+  return std::ranges::any_of(
+      guestsOf(world), [&](const GuestRecord &record) { return record.At.Carrier == segment; });
+}
+
+// The first path point, in key order, that exactly two segments use, both of guest kind, where a
+// guest stands on at least one of the two.
+EntityKey guestPointBetweenTwoSegmentsUnderGuests(const World &world) {
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  for (const ParkPathPoint &point : parkPathPoints(world)) {
+    std::vector<ParkSegment> atPoint;
+    for (const ParkSegment &segment : segments) {
+      if (segment.From == point.Key || segment.To == point.Key) {
+        atPoint.push_back(segment);
+      }
+    }
+    if (atPoint.size() != 2) {
+      continue;
+    }
+    const bool bothGuest = std::ranges::all_of(
+        atPoint, [](const ParkSegment &segment) { return segment.Kind == PathKind::Guest; });
+    const bool guestOnOne = std::ranges::any_of(
+        atPoint, [&](const ParkSegment &segment) { return someGuestStandsOn(world, segment.Key); });
+    if (bothGuest && guestOnOne) {
+      return point.Key;
+    }
+  }
+  return NULL_KEY;
+}
+
+ParkPoint pointPosition(const World &world, EntityKey pointKey) {
+  const std::optional<ParkPoint> position = stopPosition(world, OnPoint{pointKey});
+  REQUIRE(position.has_value());
+  return position.value_or(ParkPoint{});
+}
+
+// Both segments at the point follow it to a new shape and keep their keys, so the guests on them
+// are carried onto the new shape, and the networks and route distance are derived again. The point
+// moves 3 m along whichever axis direction the world accepts first.
+ChosenEdit movingPointUnderGuests(const World &before) {
+  const EntityKey pointKey = guestPointBetweenTwoSegmentsUnderGuests(before);
+  REQUIRE(pointKey != NULL_KEY);
+  const ParkPoint at = pointPosition(before, pointKey);
+  constexpr double OFFSET = 3.0;
+  const std::array<ParkPoint, 4> directions{ParkPoint{1.0, 0.0}, ParkPoint{-1.0, 0.0},
+                                            ParkPoint{0.0, 1.0}, ParkPoint{0.0, -1.0}};
+  for (const ParkPoint &direction : directions) {
+    const MovePoint move{pointKey, NewPoint{ParkPoint{at.X + (OFFSET * direction.X),
+                                                      at.Z + (OFFSET * direction.Z)}}};
+    if (isAccepted(before, ParkEdit{move})) {
+      return {"moving a guest point between two segments guests stand on, reshaping the segments "
+              "under them",
+              move};
+    }
+  }
+  FAIL("no direction along an axis accepts moving the guest point 3 m");
+  return {};
+}
+
+// A point inserted in the middle of the segment guests stand on splits it under them, so the
+// guests on its far part are carried onto a new carrier, and the networks and route distance are
+// derived again.
+ChosenEdit insertingPointUnderGuests(const World &before) {
+  const EntityKey segmentKey = guestSegmentUnderGuestHeadingToShop(before);
+  REQUIRE(segmentKey != NULL_KEY);
+  return {"inserting a point in the middle of a segment guests stand on, heading to the shop, "
+          "splitting the segment under them",
+          InsertPoint{segmentKey, 0.5}};
+}
+
+// The point's two segments merge into one and the other segment goes, so the guests on it are
+// carried onto the merged segment, and the networks and route distance are derived again.
+ChosenEdit deletingPointUnderGuests(const World &before) {
+  const EntityKey pointKey = guestPointBetweenTwoSegmentsUnderGuests(before);
+  REQUIRE(pointKey != NULL_KEY);
+  const DeletePoint del{pointKey};
+  // Without a merge, this edit would only delete segments, as deletingGuestSegment already does.
+  REQUIRE(mergedSegment(before, del).has_value());
+  return {"deleting a guest point between two segments guests stand on, merging the segments "
+          "under them",
+          del};
+}
+
 // The edits of warm.park, made from the world as a cycle leaves it. Each requires the state it was
 // chosen for, so a change to warm.park that loses that state fails here rather than quietly
 // checking less.
 std::vector<ChosenEdit> chosenEdits(const World &before) {
-  std::vector<ChosenEdit> edits{
-      deletingGuestSegment(before), addingPathEndingOnGuestSegment(before),
-      addingPathCrossingGuestSegment(before), addingShop(before), deletingShop(before)};
+  std::vector<ChosenEdit> edits{deletingGuestSegment(before),
+                                addingPathEndingOnGuestSegment(before),
+                                addingPathCrossingGuestSegment(before),
+                                addingShop(before),
+                                deletingShop(before),
+                                movingPointUnderGuests(before),
+                                insertingPointUnderGuests(before),
+                                deletingPointUnderGuests(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);
     REQUIRE(isAccepted(before, chosen.Edit));

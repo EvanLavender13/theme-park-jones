@@ -46,13 +46,13 @@ A ghost shows what an edit would do before it is committed. It is drawn by the s
 
 buildGhostMesh(world, edit, candidate) gives the edit's ghost:
 
-- an added or moved box, or an added path's segments, translucent in its kind's color, or in an invalid tint when the world refuses the edit
-- a mark at each stop where an added path joins a point or segment, and at each place pathCrossings gives, in JOIN_MARK_COLOR
-- the entity an accepted delete would remove, in a delete tint
+- an added or moved box, an added path's segments, a moved point's segments, or the segment a point's deletion merges two into, translucent in its kind's color, or in an invalid tint when the world refuses the edit
+- a mark at each stop where an added path joins a point or segment, at a moved point's target when it is a point or segment, at the place where an inserted point goes, and at each place pathCrossings gives, in JOIN_MARK_COLOR
+- the entity an accepted delete would remove, or every segment at a point an accepted DeletePoint deletes, in a delete tint
 
 With the candidate world, the ghost also shows the candidate's walkways and starved marks. Where one of these lies on a committed one, it blends into it. Only the walkways the edit adds or moves, and the shops it would starve, stand out. When the delete tool hovers a backstage segment, the ghost marks each shop the deletion leaves with no depot. buildGhostMesh(world, edit) makes the candidate itself. If a caller already holds the candidate, the caller passes it instead.
 
-appendPathStart shows where a path would start before its first click: a translucent disc of the path's width, with a join mark when the click would join a point or segment. appendFinishMark marks the stop where a click would finish the path, in FINISH_MARK_COLOR, wider than a join mark and under it. Ghost and highlighted segments lie GHOST_LIFT above the park's paths, so they never flicker against the paths beneath them. appendEntity adds the box or segment a key holds, shaped as the park draws it, in a given color such as HIGHLIGHT_TINT. It adds nothing when the key holds neither.
+appendPathStart shows where a path would start before its first click: a translucent disc of the path's width, with a join mark when the click would join a point or segment. appendFinishMark marks the stop where a click would finish the path, in FINISH_MARK_COLOR, wider than a join mark and under it. Ghost and highlighted segments lie GHOST_LIFT above the park's paths, so they never flicker against the paths beneath them. appendEntity adds the box, segment, or path point a key holds, in a given color such as HIGHLIGHT_TINT. A box or segment is shaped as the park draws it, and a path point is a flat disc of JOIN_MARK_RADIUS. It adds nothing when the key holds none of these.
 
 ## Guests
 

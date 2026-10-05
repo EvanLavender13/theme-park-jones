@@ -16,6 +16,7 @@ constexpr ToolChoice TOOL_CHOICES[] = {{"Look", ToolKind::None},
                                        {"Place shop", ToolKind::PlaceShop},
                                        {"Place depot", ToolKind::PlaceDepot},
                                        {"Move box", ToolKind::MoveBox},
+                                       {"Edit path", ToolKind::EditPath},
                                        {"Delete", ToolKind::Delete}};
 
 } // namespace

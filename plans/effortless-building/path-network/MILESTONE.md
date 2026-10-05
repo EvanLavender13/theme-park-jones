@@ -77,6 +77,9 @@ None of these features adds a test of its own unless it fixes a bug (docs/testin
 - Typing an exact length while drawing, as SketchUp does.
 - Locking the current direction with a held key, so the pointer can leave the line and still draw along it.
 - Showing the ghost of an undo's inverse while the undo control is hovered (decision 0029).
+- A handle drawn at every path point while Edit path is chosen, so a point along a straight path shows without hovering it.
+- Dragging from a segment to insert a point there and move it, in one gesture.
+- Joining two segments into one when an edit leaves them joining the same two points. AddPath and MovePoint can both make such a pair.
 
 ## Open questions
 
