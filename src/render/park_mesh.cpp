@@ -206,7 +206,8 @@ void appendGhostSegment(ParkMesh &mesh, PathKind kind, const std::vector<Carrier
 }
 
 // Adds an added path's ghost: a segment between each two stops, in the color, then a join mark at
-// each stop that joins a point, a segment, or an earlier stop. Nothing when a stop has no position.
+// each stop that joins a point, a segment, or an earlier stop, and at each place the path crosses
+// one. Nothing when a stop has no position.
 void appendGhostPath(ParkMesh &mesh, const World &world, const AddPath &path, Rgba color) {
   const std::optional<std::vector<ParkPoint>> positions = stopPositions(world, path);
   if (!positions) {
@@ -220,6 +221,9 @@ void appendGhostPath(ParkMesh &mesh, const World &world, const AddPath &path, Rg
     if (!std::holds_alternative<NewPoint>(path.Stops[i])) {
       appendJoinMark(mesh, (*positions)[i]);
     }
+  }
+  for (const ParkPoint &at : pathCrossings(world, path)) {
+    appendJoinMark(mesh, at);
   }
 }
 

@@ -68,8 +68,8 @@ inline constexpr Rgba HIGHLIGHT_TINT{1.0f, 1.0f, 1.0f, 0.35f};
 void appendSegment(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &line,
                    double width, Rgba color);
 
-// A ghost marks each stop where an added path joins a point or segment with a flat disc of this
-// radius, this high, in this color.
+// A ghost marks each stop where an added path joins a point or segment, and each place where it
+// crosses one, with a flat disc of this radius, this high, in this color.
 inline constexpr double JOIN_MARK_RADIUS = 1.0;
 inline constexpr float JOIN_MARK_LIFT = 0.06f;
 inline constexpr Rgba JOIN_MARK_COLOR{0.15f, 0.85f, 0.95f, 0.9f};

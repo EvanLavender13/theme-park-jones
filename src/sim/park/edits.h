@@ -109,6 +109,11 @@ std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop);
 // OnDrawnSegment's the place Along of the way between its two stops. None when a stop has none, or
 // a RepeatStop or an OnDrawnSegment names a stop that is not earlier.
 std::optional<std::vector<ParkPoint>> stopPositions(const World &world, const AddPath &path);
+// The ground position of each point where the path splits a segment of its kind, or one of its
+// own segments, because the two meet: a new point where they cross, or an end of one lying on the
+// other. Leaves out the points of OnSegment and OnDrawnSegment stops. In the order the meetings
+// are found. Empty when the world refuses the path.
+std::vector<ParkPoint> pathCrossings(const World &world, const AddPath &path);
 
 // Whether the command would be applied to the world: it describes a physical object, names what it
 // acts on, and conflicts with nothing: no footprints overlap, no segment comes within half its

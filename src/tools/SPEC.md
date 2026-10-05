@@ -22,7 +22,7 @@ snapStop gives the stop a path tool's click makes. If a path point of the tool's
 
 Look (ToolKind None) edits nothing.
 
-Guest path and Backstage path draw a path of their kind. Each click adds the stop snapStop gives. A click near a point or segment of the same kind joins the path there, and a segment it joins splits there when the path commits. Clicking the last stop again finishes and commits the path. The ghost shows the path through the stops and the pointer, and marks each stop that joins a point or segment. Before the first click, pathStart gives where that click would start the path and whether it would join a point or segment there, so the ghost can show it. If the drawn path has fewer than two stops, finishing it commits nothing.
+Guest path and Backstage path draw a path of their kind. Each click adds the stop snapStop gives. A click near a point or segment of the same kind joins the path there, and a segment it joins splits there when the path commits. Where the path crosses a segment of its kind, or itself, both split and share a point there when it commits. Clicking the last stop again finishes and commits the path. The ghost shows the path through the stops and the pointer, and marks each stop that joins a point or segment, and each place where the path crosses one. Before the first click, pathStart gives where that click would start the path and whether it would join a point or segment there, so the ghost can show it. If the drawn path has fewer than two stops, finishing it commits nothing.
 
 Place shop and Place depot place a box at the pointer. Pressing puts the box down, and dragging before release turns it to face the drag. The next box faces the same way as the last.
 
