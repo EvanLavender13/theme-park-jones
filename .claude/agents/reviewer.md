@@ -54,6 +54,7 @@ Detect the type from the path or the dispatch instructions. Apply the matching l
 - Internal contradictions.
 - Claims unsupported by the artifact's own evidence.
 - References to files, sections, or concepts that do not exist.
+- Sections that don't follow the artifact's skill template.
 
 ### Principles (all artifacts)
 
