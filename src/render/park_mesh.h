@@ -77,6 +77,15 @@ inline constexpr Rgba JOIN_MARK_COLOR{0.15f, 0.85f, 0.95f, 0.9f};
 // Adds a join mark centered on the point.
 void appendJoinMark(ParkMesh &mesh, ParkPoint at);
 
+// A ghost marks the stop where a press would finish the path with a flat disc of this radius, this
+// high, in this color. It lies under a join mark there, so the join mark still shows.
+inline constexpr double FINISH_MARK_RADIUS = 1.6;
+inline constexpr float FINISH_MARK_LIFT = 0.05f;
+inline constexpr Rgba FINISH_MARK_COLOR{0.25f, 0.95f, 0.35f, 0.9f};
+
+// Adds a finish mark centered on the point.
+void appendFinishMark(ParkMesh &mesh, ParkPoint at);
+
 // Ghost and highlighted segments lie this far above the park's paths, so they never tie in depth
 // with the ribbons and joints beneath them.
 inline constexpr float GHOST_LIFT = 0.01f;

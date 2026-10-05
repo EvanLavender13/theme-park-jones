@@ -260,6 +260,12 @@ void appendJoinMark(ParkMesh &mesh, ParkPoint at) {
   appendJoint(mesh, center, {-1.0, 0.0}, JOIN_MARK_RADIUS, JOIN_MARK_LIFT, JOIN_MARK_COLOR);
 }
 
+void appendFinishMark(ParkMesh &mesh, ParkPoint at) {
+  const CarrierPoint center{at.X, at.Z, 0.0};
+  appendJoint(mesh, center, {1.0, 0.0}, FINISH_MARK_RADIUS, FINISH_MARK_LIFT, FINISH_MARK_COLOR);
+  appendJoint(mesh, center, {-1.0, 0.0}, FINISH_MARK_RADIUS, FINISH_MARK_LIFT, FINISH_MARK_COLOR);
+}
+
 void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
                    Rgba color) {
   appendWalkway(mesh, kind, points, std::nullopt, color);

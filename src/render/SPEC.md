@@ -52,7 +52,7 @@ buildGhostMesh(world, edit, candidate) gives the edit's ghost:
 
 With the candidate world, the ghost also shows the candidate's walkways and starved marks. Where one of these lies on a committed one, it blends into it. Only the walkways the edit adds or moves, and the shops it would starve, stand out. When the delete tool hovers a backstage segment, the ghost marks each shop the deletion leaves with no depot. buildGhostMesh(world, edit) makes the candidate itself. If a caller already holds the candidate, the caller passes it instead.
 
-appendPathStart shows where a path would start before its first click: a translucent disc of the path's width, with a join mark when the click would join a point or segment. Ghost and highlighted segments lie GHOST_LIFT above the park's paths, so they never flicker against the paths beneath them. appendEntity adds the box or segment a key holds, shaped as the park draws it, in a given color such as HIGHLIGHT_TINT. It adds nothing when the key holds neither.
+appendPathStart shows where a path would start before its first click: a translucent disc of the path's width, with a join mark when the click would join a point or segment. appendFinishMark marks the stop where a click would finish the path, in FINISH_MARK_COLOR, wider than a join mark and under it. Ghost and highlighted segments lie GHOST_LIFT above the park's paths, so they never flicker against the paths beneath them. appendEntity adds the box or segment a key holds, shaped as the park draws it, in a given color such as HIGHLIGHT_TINT. It adds nothing when the key holds neither.
 
 ## Guests
 

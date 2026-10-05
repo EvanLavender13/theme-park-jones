@@ -40,6 +40,8 @@ public:
   [[nodiscard]] std::optional<EntityKey> highlighted(const World &world) const;
   // Where the tool's first click would start a path, as pathStart gives it.
   [[nodiscard]] std::optional<PathStart> pathStart(const World &world) const;
+  // Where a click would finish the drawn path, as pathFinish gives it.
+  [[nodiscard]] std::optional<ParkPoint> pathFinish(const World &world) const;
 
 private:
   uint64_t Generation;
