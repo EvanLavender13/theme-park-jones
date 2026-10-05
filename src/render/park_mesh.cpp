@@ -7,9 +7,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <math.h>
 #include <numbers>
 #include <optional>
+#include <span>
 #include <utility>
 #include <variant>
 
@@ -211,7 +213,70 @@ void appendDisc(ParkMesh &mesh, ParkPoint at, double radius, float lift, Rgba co
   appendJoint(mesh, center, {-1.0, 0.0}, radius, lift, color);
 }
 
-// Adds a segment as appendSegment does, GHOST_LIFT higher.
+// Adds a flat triangle facing up, the lift above the ground.
+void addFlatTriangle(ParkMesh &mesh, ParkPoint a, ParkPoint b, ParkPoint c, float lift,
+                     Rgba color) {
+  // Counter-clockwise seen from above when b lies to the left of the way from a to c.
+  const double turn = (b.Z - a.Z) * (c.X - a.X) - (b.X - a.X) * (c.Z - a.Z);
+  if (turn < 0.0) {
+    std::swap(b, c);
+  }
+  const auto first = static_cast<uint32_t>(mesh.Vertices.size());
+  for (const ParkPoint &corner : {a, b, c}) {
+    addVertex(mesh, corner.X, lift, corner.Z, {}, 1.0f, color);
+  }
+  mesh.Indices.insert(mesh.Indices.end(), {first, first + 1, first + 2});
+}
+
+// Adds a strip EDGE_LINE_WIDTH wide along the left of the edge line, the lift above the ground: a
+// quad along each step, and where the line turns right, a triangle that closes the gap between two
+// quads.
+void appendEdgeLine(ParkMesh &mesh, std::span<const ParkPoint> points, float lift, Rgba color) {
+  std::optional<ParkPoint> previous;
+  for (size_t i = 0; i + 1 < points.size(); ++i) {
+    const double dx = points[i + 1].X - points[i].X;
+    const double dz = points[i + 1].Z - points[i].Z;
+    const double length = std::sqrt(dx * dx + dz * dz);
+    if (length == 0.0) {
+      continue;
+    }
+    const ParkPoint left{dz / length * EDGE_LINE_WIDTH, -dx / length * EDGE_LINE_WIDTH};
+    const ParkPoint from = points[i];
+    const ParkPoint to = points[i + 1];
+    if (previous && previous->Z * left.X - previous->X * left.Z < 0.0) {
+      addFlatTriangle(mesh, from, {from.X + previous->X, from.Z + previous->Z},
+                      {from.X + left.X, from.Z + left.Z}, lift, color);
+    }
+    addQuad(mesh,
+            {from, to, ParkPoint{to.X + left.X, to.Z + left.Z},
+             ParkPoint{from.X + left.X, from.Z + left.Z}},
+            {lift, lift, lift, lift}, {}, 1.0f, color);
+    previous = left;
+  }
+}
+
+// Adds each piece of the surface, the lift above its kind's paths, in the color colorOf gives for
+// its kind, and then each edge line EDGE_LIFT higher in that color's edgeColor.
+template <typename ColorOf>
+void appendSurface(ParkMesh &mesh, const PavedSurface &surface, float lift, ColorOf colorOf) {
+  for (const SurfacePiece &piece : surface.Pieces) {
+    const float height = pathLift(piece.Kind) + lift;
+    const Rgba color = colorOf(piece.Kind);
+    const auto first = static_cast<uint32_t>(mesh.Vertices.size());
+    for (const ParkPoint &corner : pieceCorners(piece)) {
+      addVertex(mesh, corner.X, height, corner.Z, {}, 1.0f, color);
+    }
+    for (uint32_t k = 1; k + 1 < piece.Count; ++k) {
+      mesh.Indices.insert(mesh.Indices.end(), {first, first + k, first + k + 1});
+    }
+  }
+  for (const EdgeLine &edge : surface.Edges) {
+    appendEdgeLine(mesh, edgePoints(surface, edge), pathLift(edge.Kind) + lift + EDGE_LIFT,
+                   edgeColor(colorOf(edge.Kind)));
+  }
+}
+
+// Adds a segment's ribbon and round joints along the line, GHOST_LIFT above its kind's paths.
 void appendGhostSegment(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &line,
                         double width, Rgba color) {
   if (line.size() >= 2) {
@@ -292,12 +357,7 @@ Rgba lightened(Rgba color) {
           color.B + (1.0f - color.B) * 0.4f, color.A};
 }
 
-void appendSegment(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &line,
-                   double width, Rgba color) {
-  if (line.size() >= 2) {
-    appendSegmentAt(mesh, line, width, pathLift(kind), color);
-  }
-}
+Rgba edgeColor(Rgba color) { return {color.R * 0.6f, color.G * 0.6f, color.B * 0.6f, color.A}; }
 
 void appendPathStart(ParkMesh &mesh, PathKind kind, ParkPoint at, bool joins) {
   const CarrierPoint center{at.X, at.Z, 0.0};
@@ -409,9 +469,7 @@ ParkMesh buildParkMesh(const World &world) {
   for (const ParkEntrance &entrance : parkEntrances(world)) {
     appendBox(mesh, entrance.At, ENTRANCE_SIZE, ENTRANCE_HEIGHT, ENTRANCE_COLOR);
   }
-  for (const ParkSegment &segment : parkSegments(world)) {
-    appendSegment(mesh, segment.Kind, segment.Line, segment.Width, pathColor(segment.Kind));
-  }
+  appendSurface(mesh, parkSurface(world), 0.0f, pathColor);
   appendWalkways(mesh, world, 1.0f);
   for (const ParkBox &box : parkBoxes(world)) {
     appendBox(mesh, box.At, boxSize(box.Kind), boxHeight(box.Kind), boxColor(box.Kind));
@@ -442,11 +500,15 @@ void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color)
       return;
     }
   }
-  for (const ParkSegment &segment : parkSegments(world)) {
-    if (segment.Key == key) {
-      appendGhostSegment(mesh, segment.Kind, segment.Line, segment.Width, color);
-      return;
+  PavedSurface own;
+  for (const SurfacePiece &piece : parkSurface(world).Pieces) {
+    if (piece.Owner == key) {
+      own.Pieces.push_back(piece);
     }
+  }
+  if (!own.Pieces.empty()) {
+    appendSurface(mesh, own, GHOST_LIFT, [color](PathKind /*kind*/) { return color; });
+    return;
   }
   for (const ParkPathPoint &point : parkPathPoints(world)) {
     if (point.Key == key) {
@@ -474,16 +536,16 @@ ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
   if (accepted) {
     appendDeleted(mesh, world, edit);
   }
-  const std::vector<ParkSegment> edited = editedSegments(world, edit);
-  if (const auto *path = std::get_if<AddPath>(&edit); path != nullptr && edited.empty()) {
+  const PavedSurface surface = editedSurface(world, edit);
+  if (const auto *path = std::get_if<AddPath>(&edit); path != nullptr && surface.Pieces.empty()) {
     appendStraightPath(mesh, world, *path, ghostColor(accepted, pathColor(path->Kind)));
   }
-  for (const ParkSegment &segment : edited) {
-    appendGhostSegment(mesh, segment.Kind, segment.Line, segment.Width,
-                       ghostColor(accepted, pathColor(segment.Kind)));
-    // A narrower ghost lies inside the path it narrows, in the same color, so its new sides are
-    // marked.
-    if (std::holds_alternative<SetSegmentWidth>(edit)) {
+  appendSurface(mesh, surface, GHOST_LIFT,
+                [accepted](PathKind kind) { return ghostColor(accepted, pathColor(kind)); });
+  // A narrower ghost lies inside the path it narrows, in the same color, so its new sides are
+  // marked.
+  if (std::holds_alternative<SetSegmentWidth>(edit)) {
+    for (const ParkSegment &segment : editedSegments(world, edit)) {
       appendSides(mesh, segment, JOIN_MARK_COLOR);
     }
   }

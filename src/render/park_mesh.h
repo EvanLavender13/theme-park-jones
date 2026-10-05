@@ -5,6 +5,7 @@
 #include "sim/park/edits.h"
 #include "sim/park/geometry.h"
 #include "sim/park/intent.h"
+#include "sim/park/surface.h"
 #include "sim/world.h"
 
 #include <optional>
@@ -63,10 +64,13 @@ inline constexpr Rgba INVALID_TINT{0.95f, 0.15f, 0.15f, 0.5f};
 inline constexpr Rgba DELETE_TINT{1.0f, 0.55f, 0.1f, 0.6f};
 inline constexpr Rgba HIGHLIGHT_TINT{1.0f, 1.0f, 1.0f, 0.35f};
 
-// Adds a segment's flat ribbon along its ground line, the width wide, at pathLift(kind), with a
-// round joint beyond each end, or nothing when the line has fewer than two points.
-void appendSegment(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &line,
-                   double width, Rgba color);
+// A paved surface's edge lines are strips this wide on the paving's side of each line, this far
+// above its pieces.
+inline constexpr double EDGE_LINE_WIDTH = 0.15;
+inline constexpr float EDGE_LIFT = 0.005f;
+
+// The color of an edge line on paving of the color: red, green, and blue scaled by 0.6.
+Rgba edgeColor(Rgba color);
 
 // A ghost marks each stop where an added path joins a point or segment, and each place where it
 // crosses one, with a flat disc of this radius, this high, in this color.
@@ -153,15 +157,15 @@ void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha);
 // starved mark over each starved shop.
 ParkMesh buildParkMesh(const World &world);
 
-// Adds the box, segment, or path point the key holds, in the color: a box or segment shaped as
-// buildParkMesh draws it, a segment GHOST_LIFT higher, and a path point as a flat disc of
-// JOIN_MARK_RADIUS at JOIN_MARK_LIFT. Nothing when the key holds none of these.
+// Adds the box, segment, or path point the key holds, in the color: a box shaped as buildParkMesh
+// draws it, a segment as its own pieces of the paved surface GHOST_LIFT higher, and a path point
+// as a flat disc of JOIN_MARK_RADIUS at JOIN_MARK_LIFT. Nothing when the key holds none of these.
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
 
-// The ghost of an edit on a world: the box it adds or moves, and every segment it adds or reshapes,
-// translucent in its kind's color when accepted and INVALID_TINT when not; what an accepted
-// deletion removes, in DELETE_TINT; and its join marks; followed by the candidate's walkways and
-// starved marks when a candidate is given.
+// The ghost of an edit on a world: the box it adds or moves, and the paved surface it adds or
+// changes, drawn as buildParkMesh draws paving GHOST_LIFT higher, translucent in its kind's color
+// when accepted and INVALID_TINT when not; what an accepted deletion removes, in DELETE_TINT; and
+// its join marks; followed by the candidate's walkways and starved marks when a candidate is given.
 ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
                         const std::optional<World> &candidate);
 // The same ghost with the candidate makeCandidate gives for the edit when it is accepted, and none
