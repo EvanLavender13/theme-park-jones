@@ -67,11 +67,12 @@ A network is nodes, and edges with lengths. navigable-networks publishes the net
 
 A network place is a carrier and a distance along it. Every field is sampled at places. Carriers come from intent, so if a holder keeps a place across a re-derivation, the place survives edges being split or merged under it.
 
-The network type offers one carry-over operation. A holder applies it to its own places, using the networks from before and after a re-derivation, so nobody reads another's internals. It has three outcomes:
+The network type offers one carry-over operation. A holder applies it to its own places, using the networks from before and after a re-derivation, so nobody reads another's internals. It has four outcomes:
 
 - If the place's carrier is unchanged, the place keeps its spot.
-- If the carrier's geometry changed, the place moves to the point on the same carrier nearest its old ground position.
-- If the carrier no longer exists, the place resolves to no place. This is a legitimate state, and the holder handles it.
+- If the carrier changed or is gone, and a carrier of the new network passes over the place's old ground position, the place stays at that ground position. It stays on its own carrier if that carrier passes there.
+- If no carrier passes there and the carrier's geometry changed, the place moves to the point on the same carrier nearest its old ground position.
+- If no carrier passes there and the carrier no longer exists, the place resolves to no place. This is a legitimate state, and the holder handles it.
 
 A node may be anchored to an entity. A shop or depot can then find the places where it meets a network without reading how the network was derived. A nearest-point query finds the place for a ground position. Routing and route distance belong to navigable-networks.
 
@@ -109,7 +110,7 @@ The slice's medium map in plans/slices/boxes-and-tubes/SLICE.md names each of th
   - packets go back to their sender;
   - units with neither endpoint left are consumed as undeliverable;
   - a removed endpoint's stock goes to the entities its units are addressed to, or is consumed as discarded.
-- Principle 4 is kept by sampling only at network places. Distances between places are measured only along the network, by navigable-networks. The one straight-line measure in the medium is the nearest-point query, and it is used only to snap a ground position onto the network.
+- Principle 4 is kept by sampling only at network places. Distances between places are measured only along the network, by navigable-networks. The medium's straight-line measures are the nearest-point queries, carry-over's check that a snapped place lies on a place's old ground, and the direction query. The first two are used only to snap a ground position onto the network, and the direction query only to scale a direction to unit length.
 
 ## Dependencies
 

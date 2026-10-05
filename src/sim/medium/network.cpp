@@ -127,6 +127,21 @@ void projectOnto(const Carrier &carrier, GroundPoint point, std::optional<Place>
   }
 }
 
+// The snapped place, when its ground position lies within ON_GROUND_TOLERANCE of the point.
+std::optional<Place> onGround(const Network &network, const std::optional<Place> &snapped,
+                              GroundPoint point) {
+  const std::optional<GroundPoint> at = snapped ? network.groundPoint(*snapped) : std::nullopt;
+  if (!at) {
+    return std::nullopt;
+  }
+  const double dx = at->X - point.X;
+  const double dz = at->Z - point.Z;
+  if ((dx * dx) + (dz * dz) > ON_GROUND_TOLERANCE * ON_GROUND_TOLERANCE) {
+    return std::nullopt;
+  }
+  return snapped;
+}
+
 } // namespace
 
 Network::Network(std::vector<Carrier> carriers, uint32_t nodeCount, std::vector<NodeAnchor> anchors)
@@ -347,17 +362,25 @@ std::optional<Place> Network::nearestPlaceOn(EntityKey carrier, GroundPoint poin
 
 std::optional<Place> carryOver(const Place &place, const Network &before, const Network &after) {
   const std::optional<GroundPoint> ground = before.groundPoint(place);
-  const Carrier *now = findCarrier(after.carriers(), place.Carrier);
-  if (!ground || now == nullptr) {
+  if (!ground) {
     return std::nullopt;
   }
-  // The place resolves before, so its carrier is there. Stops are not geometry, so a split keeps
-  // it.
+  // The place resolves before, so its carrier is there. Stops are not geometry, so a split that
+  // keeps the carrier's key keeps the place.
   const Carrier *was = findCarrier(before.carriers(), place.Carrier);
-  if (was != nullptr && was->Points == now->Points) {
+  const Carrier *now = findCarrier(after.carriers(), place.Carrier);
+  if (was != nullptr && now != nullptr && was->Points == now->Points) {
     return place;
   }
-  return after.nearestPlaceOn(place.Carrier, *ground);
+  // None when the carrier is gone.
+  const std::optional<Place> own = after.nearestPlaceOn(place.Carrier, *ground);
+  if (const std::optional<Place> stays = onGround(after, own, *ground)) {
+    return stays;
+  }
+  if (const std::optional<Place> stays = onGround(after, after.nearestPlace(*ground), *ground)) {
+    return stays;
+  }
+  return own;
 }
 
 void addNetworkComponent(WorldSchema &schema) {

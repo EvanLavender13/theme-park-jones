@@ -212,9 +212,16 @@ private:
   std::vector<size_t> EdgeEndStarts;
 };
 
-// Moves a place held across a re-derivation from the network before to the network after: kept
-// when its carrier's points are unchanged, moved to the carrier's nearest point to its old ground
-// position when they changed, and none when it did not resolve before or its carrier is gone.
+// How far a carrier may pass from a place's old ground position, in meters, and still count as
+// passing over it. It allows for rounding where a producer cuts a line into new carriers.
+constexpr double ON_GROUND_TOLERANCE = 0.001;
+
+// Moves a place held across a re-derivation from the network before to the network after. It is
+// kept when its carrier's points are unchanged. Otherwise, if a carrier after passes within
+// ON_GROUND_TOLERANCE of its old ground position, it stays at that ground position: on its own
+// carrier if that one passes there, or else on the carrier nearestPlace finds. Otherwise it moves
+// to its carrier's nearest point to its old ground position, or is none when it did not resolve
+// before or its carrier is gone.
 [[nodiscard]] std::optional<Place> carryOver(const Place &place, const Network &before,
                                              const Network &after);
 

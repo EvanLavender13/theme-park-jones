@@ -406,9 +406,22 @@ void stepGuests(World &world) {
   admitGuests(world, network);
 }
 
+// Turns the guest about when the carrier its place is carried to runs against the one it stood
+// on, there, so it keeps walking the same way over the ground. If either direction is unknown, or
+// the two are square to each other, it keeps its way.
+void keepWayOverGround(Guest &guest, const Network &before, const Network &after,
+                       const Place &carried) {
+  const std::optional<GroundDirection> was = before.directionAt(guest.At);
+  const std::optional<GroundDirection> now = after.directionAt(carried);
+  if (was && now && (was->X * now->X) + (was->Z * now->Z) < 0.0) {
+    guest.Forward = !guest.Forward;
+  }
+}
+
 // Carries each guest's place from the guest network before the resolution to the one it derived:
 // by carryOver, and for a retired place, to the new network's nearest place to where the guest
-// stood. A place with neither is left as it is, and its guest leaves when it next steps. Nothing
+// stood. A guest that carryOver puts on another carrier keeps walking the same way over the
+// ground. A place with neither is left as it is, and its guest leaves when it next steps. Nothing
 // changes in a world's first resolution, which has no network before.
 void carryGuests(World &world) {
   const Network *before = previousNetwork(world, PathKind::Guest);
@@ -419,6 +432,9 @@ void carryGuests(World &world) {
   for (const EntityKey key : parkGuests(world)) {
     Guest &guest = world.Registry.get<Guest>(world.findEntity(key));
     if (const std::optional<Place> carried = carryOver(guest.At, *before, after)) {
+      if (carried->Carrier != guest.At.Carrier) {
+        keepWayOverGround(guest, *before, after, *carried);
+      }
       guest.At = *carried;
       continue;
     }
