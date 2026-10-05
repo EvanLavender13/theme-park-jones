@@ -66,7 +66,7 @@ Where a segment AddPath adds meets another segment of its kind, the two join. Th
 
 - If each end of each segment lies within MIN_SEGMENT_LENGTH of the line through the other, the segments lie along one line. They don't meet, and neither splits.
 - Otherwise, if an end of one segment lies within MIN_SEGMENT_LENGTH of the other segment, and farther than MIN_SEGMENT_LENGTH from both of the other's ends, the other segment splits at that end's point.
-- Otherwise, if the segments cross, AddPath adds a point at the crossing, with DEFAULT_CORNER_RADIUS, and both split there.
+- Otherwise, if the segments cross, AddPath adds a point at the crossing, with DEFAULT_CORNER_RADIUS, and both split there. If the crossing lies within MIN_SEGMENT_LENGTH of a point the path already places, as where a path doubles back across a segment, both split at that point instead.
 
 If they meet within MIN_SEGMENT_LENGTH of an end of each, nothing splits. A segment that meets several others splits at each of their points, in order along it, together with any OnSegment or OnDrawnSegment stops on it, as described above. pathCrossings gives the ground position of each point where AddPath splits a segment this way, other than at an OnSegment or OnDrawnSegment stop. It gives none if the world refuses the path.
 
