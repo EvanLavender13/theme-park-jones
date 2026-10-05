@@ -77,6 +77,8 @@ struct RemoveStall {
 void applyCommand(World &world, const RemoveStall &command) { world.destroyEntity(command.Stall); }
 
 constexpr uint64_t TRACK_PURPOSE = hashName("track-network");
+// How wide the track is. Nothing in the scenario reads it, but every carrier has a width.
+constexpr double TRACK_WIDTH = 3.0;
 constexpr uint64_t SHIP_PURPOSE = hashName("stalls-ship");
 constexpr uint64_t CHOOSE_PURPOSE = hashName("stalls-choose");
 constexpr uint64_t SPAWN_PURPOSE = hashName("stalls-spawn");
@@ -131,6 +133,7 @@ void resolveTrack(World &world) {
   // Creating an entity may move the registry's storage, so the track is copied first.
   const Track track = world.Registry.get<Track>(world.findEntity(owner));
   Carrier carrier{.Key = owner,
+                  .Width = TRACK_WIDTH,
                   .Points = {{.X = 0.0, .Z = 0.0, .Distance = 0.0},
                              {.X = track.Length, .Z = 0.0, .Distance = track.Length}},
                   .Stops = {}};

@@ -12,7 +12,7 @@ addRoutes registers the derived type PreviousNetwork, the resolver path-networks
 
 Each resolution derives one network for each PathKind from intent alone, so saves never hold networks (principle 1). parkNetwork returns a kind's network. Before the world's first resolution, it returns an empty network.
 
-A kind's network has a carrier for each path of that kind, keyed by the path's key and following its ground line. It also has a carrier for each connector. Every edge is a stretch of a drawn line or a connector, measured along it (principle 4). Paths of different kinds never share a node, even where they cross.
+A kind's network has a carrier for each path of that kind, keyed by the path's key and following its ground line. It also has a carrier for each connector. Every carrier, a path's or a connector's, has its kind's path width (pathWidth, sim/park/SPEC.md). Every edge is a stretch of a drawn line or a connector, measured along it (principle 4). Paths of different kinds never share a node, even where they cross.
 
 Where lines of one kind cross or come within JUNCTION_TOLERANCE of each other, they join at a node. These all give junctions:
 

@@ -38,6 +38,13 @@ void requireValidPoints(const Carrier &carrier) {
   }
 }
 
+void requireValidWidth(const Carrier &carrier) {
+  if (!isFinite(carrier.Width) || !(carrier.Width > 0.0)) {
+    throw std::invalid_argument(carrierName(carrier.Key) +
+                                " has a width that is not finite and above zero");
+  }
+}
+
 void requireValidStops(const Carrier &carrier, uint32_t nodeCount) {
   const std::string name = carrierName(carrier.Key);
   if (carrier.Stops.size() < 2) {
@@ -133,6 +140,7 @@ Network::Network(std::vector<Carrier> carriers, uint32_t nodeCount, std::vector<
     if (i > 0 && Carriers[i - 1].Key == Carriers[i].Key) {
       throw std::invalid_argument(carrierName(Carriers[i].Key) + " is repeated");
     }
+    requireValidWidth(Carriers[i]);
     requireValidPoints(Carriers[i]);
     requireValidStops(Carriers[i], NodeCount);
   }
@@ -280,6 +288,38 @@ std::optional<GroundPoint> Network::groundPoint(const Place &place) const {
   const CarrierPoint &b = *after;
   const double t = (place.Distance - a.Distance) / (b.Distance - a.Distance);
   return GroundPoint{a.X + t * (b.X - a.X), a.Z + t * (b.Z - a.Z)};
+}
+
+std::optional<double> Network::widthAt(const Place &place) const {
+  const std::optional<size_t> index = findCarrierOf(place);
+  if (!index) {
+    return std::nullopt;
+  }
+  return Carriers[*index].Width;
+}
+
+std::optional<GroundDirection> Network::directionAt(const Place &place) const {
+  const std::optional<size_t> index = findCarrierOf(place);
+  if (!index) {
+    return std::nullopt;
+  }
+  const std::vector<CarrierPoint> &points = Carriers[*index].Points;
+  // The first point beyond the distance, so a place at a point takes the piece ahead of it. The
+  // first point is at 0 and the place is at or above 0, so it is never the first point. Beyond
+  // the end there is none, and the last piece is used.
+  auto after = std::ranges::upper_bound(points, place.Distance, {}, &CarrierPoint::Distance);
+  if (after == points.end()) {
+    after = points.end() - 1;
+  }
+  const CarrierPoint &a = *(after - 1);
+  const CarrierPoint &b = *after;
+  const double dx = b.X - a.X;
+  const double dz = b.Z - a.Z;
+  const double length = std::sqrt((dx * dx) + (dz * dz));
+  if (!(length > 0.0)) {
+    return std::nullopt;
+  }
+  return GroundDirection{dx / length, dz / length};
 }
 
 std::optional<Place> Network::nearestPlace(GroundPoint point) const {

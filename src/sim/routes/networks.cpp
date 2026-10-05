@@ -30,7 +30,8 @@ std::vector<Carrier> pathCarriers(const std::vector<ParkPath> &paths, PathKind k
     if (line.empty()) {
       continue;
     }
-    carriers.push_back(Carrier{.Key = path.Key, .Points = std::move(line), .Stops = {}});
+    carriers.push_back(
+        Carrier{.Key = path.Key, .Width = pathWidth(kind), .Points = std::move(line), .Stops = {}});
   }
   return carriers;
 }
@@ -280,10 +281,10 @@ struct Connection {
   double PathDistance = 0.0;
 };
 
-// The connectors of the doors whose nearest point on the path carriers lies within reach. The
-// carriers are in key order.
+// The connectors of the doors whose nearest point on the path carriers lies within reach, each
+// the given width. The carriers are in key order.
 std::vector<Connection> findConnections(const std::vector<Carrier> &carriers,
-                                        const std::vector<Door> &doors) {
+                                        const std::vector<Door> &doors, double width) {
   std::vector<Connection> connections;
   if (carriers.empty()) {
     return connections;
@@ -313,6 +314,7 @@ std::vector<Connection> findConnections(const std::vector<Carrier> &carriers,
     const auto path = std::ranges::lower_bound(carriers, place->Carrier, {}, &Carrier::Key);
     connections.push_back(
         {.Connector = {.Key = key,
+                       .Width = width,
                        .Points = {{.X = door.At.X, .Z = door.At.Z, .Distance = 0.0},
                                   {.X = point->X, .Z = point->Z, .Distance = reach}},
                        .Stops = {}},
@@ -382,7 +384,7 @@ Network deriveNetwork(const std::vector<ParkPath> &paths, const std::vector<Door
   std::vector<Meeting> meetings = findMeetings(carriers);
 
   // Each connector meets its path at its connection.
-  std::vector<Connection> connections = findConnections(carriers, doors);
+  std::vector<Connection> connections = findConnections(carriers, doors, pathWidth(kind));
   const size_t pathCount = carriers.size();
   for (Connection &connection : connections) {
     meetings.push_back({.First = connection.Path,

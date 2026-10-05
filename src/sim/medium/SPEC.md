@@ -15,12 +15,13 @@ The medium owns no network, field, or flow kind of its own. Each owning module d
 
 ## Networks
 
-A Network is a value built from carriers, a node count, and anchors. A carrier is a line with a stable key, such as a drawn path or a box's connector. It is given as a polyline of ground points with the producer's own arc lengths. Nodes stop along carriers, and the stretches between consecutive stops are the network's edges. Because edges lie along carriers, every distance on a network is a distance along a line the producer drew (principle 4). A node may be anchored to one entity, and an entity may anchor several nodes. Through its anchors, an entity finds where it meets the network without knowing how the network was derived.
+A Network is a value built from carriers, a node count, and anchors. A carrier is a line with a stable key, such as a drawn path or a box's connector. It is given as a polyline of ground points with the producer's own arc lengths. Each carrier also has a walkable width, the same along its whole length. Nodes stop along carriers, and the stretches between consecutive stops are the network's edges. Because edges lie along carriers, every distance on a network is a distance along a line the producer drew (principle 4). A node may be anchored to one entity, and an entity may anchor several nodes. Through its anchors, an entity finds where it meets the network without knowing how the network was derived.
 
 The constructor refuses a malformed network with std::invalid_argument, which means every network that exists is well formed:
 
 - Carrier keys are unique and not NULL_KEY.
 - Each carrier's distances start at 0 and strictly increase.
+- Each carrier's width is finite and above zero.
 - Each carrier's stops start at 0 and end at its length, so its edges tile it exactly.
 - Every node is a stop of some carrier.
 - A node has at most one anchor.
@@ -35,7 +36,9 @@ A Place is a carrier key and a distance along it. It names the same ground posit
 
 resolve gives a place's position in a network: either the node whose stop is exactly at its distance, or the edge that encloses it, with its offsets from both ends. If a place is on a carrier the network lacks, or off the carrier's ends, it resolves to nothing, which is a legitimate result, not an error (principle 2). A node's stopPlaces are exactly the places that resolve to it.
 
-groundPoint gives a place's ground position, interpolated along the carrier's polyline. nearestPlace snaps a ground position to the nearest place on any carrier. nearestPlaceOn snaps it to the nearest place on one carrier. A junction is equally near on every carrier that stops there, and ties are broken deterministically. These are the medium's only straight-line measures. They are used only to snap a ground position onto a network (principle 4).
+groundPoint gives a place's ground position, interpolated along the carrier's polyline. nearestPlace snaps a ground position to the nearest place on any carrier. nearestPlaceOn snaps it to the nearest place on one carrier. A junction is equally near on every carrier that stops there, and ties are broken deterministically. nearestPlace, nearestPlaceOn, and directionAt are the medium's only straight-line measures. The first two are used only to snap a ground position onto a network, and directionAt only to scale a direction to unit length. None of them measures how far anything travels (principle 4).
+
+widthAt gives the walkable width at a place, and directionAt gives the direction of travel there, as a unit vector on the ground pointing toward higher distances along its carrier. At a point where the carrier's polyline bends, the direction is that of the piece ahead. At the carrier's end, it is that of the last piece. Where a place doesn't resolve, both give nothing. If the piece has no length on the ground, directionAt gives nothing.
 
 ## Carry-over
 
