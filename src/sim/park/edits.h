@@ -138,13 +138,23 @@ struct SetSegmentWidth {
   bool operator==(const SetSegmentWidth &) const = default;
 };
 
+// The segment's edge radius at the point, one of its two points, held exactly as given.
+struct SetEdgeRadius {
+  EntityKey Segment = NULL_KEY;
+  EntityKey Point = NULL_KEY;
+  double Radius = 0.0;
+
+  bool operator==(const SetEdgeRadius &) const = default;
+};
+
 // Registers AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
-// DeletePoint, SetCornerRadius, and SetSegmentWidth, in that order.
+// DeletePoint, SetCornerRadius, SetSegmentWidth, and SetEdgeRadius, in that order.
 void addParkEdits(WorldSchema &schema);
 
-// A tentative or committed edit to park intent: one of the ten commands.
-using ParkEdit = std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint,
-                              InsertPoint, DeletePoint, SetCornerRadius, SetSegmentWidth>;
+// A tentative or committed edit to park intent: one of the eleven commands.
+using ParkEdit =
+    std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
+                 DeletePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius>;
 
 // The stop's ground position: a NewPoint's own, an OnPoint's point's, or the place Along of the way
 // from an OnSegment's segment's From point to its To point. None when the stop names no path point,
@@ -173,8 +183,9 @@ std::vector<ParkPoint> pathCrossings(const World &world, const DeletePoint &del)
 std::vector<ParkSegment> editedSegments(const World &world, const ParkEdit &edit);
 
 // The pieces and edge lines of each segment and point whose part of the surface the edit changes,
-// as they would lie after the edit, in ascending key order of their owners. Empty when
-// editedSegments is.
+// as they would lie after the edit, in ascending key order of their owners. Empty when the edit
+// names nothing it acts on, when a segment it adds or reshapes has no ground line, and for edits of
+// boxes.
 PavedSurface editedSurface(const World &world, const ParkEdit &edit);
 
 // Whether the command would be applied to the world: it describes a physical object, names what it
@@ -190,6 +201,7 @@ bool isAccepted(const World &world, const InsertPoint &command);
 bool isAccepted(const World &world, const DeletePoint &command);
 bool isAccepted(const World &world, const SetCornerRadius &command);
 bool isAccepted(const World &world, const SetSegmentWidth &command);
+bool isAccepted(const World &world, const SetEdgeRadius &command);
 
 // Whether the command the edit holds would be applied to the world.
 bool isAccepted(const World &world, const ParkEdit &edit);
@@ -209,6 +221,7 @@ void applyCommand(World &world, const InsertPoint &command);
 void applyCommand(World &world, const DeletePoint &command);
 void applyCommand(World &world, const SetCornerRadius &command);
 void applyCommand(World &world, const SetSegmentWidth &command);
+void applyCommand(World &world, const SetEdgeRadius &command);
 
 // Whether every solid and line has its geometry, stays in the park, and conflicts with no other.
 bool isPhysicallyValid(const World &world);

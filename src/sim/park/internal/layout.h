@@ -48,6 +48,8 @@ PavedSurface surfaceOf(const PathLayout &layout, const PathGround &ground);
 // whole, without hiding the parts that lie inside paving joined to them.
 PavedSurface surfaceAround(const PathLayout &layout, const PathGround &ground,
                            const std::vector<EntityKey> &focus, bool hide);
+// Each edge the layout's segments make, as parkEdges gives them, given its ground.
+std::vector<ParkEdge> edgesOf(const PathLayout &layout, const PathGround &ground);
 // The points, in ascending key order, whose part of the surface can change when the segments at
 // the given points change: those points, and the points of each segment whose paving or edge
 // lines can reach theirs.

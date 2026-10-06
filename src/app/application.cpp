@@ -99,7 +99,7 @@ bool Application::runFrames() {
                            Ui.shown().FoodOverlay,
                            Interactions.pathStart(Session.world()),
                            Interactions.pathFinish(Session.world()),
-                           Interactions.radiusHandles(Session.world()),
+                           Interactions.editHandles(Session.world()),
                            Interactions.hoveredHandle(Session.world())};
     if ((Scene.syncLook(remade, look) &&
          !uploadPreviewMeshes(renderer, Session.world(), Scene.preview(), look)) ||

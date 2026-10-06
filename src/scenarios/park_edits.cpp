@@ -22,8 +22,8 @@ constexpr double REACH = PARK_SIZE / 2.0 + 8.0;
 // A path's next point lies at most this far from its last along each axis.
 constexpr double PATH_STEP = 40.0;
 // Weights of AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
-// DeletePoint, SetCornerRadius, and SetSegmentWidth.
-constexpr std::array<uint64_t, 10> EDIT_WEIGHTS{3, 4, 3, 1, 1, 2, 1, 1, 1, 1};
+// DeletePoint, SetCornerRadius, SetSegmentWidth, and SetEdgeRadius.
+constexpr std::array<uint64_t, 11> EDIT_WEIGHTS{3, 4, 3, 1, 1, 2, 1, 1, 1, 1, 1};
 
 // The cycle's next draw, in [0, 1).
 double drawEdit(const World &world, uint64_t &index) {
@@ -64,6 +64,21 @@ AddPath drawPath(const World &world, uint64_t &index) {
   return path;
 }
 
+// An edge radius at one end of any given key, up to 12 m, so some don't fit and are made smaller. A
+// key that holds no segment names no point, so the command is refused.
+SetEdgeRadius drawEdgeRadius(const World &world, uint64_t &index) {
+  const EntityKey key = drawGivenKey(world, index);
+  const bool atFrom = drawEdit(world, index) < 0.5;
+  const double radius = drawEdit(world, index) * 12.0;
+  EntityKey point = NULL_KEY;
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Key == key) {
+      point = atFrom ? segment.From : segment.To;
+    }
+  }
+  return SetEdgeRadius{key, point, radius};
+}
+
 // Before every tenth cycle, one drawn edit of any kind.
 void queueEdit(const World &world, CommandQueue &commands) {
   if (world.Tick % EDIT_INTERVAL != 0) {
@@ -96,10 +111,12 @@ void queueEdit(const World &world, CommandQueue &commands) {
     // Radii up to 12 m, so some don't fit and are made smaller.
     const EntityKey point = drawGivenKey(world, index);
     commands.push(SetCornerRadius{point, drawEdit(world, index) * 12.0});
-  } else {
+  } else if (kind == 9) {
     // Widths across the Edit path tool's range, so some meet a box and are refused.
     const EntityKey segment = drawGivenKey(world, index);
     commands.push(SetSegmentWidth{segment, 1.5 + drawEdit(world, index) * 14.5});
+  } else {
+    commands.push(drawEdgeRadius(world, index));
   }
 }
 

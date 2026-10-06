@@ -48,6 +48,35 @@ std::span<const ParkPoint> edgePoints(const PavedSurface &surface, const EdgeLin
 // The park's paved surface. A segment with an empty ground line adds nothing.
 PavedSurface parkSurface(const World &world);
 
+// An edge of the paving at a path point, where its outline turns from one segment's left side, seen
+// walking away from the point, to the right side of the next segment counter-clockwise: the point,
+// that segment, the unit direction along each of the two away from the point, that segment's
+// first, and whether the next lies less than half a turn around. Radius is the radius it is rounded
+// with, between the smallest and largest that fit. Middle is its curve's middle, Sharp is where the
+// two sides meet, and Toward is the unit direction from Sharp in which Middle moves as the radius
+// grows.
+struct ParkEdge {
+  EntityKey Point = NULL_KEY;
+  EntityKey Segment = NULL_KEY;
+  std::array<ParkPoint, 2> Along{};
+  bool Inner = false;
+  double Radius = 0.0;
+  double MinRadius = 0.0;
+  double MaxRadius = 0.0;
+  ParkPoint Middle;
+  ParkPoint Sharp;
+  ParkPoint Toward;
+
+  bool operator==(const ParkEdge &) const = default;
+};
+
+// Each edge with a radius, other than a corner's inside edge, in ascending key order of its point,
+// then of its segment.
+std::vector<ParkEdge> parkEdges(const World &world);
+// The radius whose curve's middle lies the distance from the edge's Sharp along its Toward. 0 for a
+// distance of 0 or less.
+double edgeRadiusFor(const ParkEdge &edge, double distance);
+
 } // namespace tpj
 
 #endif

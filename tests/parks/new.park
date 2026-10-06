@@ -11,4 +11,4 @@ next-key 5
 3 x=0 z=103 radius=0
 
 [path-segment]
-4 kind=guest from=2 to=3 width=3
+4 kind=guest from=2 to=3 width=3 from-edge-radius=0 to-edge-radius=0

@@ -106,6 +106,14 @@ bool leavesPark(const Line &line) {
   });
 }
 
+// Whether a corner of the piece lies past the park's edge by more than CONTACT_TOLERANCE.
+bool leavesPark(const SurfacePiece &piece) {
+  const double limit = HALF_PARK + CONTACT_TOLERANCE;
+  return std::ranges::any_of(pieceCorners(piece), [limit](const ParkPoint &corner) {
+    return std::abs(corner.X) > limit || std::abs(corner.Z) > limit;
+  });
+}
+
 // The least and greatest projections of the corners onto the axis.
 std::pair<double, double> extentOf(std::span<const ParkPoint> corners, const ParkPoint &axis) {
   const auto project = [&axis](const ParkPoint &corner) {
@@ -212,7 +220,7 @@ struct Split {
 
 // A segment an edit adds or reshapes: the one Key holds, or, when Key is NULL_KEY, a new one. It
 // runs from plan point From to plan point To and splits at the points it runs Through, in order of
-// Along.
+// Along. FromEdge and ToEdge are its edge radii at From and To.
 struct PlanLine {
   EntityKey Key = NULL_KEY;
   PathKind Kind = PathKind::Guest;
@@ -220,6 +228,8 @@ struct PlanLine {
   size_t From = 0;
   size_t To = 0;
   std::vector<PlacedPoint> Through;
+  double FromEdge = DEFAULT_EDGE_RADIUS;
+  double ToEdge = DEFAULT_EDGE_RADIUS;
 };
 
 // What an accepted edit makes. Points holds the points its lines and splits run through: for
@@ -230,7 +240,8 @@ struct PlanLine {
 // the one from stop i to stop i + 1 at index i. Crossings holds the entries in Points where a
 // meeting splits a segment, in the order found. Destroyed holds the keys it destroys, segments
 // first. If Moved is not NULL_KEY, that existing point moves to MovedTo. If Rounded is not
-// NULL_KEY, that existing point's radius becomes RoundedTo.
+// NULL_KEY, that existing point's radius becomes RoundedTo. If Edged is not NULL_KEY, that existing
+// segment's edge radius at its From end, when EdgedAtFrom, or else at its To end, becomes EdgedTo.
 struct EditPlan {
   std::vector<PlanPoint> Points;
   std::vector<size_t> Stops;
@@ -242,6 +253,9 @@ struct EditPlan {
   ParkPoint MovedTo;
   EntityKey Rounded = NULL_KEY;
   double RoundedTo = 0.0;
+  EntityKey Edged = NULL_KEY;
+  bool EdgedAtFrom = false;
+  double EdgedTo = 0.0;
 };
 
 // Whether the key holds a path point that some segment uses, every such segment of the kind.
@@ -286,6 +300,11 @@ std::vector<ParkSegment> segmentsNotAt(const std::vector<ParkSegment> &segments,
   std::ranges::copy_if(segments, std::back_inserter(notAt),
                        [point](const ParkSegment &segment) { return !endsAt(segment, point); });
   return notAt;
+}
+
+// The segment's edge radius at the point, one of its two.
+double edgeAt(const ParkSegment &segment, EntityKey point) {
+  return segment.From == point ? segment.FromEdge : segment.ToEdge;
 }
 
 // The segment's end that is not the point.
@@ -586,7 +605,9 @@ std::optional<EditPlan> planMove(const World &world, const MovePoint &command) {
                                   segment.Width,
                                   segment.From == command.Point ? moved : farEntry,
                                   segment.To == command.Point ? moved : farEntry,
-                                  {}});
+                                  {},
+                                  segment.FromEdge,
+                                  segment.ToEdge});
   }
   const std::vector<ParkSegment> kept = segmentsNotAt(segments, command.Point);
   if (onPoint != nullptr) {
@@ -650,12 +671,16 @@ std::optional<EditPlan> planDelete(const World &world, const DeletePoint &comman
     }
     const size_t lowEntry = pointEntry(plan, lowFar, *lowAt);
     const size_t highEntry = pointEntry(plan, highFar, *highAt);
+    // The end at the point takes the high segment's far end, with its edge radius there.
+    const double highEdge = edgeAt(high, highFar);
     plan.Lines.push_back(PlanLine{low.Key,
                                   low.Kind,
                                   std::max(low.Width, high.Width),
                                   low.From == command.Point ? highEntry : lowEntry,
                                   low.To == command.Point ? highEntry : lowEntry,
-                                  {}});
+                                  {},
+                                  low.From == command.Point ? highEdge : low.FromEdge,
+                                  low.To == command.Point ? highEdge : low.ToEdge});
     plan.Destroyed = {high.Key, command.Point};
     if (!linesHaveGround(plan)) {
       return std::nullopt;
@@ -716,6 +741,22 @@ std::optional<EditPlan> planRadius(const World &world, const SetCornerRadius &co
   return plan;
 }
 
+// The plan of a SetEdgeRadius that names a segment with a ground line, one of its two points, and a
+// radius finite and at least 0.
+std::optional<EditPlan> planEdge(const World &world, const SetEdgeRadius &command) {
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  const ParkSegment *segment = findSegment(segments, command.Segment);
+  if (segment == nullptr || segment->Line.empty() || !endsAt(*segment, command.Point) ||
+      !std::isfinite(command.Radius) || command.Radius < 0.0) {
+    return std::nullopt;
+  }
+  EditPlan plan;
+  plan.Edged = segment->Key;
+  plan.EdgedAtFrom = segment->From == command.Point;
+  plan.EdgedTo = command.Radius;
+  return plan;
+}
+
 // The plan of a SetSegmentWidth that names a segment with a ground line and a width finite and
 // above zero: the segment reshaped between its own points, at the width. It meets nothing it
 // didn't meet before.
@@ -734,7 +775,14 @@ std::optional<EditPlan> planWidth(const World &world, const SetSegmentWidth &com
   EditPlan plan;
   const size_t from = pointEntry(plan, segment->From, *fromAt);
   const size_t to = pointEntry(plan, segment->To, *toAt);
-  plan.Lines.push_back(PlanLine{segment->Key, segment->Kind, command.Width, from, to, {}});
+  plan.Lines.push_back(PlanLine{segment->Key,
+                                segment->Kind,
+                                command.Width,
+                                from,
+                                to,
+                                {},
+                                segment->FromEdge,
+                                segment->ToEdge});
   return plan;
 }
 
@@ -817,19 +865,33 @@ template <typename Store> void applyPlan(Store &store, const EditPlan &plan) {
   if (plan.Rounded != NULL_KEY) {
     store.point(plan.Rounded).Radius = plan.RoundedTo;
   }
+  if (plan.Edged != NULL_KEY) {
+    PathSegmentIntent &edged = store.segment(plan.Edged);
+    (plan.EdgedAtFrom ? edged.FromEdge : edged.ToEdge) = plan.EdgedTo;
+  }
   for (const Split &split : plan.Splits) {
     const PathSegmentIntent was = store.segment(split.Segment);
     store.segment(split.Segment).To = keys[split.At.front().Point];
+    store.segment(split.Segment).ToEdge = DEFAULT_EDGE_RADIUS;
     for (size_t k = 0; k < split.At.size(); ++k) {
-      const EntityKey to = k + 1 < split.At.size() ? keys[split.At[k + 1].Point] : was.To;
-      store.addSegment(PathSegmentIntent{was.Kind, keys[split.At[k].Point], to, was.Width});
+      const bool last = k + 1 == split.At.size();
+      const EntityKey to = last ? was.To : keys[split.At[k + 1].Point];
+      store.addSegment(PathSegmentIntent{was.Kind, keys[split.At[k].Point], to, was.Width,
+                                         DEFAULT_EDGE_RADIUS,
+                                         last ? was.ToEdge : DEFAULT_EDGE_RADIUS});
     }
   }
   for (const PlanLine &line : plan.Lines) {
     EntityKey from = keys[line.From];
     bool first = true;
-    const auto addPart = [&](EntityKey to) {
-      const PathSegmentIntent part{line.Kind, from, to, line.Width};
+    // The first part takes the line's edge radius at From, and the last its edge radius at To.
+    const auto addPart = [&](EntityKey to, bool last) {
+      const PathSegmentIntent part{line.Kind,
+                                   from,
+                                   to,
+                                   line.Width,
+                                   first ? line.FromEdge : DEFAULT_EDGE_RADIUS,
+                                   last ? line.ToEdge : DEFAULT_EDGE_RADIUS};
       if (first && line.Key != NULL_KEY) {
         store.segment(line.Key) = part;
       } else {
@@ -839,9 +901,9 @@ template <typename Store> void applyPlan(Store &store, const EditPlan &plan) {
       from = to;
     };
     for (const PlacedPoint &placed : line.Through) {
-      addPart(keys[placed.Point]);
+      addPart(keys[placed.Point], false);
     }
-    addPart(keys[line.To]);
+    addPart(keys[line.To], true);
   }
 }
 
@@ -895,7 +957,7 @@ std::vector<EntityKey> pointsChanged(const std::vector<ParkSegment> &before,
   std::vector<EntityKey> points;
   const auto differs = [](const ParkSegment *was, const ParkSegment &is) {
     return was == nullptr || was->From != is.From || was->To != is.To || was->Line != is.Line ||
-           was->Width != is.Width;
+           was->Width != is.Width || was->FromEdge != is.FromEdge || was->ToEdge != is.ToEdge;
   };
   for (const ParkSegment &segment : after) {
     if (differs(findSegment(before, segment.Key), segment)) {
@@ -971,7 +1033,8 @@ Edited editedBy(const World &world, const EditPlan &plan, Wanted wanted) {
 }
 
 // The plan when the world accepts it: every segment it adds or changes has a ground line that stays
-// in the park, and every piece of the surface it adds or changes meets no solid.
+// in the park, and every piece of the surface it adds or changes stays in the park and meets no
+// solid.
 std::optional<EditPlan> acceptedPlan(const World &world, std::optional<EditPlan> plan) {
   if (!plan) {
     return std::nullopt;
@@ -984,8 +1047,9 @@ std::optional<EditPlan> acceptedPlan(const World &world, std::optional<EditPlan>
                             const std::optional<Line> line = lineOf(segment);
                             return line && !leavesPark(*line);
                           }) &&
-      std::ranges::all_of(edited.Surface.Pieces,
-                          [&solids](const SurfacePiece &piece) { return fits(piece, solids); });
+      std::ranges::all_of(edited.Surface.Pieces, [&solids](const SurfacePiece &piece) {
+        return !leavesPark(piece) && fits(piece, solids);
+      });
   return fitting ? std::move(plan) : std::nullopt;
 }
 
@@ -1020,6 +1084,9 @@ std::optional<EditPlan> planOf(const World &world, const SetCornerRadius &comman
 std::optional<EditPlan> planOf(const World &world, const SetSegmentWidth &command) {
   return planWidth(world, command);
 }
+std::optional<EditPlan> planOf(const World &world, const SetEdgeRadius &command) {
+  return planEdge(world, command);
+}
 
 // The ground position of each of the plan's crossings, or none without a plan.
 std::vector<ParkPoint> crossingsOf(const std::optional<EditPlan> &plan) {
@@ -1045,6 +1112,7 @@ void addParkEdits(WorldSchema &schema) {
   schema.addCommand<DeletePoint>();
   schema.addCommand<SetCornerRadius>();
   schema.addCommand<SetSegmentWidth>();
+  schema.addCommand<SetEdgeRadius>();
 }
 
 std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop) {
@@ -1116,8 +1184,9 @@ std::vector<ParkPoint> pathCrossings(const World &world, const DeletePoint &del)
 namespace {
 
 // The pieces of the park's surface that can reach the solid. Every piece of a point's or of a
-// segment's lies within the length and width of one of the point's segments from the point, so
-// only the points that near the solid's bounds and their segments are built.
+// segment's lies within the longer of one of the point's segments' length and the widest width,
+// plus the widest width, from the point, so only the points that near the solid's bounds and their
+// segments are built.
 std::vector<SurfacePiece> piecesNear(const World &world, const Solid &solid) {
   const PathLayout layout = layoutOf(world);
   const PathGround ground = groundOf(layout);
@@ -1126,6 +1195,12 @@ std::vector<SurfacePiece> piecesNear(const World &world, const Solid &solid) {
   const auto positionOf = [&layout](EntityKey key) {
     return std::ranges::lower_bound(layout.Points, key, {}, &LayoutPoint::Key)->Intent.At;
   };
+  double widest = 0.0;
+  for (const ParkSegment &segment : ground.Segments) {
+    if (!segment.Line.empty()) {
+      widest = std::max(widest, segment.Width);
+    }
+  }
   std::vector<EntityKey> focus;
   for (const ParkSegment &segment : ground.Segments) {
     if (segment.Line.empty()) {
@@ -1135,7 +1210,8 @@ std::vector<SurfacePiece> piecesNear(const World &world, const Solid &solid) {
     const ParkPoint to = positionOf(segment.To);
     const double dx = to.X - from.X;
     const double dz = to.Z - from.Z;
-    const double reach = std::sqrt(dx * dx + dz * dz) + segment.Width + CONTACT_TOLERANCE;
+    const double reach =
+        std::max(std::sqrt(dx * dx + dz * dz), widest) + widest + CONTACT_TOLERANCE;
     for (const auto &[key, at] : {std::pair{segment.From, from}, std::pair{segment.To, to}}) {
       const double outX = std::max({leastX - at.X, at.X - greatestX, 0.0});
       const double outZ = std::max({leastZ - at.Z, at.Z - greatestZ, 0.0});
@@ -1197,6 +1273,10 @@ bool isAccepted(const World &world, const SetCornerRadius &command) {
 }
 
 bool isAccepted(const World &world, const SetSegmentWidth &command) {
+  return acceptedPlan(world, planOf(world, command)).has_value();
+}
+
+bool isAccepted(const World &world, const SetEdgeRadius &command) {
   return acceptedPlan(world, planOf(world, command)).has_value();
 }
 
@@ -1270,6 +1350,13 @@ void applyCommand(World &world, const SetSegmentWidth &command) {
   }
 }
 
+void applyCommand(World &world, const SetEdgeRadius &command) {
+  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
+    WorldStore store(world);
+    applyPlan(store, *plan);
+  }
+}
+
 namespace {
 
 // What the edit changes, or nothing when it names nothing it acts on, or a segment it adds or
@@ -1295,8 +1382,7 @@ std::vector<ParkSegment> editedSegments(const World &world, const ParkEdit &edit
 }
 
 PavedSurface editedSurface(const World &world, const ParkEdit &edit) {
-  Edited edited = editedOf(world, edit);
-  return edited.Segments.empty() ? PavedSurface{} : std::move(edited.Surface);
+  return editedOf(world, edit).Surface;
 }
 
 bool isPhysicallyValid(const World &world) {
@@ -1320,8 +1406,9 @@ bool isPhysicallyValid(const World &world) {
   if (std::ranges::any_of(lines, [](const Line &line) { return leavesPark(line); })) {
     return false;
   }
-  return std::ranges::all_of(parkSurface(world).Pieces,
-                             [&solids](const SurfacePiece &piece) { return fits(piece, solids); });
+  return std::ranges::all_of(parkSurface(world).Pieces, [&solids](const SurfacePiece &piece) {
+    return !leavesPark(piece) && fits(piece, solids);
+  });
 }
 
 bool isAccepted(const World &world, const ParkEdit &edit) {

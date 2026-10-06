@@ -380,7 +380,7 @@ void appendFinishMark(ParkMesh &mesh, ParkPoint at) {
   appendDisc(mesh, at, FINISH_MARK_RADIUS, FINISH_MARK_LIFT, FINISH_MARK_COLOR);
 }
 
-void appendRadiusHandle(ParkMesh &mesh, ParkPoint at, Rgba color) {
+void appendHandle(ParkMesh &mesh, ParkPoint at, Rgba color) {
   appendDisc(mesh, at, RADIUS_HANDLE_SIZE, HANDLE_LIFT, color);
 }
 

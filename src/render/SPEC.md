@@ -16,7 +16,7 @@ It depends on no module but sim and core. The band overlay shades by values it i
 The app calls these headers:
 
 - renderer.h to create the renderer, upload meshes, and draw frames
-- park_mesh.h for buildParkMesh, buildGhostMesh, appendEntity, appendRadiusHandle, appendSides, meshBounds, HIGHLIGHT_TINT, and HANDLE_COLOR
+- park_mesh.h for buildParkMesh, buildGhostMesh, appendEntity, appendHandle, appendSides, meshBounds, HIGHLIGHT_TINT, HANDLE_COLOR, and EDGE_HANDLE_COLOR
 - guest_mesh.h for buildGuestMesh and appendGuestEntity
 - graph_overlay.h for buildGraphOverlay, graphColor, and the GRAPH_ drawing constants
 - band_overlay.h for OVERLAY_BAND, the reach of the food tooltip
@@ -55,7 +55,7 @@ With the candidate world, the ghost also shows the candidate's walkways and star
 
 appendPathStart shows where a path would start before its first click: a translucent disc of the path's width, with a join mark when the click would join a point or segment. appendFinishMark marks the stop where a click would finish the path, in FINISH_MARK_COLOR, wider than a join mark and under it. Ghost and highlighted segments lie GHOST_LIFT above the park's paths, so they never flicker against the paths beneath them. appendEntity adds the box, segment, or path point a key holds, in a given color such as HIGHLIGHT_TINT. A box is shaped as the park draws it, a segment as its own pieces of the surface, which are its body and its halves of the corners at its ends, and a path point is a flat disc of JOIN_MARK_RADIUS. It adds nothing when the key holds none of these.
 
-appendRadiusHandle adds a radius handle as a flat disc of RADIUS_HANDLE_SIZE, in a given color, above join marks. appendSides adds a strip along the inside of each of a segment's two sides, in a given color, above the segment's ghost. It adds nothing when the key holds no segment with a ground line.
+appendHandle adds a radius or edge handle as a flat disc of RADIUS_HANDLE_SIZE, in a given color, above join marks. appendSides adds a strip along the inside of each of a segment's two sides, in a given color, above the segment's ghost. It adds nothing when the key holds no segment with a ground line.
 
 ## Guests
 

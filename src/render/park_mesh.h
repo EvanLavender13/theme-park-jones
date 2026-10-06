@@ -95,9 +95,11 @@ void appendFinishMark(ParkMesh &mesh, ParkPoint at);
 inline constexpr double RADIUS_HANDLE_SIZE = 0.6;
 inline constexpr float HANDLE_LIFT = 0.07f;
 inline constexpr Rgba HANDLE_COLOR{0.95f, 0.95f, 0.95f, 0.8f};
+// The color of edge handles, apart from radius handles.
+inline constexpr Rgba EDGE_HANDLE_COLOR{0.95f, 0.70f, 0.25f, 0.8f};
 
-// Adds a radius handle centered on the point.
-void appendRadiusHandle(ParkMesh &mesh, ParkPoint at, Rgba color);
+// Adds a radius or edge handle centered on the point.
+void appendHandle(ParkMesh &mesh, ParkPoint at, Rgba color);
 
 // A segment's side marks are strips this wide along the inside of each side.
 inline constexpr double SIDE_MARK_WIDTH = 0.3;

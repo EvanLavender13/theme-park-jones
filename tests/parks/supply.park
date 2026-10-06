@@ -20,15 +20,15 @@ next-key 25
 12 x=12 z=87 radius=0
 
 [path-segment]
-13 kind=guest from=2 to=3 width=3
-14 kind=guest from=3 to=4 width=3
-15 kind=guest from=3 to=5 width=3
-16 kind=guest from=5 to=6 width=3
-17 kind=guest from=7 to=5 width=3
-18 kind=guest from=5 to=8 width=3
-19 kind=guest from=4 to=9 width=3
-20 kind=guest from=9 to=10 width=3
-21 kind=backstage from=11 to=12 width=2
+13 kind=guest from=2 to=3 width=3 from-edge-radius=0 to-edge-radius=0
+14 kind=guest from=3 to=4 width=3 from-edge-radius=0 to-edge-radius=0
+15 kind=guest from=3 to=5 width=3 from-edge-radius=0 to-edge-radius=0
+16 kind=guest from=5 to=6 width=3 from-edge-radius=0 to-edge-radius=0
+17 kind=guest from=7 to=5 width=3 from-edge-radius=0 to-edge-radius=0
+18 kind=guest from=5 to=8 width=3 from-edge-radius=0 to-edge-radius=0
+19 kind=guest from=4 to=9 width=3 from-edge-radius=0 to-edge-radius=0
+20 kind=guest from=9 to=10 width=3 from-edge-radius=0 to-edge-radius=0
+21 kind=backstage from=11 to=12 width=2 from-edge-radius=0 to-edge-radius=0
 
 [box]
 22 kind=shop x=6.5 z=115 facing-x=-1 facing-z=0

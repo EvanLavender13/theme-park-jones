@@ -163,239 +163,239 @@ next-key 2455
 389 x=100 z=80 radius=0
 
 [path-segment]
-7 kind=guest from=5 to=6 width=3
-10 kind=guest from=8 to=40 width=3
-13 kind=guest from=11 to=41 width=3
-16 kind=guest from=14 to=42 width=3
-19 kind=guest from=17 to=43 width=3
-22 kind=guest from=20 to=44 width=3
-25 kind=guest from=23 to=45 width=3
-28 kind=guest from=26 to=46 width=3
-31 kind=guest from=29 to=47 width=3
-34 kind=guest from=32 to=48 width=3
-37 kind=guest from=35 to=49 width=3
-50 kind=guest from=40 to=73 width=3
-51 kind=guest from=41 to=74 width=3
-52 kind=guest from=42 to=75 width=3
-53 kind=guest from=43 to=76 width=3
-54 kind=guest from=44 to=77 width=3
-55 kind=guest from=45 to=78 width=3
-56 kind=guest from=46 to=79 width=3
-57 kind=guest from=47 to=80 width=3
-58 kind=guest from=48 to=81 width=3
-59 kind=guest from=49 to=82 width=3
-60 kind=guest from=38 to=40 width=3
-61 kind=guest from=40 to=41 width=3
-62 kind=guest from=41 to=42 width=3
-63 kind=guest from=42 to=43 width=3
-64 kind=guest from=43 to=44 width=3
-65 kind=guest from=44 to=45 width=3
-66 kind=guest from=45 to=46 width=3
-67 kind=guest from=46 to=47 width=3
-68 kind=guest from=47 to=48 width=3
-69 kind=guest from=48 to=49 width=3
-70 kind=guest from=49 to=39 width=3
-83 kind=guest from=73 to=106 width=3
-84 kind=guest from=74 to=107 width=3
-85 kind=guest from=75 to=108 width=3
-86 kind=guest from=76 to=109 width=3
-87 kind=guest from=77 to=110 width=3
-88 kind=guest from=78 to=111 width=3
-89 kind=guest from=79 to=112 width=3
-90 kind=guest from=80 to=113 width=3
-91 kind=guest from=81 to=114 width=3
-92 kind=guest from=82 to=115 width=3
-93 kind=guest from=71 to=73 width=3
-94 kind=guest from=73 to=74 width=3
-95 kind=guest from=74 to=75 width=3
-96 kind=guest from=75 to=76 width=3
-97 kind=guest from=76 to=77 width=3
-98 kind=guest from=77 to=78 width=3
-99 kind=guest from=78 to=79 width=3
-100 kind=guest from=79 to=80 width=3
-101 kind=guest from=80 to=81 width=3
-102 kind=guest from=81 to=82 width=3
-103 kind=guest from=82 to=72 width=3
-116 kind=guest from=106 to=139 width=3
-117 kind=guest from=107 to=140 width=3
-118 kind=guest from=108 to=141 width=3
-119 kind=guest from=109 to=142 width=3
-120 kind=guest from=110 to=143 width=3
-121 kind=guest from=111 to=144 width=3
-122 kind=guest from=112 to=145 width=3
-123 kind=guest from=113 to=146 width=3
-124 kind=guest from=114 to=147 width=3
-125 kind=guest from=115 to=148 width=3
-126 kind=guest from=104 to=106 width=3
-127 kind=guest from=106 to=107 width=3
-128 kind=guest from=107 to=108 width=3
-129 kind=guest from=108 to=109 width=3
-130 kind=guest from=109 to=110 width=3
-131 kind=guest from=110 to=111 width=3
-132 kind=guest from=111 to=112 width=3
-133 kind=guest from=112 to=113 width=3
-134 kind=guest from=113 to=114 width=3
-135 kind=guest from=114 to=115 width=3
-136 kind=guest from=115 to=105 width=3
-149 kind=guest from=139 to=172 width=3
-150 kind=guest from=140 to=173 width=3
-151 kind=guest from=141 to=174 width=3
-152 kind=guest from=142 to=175 width=3
-153 kind=guest from=143 to=176 width=3
-154 kind=guest from=144 to=177 width=3
-155 kind=guest from=145 to=178 width=3
-156 kind=guest from=146 to=179 width=3
-157 kind=guest from=147 to=180 width=3
-158 kind=guest from=148 to=181 width=3
-159 kind=guest from=137 to=139 width=3
-160 kind=guest from=139 to=140 width=3
-161 kind=guest from=140 to=141 width=3
-162 kind=guest from=141 to=142 width=3
-163 kind=guest from=142 to=143 width=3
-164 kind=guest from=143 to=144 width=3
-165 kind=guest from=144 to=145 width=3
-166 kind=guest from=145 to=146 width=3
-167 kind=guest from=146 to=147 width=3
-168 kind=guest from=147 to=148 width=3
-169 kind=guest from=148 to=138 width=3
-182 kind=guest from=172 to=205 width=3
-183 kind=guest from=173 to=206 width=3
-184 kind=guest from=174 to=207 width=3
-185 kind=guest from=175 to=208 width=3
-186 kind=guest from=176 to=209 width=3
-187 kind=guest from=177 to=210 width=3
-188 kind=guest from=178 to=211 width=3
-189 kind=guest from=179 to=212 width=3
-190 kind=guest from=180 to=213 width=3
-191 kind=guest from=181 to=214 width=3
-192 kind=guest from=170 to=172 width=3
-193 kind=guest from=172 to=173 width=3
-194 kind=guest from=173 to=174 width=3
-195 kind=guest from=174 to=175 width=3
-196 kind=guest from=175 to=176 width=3
-197 kind=guest from=176 to=177 width=3
-198 kind=guest from=177 to=178 width=3
-199 kind=guest from=178 to=179 width=3
-200 kind=guest from=179 to=180 width=3
-201 kind=guest from=180 to=181 width=3
-202 kind=guest from=181 to=171 width=3
-215 kind=guest from=205 to=238 width=3
-216 kind=guest from=206 to=239 width=3
-217 kind=guest from=207 to=240 width=3
-218 kind=guest from=208 to=241 width=3
-219 kind=guest from=209 to=242 width=3
-220 kind=guest from=210 to=243 width=3
-221 kind=guest from=211 to=244 width=3
-222 kind=guest from=212 to=245 width=3
-223 kind=guest from=213 to=246 width=3
-224 kind=guest from=214 to=247 width=3
-225 kind=guest from=203 to=205 width=3
-226 kind=guest from=205 to=206 width=3
-227 kind=guest from=206 to=207 width=3
-228 kind=guest from=207 to=208 width=3
-229 kind=guest from=208 to=209 width=3
-230 kind=guest from=209 to=210 width=3
-231 kind=guest from=210 to=211 width=3
-232 kind=guest from=211 to=212 width=3
-233 kind=guest from=212 to=213 width=3
-234 kind=guest from=213 to=214 width=3
-235 kind=guest from=214 to=204 width=3
-248 kind=guest from=238 to=271 width=3
-249 kind=guest from=239 to=272 width=3
-250 kind=guest from=240 to=273 width=3
-251 kind=guest from=241 to=274 width=3
-252 kind=guest from=242 to=275 width=3
-253 kind=guest from=243 to=276 width=3
-254 kind=guest from=244 to=277 width=3
-255 kind=guest from=245 to=278 width=3
-256 kind=guest from=246 to=279 width=3
-257 kind=guest from=247 to=280 width=3
-258 kind=guest from=236 to=238 width=3
-259 kind=guest from=238 to=239 width=3
-260 kind=guest from=239 to=240 width=3
-261 kind=guest from=240 to=241 width=3
-262 kind=guest from=241 to=242 width=3
-263 kind=guest from=242 to=243 width=3
-264 kind=guest from=243 to=244 width=3
-265 kind=guest from=244 to=245 width=3
-266 kind=guest from=245 to=246 width=3
-267 kind=guest from=246 to=247 width=3
-268 kind=guest from=247 to=237 width=3
-281 kind=guest from=271 to=304 width=3
-282 kind=guest from=272 to=305 width=3
-283 kind=guest from=273 to=306 width=3
-284 kind=guest from=274 to=307 width=3
-285 kind=guest from=275 to=308 width=3
-286 kind=guest from=276 to=309 width=3
-287 kind=guest from=277 to=310 width=3
-288 kind=guest from=278 to=311 width=3
-289 kind=guest from=279 to=312 width=3
-290 kind=guest from=280 to=313 width=3
-291 kind=guest from=269 to=271 width=3
-292 kind=guest from=271 to=272 width=3
-293 kind=guest from=272 to=273 width=3
-294 kind=guest from=273 to=274 width=3
-295 kind=guest from=274 to=275 width=3
-296 kind=guest from=275 to=276 width=3
-297 kind=guest from=276 to=277 width=3
-298 kind=guest from=277 to=278 width=3
-299 kind=guest from=278 to=279 width=3
-300 kind=guest from=279 to=280 width=3
-301 kind=guest from=280 to=270 width=3
-314 kind=guest from=304 to=337 width=3
-315 kind=guest from=305 to=338 width=3
-316 kind=guest from=306 to=339 width=3
-317 kind=guest from=307 to=340 width=3
-318 kind=guest from=308 to=341 width=3
-319 kind=guest from=309 to=342 width=3
-320 kind=guest from=310 to=343 width=3
-321 kind=guest from=311 to=344 width=3
-322 kind=guest from=312 to=345 width=3
-323 kind=guest from=313 to=346 width=3
-324 kind=guest from=302 to=304 width=3
-325 kind=guest from=304 to=305 width=3
-326 kind=guest from=305 to=306 width=3
-327 kind=guest from=306 to=307 width=3
-328 kind=guest from=307 to=308 width=3
-329 kind=guest from=308 to=309 width=3
-330 kind=guest from=309 to=310 width=3
-331 kind=guest from=310 to=311 width=3
-332 kind=guest from=311 to=312 width=3
-333 kind=guest from=312 to=313 width=3
-334 kind=guest from=313 to=303 width=3
-347 kind=guest from=337 to=9 width=3
-348 kind=guest from=338 to=12 width=3
-349 kind=guest from=339 to=15 width=3
-350 kind=guest from=340 to=18 width=3
-351 kind=guest from=341 to=21 width=3
-352 kind=guest from=342 to=24 width=3
-353 kind=guest from=343 to=27 width=3
-354 kind=guest from=344 to=30 width=3
-355 kind=guest from=345 to=33 width=3
-356 kind=guest from=346 to=36 width=3
-357 kind=guest from=335 to=337 width=3
-358 kind=guest from=337 to=338 width=3
-359 kind=guest from=338 to=339 width=3
-360 kind=guest from=339 to=340 width=3
-361 kind=guest from=340 to=341 width=3
-362 kind=guest from=341 to=6 width=3
-363 kind=guest from=6 to=342 width=3
-364 kind=guest from=342 to=343 width=3
-365 kind=guest from=343 to=344 width=3
-366 kind=guest from=344 to=345 width=3
-367 kind=guest from=345 to=346 width=3
-368 kind=guest from=346 to=336 width=3
-371 kind=backstage from=369 to=372 width=2
-374 kind=backstage from=372 to=376 width=2
-375 kind=backstage from=372 to=373 width=2
-378 kind=backstage from=376 to=380 width=2
-379 kind=backstage from=376 to=377 width=2
-382 kind=backstage from=380 to=384 width=2
-383 kind=backstage from=380 to=381 width=2
-386 kind=backstage from=384 to=388 width=2
-387 kind=backstage from=384 to=385 width=2
-390 kind=backstage from=388 to=370 width=2
-391 kind=backstage from=388 to=389 width=2
+7 kind=guest from=5 to=6 width=3 from-edge-radius=0 to-edge-radius=0
+10 kind=guest from=8 to=40 width=3 from-edge-radius=0 to-edge-radius=0
+13 kind=guest from=11 to=41 width=3 from-edge-radius=0 to-edge-radius=0
+16 kind=guest from=14 to=42 width=3 from-edge-radius=0 to-edge-radius=0
+19 kind=guest from=17 to=43 width=3 from-edge-radius=0 to-edge-radius=0
+22 kind=guest from=20 to=44 width=3 from-edge-radius=0 to-edge-radius=0
+25 kind=guest from=23 to=45 width=3 from-edge-radius=0 to-edge-radius=0
+28 kind=guest from=26 to=46 width=3 from-edge-radius=0 to-edge-radius=0
+31 kind=guest from=29 to=47 width=3 from-edge-radius=0 to-edge-radius=0
+34 kind=guest from=32 to=48 width=3 from-edge-radius=0 to-edge-radius=0
+37 kind=guest from=35 to=49 width=3 from-edge-radius=0 to-edge-radius=0
+50 kind=guest from=40 to=73 width=3 from-edge-radius=0 to-edge-radius=0
+51 kind=guest from=41 to=74 width=3 from-edge-radius=0 to-edge-radius=0
+52 kind=guest from=42 to=75 width=3 from-edge-radius=0 to-edge-radius=0
+53 kind=guest from=43 to=76 width=3 from-edge-radius=0 to-edge-radius=0
+54 kind=guest from=44 to=77 width=3 from-edge-radius=0 to-edge-radius=0
+55 kind=guest from=45 to=78 width=3 from-edge-radius=0 to-edge-radius=0
+56 kind=guest from=46 to=79 width=3 from-edge-radius=0 to-edge-radius=0
+57 kind=guest from=47 to=80 width=3 from-edge-radius=0 to-edge-radius=0
+58 kind=guest from=48 to=81 width=3 from-edge-radius=0 to-edge-radius=0
+59 kind=guest from=49 to=82 width=3 from-edge-radius=0 to-edge-radius=0
+60 kind=guest from=38 to=40 width=3 from-edge-radius=0 to-edge-radius=0
+61 kind=guest from=40 to=41 width=3 from-edge-radius=0 to-edge-radius=0
+62 kind=guest from=41 to=42 width=3 from-edge-radius=0 to-edge-radius=0
+63 kind=guest from=42 to=43 width=3 from-edge-radius=0 to-edge-radius=0
+64 kind=guest from=43 to=44 width=3 from-edge-radius=0 to-edge-radius=0
+65 kind=guest from=44 to=45 width=3 from-edge-radius=0 to-edge-radius=0
+66 kind=guest from=45 to=46 width=3 from-edge-radius=0 to-edge-radius=0
+67 kind=guest from=46 to=47 width=3 from-edge-radius=0 to-edge-radius=0
+68 kind=guest from=47 to=48 width=3 from-edge-radius=0 to-edge-radius=0
+69 kind=guest from=48 to=49 width=3 from-edge-radius=0 to-edge-radius=0
+70 kind=guest from=49 to=39 width=3 from-edge-radius=0 to-edge-radius=0
+83 kind=guest from=73 to=106 width=3 from-edge-radius=0 to-edge-radius=0
+84 kind=guest from=74 to=107 width=3 from-edge-radius=0 to-edge-radius=0
+85 kind=guest from=75 to=108 width=3 from-edge-radius=0 to-edge-radius=0
+86 kind=guest from=76 to=109 width=3 from-edge-radius=0 to-edge-radius=0
+87 kind=guest from=77 to=110 width=3 from-edge-radius=0 to-edge-radius=0
+88 kind=guest from=78 to=111 width=3 from-edge-radius=0 to-edge-radius=0
+89 kind=guest from=79 to=112 width=3 from-edge-radius=0 to-edge-radius=0
+90 kind=guest from=80 to=113 width=3 from-edge-radius=0 to-edge-radius=0
+91 kind=guest from=81 to=114 width=3 from-edge-radius=0 to-edge-radius=0
+92 kind=guest from=82 to=115 width=3 from-edge-radius=0 to-edge-radius=0
+93 kind=guest from=71 to=73 width=3 from-edge-radius=0 to-edge-radius=0
+94 kind=guest from=73 to=74 width=3 from-edge-radius=0 to-edge-radius=0
+95 kind=guest from=74 to=75 width=3 from-edge-radius=0 to-edge-radius=0
+96 kind=guest from=75 to=76 width=3 from-edge-radius=0 to-edge-radius=0
+97 kind=guest from=76 to=77 width=3 from-edge-radius=0 to-edge-radius=0
+98 kind=guest from=77 to=78 width=3 from-edge-radius=0 to-edge-radius=0
+99 kind=guest from=78 to=79 width=3 from-edge-radius=0 to-edge-radius=0
+100 kind=guest from=79 to=80 width=3 from-edge-radius=0 to-edge-radius=0
+101 kind=guest from=80 to=81 width=3 from-edge-radius=0 to-edge-radius=0
+102 kind=guest from=81 to=82 width=3 from-edge-radius=0 to-edge-radius=0
+103 kind=guest from=82 to=72 width=3 from-edge-radius=0 to-edge-radius=0
+116 kind=guest from=106 to=139 width=3 from-edge-radius=0 to-edge-radius=0
+117 kind=guest from=107 to=140 width=3 from-edge-radius=0 to-edge-radius=0
+118 kind=guest from=108 to=141 width=3 from-edge-radius=0 to-edge-radius=0
+119 kind=guest from=109 to=142 width=3 from-edge-radius=0 to-edge-radius=0
+120 kind=guest from=110 to=143 width=3 from-edge-radius=0 to-edge-radius=0
+121 kind=guest from=111 to=144 width=3 from-edge-radius=0 to-edge-radius=0
+122 kind=guest from=112 to=145 width=3 from-edge-radius=0 to-edge-radius=0
+123 kind=guest from=113 to=146 width=3 from-edge-radius=0 to-edge-radius=0
+124 kind=guest from=114 to=147 width=3 from-edge-radius=0 to-edge-radius=0
+125 kind=guest from=115 to=148 width=3 from-edge-radius=0 to-edge-radius=0
+126 kind=guest from=104 to=106 width=3 from-edge-radius=0 to-edge-radius=0
+127 kind=guest from=106 to=107 width=3 from-edge-radius=0 to-edge-radius=0
+128 kind=guest from=107 to=108 width=3 from-edge-radius=0 to-edge-radius=0
+129 kind=guest from=108 to=109 width=3 from-edge-radius=0 to-edge-radius=0
+130 kind=guest from=109 to=110 width=3 from-edge-radius=0 to-edge-radius=0
+131 kind=guest from=110 to=111 width=3 from-edge-radius=0 to-edge-radius=0
+132 kind=guest from=111 to=112 width=3 from-edge-radius=0 to-edge-radius=0
+133 kind=guest from=112 to=113 width=3 from-edge-radius=0 to-edge-radius=0
+134 kind=guest from=113 to=114 width=3 from-edge-radius=0 to-edge-radius=0
+135 kind=guest from=114 to=115 width=3 from-edge-radius=0 to-edge-radius=0
+136 kind=guest from=115 to=105 width=3 from-edge-radius=0 to-edge-radius=0
+149 kind=guest from=139 to=172 width=3 from-edge-radius=0 to-edge-radius=0
+150 kind=guest from=140 to=173 width=3 from-edge-radius=0 to-edge-radius=0
+151 kind=guest from=141 to=174 width=3 from-edge-radius=0 to-edge-radius=0
+152 kind=guest from=142 to=175 width=3 from-edge-radius=0 to-edge-radius=0
+153 kind=guest from=143 to=176 width=3 from-edge-radius=0 to-edge-radius=0
+154 kind=guest from=144 to=177 width=3 from-edge-radius=0 to-edge-radius=0
+155 kind=guest from=145 to=178 width=3 from-edge-radius=0 to-edge-radius=0
+156 kind=guest from=146 to=179 width=3 from-edge-radius=0 to-edge-radius=0
+157 kind=guest from=147 to=180 width=3 from-edge-radius=0 to-edge-radius=0
+158 kind=guest from=148 to=181 width=3 from-edge-radius=0 to-edge-radius=0
+159 kind=guest from=137 to=139 width=3 from-edge-radius=0 to-edge-radius=0
+160 kind=guest from=139 to=140 width=3 from-edge-radius=0 to-edge-radius=0
+161 kind=guest from=140 to=141 width=3 from-edge-radius=0 to-edge-radius=0
+162 kind=guest from=141 to=142 width=3 from-edge-radius=0 to-edge-radius=0
+163 kind=guest from=142 to=143 width=3 from-edge-radius=0 to-edge-radius=0
+164 kind=guest from=143 to=144 width=3 from-edge-radius=0 to-edge-radius=0
+165 kind=guest from=144 to=145 width=3 from-edge-radius=0 to-edge-radius=0
+166 kind=guest from=145 to=146 width=3 from-edge-radius=0 to-edge-radius=0
+167 kind=guest from=146 to=147 width=3 from-edge-radius=0 to-edge-radius=0
+168 kind=guest from=147 to=148 width=3 from-edge-radius=0 to-edge-radius=0
+169 kind=guest from=148 to=138 width=3 from-edge-radius=0 to-edge-radius=0
+182 kind=guest from=172 to=205 width=3 from-edge-radius=0 to-edge-radius=0
+183 kind=guest from=173 to=206 width=3 from-edge-radius=0 to-edge-radius=0
+184 kind=guest from=174 to=207 width=3 from-edge-radius=0 to-edge-radius=0
+185 kind=guest from=175 to=208 width=3 from-edge-radius=0 to-edge-radius=0
+186 kind=guest from=176 to=209 width=3 from-edge-radius=0 to-edge-radius=0
+187 kind=guest from=177 to=210 width=3 from-edge-radius=0 to-edge-radius=0
+188 kind=guest from=178 to=211 width=3 from-edge-radius=0 to-edge-radius=0
+189 kind=guest from=179 to=212 width=3 from-edge-radius=0 to-edge-radius=0
+190 kind=guest from=180 to=213 width=3 from-edge-radius=0 to-edge-radius=0
+191 kind=guest from=181 to=214 width=3 from-edge-radius=0 to-edge-radius=0
+192 kind=guest from=170 to=172 width=3 from-edge-radius=0 to-edge-radius=0
+193 kind=guest from=172 to=173 width=3 from-edge-radius=0 to-edge-radius=0
+194 kind=guest from=173 to=174 width=3 from-edge-radius=0 to-edge-radius=0
+195 kind=guest from=174 to=175 width=3 from-edge-radius=0 to-edge-radius=0
+196 kind=guest from=175 to=176 width=3 from-edge-radius=0 to-edge-radius=0
+197 kind=guest from=176 to=177 width=3 from-edge-radius=0 to-edge-radius=0
+198 kind=guest from=177 to=178 width=3 from-edge-radius=0 to-edge-radius=0
+199 kind=guest from=178 to=179 width=3 from-edge-radius=0 to-edge-radius=0
+200 kind=guest from=179 to=180 width=3 from-edge-radius=0 to-edge-radius=0
+201 kind=guest from=180 to=181 width=3 from-edge-radius=0 to-edge-radius=0
+202 kind=guest from=181 to=171 width=3 from-edge-radius=0 to-edge-radius=0
+215 kind=guest from=205 to=238 width=3 from-edge-radius=0 to-edge-radius=0
+216 kind=guest from=206 to=239 width=3 from-edge-radius=0 to-edge-radius=0
+217 kind=guest from=207 to=240 width=3 from-edge-radius=0 to-edge-radius=0
+218 kind=guest from=208 to=241 width=3 from-edge-radius=0 to-edge-radius=0
+219 kind=guest from=209 to=242 width=3 from-edge-radius=0 to-edge-radius=0
+220 kind=guest from=210 to=243 width=3 from-edge-radius=0 to-edge-radius=0
+221 kind=guest from=211 to=244 width=3 from-edge-radius=0 to-edge-radius=0
+222 kind=guest from=212 to=245 width=3 from-edge-radius=0 to-edge-radius=0
+223 kind=guest from=213 to=246 width=3 from-edge-radius=0 to-edge-radius=0
+224 kind=guest from=214 to=247 width=3 from-edge-radius=0 to-edge-radius=0
+225 kind=guest from=203 to=205 width=3 from-edge-radius=0 to-edge-radius=0
+226 kind=guest from=205 to=206 width=3 from-edge-radius=0 to-edge-radius=0
+227 kind=guest from=206 to=207 width=3 from-edge-radius=0 to-edge-radius=0
+228 kind=guest from=207 to=208 width=3 from-edge-radius=0 to-edge-radius=0
+229 kind=guest from=208 to=209 width=3 from-edge-radius=0 to-edge-radius=0
+230 kind=guest from=209 to=210 width=3 from-edge-radius=0 to-edge-radius=0
+231 kind=guest from=210 to=211 width=3 from-edge-radius=0 to-edge-radius=0
+232 kind=guest from=211 to=212 width=3 from-edge-radius=0 to-edge-radius=0
+233 kind=guest from=212 to=213 width=3 from-edge-radius=0 to-edge-radius=0
+234 kind=guest from=213 to=214 width=3 from-edge-radius=0 to-edge-radius=0
+235 kind=guest from=214 to=204 width=3 from-edge-radius=0 to-edge-radius=0
+248 kind=guest from=238 to=271 width=3 from-edge-radius=0 to-edge-radius=0
+249 kind=guest from=239 to=272 width=3 from-edge-radius=0 to-edge-radius=0
+250 kind=guest from=240 to=273 width=3 from-edge-radius=0 to-edge-radius=0
+251 kind=guest from=241 to=274 width=3 from-edge-radius=0 to-edge-radius=0
+252 kind=guest from=242 to=275 width=3 from-edge-radius=0 to-edge-radius=0
+253 kind=guest from=243 to=276 width=3 from-edge-radius=0 to-edge-radius=0
+254 kind=guest from=244 to=277 width=3 from-edge-radius=0 to-edge-radius=0
+255 kind=guest from=245 to=278 width=3 from-edge-radius=0 to-edge-radius=0
+256 kind=guest from=246 to=279 width=3 from-edge-radius=0 to-edge-radius=0
+257 kind=guest from=247 to=280 width=3 from-edge-radius=0 to-edge-radius=0
+258 kind=guest from=236 to=238 width=3 from-edge-radius=0 to-edge-radius=0
+259 kind=guest from=238 to=239 width=3 from-edge-radius=0 to-edge-radius=0
+260 kind=guest from=239 to=240 width=3 from-edge-radius=0 to-edge-radius=0
+261 kind=guest from=240 to=241 width=3 from-edge-radius=0 to-edge-radius=0
+262 kind=guest from=241 to=242 width=3 from-edge-radius=0 to-edge-radius=0
+263 kind=guest from=242 to=243 width=3 from-edge-radius=0 to-edge-radius=0
+264 kind=guest from=243 to=244 width=3 from-edge-radius=0 to-edge-radius=0
+265 kind=guest from=244 to=245 width=3 from-edge-radius=0 to-edge-radius=0
+266 kind=guest from=245 to=246 width=3 from-edge-radius=0 to-edge-radius=0
+267 kind=guest from=246 to=247 width=3 from-edge-radius=0 to-edge-radius=0
+268 kind=guest from=247 to=237 width=3 from-edge-radius=0 to-edge-radius=0
+281 kind=guest from=271 to=304 width=3 from-edge-radius=0 to-edge-radius=0
+282 kind=guest from=272 to=305 width=3 from-edge-radius=0 to-edge-radius=0
+283 kind=guest from=273 to=306 width=3 from-edge-radius=0 to-edge-radius=0
+284 kind=guest from=274 to=307 width=3 from-edge-radius=0 to-edge-radius=0
+285 kind=guest from=275 to=308 width=3 from-edge-radius=0 to-edge-radius=0
+286 kind=guest from=276 to=309 width=3 from-edge-radius=0 to-edge-radius=0
+287 kind=guest from=277 to=310 width=3 from-edge-radius=0 to-edge-radius=0
+288 kind=guest from=278 to=311 width=3 from-edge-radius=0 to-edge-radius=0
+289 kind=guest from=279 to=312 width=3 from-edge-radius=0 to-edge-radius=0
+290 kind=guest from=280 to=313 width=3 from-edge-radius=0 to-edge-radius=0
+291 kind=guest from=269 to=271 width=3 from-edge-radius=0 to-edge-radius=0
+292 kind=guest from=271 to=272 width=3 from-edge-radius=0 to-edge-radius=0
+293 kind=guest from=272 to=273 width=3 from-edge-radius=0 to-edge-radius=0
+294 kind=guest from=273 to=274 width=3 from-edge-radius=0 to-edge-radius=0
+295 kind=guest from=274 to=275 width=3 from-edge-radius=0 to-edge-radius=0
+296 kind=guest from=275 to=276 width=3 from-edge-radius=0 to-edge-radius=0
+297 kind=guest from=276 to=277 width=3 from-edge-radius=0 to-edge-radius=0
+298 kind=guest from=277 to=278 width=3 from-edge-radius=0 to-edge-radius=0
+299 kind=guest from=278 to=279 width=3 from-edge-radius=0 to-edge-radius=0
+300 kind=guest from=279 to=280 width=3 from-edge-radius=0 to-edge-radius=0
+301 kind=guest from=280 to=270 width=3 from-edge-radius=0 to-edge-radius=0
+314 kind=guest from=304 to=337 width=3 from-edge-radius=0 to-edge-radius=0
+315 kind=guest from=305 to=338 width=3 from-edge-radius=0 to-edge-radius=0
+316 kind=guest from=306 to=339 width=3 from-edge-radius=0 to-edge-radius=0
+317 kind=guest from=307 to=340 width=3 from-edge-radius=0 to-edge-radius=0
+318 kind=guest from=308 to=341 width=3 from-edge-radius=0 to-edge-radius=0
+319 kind=guest from=309 to=342 width=3 from-edge-radius=0 to-edge-radius=0
+320 kind=guest from=310 to=343 width=3 from-edge-radius=0 to-edge-radius=0
+321 kind=guest from=311 to=344 width=3 from-edge-radius=0 to-edge-radius=0
+322 kind=guest from=312 to=345 width=3 from-edge-radius=0 to-edge-radius=0
+323 kind=guest from=313 to=346 width=3 from-edge-radius=0 to-edge-radius=0
+324 kind=guest from=302 to=304 width=3 from-edge-radius=0 to-edge-radius=0
+325 kind=guest from=304 to=305 width=3 from-edge-radius=0 to-edge-radius=0
+326 kind=guest from=305 to=306 width=3 from-edge-radius=0 to-edge-radius=0
+327 kind=guest from=306 to=307 width=3 from-edge-radius=0 to-edge-radius=0
+328 kind=guest from=307 to=308 width=3 from-edge-radius=0 to-edge-radius=0
+329 kind=guest from=308 to=309 width=3 from-edge-radius=0 to-edge-radius=0
+330 kind=guest from=309 to=310 width=3 from-edge-radius=0 to-edge-radius=0
+331 kind=guest from=310 to=311 width=3 from-edge-radius=0 to-edge-radius=0
+332 kind=guest from=311 to=312 width=3 from-edge-radius=0 to-edge-radius=0
+333 kind=guest from=312 to=313 width=3 from-edge-radius=0 to-edge-radius=0
+334 kind=guest from=313 to=303 width=3 from-edge-radius=0 to-edge-radius=0
+347 kind=guest from=337 to=9 width=3 from-edge-radius=0 to-edge-radius=0
+348 kind=guest from=338 to=12 width=3 from-edge-radius=0 to-edge-radius=0
+349 kind=guest from=339 to=15 width=3 from-edge-radius=0 to-edge-radius=0
+350 kind=guest from=340 to=18 width=3 from-edge-radius=0 to-edge-radius=0
+351 kind=guest from=341 to=21 width=3 from-edge-radius=0 to-edge-radius=0
+352 kind=guest from=342 to=24 width=3 from-edge-radius=0 to-edge-radius=0
+353 kind=guest from=343 to=27 width=3 from-edge-radius=0 to-edge-radius=0
+354 kind=guest from=344 to=30 width=3 from-edge-radius=0 to-edge-radius=0
+355 kind=guest from=345 to=33 width=3 from-edge-radius=0 to-edge-radius=0
+356 kind=guest from=346 to=36 width=3 from-edge-radius=0 to-edge-radius=0
+357 kind=guest from=335 to=337 width=3 from-edge-radius=0 to-edge-radius=0
+358 kind=guest from=337 to=338 width=3 from-edge-radius=0 to-edge-radius=0
+359 kind=guest from=338 to=339 width=3 from-edge-radius=0 to-edge-radius=0
+360 kind=guest from=339 to=340 width=3 from-edge-radius=0 to-edge-radius=0
+361 kind=guest from=340 to=341 width=3 from-edge-radius=0 to-edge-radius=0
+362 kind=guest from=341 to=6 width=3 from-edge-radius=0 to-edge-radius=0
+363 kind=guest from=6 to=342 width=3 from-edge-radius=0 to-edge-radius=0
+364 kind=guest from=342 to=343 width=3 from-edge-radius=0 to-edge-radius=0
+365 kind=guest from=343 to=344 width=3 from-edge-radius=0 to-edge-radius=0
+366 kind=guest from=344 to=345 width=3 from-edge-radius=0 to-edge-radius=0
+367 kind=guest from=345 to=346 width=3 from-edge-radius=0 to-edge-radius=0
+368 kind=guest from=346 to=336 width=3 from-edge-radius=0 to-edge-radius=0
+371 kind=backstage from=369 to=372 width=2 from-edge-radius=0 to-edge-radius=0
+374 kind=backstage from=372 to=376 width=2 from-edge-radius=0 to-edge-radius=0
+375 kind=backstage from=372 to=373 width=2 from-edge-radius=0 to-edge-radius=0
+378 kind=backstage from=376 to=380 width=2 from-edge-radius=0 to-edge-radius=0
+379 kind=backstage from=376 to=377 width=2 from-edge-radius=0 to-edge-radius=0
+382 kind=backstage from=380 to=384 width=2 from-edge-radius=0 to-edge-radius=0
+383 kind=backstage from=380 to=381 width=2 from-edge-radius=0 to-edge-radius=0
+386 kind=backstage from=384 to=388 width=2 from-edge-radius=0 to-edge-radius=0
+387 kind=backstage from=384 to=385 width=2 from-edge-radius=0 to-edge-radius=0
+390 kind=backstage from=388 to=370 width=2 from-edge-radius=0 to-edge-radius=0
+391 kind=backstage from=388 to=389 width=2 from-edge-radius=0 to-edge-radius=0
 
 [box]
 392 kind=shop x=-80 z=-84.5 facing-x=0 facing-z=-1

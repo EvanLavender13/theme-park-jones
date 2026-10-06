@@ -1,6 +1,7 @@
 #include "tools/tools.h"
 
 #include "sim/park/geometry.h"
+#include "sim/park/surface.h"
 
 #include <algorithm>
 #include <math.h>
@@ -44,6 +45,21 @@ std::optional<ParkCorner> cornerOf(const World &world, EntityKey point) {
     }
   }
   return std::nullopt;
+}
+
+// The edge at the point that starts from the segment's left side, or none.
+std::optional<ParkEdge> edgeOf(const World &world, EntityKey point, EntityKey segment) {
+  for (const ParkEdge &edge : parkEdges(world)) {
+    if (edge.Point == point && edge.Segment == segment) {
+      return edge;
+    }
+  }
+  return std::nullopt;
+}
+
+// How far the point lies from where the edge's sides meet, along its Toward.
+double depthAlong(const ParkEdge &edge, ParkPoint point) {
+  return (point.X - edge.Sharp.X) * edge.Toward.X + (point.Z - edge.Sharp.Z) * edge.Toward.Z;
 }
 
 // The segment the key holds, or none.
@@ -295,9 +311,10 @@ std::optional<InsertPoint> insertAt(const World &world, ParkPoint point) {
   return std::nullopt;
 }
 
-// The edit a dragged radius handle or side makes with the pointer where it is: the arc's middle
-// moved as far into the corner as the pointer has moved, or the width grown by twice how far the
-// pointer has moved away from the ground line. None when the corner or segment is gone.
+// The edit a dragged radius handle, edge handle, or side makes with the pointer where it is: the
+// arc's middle moved as far into the corner as the pointer has moved, the edge's middle moved as
+// far along its Toward as the pointer has moved, or the width grown by twice how far the pointer
+// has moved away from the ground line. None when the corner, edge, or segment is gone.
 std::optional<ParkEdit> handleEdit(const EditHandle &handle, double grabFrom, const World &world,
                                    ParkPoint pointer) {
   if (handle.Kind == HandleKind::Radius) {
@@ -307,6 +324,15 @@ std::optional<ParkEdit> handleEdit(const EditHandle &handle, double grabFrom, co
     }
     const double radius = cornerRadiusFor(*corner, depthAlong(*corner, pointer) + grabFrom);
     return SetCornerRadius{corner->Point, std::min(radius, corner->MaxRadius)};
+  }
+  if (handle.Kind == HandleKind::Edge) {
+    const std::optional<ParkEdge> edge = edgeOf(world, handle.Key, handle.Segment);
+    if (!edge) {
+      return std::nullopt;
+    }
+    const double radius = edgeRadiusFor(*edge, depthAlong(*edge, pointer) + grabFrom);
+    return SetEdgeRadius{edge->Segment, edge->Point,
+                         std::clamp(radius, edge->MinRadius, edge->MaxRadius)};
   }
   const std::optional<ParkSegment> segment = segmentOf(world, handle.Key);
   if (!segment || segment->Line.size() < 2) {
@@ -335,7 +361,7 @@ std::optional<ParkEdit> editPathEdit(const ToolState &tool, const World &world) 
   if (tool.Holding && tool.Inserting) {
     return *tool.Inserting;
   }
-  if (tool.Holding || !tool.Pointer || radiusHandleAt(world, *tool.Pointer) ||
+  if (tool.Holding || !tool.Pointer || handleAt(world, *tool.Pointer) ||
       pointAt(world, *tool.Pointer) || sideAt(world, *tool.Pointer)) {
     return std::nullopt;
   }
@@ -345,14 +371,21 @@ std::optional<ParkEdit> editPathEdit(const ToolState &tool, const World &world) 
   return std::nullopt;
 }
 
-// Edit path's press takes, in order, the radius handle, the point, the segment's sides, or the
-// insert under the pointer.
+// Edit path's press takes, in order, the radius or edge handle, the point, the segment's sides, or
+// the insert under the pointer.
 void pressEditPath(ToolState &tool, const World &world, ParkPoint pointer) {
-  if (const std::optional<EntityKey> key = radiusHandleAt(world, pointer)) {
-    if (const std::optional<ParkCorner> corner = cornerOf(world, *key)) {
+  if (const std::optional<EditHandle> handle = handleAt(world, pointer)) {
+    if (handle->Kind == HandleKind::Radius) {
+      if (const std::optional<ParkCorner> corner = cornerOf(world, handle->Key)) {
+        tool.Holding = true;
+        tool.Grabbed = handle;
+        tool.GrabFrom = distanceBetween(corner->At, corner->Middle) - depthAlong(*corner, pointer);
+        return;
+      }
+    } else if (const std::optional<ParkEdge> edge = edgeOf(world, handle->Key, handle->Segment)) {
       tool.Holding = true;
-      tool.Grabbed = EditHandle{HandleKind::Radius, *key, radiusHandleOf(*corner)};
-      tool.GrabFrom = distanceBetween(corner->At, corner->Middle) - depthAlong(*corner, pointer);
+      tool.Grabbed = handle;
+      tool.GrabFrom = depthAlong(*edge, edge->Middle) - depthAlong(*edge, pointer);
       return;
     }
   }
@@ -531,7 +564,7 @@ std::optional<EntityKey> highlightedEntity(const ToolState &tool, const World &w
     return boxAt(world, *tool.Pointer);
   }
   if (tool.Kind == ToolKind::EditPath && !tool.Holding && tool.Pointer &&
-      !radiusHandleAt(world, *tool.Pointer)) {
+      !handleAt(world, *tool.Pointer)) {
     return pointAt(world, *tool.Pointer);
   }
   return std::nullopt;
@@ -634,15 +667,22 @@ ParkPoint radiusHandleOf(const ParkCorner &corner) {
   return {corner.At.X + corner.Toward.X * depth, corner.At.Z + corner.Toward.Z * depth};
 }
 
-std::optional<EntityKey> radiusHandleAt(const World &world, ParkPoint point) {
-  std::optional<EntityKey> nearest;
+std::optional<EditHandle> handleAt(const World &world, ParkPoint point) {
+  std::optional<EditHandle> nearest;
   double nearestDistance = 0.0;
-  for (const ParkCorner &corner : parkCorners(world)) {
-    const double distance = distanceBetween(point, radiusHandleOf(corner));
+  // Radius handles come first, so a tie goes to the first in this order.
+  const auto consider = [&](const EditHandle &handle) {
+    const double distance = distanceBetween(point, handle.At);
     if (distance <= HANDLE_REACH && (!nearest || distance < nearestDistance)) {
-      nearest = corner.Point;
+      nearest = handle;
       nearestDistance = distance;
     }
+  };
+  for (const ParkCorner &corner : parkCorners(world)) {
+    consider(EditHandle{HandleKind::Radius, corner.Point, radiusHandleOf(corner)});
+  }
+  for (const ParkEdge &edge : parkEdges(world)) {
+    consider(EditHandle{HandleKind::Edge, edge.Point, edge.Middle, edge.Segment});
   }
   return nearest;
 }
@@ -663,11 +703,14 @@ std::optional<EntityKey> sideAt(const World &world, ParkPoint point) {
   return nearest;
 }
 
-std::vector<ParkPoint> radiusHandles(const ToolState &tool, const World &world) {
-  std::vector<ParkPoint> handles;
+std::vector<EditHandle> editHandles(const ToolState &tool, const World &world) {
+  std::vector<EditHandle> handles;
   if (tool.Kind == ToolKind::EditPath && !tool.Holding) {
     for (const ParkCorner &corner : parkCorners(world)) {
-      handles.push_back(radiusHandleOf(corner));
+      handles.push_back(EditHandle{HandleKind::Radius, corner.Point, radiusHandleOf(corner)});
+    }
+    for (const ParkEdge &edge : parkEdges(world)) {
+      handles.push_back(EditHandle{HandleKind::Edge, edge.Point, edge.Middle, edge.Segment});
     }
   }
   return handles;
@@ -677,10 +720,8 @@ std::optional<EditHandle> hoveredHandle(const ToolState &tool, const World &worl
   if (tool.Kind != ToolKind::EditPath || tool.Holding || !tool.Pointer) {
     return std::nullopt;
   }
-  if (const std::optional<EntityKey> key = radiusHandleAt(world, *tool.Pointer)) {
-    if (const std::optional<ParkCorner> corner = cornerOf(world, *key)) {
-      return EditHandle{HandleKind::Radius, *key, radiusHandleOf(*corner)};
-    }
+  if (const std::optional<EditHandle> handle = handleAt(world, *tool.Pointer)) {
+    return handle;
   }
   if (pointAt(world, *tool.Pointer)) {
     return std::nullopt;
