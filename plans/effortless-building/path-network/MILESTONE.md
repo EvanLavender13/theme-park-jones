@@ -87,6 +87,9 @@ None of these features adds a test of its own unless it fixes a bug (docs/testin
 - Showing Edit path's handles only near the pointer, so a large park isn't covered in them.
 - Inserting a point inside a taper's curve keeps the curve where it was, instead of ending it at the new point.
 - A segment that an edit adds or moves meets others along its own arcs, not along the straight lines to its points, so a dragged rounded bend joins a path where its curve crosses it.
+- Guides from the ends of nearby paths, straight on from where they stop, for lining a new path up with one it doesn't touch. Cities: Skylines 2 players turn such guides off when they pull roads out of line, so keep them to nearby ends.
+- Snapping a handle drag, such as a segment's width or a corner's radius, to whole numbers.
+- Reach in screen pixels for picking points and handles in Edit path, and for finishing a path, which still use meters.
 
 ## Open questions
 
