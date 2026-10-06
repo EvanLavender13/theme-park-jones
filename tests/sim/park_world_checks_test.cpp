@@ -448,6 +448,52 @@ ChosenEdit curvingJunctionEdgeUnderGuests(const World &before) {
           set};
 }
 
+// The first path point, in the order parkPathPoints gives, that two or more guest segments use,
+// where a guest stands on one of those segments.
+EntityKey guestJunctionPointUnderGuests(const World &world) {
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  for (const ParkPathPoint &point : parkPathPoints(world)) {
+    std::vector<ParkSegment> guestAtPoint;
+    for (const ParkSegment &segment : segments) {
+      if (segment.Kind == PathKind::Guest &&
+          (segment.From == point.Key || segment.To == point.Key)) {
+        guestAtPoint.push_back(segment);
+      }
+    }
+    if (guestAtPoint.size() < 2) {
+      continue;
+    }
+    const bool guestOnOne = std::ranges::any_of(guestAtPoint, [&](const ParkSegment &segment) {
+      return someGuestStandsOn(world, segment.Key);
+    });
+    if (guestOnOne) {
+      return point.Key;
+    }
+  }
+  return NULL_KEY;
+}
+
+// The point keeps its key and position and only its taper length changes. No two segments in
+// warm.park run straight on at a point, so no ground line or paving changes, the guests at the
+// point stay where they stand, and the save holds a taper length above 0.
+ChosenEdit settingTaperAtGuestJunctionUnderGuests(const World &before) {
+  const EntityKey pointKey = guestJunctionPointUnderGuests(before);
+  REQUIRE(pointKey != NULL_KEY);
+  constexpr double LENGTH = 4.0;
+  const SetTaperLength set{pointKey, LENGTH};
+  REQUIRE(isAccepted(before, ParkEdit{set}));
+  // Without the length held on the point, the checked worlds would hold no taper but 0.
+  const World candidate = makeCandidate(before, queueOf(ParkEdit{set}));
+  const std::vector<ParkPathPoint> points = parkPathPoints(candidate);
+  const auto found = std::ranges::find_if(
+      points, [&](const ParkPathPoint &point) { return point.Key == pointKey; });
+  REQUIRE(found != points.end());
+  REQUIRE(found->Taper == LENGTH);
+  return {"setting a taper length on a guest junction point whose segments guests stand on, "
+          "leaving the segments' ground lines and paving as they were",
+          set};
+}
+
 // The edits of warm.park, made from the world as a cycle leaves it. Each requires the state it was
 // chosen for, so a change to warm.park that loses that state fails here rather than quietly
 // checking less.
@@ -462,7 +508,8 @@ std::vector<ChosenEdit> chosenEdits(const World &before) {
                                 removingPointUnderGuests(before),
                                 roundingCornerUnderGuests(before),
                                 narrowingSegmentUnderGuests(before),
-                                curvingJunctionEdgeUnderGuests(before)};
+                                curvingJunctionEdgeUnderGuests(before),
+                                settingTaperAtGuestJunctionUnderGuests(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);
     REQUIRE(isAccepted(before, chosen.Edit));

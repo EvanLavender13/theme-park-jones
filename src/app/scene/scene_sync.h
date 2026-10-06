@@ -61,6 +61,7 @@ private:
   // The intent a park mesh was built from.
   struct DrawnIntent {
     std::vector<ParkEntrance> Entrances;
+    std::vector<ParkPathPoint> Points;
     std::vector<ParkSegment> Segments;
     std::vector<ParkBox> Boxes;
 

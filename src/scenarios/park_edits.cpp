@@ -22,8 +22,8 @@ constexpr double REACH = PARK_SIZE / 2.0 + 8.0;
 // A path's next point lies at most this far from its last along each axis.
 constexpr double PATH_STEP = 40.0;
 // Weights of AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
-// RemovePoint, SetCornerRadius, SetSegmentWidth, and SetEdgeRadius.
-constexpr std::array<uint64_t, 11> EDIT_WEIGHTS{3, 4, 3, 1, 1, 2, 1, 1, 1, 1, 1};
+// RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, and SetTaperLength.
+constexpr std::array<uint64_t, 12> EDIT_WEIGHTS{3, 4, 3, 1, 1, 2, 1, 1, 1, 1, 1, 1};
 
 // The cycle's next draw, in [0, 1).
 double drawEdit(const World &world, uint64_t &index) {
@@ -123,8 +123,12 @@ void queueEdit(const World &world, CommandQueue &commands) {
     // Widths across the Edit path tool's range, so some meet a box and are refused.
     const EntityKey segment = drawGivenKey(world, index);
     commands.push(SetSegmentWidth{segment, 1.5 + drawEdit(world, index) * 14.5});
-  } else {
+  } else if (kind == 10) {
     commands.push(drawEdgeRadius(world, index));
+  } else {
+    // Lengths up to 12 m, so some don't fit and are made smaller.
+    const EntityKey point = drawGivenKey(world, index);
+    commands.push(SetTaperLength{point, drawEdit(world, index) * 12.0});
   }
 }
 

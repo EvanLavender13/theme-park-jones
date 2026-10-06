@@ -7,17 +7,17 @@ next-key 57
 1 x=0 z=126.5 facing-x=0 facing-z=-1
 
 [path-point]
-2 x=0 z=123 radius=0
-3 x=0 z=110 radius=0
-4 x=0 z=100 radius=0
-5 x=-15 z=110 radius=0
-6 x=-30 z=110 radius=0
-7 x=-15 z=120 radius=0
-8 x=-15 z=95 radius=0
-9 x=20 z=100 radius=0
-10 x=30 z=80 radius=0
-11 x=12 z=122 radius=0
-12 x=12 z=87 radius=0
+2 x=0 z=123 radius=0 taper=0
+3 x=0 z=110 radius=0 taper=0
+4 x=0 z=100 radius=0 taper=0
+5 x=-15 z=110 radius=0 taper=0
+6 x=-30 z=110 radius=0 taper=0
+7 x=-15 z=120 radius=0 taper=0
+8 x=-15 z=95 radius=0 taper=0
+9 x=20 z=100 radius=0 taper=0
+10 x=30 z=80 radius=0 taper=0
+11 x=12 z=122 radius=0 taper=0
+12 x=12 z=87 radius=0 taper=0
 
 [path-segment]
 13 kind=guest from=2 to=3 width=3 from-edge-radius=0 to-edge-radius=0

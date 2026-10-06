@@ -8,11 +8,13 @@
 
 namespace tpj {
 
-// A point that path segments share: its ground position, and the radius of the corner it makes
-// when exactly two segments meet there.
+// A point that path segments share: its ground position, the radius of the corner it makes when
+// exactly two segments meet there, and the length over which the narrower of two segments curves
+// out to the wider one's side where they meet there, or 0 for its natural length.
 struct PathPointIntent {
   ParkPoint At;
   double Radius = DEFAULT_CORNER_RADIUS;
+  double Taper = DEFAULT_TAPER_LENGTH;
 
   bool operator==(const PathPointIntent &) const = default;
 };
@@ -21,6 +23,7 @@ template <typename Visitor> void visitFields(Visitor &visitor, PathPointIntent &
   visitor.field("x", point.At.X);
   visitor.field("z", point.At.Z);
   visitor.field("radius", point.Radius);
+  visitor.field("taper", point.Taper);
 }
 
 // A straight piece of path between two path points, and the radius of the edge that starts from its

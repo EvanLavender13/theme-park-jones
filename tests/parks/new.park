@@ -7,8 +7,8 @@ next-key 5
 1 x=0 z=126.5 facing-x=0 facing-z=-1
 
 [path-point]
-2 x=0 z=123 radius=0
-3 x=0 z=103 radius=0
+2 x=0 z=123 radius=0 taper=0
+3 x=0 z=103 radius=0 taper=0
 
 [path-segment]
 4 kind=guest from=2 to=3 width=3 from-edge-radius=0 to-edge-radius=0

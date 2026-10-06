@@ -57,6 +57,22 @@ std::optional<ParkEdge> edgeOf(const World &world, EntityKey point, EntityKey se
   return std::nullopt;
 }
 
+// The taper at the point, or none.
+std::optional<ParkTaper> taperOf(const World &world, EntityKey point) {
+  for (const ParkTaper &taper : parkTapers(world)) {
+    if (taper.Point == point) {
+      return taper;
+    }
+  }
+  return std::nullopt;
+}
+
+// How far the point lies from where the taper's sides would stop without curves, along the narrower
+// segment.
+double depthAlong(const ParkTaper &taper, ParkPoint point) {
+  return (point.X - taper.At.X) * taper.Along.X + (point.Z - taper.At.Z) * taper.Along.Z;
+}
+
 // How far the point lies from where the edge's sides meet, along its Toward.
 double depthAlong(const ParkEdge &edge, ParkPoint point) {
   return (point.X - edge.Sharp.X) * edge.Toward.X + (point.Z - edge.Sharp.Z) * edge.Toward.Z;
@@ -423,10 +439,12 @@ std::optional<InsertPoint> insertAt(const World &world, ParkPoint point) {
   return std::nullopt;
 }
 
-// The edit a dragged radius handle, edge handle, or side makes with the pointer where it is: the
-// arc's middle moved as far into the corner as the pointer has moved, the edge's middle moved as
-// far along its Toward as the pointer has moved, or the width grown by twice how far the pointer
-// has moved away from the ground line. None when the corner, edge, or segment is gone.
+// The edit a dragged radius handle, edge handle, taper handle, or side makes with the pointer where
+// it is: the arc's middle moved as far into the corner as the pointer has moved, the edge's middle
+// moved as far along its Toward as the pointer has moved, where the longest curve starts moved as
+// far along the narrower segment as the pointer has moved, or the width grown by twice how far the
+// pointer has moved away from the ground line. None when the corner, edge, taper, or segment is
+// gone.
 std::optional<ParkEdit> handleEdit(const EditHandle &handle, double grabFrom, const World &world,
                                    ParkPoint pointer) {
   if (handle.Kind == HandleKind::Radius) {
@@ -445,6 +463,15 @@ std::optional<ParkEdit> handleEdit(const EditHandle &handle, double grabFrom, co
     const double radius = edgeRadiusFor(*edge, depthAlong(*edge, pointer) + grabFrom);
     return SetEdgeRadius{edge->Segment, edge->Point,
                          std::clamp(radius, edge->MinRadius, edge->MaxRadius)};
+  }
+  if (handle.Kind == HandleKind::Taper) {
+    const std::optional<ParkTaper> taper = taperOf(world, handle.Key);
+    if (!taper) {
+      return std::nullopt;
+    }
+    const double most = std::max(taper->MaxLength, MIN_TAPER_LENGTH);
+    return SetTaperLength{
+        taper->Point, std::clamp(depthAlong(*taper, pointer) + grabFrom, MIN_TAPER_LENGTH, most)};
   }
   const std::optional<ParkSegment> segment = segmentOf(world, handle.Key);
   if (!segment || segment->Line.size() < 2) {
@@ -483,8 +510,8 @@ std::optional<ParkEdit> editPathEdit(const ToolState &tool, const World &world) 
   return std::nullopt;
 }
 
-// Edit path's press takes, in order, the radius or edge handle, the point, the segment's sides, or
-// the insert under the pointer.
+// Edit path's press takes, in order, the radius, edge, or taper handle, the point, the segment's
+// sides, or the insert under the pointer.
 void pressEditPath(ToolState &tool, const World &world, ParkPoint pointer) {
   if (const std::optional<EditHandle> handle = handleAt(world, pointer)) {
     if (handle->Kind == HandleKind::Radius) {
@@ -492,6 +519,13 @@ void pressEditPath(ToolState &tool, const World &world, ParkPoint pointer) {
         tool.Holding = true;
         tool.Grabbed = handle;
         tool.GrabFrom = distanceBetween(corner->At, corner->Middle) - depthAlong(*corner, pointer);
+        return;
+      }
+    } else if (handle->Kind == HandleKind::Taper) {
+      if (const std::optional<ParkTaper> taper = taperOf(world, handle->Key)) {
+        tool.Holding = true;
+        tool.Grabbed = handle;
+        tool.GrabFrom = taper->Length - depthAlong(*taper, pointer);
         return;
       }
     } else if (const std::optional<ParkEdge> edge = edgeOf(world, handle->Key, handle->Segment)) {
@@ -796,6 +830,11 @@ ParkPoint radiusHandleOf(const ParkCorner &corner) {
   return {corner.At.X + corner.Toward.X * depth, corner.At.Z + corner.Toward.Z * depth};
 }
 
+ParkPoint taperHandleOf(const ParkTaper &taper) {
+  const double depth = std::max(taper.Length, std::min(TAPER_HANDLE_DEPTH, taper.MaxLength));
+  return {taper.At.X + taper.Along.X * depth, taper.At.Z + taper.Along.Z * depth};
+}
+
 std::optional<EditHandle> handleAt(const World &world, ParkPoint point) {
   std::optional<EditHandle> nearest;
   double nearestDistance = 0.0;
@@ -812,6 +851,9 @@ std::optional<EditHandle> handleAt(const World &world, ParkPoint point) {
   }
   for (const ParkEdge &edge : parkEdges(world)) {
     consider(EditHandle{HandleKind::Edge, edge.Point, edge.Middle, edge.Segment});
+  }
+  for (const ParkTaper &taper : parkTapers(world)) {
+    consider(EditHandle{HandleKind::Taper, taper.Point, taperHandleOf(taper), taper.Segment});
   }
   return nearest;
 }
@@ -845,6 +887,10 @@ std::vector<EditHandle> editHandles(const ToolState &tool, const World &world) {
     }
     for (const ParkEdge &edge : parkEdges(world)) {
       handles.push_back(EditHandle{HandleKind::Edge, edge.Point, edge.Middle, edge.Segment});
+    }
+    for (const ParkTaper &taper : parkTapers(world)) {
+      handles.push_back(
+          EditHandle{HandleKind::Taper, taper.Point, taperHandleOf(taper), taper.Segment});
     }
   }
   return handles;

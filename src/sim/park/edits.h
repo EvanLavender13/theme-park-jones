@@ -158,14 +158,22 @@ struct SetEdgeRadius {
   bool operator==(const SetEdgeRadius &) const = default;
 };
 
+// The path point's taper length, held exactly as given.
+struct SetTaperLength {
+  EntityKey Point = NULL_KEY;
+  double Length = 0.0;
+
+  bool operator==(const SetTaperLength &) const = default;
+};
+
 // Registers AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
-// RemovePoint, SetCornerRadius, SetSegmentWidth, and SetEdgeRadius, in that order.
+// RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, and SetTaperLength, in that order.
 void addParkEdits(WorldSchema &schema);
 
-// A tentative or committed edit to park intent: one of the eleven commands.
+// A tentative or committed edit to park intent: one of the twelve commands.
 using ParkEdit =
     std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
-                 RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius>;
+                 RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, SetTaperLength>;
 
 // The stop's ground position: a NewPoint's own, an OnPoint's point's, the place Along of the way
 // from an OnSegment's segment's From point to its To point, or the place an OnBend names on its
@@ -215,6 +223,7 @@ bool isAccepted(const World &world, const RemovePoint &command);
 bool isAccepted(const World &world, const SetCornerRadius &command);
 bool isAccepted(const World &world, const SetSegmentWidth &command);
 bool isAccepted(const World &world, const SetEdgeRadius &command);
+bool isAccepted(const World &world, const SetTaperLength &command);
 
 // Whether the command the edit holds would be applied to the world.
 bool isAccepted(const World &world, const ParkEdit &edit);
@@ -235,6 +244,7 @@ void applyCommand(World &world, const RemovePoint &command);
 void applyCommand(World &world, const SetCornerRadius &command);
 void applyCommand(World &world, const SetSegmentWidth &command);
 void applyCommand(World &world, const SetEdgeRadius &command);
+void applyCommand(World &world, const SetTaperLength &command);
 
 // Whether every solid and line has its geometry, stays in the park, and conflicts with no other.
 bool isPhysicallyValid(const World &world);

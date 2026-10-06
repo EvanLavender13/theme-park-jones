@@ -262,6 +262,7 @@ struct PlanLine {
 // that existing point's radius becomes RoundedTo. Curves holds the radii written last, so that
 // the edit keeps every curve. If Edged is not NULL_KEY, that existing
 // segment's edge radius at its From end, when EdgedAtFrom, or else at its To end, becomes EdgedTo.
+// If Tapered is not NULL_KEY, that existing point's taper length becomes TaperedTo.
 struct EditPlan {
   std::vector<PlanPoint> Points;
   std::vector<size_t> Stops;
@@ -276,6 +277,8 @@ struct EditPlan {
   EntityKey Edged = NULL_KEY;
   bool EdgedAtFrom = false;
   double EdgedTo = 0.0;
+  EntityKey Tapered = NULL_KEY;
+  double TaperedTo = 0.0;
   CurveWrites Curves;
 };
 
@@ -997,6 +1000,18 @@ std::optional<EditPlan> planRadius(const World &world, const SetCornerRadius &co
   return plan;
 }
 
+// The plan of a SetTaperLength that names a path point with a length finite and at least 0.
+std::optional<EditPlan> planTaper(const World &world, const SetTaperLength &command) {
+  if (findIntent<PathPointIntent>(world, command.Point) == nullptr ||
+      !std::isfinite(command.Length) || command.Length < 0.0) {
+    return std::nullopt;
+  }
+  EditPlan plan;
+  plan.Tapered = command.Point;
+  plan.TaperedTo = command.Length;
+  return plan;
+}
+
 // The plan of a SetEdgeRadius that names a segment with a ground line, one of its two points, and a
 // radius finite and at least 0.
 std::optional<EditPlan> planEdge(const World &world, const SetEdgeRadius &command) {
@@ -1241,6 +1256,9 @@ void applyPlan(Store &store, const EditPlan &plan, std::vector<SegmentEnd> *adde
   if (plan.Rounded != NULL_KEY) {
     store.point(plan.Rounded).Radius = plan.RoundedTo;
   }
+  if (plan.Tapered != NULL_KEY) {
+    store.point(plan.Tapered).Taper = plan.TaperedTo;
+  }
   if (plan.Edged != NULL_KEY) {
     PathSegmentIntent &edged = store.segment(plan.Edged);
     (plan.EdgedAtFrom ? edged.FromEdge : edged.ToEdge) = plan.EdgedTo;
@@ -1363,6 +1381,12 @@ Edited editedBy(const World &world, const EditPlan &plan, Wanted wanted) {
   applyPlan(store, plan);
   PathGround groundAfter = groundOf(after);
   std::vector<EntityKey> points = pointsChanged(groundBefore.Segments, groundAfter.Segments);
+  // A taper length changes no segment, but it changes the paving at its point.
+  if (plan.Tapered != NULL_KEY) {
+    points.push_back(plan.Tapered);
+    std::ranges::sort(points);
+    points.erase(std::unique(points.begin(), points.end()), points.end());
+  }
   // A segment's paving at one end depends on whether its other end is free, which can change
   // whenever a changed point loses or gains a segment.
   points = withFarEnds(groundBefore.Segments, groundAfter.Segments, points);
@@ -1458,6 +1482,9 @@ std::optional<EditPlan> planOf(const World &world, const SetSegmentWidth &comman
 std::optional<EditPlan> planOf(const World &world, const SetEdgeRadius &command) {
   return planEdge(world, command);
 }
+std::optional<EditPlan> planOf(const World &world, const SetTaperLength &command) {
+  return planTaper(world, command);
+}
 
 // The ground position of each of the plan's crossings, or none without a plan.
 std::vector<ParkPoint> crossingsOf(const std::optional<EditPlan> &plan) {
@@ -1484,6 +1511,7 @@ void addParkEdits(WorldSchema &schema) {
   schema.addCommand<SetCornerRadius>();
   schema.addCommand<SetSegmentWidth>();
   schema.addCommand<SetEdgeRadius>();
+  schema.addCommand<SetTaperLength>();
 }
 
 std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop) {
@@ -1658,6 +1686,10 @@ bool isAccepted(const World &world, const SetEdgeRadius &command) {
   return acceptedPlan(world, planOf(world, command)).has_value();
 }
 
+bool isAccepted(const World &world, const SetTaperLength &command) {
+  return acceptedPlan(world, planOf(world, command)).has_value();
+}
+
 void applyCommand(World &world, const AddPath &command) {
   if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
     WorldStore store(world);
@@ -1729,6 +1761,13 @@ void applyCommand(World &world, const SetSegmentWidth &command) {
 }
 
 void applyCommand(World &world, const SetEdgeRadius &command) {
+  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
+    WorldStore store(world);
+    applyPlan(store, *plan);
+  }
+}
+
+void applyCommand(World &world, const SetTaperLength &command) {
   if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
     WorldStore store(world);
     applyPlan(store, *plan);

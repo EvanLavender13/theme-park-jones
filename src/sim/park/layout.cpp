@@ -234,22 +234,69 @@ std::vector<std::vector<CarrierPoint>> straightLines(const PathLayout &layout) {
 // Directions whose cross product is within this of zero run along one line.
 constexpr double PARALLEL = 1e-9;
 
+// A segment's end at a point, as pavingReaches sees it: the segment's index, its unit direction
+// away from the point, and its half width.
+struct ReachArm {
+  size_t Segment = 0;
+  ParkPoint Along;
+  double Half = 0.0;
+  // The edge radius held at the point, for the edge starting from the segment's left side.
+  double Edge = 0.0;
+};
+
+// Whether the outline would step straight across from the first arm's left side to the second's
+// right side, the second lying counter-clockwise of the first, when the edge there has all the room
+// it needs: where they run straight on, or where an outer edge can't touch both sides between the
+// point's own corner and the wider width behind the point, as the paving fits it. start is how far
+// from the point the point's own corner arc touches its segments.
+bool stepsBetween(const ReachArm &a, const ReachArm &b, double start) {
+  const double sine = ccwOf(a.Along, b.Along);
+  const double cosine = a.Along.X * b.Along.X + a.Along.Z * b.Along.Z;
+  if (std::abs(sine) <= PARALLEL) {
+    return cosine < 0.0;
+  }
+  // An inner edge with all the room it needs always fits.
+  if (sine > 0.0) {
+    return false;
+  }
+  const double grow = -(1.0 + cosine);
+  const auto radiusA = [&](double d) { return (d * sine - b.Half - a.Half * cosine) / grow; };
+  const auto radiusB = [&](double d) { return (d * sine - a.Half - b.Half * cosine) / grow; };
+  const double behind = -2.0 * std::max(a.Half, b.Half);
+  const double least = std::max({0.0, radiusA(behind), radiusB(behind)});
+  return least > std::min(radiusA(start), radiusB(start));
+}
+
+// At a point where exactly two segments of different widths meet, the outline steps between them
+// on at least one side, and the point holds a taper length above 0, the index of the narrower one's
+// arm, whose curve may run that far along it. None elsewhere. The arms are in counter-clockwise
+// order.
+std::optional<size_t> taperArm(const PathPointIntent &point, const std::vector<ReachArm> &arms) {
+  const double taper = std::isfinite(point.Taper) && point.Taper > 0.0 ? point.Taper : 0.0;
+  if (arms.size() != 2 || arms[0].Half == arms[1].Half || taper == 0.0) {
+    return std::nullopt;
+  }
+  const double cosine = arms[0].Along.X * arms[1].Along.X + arms[0].Along.Z * arms[1].Along.Z;
+  const double sine = std::abs(ccwOf(arms[0].Along, arms[1].Along));
+  const double radius = std::isfinite(point.Radius) && point.Radius > 0.0 ? point.Radius : 0.0;
+  const double start = sine > PARALLEL ? radius * sine / (1.0 - cosine) : 0.0;
+  if (!stepsBetween(arms[0], arms[1], start) && !stepsBetween(arms[1], arms[0], start)) {
+    return std::nullopt;
+  }
+  return arms[0].Half < arms[1].Half ? 0 : 1;
+}
+
 // How far along each segment from each of its points with two or more segments that point's paving
 // reaches: the farther of where the inner edges on the segment's two sides touch it, each with the
 // radius it is held at, or 0. At a point with two segments, the inner edge's radius is the point's
-// radius less the narrower half width. By the point's key, then the segment's index.
+// radius less the narrower half width. Where the narrower of two segments may curve out to the
+// wider one, its reach is the taper length the point holds farther. By the point's key,
+// then the segment's index.
 std::vector<std::tuple<EntityKey, size_t, double>>
 pavingReaches(const PathLayout &layout, const std::vector<std::pair<EntityKey, size_t>> &ends,
               const std::vector<std::vector<CarrierPoint>> &straight) {
-  struct Arm {
-    size_t Segment = 0;
-    ParkPoint Along;
-    double Half = 0.0;
-    // The edge radius held at the point, for the edge starting from the segment's left side.
-    double Edge = 0.0;
-  };
   std::vector<std::tuple<EntityKey, size_t, double>> reaches;
-  std::vector<Arm> arms;
+  std::vector<ReachArm> arms;
   for (size_t first = 0; first < ends.size();) {
     size_t last = first;
     while (last < ends.size() && ends[last].first == ends[first].first) {
@@ -266,27 +313,28 @@ pavingReaches(const PathLayout &layout, const std::vector<std::pair<EntityKey, s
       }
       const PathPointIntent *far = findPoint(layout, intent.From == key ? intent.To : intent.From);
       const double edge = intent.From == key ? intent.FromEdge : intent.ToEdge;
-      arms.push_back(Arm{segment, unitToward(point->At, far->At), intent.Width / 2.0,
-                         std::isfinite(edge) && edge > 0.0 ? edge : 0.0});
+      arms.push_back(ReachArm{segment, unitToward(point->At, far->At), intent.Width / 2.0,
+                              std::isfinite(edge) && edge > 0.0 ? edge : 0.0});
     }
     first = last;
     if (arms.size() < 2) {
       continue;
     }
-    std::ranges::sort(arms, [](const Arm &x, const Arm &y) {
+    std::ranges::sort(arms, [](const ReachArm &x, const ReachArm &y) {
       if (comesBefore(x.Along, y.Along) != comesBefore(y.Along, x.Along)) {
         return comesBefore(x.Along, y.Along);
       }
       return x.Segment < y.Segment;
     });
+    const std::optional<size_t> tapered = taperArm(*point, arms);
     for (size_t i = 0; i < arms.size(); ++i) {
-      const Arm &arm = arms[i];
-      const Arm &next = arms[(i + 1) % arms.size()];
-      const Arm &previous = arms[(i + arms.size() - 1) % arms.size()];
+      const ReachArm &arm = arms[i];
+      const ReachArm &next = arms[(i + 1) % arms.size()];
+      const ReachArm &previous = arms[(i + arms.size() - 1) % arms.size()];
       // An inner edge of radius r between two segments touches the first
       // (b.Half + a.Half cos + (1 + cos) r) / sine from the point, and the second the same with the
       // halves swapped, when the second lies less than half a turn on.
-      const auto touch = [&](const Arm &a, const Arm &b, bool onFirst) {
+      const auto touch = [&](const ReachArm &a, const ReachArm &b, bool onFirst) {
         const double sine = ccwOf(a.Along, b.Along);
         const double cosine = a.Along.X * b.Along.X + a.Along.Z * b.Along.Z;
         if (sine <= PARALLEL) {
@@ -300,7 +348,8 @@ pavingReaches(const PathLayout &layout, const std::vector<std::pair<EntityKey, s
                        : (a.Half + b.Half * cosine + grow) / sine;
       };
       const double reach = std::max({0.0, touch(arm, next, true), touch(previous, arm, false)});
-      reaches.emplace_back(key, arm.Segment, reach);
+      const bool curves = tapered.has_value() && tapered.value_or(0) == i;
+      reaches.emplace_back(key, arm.Segment, curves ? reach + point->Taper : reach);
     }
   }
   std::ranges::sort(reaches);

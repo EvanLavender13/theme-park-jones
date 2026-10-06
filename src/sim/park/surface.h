@@ -77,6 +77,25 @@ std::vector<ParkEdge> parkEdges(const World &world);
 // distance of 0 or less.
 double edgeRadiusFor(const ParkEdge &edge, double distance);
 
+// Where exactly two segments with ground lines and different widths meet at a path point, and the
+// outline curves from one's side to the other's instead of stepping: the point's key, the place on
+// the narrower segment's line where its sides would stop without curves, the narrower segment's
+// key, the unit direction along it away from the point, the length of its longest curve, and the
+// longest any of its curves can be.
+struct ParkTaper {
+  EntityKey Point = NULL_KEY;
+  ParkPoint At;
+  EntityKey Segment = NULL_KEY;
+  ParkPoint Along;
+  double Length = 0.0;
+  double MaxLength = 0.0;
+
+  bool operator==(const ParkTaper &) const = default;
+};
+
+// Each taper, in ascending key order of its point.
+std::vector<ParkTaper> parkTapers(const World &world);
+
 } // namespace tpj
 
 #endif

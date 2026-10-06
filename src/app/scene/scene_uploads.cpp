@@ -32,9 +32,12 @@ ParkMesh ghostMesh(const World &world, const Preview &preview, const PreviewLook
   for (const EditHandle &handle : look.Handles) {
     if (handle.Kind == HandleKind::Point) {
       appendPointMark(mesh, handle.At, POINT_MARK_COLOR);
+    } else if (handle.Kind == HandleKind::Radius) {
+      appendHandle(mesh, handle.At, HANDLE_COLOR);
+    } else if (handle.Kind == HandleKind::Taper) {
+      appendHandle(mesh, handle.At, TAPER_HANDLE_COLOR);
     } else {
-      appendHandle(mesh, handle.At,
-                   handle.Kind == HandleKind::Radius ? HANDLE_COLOR : EDGE_HANDLE_COLOR);
+      appendHandle(mesh, handle.At, EDGE_HANDLE_COLOR);
     }
   }
   if (look.Hovered && look.Hovered->Kind != HandleKind::Side) {
