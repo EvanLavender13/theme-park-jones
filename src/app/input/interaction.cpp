@@ -33,7 +33,9 @@ void Interaction::pick(const World &world, std::optional<EntityKey> entity) {
 
 void Interaction::selectTool(ToolKind kind) { tpj::selectTool(Tool, kind); }
 
-void Interaction::movePointer(std::optional<ParkPoint> ground) { tpj::movePointer(Tool, ground); }
+void Interaction::movePointer(const World &world, const PointerSample &pointer) {
+  tpj::movePointer(Tool, world, pointer);
+}
 
 std::optional<ParkEdit> Interaction::tentativeEdit(const World &world) const {
   return tpj::tentativeEdit(Tool, world);
@@ -57,6 +59,12 @@ std::vector<EditHandle> Interaction::editHandles(const World &world) const {
 
 std::optional<EditHandle> Interaction::hoveredHandle(const World &world) const {
   return tpj::hoveredHandle(Tool, world);
+}
+
+std::vector<SnapGuide> Interaction::snapGuides() const { return tpj::snapGuides(Tool); }
+
+std::vector<MeasuredLength> Interaction::measuredLengths(const World &world) const {
+  return tpj::measuredLengths(Tool, world);
 }
 
 } // namespace tpj

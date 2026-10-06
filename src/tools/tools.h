@@ -26,10 +26,13 @@ enum class ToolKind : uint8_t {
 
 // A place drag nearer than this to where the box lands keeps the facing it had, in meters.
 inline constexpr double MIN_FACING_DRAG = 1.0;
-// A path tool snaps a click onto a point or segment of its kind this near it, in meters.
-inline constexpr double SNAP_REACH = 2.0;
 // A path tool's press this near its last stop finishes the path, in meters.
 inline constexpr double FINISH_REACH = 1.0;
+// A snap catches the pointer this near it, and holds it until it moves this far, in screen pixels.
+inline constexpr double SNAP_CATCH_PIXELS = 10.0;
+inline constexpr double SNAP_RELEASE_PIXELS = 14.0;
+// A path that snaps to a door ends this far clear of the door's face, in meters.
+inline constexpr double DOOR_CLEARANCE = 0.25;
 // A press or hover this near a path point picks it, in meters.
 inline constexpr double POINT_REACH = 2.0;
 // Edit path keeps a corner's radius handle at least this far from its point, in meters.
@@ -65,12 +68,84 @@ struct EditHandle {
   bool operator==(const EditHandle &) const = default;
 };
 
+// What a snap guide shows: a point snapped to, a door's line to where the path ends, a segment
+// snapped onto, a direction from an anchor, or whole meters from an anchor.
+enum class GuideKind : uint8_t { Point, Door, Segment, Direction, Length };
+
+// A guide to draw. Point: the point at To. Door: from the door at From to the target at To.
+// Segment: the straight part of a segment from From to To. Direction: from its anchor at From
+// through To, running on past it. Length: from its anchor at From to To, with a tick at each whole
+// meter.
+struct SnapGuide {
+  GuideKind Kind = GuideKind::Point;
+  ParkPoint From;
+  ParkPoint To;
+
+  bool operator==(const SnapGuide &) const = default;
+};
+
+// One thing a snap holds to. Key names a path point, a door's entity, a segment, or a rounded
+// corner's point. Index names a drawn stop, a drawn segment, a door's face, a guide's place in the
+// snap's list of guides, or a whole number of meters.
+enum class HoldKind : uint8_t {
+  Point,
+  DrawnStop,
+  Door,
+  Segment,
+  Bend,
+  DrawnSegment,
+  Guide,
+  Length
+};
+
+struct SnapHold {
+  HoldKind Kind = HoldKind::Point;
+  EntityKey Key = NULL_KEY;
+  uint64_t Index = 0;
+
+  bool operator==(const SnapHold &) const = default;
+};
+
+// The snap in effect: where the stop or point lands, the stop it makes, the guides it shows, and
+// what it holds to. While snapping is off, it lands at the pointer as a new point, with no guides
+// and no holds.
+struct PointerSnap {
+  ParkPoint At;
+  PathStop Stop;
+  std::vector<SnapGuide> Guides;
+  std::vector<SnapHold> Holds;
+
+  bool operator==(const PointerSnap &) const = default;
+};
+
+// Where the pointer meets the ground, if it does; how many meters of ground a screen pixel spans
+// there; and whether the player is holding the key that turns snapping off.
+struct PointerSample {
+  std::optional<ParkPoint> Ground;
+  double MetersPerPixel = 0.0;
+  bool SnapsOff = false;
+};
+
+// A segment whose length the ghost shows, from one end to the other.
+struct MeasuredLength {
+  ParkPoint From;
+  ParkPoint To;
+
+  bool operator==(const MeasuredLength &) const = default;
+};
+
 // One tool and what it holds. Change it only through selectTool, movePointer, pressPointer, and
 // releasePointer.
 struct ToolState {
   ToolKind Kind = ToolKind::None;
   // Where the pointer meets the ground, if it does.
   std::optional<ParkPoint> Pointer;
+  // The pointer's last sample's meters per pixel and whether it turned snapping off.
+  double MetersPerPixel = 0.0;
+  bool SnapsOff = false;
+  // The snap in effect while a path tool is chosen with the pointer on the ground, or while Edit
+  // path drags a point. None otherwise.
+  std::optional<PointerSnap> Snapped;
   bool Holding = false;
   // Whether the pointer has met the ground anywhere new since the press took hold.
   bool Dragged = false;
@@ -102,8 +177,9 @@ struct ToolState {
 
 // Sets the tool, dropping any hold without committing.
 void selectTool(ToolState &tool, ToolKind kind);
-// Where the pointer meets the ground, or none off the ground or over a panel.
-void movePointer(ToolState &tool, std::optional<ParkPoint> ground);
+// Records the pointer's sample: where it meets the ground, or none off the ground or over a panel,
+// the meters a pixel spans there, and whether snapping is off. Then finds the snap in effect.
+void movePointer(ToolState &tool, const World &world, const PointerSample &pointer);
 // The primary button went down. A path tool adds no stop that would make the world refuse its path.
 void pressPointer(ToolState &tool, const World &world);
 // The primary button went up: the edit to commit, which is the tentative edit of the moment
@@ -119,20 +195,8 @@ std::optional<EntityKey> highlightedEntity(const ToolState &tool, const World &w
 std::optional<EntityKey> boxAt(const World &world, ParkPoint point);
 // The first segment in key order whose ground line passes within half its width of the point.
 std::optional<EntityKey> segmentAt(const World &world, ParkPoint point);
-// The stop a click at the point makes for a path of the kind whose stops so far are drawn: the
-// nearest within SNAP_REACH of the path points of the kind and the points the drawn stops make,
-// leaving out the last, or else the nearest place within SNAP_REACH on a segment of the kind or a
-// segment between two drawn stops, or that segment's end point when the place lies within
-// MIN_SEGMENT_LENGTH of it, or else a new point at the click. A point is the kind's when at least
-// one segment uses it and every segment at it has the kind.
-PathStop snapStop(const World &world, PathKind kind, const std::vector<PathStop> &drawn,
-                  ParkPoint point);
 // The path point nearest the point within POINT_REACH, of either kind. Ties go to the lower key.
 std::optional<EntityKey> pointAt(const World &world, ParkPoint point);
-// Where a dragged path point at the place moves to: snapStop's target for a path of the point's
-// kind with no stops drawn, leaving out the point and every segment at it, or a new point at the
-// place when no segment uses the point.
-PointTarget snapPoint(const World &world, EntityKey point, ParkPoint at);
 // Where the corner's radius handle lies.
 ParkPoint radiusHandleOf(const ParkCorner &corner);
 // Where the taper's handle lies.
@@ -152,6 +216,11 @@ std::vector<EditHandle> editHandles(const ToolState &tool, const World &world);
 // The radius, edge, or taper handle, or the segment's sides under the pointer that a press with
 // EditPath would take, while nothing is held. None otherwise.
 std::optional<EditHandle> hoveredHandle(const ToolState &tool, const World &world);
+// The guides of the snap in effect, or none.
+std::vector<SnapGuide> snapGuides(const ToolState &tool);
+// From the last stop of the path being drawn to where a press would add the next, or from the
+// other end of each segment at a dragged point to where it would land. Empty otherwise.
+std::vector<MeasuredLength> measuredLengths(const ToolState &tool, const World &world);
 
 // Where a path tool's first click would start the path, its kind, and whether it would join a
 // point or segment there.

@@ -4,7 +4,7 @@ This module serves the navigable-networks capability (plans/navigable-networks).
 
 ## Boundary
 
-routes reads intent only through parkSegments, parkEntrances, parkBoxes, and footprintOf (sim/park/SPEC.md, decision 0025). It publishes networks in the medium's Network type and route distance in the medium's fields (sim/medium/SPEC.md). Other modules read both through parkNetwork, previousNetwork, the Network type's queries, sampleField, and routeEntryAt, not through how they were derived.
+routes reads intent only through parkSegments, parkEntrances, parkBoxes, and footprintOf (sim/park/SPEC.md, decision 0025). It publishes networks in the medium's Network type and route distance in the medium's fields (sim/medium/SPEC.md). Other modules read both through parkNetwork, previousNetwork, the Network type's queries, sampleField, and routeEntryAt, and the doors connectors start from through parkDoors, not through how they were derived.
 
 addRoutes registers the derived type PreviousNetwork, the resolver path-networks, and route distance's two fields and its resolver. makeParkSchema calls it after addParkEdits. addDropPreviousNetworks registers the finisher that removes the previous networks. addPark calls it after every finisher that reads them.
 
@@ -30,6 +30,8 @@ Doors sit at the middle of an entity's front and back faces.
 - An entrance's front door serves the guest network.
 - A shop's front door serves the guest network, and its back door serves the backstage network.
 - A depot's front door serves the backstage network.
+
+parkDoors gives the doors serving a kind: the entrances' first, then the boxes', each in key order of its entity. A ParkDoor has its entity, its face, its position, and the unit direction out of its face.
 
 If a door is within CONNECTION_REACH of a path of the kind it serves, it gets a connector. A connector is a short straight carrier keyed connectorKey(entity, face). It runs from the door to the nearest point on that kind's paths, and joins the path's network there like any other meeting. If a door is farther away, or there is no path of its kind, it has no connector, and nothing else about its entity changes (principle 2). If a door is flush against a line of its kind, it still gets a connector.
 
