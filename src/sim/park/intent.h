@@ -63,6 +63,9 @@ constexpr double pathWidth(PathKind kind) { return kind == PathKind::Guest ? 3.0
 // The corner radius a new path point takes, in meters.
 inline constexpr double DEFAULT_CORNER_RADIUS = 0.0;
 
+// The edge radius a new segment end takes, in meters: a sharp edge.
+inline constexpr double DEFAULT_EDGE_RADIUS = 0.0;
+
 constexpr FootprintSize boxSize(BoxKind kind) {
   return kind == BoxKind::Shop ? FootprintSize{8.0, 6.0} : FootprintSize{12.0, 8.0};
 }
@@ -104,8 +107,9 @@ struct ParkCorner {
   bool operator==(const ParkCorner &) const = default;
 };
 
-// A path segment's intent, as other modules read it: its kind, its two points, its width, and its
-// ground line, which is empty when the segment has no physical shape.
+// A path segment's intent, as other modules read it: its kind, its two points, its width, its
+// ground line, which is empty when the segment has no physical shape, and its edge radius at each
+// end, for the edge that starts from its left side there, seen walking away from that end's point.
 struct ParkSegment {
   EntityKey Key = NULL_KEY;
   PathKind Kind = PathKind::Guest;
@@ -113,6 +117,8 @@ struct ParkSegment {
   EntityKey To = NULL_KEY;
   double Width = 0.0;
   std::vector<CarrierPoint> Line;
+  double FromEdge = DEFAULT_EDGE_RADIUS;
+  double ToEdge = DEFAULT_EDGE_RADIUS;
 
   bool operator==(const ParkSegment &) const = default;
 };

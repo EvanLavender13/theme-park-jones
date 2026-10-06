@@ -11,6 +11,7 @@
 #include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
+#include "sim/park/surface.h"
 #include "sim/park_schema.h"
 #include "sim/save.h"
 #include "sim/schema.h"
@@ -406,6 +407,47 @@ ChosenEdit narrowingSegmentUnderGuests(const World &before) {
           SetSegmentWidth{segmentKey, width.value_or(0.0) / 2.0}};
 }
 
+// The first edge, in the order parkEdges gives, whose point three or more guest segments use,
+// where a guest stands on one of those segments, and which has a radius above 0 that fits.
+std::optional<ParkEdge> guestJunctionEdgeUnderGuests(const World &world) {
+  const std::vector<ParkSegment> segments = parkSegments(world);
+  for (const ParkEdge &edge : parkEdges(world)) {
+    if (!(edge.MaxRadius > 0.0)) {
+      continue;
+    }
+    std::vector<ParkSegment> guestAtPoint;
+    for (const ParkSegment &segment : segments) {
+      if (segment.Kind == PathKind::Guest &&
+          (segment.From == edge.Point || segment.To == edge.Point)) {
+        guestAtPoint.push_back(segment);
+      }
+    }
+    if (guestAtPoint.size() < 3) {
+      continue;
+    }
+    const bool guestOnOne = std::ranges::any_of(guestAtPoint, [&](const ParkSegment &segment) {
+      return someGuestStandsOn(world, segment.Key);
+    });
+    if (guestOnOne) {
+      return edge;
+    }
+  }
+  return std::nullopt;
+}
+
+// The segment keeps its key and its ground line, and only its edge radius at the junction changes,
+// so the guests at the junction stay where they stand and the save holds a curved edge.
+ChosenEdit curvingJunctionEdgeUnderGuests(const World &before) {
+  const std::optional<ParkEdge> edge = guestJunctionEdgeUnderGuests(before);
+  REQUIRE(edge.has_value());
+  const ParkEdge found = edge.value_or(ParkEdge{});
+  const SetEdgeRadius set{found.Segment, found.Point, found.MaxRadius / 2.0};
+  REQUIRE(isAccepted(before, ParkEdit{set}));
+  return {"curving an inside corner of a guest junction whose segments guests stand on to half the "
+          "largest radius that fits, leaving the segments' ground lines as they were",
+          set};
+}
+
 // The edits of warm.park, made from the world as a cycle leaves it. Each requires the state it was
 // chosen for, so a change to warm.park that loses that state fails here rather than quietly
 // checking less.
@@ -419,7 +461,8 @@ std::vector<ChosenEdit> chosenEdits(const World &before) {
                                 insertingPointUnderGuests(before),
                                 deletingPointUnderGuests(before),
                                 roundingCornerUnderGuests(before),
-                                narrowingSegmentUnderGuests(before)};
+                                narrowingSegmentUnderGuests(before),
+                                curvingJunctionEdgeUnderGuests(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);
     REQUIRE(isAccepted(before, chosen.Edit));

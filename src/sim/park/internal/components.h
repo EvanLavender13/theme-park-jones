@@ -23,12 +23,15 @@ template <typename Visitor> void visitFields(Visitor &visitor, PathPointIntent &
   visitor.field("radius", point.Radius);
 }
 
-// A straight piece of path between two path points.
+// A straight piece of path between two path points, and the radius of the edge that starts from its
+// left side at each end, seen walking away from that end's point.
 struct PathSegmentIntent {
   PathKind Kind = PathKind::Guest;
   EntityKey From = NULL_KEY;
   EntityKey To = NULL_KEY;
   double Width = 0.0;
+  double FromEdge = DEFAULT_EDGE_RADIUS;
+  double ToEdge = DEFAULT_EDGE_RADIUS;
 
   bool operator==(const PathSegmentIntent &) const = default;
 };
@@ -38,6 +41,8 @@ template <typename Visitor> void visitFields(Visitor &visitor, PathSegmentIntent
   visitor.field("from", segment.From);
   visitor.field("to", segment.To);
   visitor.field("width", segment.Width);
+  visitor.field("from-edge-radius", segment.FromEdge);
+  visitor.field("to-edge-radius", segment.ToEdge);
 }
 
 // A box the player placed.
