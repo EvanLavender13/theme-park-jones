@@ -101,6 +101,14 @@ inline constexpr Rgba EDGE_HANDLE_COLOR{0.95f, 0.70f, 0.25f, 0.8f};
 // Adds a radius or edge handle centered on the point.
 void appendHandle(ParkMesh &mesh, ParkPoint at, Rgba color);
 
+// Path point markers are flat discs of this radius, this high, under handles and above join marks.
+inline constexpr double POINT_MARK_SIZE = 0.35;
+inline constexpr float POINT_MARK_LIFT = 0.065f;
+inline constexpr Rgba POINT_MARK_COLOR{0.15f, 0.2f, 0.3f, 0.9f};
+
+// Adds a path point's marker centered on the point.
+void appendPointMark(ParkMesh &mesh, ParkPoint at, Rgba color);
+
 // A segment's side marks are strips this wide along the inside of each side.
 inline constexpr double SIDE_MARK_WIDTH = 0.3;
 

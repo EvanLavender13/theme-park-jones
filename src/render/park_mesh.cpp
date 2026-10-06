@@ -297,12 +297,12 @@ void appendStraightPath(ParkMesh &mesh, const World &world, const AddPath &path,
   }
 }
 
-// Adds, in the delete tint, the box or segment a deletion removes, or every segment at a point
-// DeletePoint deletes.
+// Adds, in the delete tint, the box or segment a deletion removes, or both segments at a point
+// RemovePoint merges.
 void appendDeleted(ParkMesh &mesh, const World &world, const ParkEdit &edit) {
-  if (const auto *del = std::get_if<DeletePoint>(&edit)) {
+  if (const auto *remove = std::get_if<RemovePoint>(&edit)) {
     for (const ParkSegment &segment : parkSegments(world)) {
-      if (segment.From == del->Point || segment.To == del->Point) {
+      if (segment.From == remove->Point || segment.To == remove->Point) {
         appendEntity(mesh, world, segment.Key, DELETE_TINT);
       }
     }
@@ -339,12 +339,12 @@ void appendJoinMarks(ParkMesh &mesh, const World &world, const ParkEdit &edit) {
       appendJoinMark(mesh, at);
     }
   } else if (const auto *insert = std::get_if<InsertPoint>(&edit)) {
-    if (const std::optional<ParkPoint> at =
-            stopPosition(world, OnSegment{insert->Segment, insert->Along})) {
+    const PathStop place = std::visit([](const auto &at) { return PathStop{at}; }, insert->At);
+    if (const std::optional<ParkPoint> at = stopPosition(world, place)) {
       appendJoinMark(mesh, *at);
     }
-  } else if (const auto *del = std::get_if<DeletePoint>(&edit)) {
-    for (const ParkPoint &at : pathCrossings(world, *del)) {
+  } else if (const auto *remove = std::get_if<RemovePoint>(&edit)) {
+    for (const ParkPoint &at : pathCrossings(world, *remove)) {
       appendJoinMark(mesh, at);
     }
   }
@@ -382,6 +382,10 @@ void appendFinishMark(ParkMesh &mesh, ParkPoint at) {
 
 void appendHandle(ParkMesh &mesh, ParkPoint at, Rgba color) {
   appendDisc(mesh, at, RADIUS_HANDLE_SIZE, HANDLE_LIFT, color);
+}
+
+void appendPointMark(ParkMesh &mesh, ParkPoint at, Rgba color) {
+  appendDisc(mesh, at, POINT_MARK_SIZE, POINT_MARK_LIFT, color);
 }
 
 void appendSides(ParkMesh &mesh, const ParkSegment &segment, Rgba color) {
@@ -518,6 +522,34 @@ void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color)
   }
 }
 
+namespace {
+
+// The pieces and edge lines of editedSurface that belong to the segments editedSegments gives.
+PavedSurface reshapedBy(const World &world, const ParkEdit &edit) {
+  const std::vector<ParkSegment> reshaped = editedSegments(world, edit);
+  const PavedSurface surface = editedSurface(world, edit);
+  const auto isReshaped = [&reshaped](EntityKey owner) {
+    return std::ranges::any_of(
+        reshaped, [owner](const ParkSegment &segment) { return segment.Key == owner; });
+  };
+  PavedSurface own;
+  for (const SurfacePiece &piece : surface.Pieces) {
+    if (isReshaped(piece.Owner)) {
+      own.Pieces.push_back(piece);
+    }
+  }
+  for (const EdgeLine &edge : surface.Edges) {
+    if (isReshaped(edge.Owner)) {
+      const std::span<const ParkPoint> points = edgePoints(surface, edge);
+      own.Edges.push_back(EdgeLine{edge.Kind, edge.Owner, own.EdgePoints.size(), points.size()});
+      own.EdgePoints.insert(own.EdgePoints.end(), points.begin(), points.end());
+    }
+  }
+  return own;
+}
+
+} // namespace
+
 ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
                         const std::optional<World> &candidate) {
   ParkMesh mesh;
@@ -532,6 +564,17 @@ ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
                   ghostColor(accepted, boxColor(box.Kind)));
       }
     }
+  }
+  if (const auto *del = std::get_if<DeleteSegment>(&edit)) {
+    // A segment's deletion shows only what goes, and the segments whose line it reshapes.
+    appendEntity(mesh, world, del->Segment, accepted ? DELETE_TINT : INVALID_TINT);
+    appendSurface(mesh, reshapedBy(world, edit), GHOST_LIFT,
+                  [accepted](PathKind kind) { return ghostColor(accepted, pathColor(kind)); });
+    if (candidate) {
+      appendWalkways(mesh, *candidate, GHOST_ALPHA);
+      appendStarvedMarks(mesh, *candidate, GHOST_ALPHA);
+    }
+    return mesh;
   }
   if (accepted) {
     appendDeleted(mesh, world, edit);

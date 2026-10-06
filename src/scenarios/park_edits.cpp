@@ -22,7 +22,7 @@ constexpr double REACH = PARK_SIZE / 2.0 + 8.0;
 // A path's next point lies at most this far from its last along each axis.
 constexpr double PATH_STEP = 40.0;
 // Weights of AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
-// DeletePoint, SetCornerRadius, SetSegmentWidth, and SetEdgeRadius.
+// RemovePoint, SetCornerRadius, SetSegmentWidth, and SetEdgeRadius.
 constexpr std::array<uint64_t, 11> EDIT_WEIGHTS{3, 4, 3, 1, 1, 2, 1, 1, 1, 1, 1};
 
 // The cycle's next draw, in [0, 1).
@@ -103,10 +103,18 @@ void queueEdit(const World &world, CommandQueue &commands) {
     const ParkPoint to{drawAround(world, index, REACH), drawAround(world, index, REACH)};
     commands.push(MovePoint{point, NewPoint{to}});
   } else if (kind == 6) {
-    const EntityKey segment = drawGivenKey(world, index);
-    commands.push(InsertPoint{segment, drawEdit(world, index)});
+    // One insert in four names a key as a rounded corner's point, so it splits the corner on its
+    // arc. A key that holds no rounded corner names nothing, so the command is refused.
+    const bool onBend = drawEdit(world, index) < 0.25;
+    const EntityKey key = drawGivenKey(world, index);
+    const double along = drawEdit(world, index);
+    if (onBend) {
+      commands.push(InsertPoint{OnBend{key, along}});
+    } else {
+      commands.push(InsertPoint{OnSegment{key, along}});
+    }
   } else if (kind == 7) {
-    commands.push(DeletePoint{drawGivenKey(world, index)});
+    commands.push(RemovePoint{drawGivenKey(world, index)});
   } else if (kind == 8) {
     // Radii up to 12 m, so some don't fit and are made smaller.
     const EntityKey point = drawGivenKey(world, index);
