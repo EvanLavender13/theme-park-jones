@@ -25,7 +25,7 @@ On wide segments, a door at the frontage setback lies beyond today's connection 
 
 ## Tuning
 
-These are starting values. Drawing main-street.park adjusts them, and each feature that uses one states its final value.
+These are the final values, settled by drawing main-street.park.
 
 - Default widths: guest 3 m and backstage 2 m, as today. Allowed widths: 1.5 m to 16 m for both kinds.
 - Default corner radius: 0, a sharp corner. The player rounds a bend by dragging its radius handle. A radius can be anything from 0 up. If the radius is less than half the width, the paving's inner edge is sharp where it would fold back. The outer edge follows its own edge radius (edge-radii). If the arc's tangent lengths don't fit, the radius shrinks until each fits in what the segment's other end leaves free, or half the segment if both ends ask for more (predictable-editing).
