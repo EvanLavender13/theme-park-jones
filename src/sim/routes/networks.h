@@ -14,7 +14,7 @@ namespace tpj {
 class World;
 class WorldSchema;
 
-// Two lines of a kind that come this close meet, and a carrier's meetings this close are one stop.
+// Connectors that meet a carrier this close to each other, or to its end, stop there at one node.
 inline constexpr double JUNCTION_TOLERANCE = 0.001;
 
 // A door farther than this from every path of its kind has no connector.

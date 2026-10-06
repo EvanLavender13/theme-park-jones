@@ -56,8 +56,8 @@ struct FootprintSize {
   double Depth = 0.0;
 };
 
-// The width a new segment of the kind takes, in meters. Until navigable-networks' wide-routes,
-// routes gives every carrier of the kind this width.
+// The width a new segment of the kind takes, in meters, and the width routes gives the kind's
+// connectors.
 constexpr double pathWidth(PathKind kind) { return kind == PathKind::Guest ? 3.0 : 2.0; }
 
 // The corner radius a new path point takes, in meters.

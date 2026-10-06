@@ -12,14 +12,9 @@ addRoutes registers the derived type PreviousNetwork, the resolver path-networks
 
 Each resolution derives one network for each PathKind from intent alone, so saves never hold networks (principle 1). parkNetwork returns a kind's network. Before the world's first resolution, it returns an empty network.
 
-A kind's network has a carrier for each segment of that kind whose ground line is not empty, keyed by the segment's key and following its ground line. It also has a carrier for each connector. Every carrier, a segment's or a connector's, has its kind's path width (pathWidth, sim/park/SPEC.md). Every edge is a stretch of a segment or a connector, measured along it (principle 4). Paths of different kinds never share a node, even where they cross.
+A kind's network has a carrier for each segment of that kind whose ground line is not empty, keyed by the segment's key, following its ground line, and with the segment's width. It also has a carrier for each connector, with its kind's path width (pathWidth, sim/park/SPEC.md). Every edge is a stretch of a segment or a connector, measured along it (principle 4). Paths of different kinds never share a node, even where they cross.
 
-Where lines of one kind cross or come within JUNCTION_TOLERANCE of each other, they join at a node. These all give junctions:
-
-- a crossing;
-- a point snapped onto another line;
-- a line through another line's point;
-- a collinear overlap.
+Carriers join only at path points and at connectors' ends. Every carrier whose segment ends at a point stops there, and all of them share one node. Segments of one kind that cross, touch, or overlap without sharing a point don't join. At a rounded corner, the node lies at the middle of the arc, where the two segments' ground lines meet.
 
 If nodes are closer together along a carrier than JUNCTION_TOLERANCE, they are one node.
 
@@ -33,7 +28,7 @@ Doors sit at the middle of an entity's front and back faces.
 
 parkDoors gives the doors serving a kind: the entrances' first, then the boxes', each in key order of its entity. A ParkDoor has its entity, its face, its position, and the unit direction out of its face.
 
-If a door is within CONNECTION_REACH of a path of the kind it serves, it gets a connector. A connector is a short straight carrier keyed connectorKey(entity, face). It runs from the door to the nearest point on that kind's paths, and joins the path's network there like any other meeting. If a door is farther away, or there is no path of its kind, it has no connector, and nothing else about its entity changes (principle 2). If a door is flush against a line of its kind, it still gets a connector.
+If a door is within CONNECTION_REACH of a path of the kind it serves, it gets a connector. A connector is a short straight carrier keyed connectorKey(entity, face). It runs from the door to the nearest point on that kind's paths, and stops that path's carrier there at a node. If a door is farther away, or there is no path of its kind, it has no connector, and nothing else about its entity changes (principle 2). If a door is flush against a line of its kind, it still gets a connector.
 
 Each connector's door end is a node of its own, anchored to the door's entity. These are the networks' only anchors. An entity finds where it meets a network through anchoredNodes. If an entity has no connector on a network, it is not on that network.
 
