@@ -33,6 +33,8 @@ inline constexpr double SNAP_CATCH_PIXELS = 10.0;
 inline constexpr double SNAP_RELEASE_PIXELS = 14.0;
 // A path that snaps to a door ends this far clear of the door's face, in meters.
 inline constexpr double DOOR_CLEARANCE = 0.25;
+// A box that fronts a segment has its front face this far beyond the segment's paving, in meters.
+inline constexpr double FRONTAGE_SETBACK = 1.0;
 // A press or hover this near a path point picks it, in meters.
 inline constexpr double POINT_REACH = 2.0;
 // Edit path keeps a corner's radius handle at least this far from its point, in meters.
@@ -154,6 +156,9 @@ struct ToolState {
   double FacingZ = -1.0;
   // Holding with a place tool: where the box lands and how it faces.
   Pose Landing;
+  // The place tools' box pose while it fronts a segment, found when the pointer moves while not
+  // holding, and kept through a hold. None while it fronts none.
+  std::optional<Pose> Fronted;
   // Holding with MoveBox: the box, the offset of its position from the pointer at the press, and
   // where it would move.
   EntityKey Held = NULL_KEY;
@@ -208,6 +213,9 @@ std::optional<EditHandle> handleAt(const World &world, ParkPoint point);
 // The segment with a ground line whose side lies nearest the point within SIDE_REACH. Ties go to
 // the lower key.
 std::optional<EntityKey> sideAt(const World &world, ParkPoint point);
+// The pose of a box of the kind that fronts the segment near the point, as tools/SPEC.md's Place
+// shop and Place depot state, or none when no segment of the kind its front door serves is near.
+std::optional<Pose> frontagePose(const World &world, BoxKind kind, ParkPoint point);
 // Every path point's marker, in key order, then every corner's radius handle, in key order of its
 // point, then every edge handle, in the order parkEdges gives the edges, then every taper handle,
 // in the order parkTapers gives the tapers, while EditPath is chosen and nothing is held. Only the

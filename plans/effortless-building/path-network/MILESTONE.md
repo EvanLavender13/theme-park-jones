@@ -78,6 +78,7 @@ None of these features adds a test of its own unless it fixes a bug (docs/testin
 ## Deepening candidates
 
 - Frontage when moving a box, not only when placing one.
+- A box fronting the inside of a tight curve moves out until its whole front face clears the paving by the setback, not only the face's middle.
 - Typing an exact length while drawing, as SketchUp does.
 - Locking the current direction with a held key, so the pointer can leave the line and still draw along it.
 - Showing the ghost of an undo's inverse while the undo control is hovered (decision 0029).
