@@ -11,6 +11,7 @@
 #include <array>
 #include <cmath>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <span>
 #include <stddef.h>
@@ -1373,20 +1374,16 @@ std::vector<EntityKey> withFarEnds(const std::vector<ParkSegment> &before,
   return points;
 }
 
-Edited editedBy(const World &world, const EditPlan &plan, Wanted wanted) {
-  const PathLayout before = layoutOf(world);
+// What changes from one layout to another. Extra holds points whose paving can change though no
+// segment at them does, as when a taper length changes.
+Edited editedBetween(const PathLayout &before, const PathLayout &after,
+                     const std::vector<EntityKey> &extra, Wanted wanted) {
   const PathGround groundBefore = groundOf(before);
-  PathLayout after = before;
-  LayoutStore store(after, world.nextKey());
-  applyPlan(store, plan);
   PathGround groundAfter = groundOf(after);
   std::vector<EntityKey> points = pointsChanged(groundBefore.Segments, groundAfter.Segments);
-  // A taper length changes no segment, but it changes the paving at its point.
-  if (plan.Tapered != NULL_KEY) {
-    points.push_back(plan.Tapered);
-    std::ranges::sort(points);
-    points.erase(std::unique(points.begin(), points.end()), points.end());
-  }
+  points.insert(points.end(), extra.begin(), extra.end());
+  std::ranges::sort(points);
+  points.erase(std::unique(points.begin(), points.end()), points.end());
   // A segment's paving at one end depends on whether its other end is free, which can change
   // whenever a changed point loses or gains a segment.
   points = withFarEnds(groundBefore.Segments, groundAfter.Segments, points);
@@ -1410,6 +1407,19 @@ Edited editedBy(const World &world, const EditPlan &plan, Wanted wanted) {
     }
   }
   return edited;
+}
+
+Edited editedBy(const World &world, const EditPlan &plan, Wanted wanted) {
+  const PathLayout before = layoutOf(world);
+  PathLayout after = before;
+  LayoutStore store(after, world.nextKey());
+  applyPlan(store, plan);
+  // A taper length changes no segment, but it changes the paving at its point.
+  std::vector<EntityKey> extra;
+  if (plan.Tapered != NULL_KEY) {
+    extra.push_back(plan.Tapered);
+  }
+  return editedBetween(before, after, extra, wanted);
 }
 
 // The plan when the world accepts it: every segment it adds or changes has a ground line that stays
@@ -1485,6 +1495,10 @@ std::optional<EditPlan> planOf(const World &world, const SetEdgeRadius &command)
 std::optional<EditPlan> planOf(const World &world, const SetTaperLength &command) {
   return planTaper(world, command);
 }
+// RestoreIntent has no plan, and it shows no ghost.
+std::optional<EditPlan> planOf(const World & /*world*/, const RestoreIntent & /*command*/) {
+  return std::nullopt;
+}
 
 // The ground position of each of the plan's crossings, or none without a plan.
 std::vector<ParkPoint> crossingsOf(const std::optional<EditPlan> &plan) {
@@ -1512,6 +1526,7 @@ void addParkEdits(WorldSchema &schema) {
   schema.addCommand<SetSegmentWidth>();
   schema.addCommand<SetEdgeRadius>();
   schema.addCommand<SetTaperLength>();
+  schema.addCommand<RestoreIntent>();
 }
 
 std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop) {
@@ -1593,8 +1608,7 @@ namespace {
 // segment's lies within the longer of one of the point's segments' length and the widest width,
 // plus the widest width, from the point, so only the points that near the solid's bounds and their
 // segments are built.
-std::vector<SurfacePiece> piecesNear(const World &world, const Solid &solid) {
-  const PathLayout layout = layoutOf(world);
+std::vector<SurfacePiece> piecesNear(const PathLayout &layout, const Solid &solid) {
   const PathGround ground = groundOf(layout);
   const auto [leastX, greatestX] = extentOf(solid.Shape.Corners, ParkPoint{1.0, 0.0});
   const auto [leastZ, greatestZ] = extentOf(solid.Shape.Corners, ParkPoint{0.0, 1.0});
@@ -1631,6 +1645,199 @@ std::vector<SurfacePiece> piecesNear(const World &world, const Solid &solid) {
   return surfaceAround(layout, ground, focus, false).Pieces;
 }
 
+bool isListed(const std::vector<EntityKey> &keys, EntityKey key) {
+  return std::ranges::find(keys, key) != keys.end();
+}
+
+bool isAtLeastZero(double value) { return std::isfinite(value) && value >= 0.0; }
+
+bool isPointValid(const ParkPathPoint &point) {
+  return std::isfinite(point.At.X) && std::isfinite(point.At.Z) && isAtLeastZero(point.Radius) &&
+         isAtLeastZero(point.Taper);
+}
+
+bool isBoxValid(const ParkBox &box) {
+  return isKnown(box.Kind) && std::isfinite(box.At.X) && std::isfinite(box.At.Z) &&
+         std::isfinite(box.At.FacingX) && std::isfinite(box.At.FacingZ);
+}
+
+// Whether the restore names what it acts on, as the spec's RestoreIntent acceptance lists, apart
+// from physical validity. Before is the world's layout.
+bool namesValid(const World &world, const PathLayout &before, const RestoreIntent &command) {
+  const auto removed = [&command](EntityKey key) { return isListed(command.Remove, key); };
+  if (!std::ranges::all_of(command.Remove, [&world](EntityKey key) {
+        return findIntent<PathPointIntent>(world, key) != nullptr ||
+               findIntent<PathSegmentIntent>(world, key) != nullptr ||
+               findIntent<BoxIntent>(world, key) != nullptr;
+      })) {
+    return false;
+  }
+  const auto setsKept = [&removed](const auto &records, const auto &holds) {
+    return std::ranges::all_of(
+        records, [&](const auto &record) { return holds(record.Key) && !removed(record.Key); });
+  };
+  if (!setsKept(command.Set.Points,
+                [&world](EntityKey key) { return findIntent<PathPointIntent>(world, key); }) ||
+      !setsKept(command.Set.Segments,
+                [&world](EntityKey key) { return findIntent<PathSegmentIntent>(world, key); }) ||
+      !setsKept(command.Set.Boxes,
+                [&world](EntityKey key) { return findIntent<BoxIntent>(world, key); })) {
+    return false;
+  }
+  std::vector<EntityKey> names;
+  names.reserve(command.Add.Points.size() + command.Add.Segments.size() + command.Add.Boxes.size());
+  for (const ParkPathPoint &point : command.Add.Points) {
+    names.push_back(point.Key);
+  }
+  for (const SegmentRecord &segment : command.Add.Segments) {
+    names.push_back(segment.Key);
+  }
+  for (const ParkBox &box : command.Add.Boxes) {
+    names.push_back(box.Key);
+  }
+  std::ranges::sort(names);
+  if (std::ranges::adjacent_find(names) != names.end() ||
+      std::ranges::any_of(
+          names, [&world](EntityKey key) { return world.findEntity(key) != entt::null; })) {
+    return false;
+  }
+  const auto pointLeft = [&](EntityKey key) {
+    return std::ranges::find(command.Add.Points, key, &ParkPathPoint::Key) !=
+               command.Add.Points.end() ||
+           (findIntent<PathPointIntent>(world, key) != nullptr && !removed(key));
+  };
+  const auto segmentValid = [&pointLeft](const SegmentRecord &segment) {
+    return isKnown(segment.Kind) && segment.From != segment.To && pointLeft(segment.From) &&
+           pointLeft(segment.To) && std::isfinite(segment.Width) && segment.Width > 0.0 &&
+           isAtLeastZero(segment.FromEdge) && isAtLeastZero(segment.ToEdge);
+  };
+  for (const IntentRecords *records : {&command.Set, &command.Add}) {
+    if (!std::ranges::all_of(records->Points, isPointValid) ||
+        !std::ranges::all_of(records->Segments, segmentValid) ||
+        !std::ranges::all_of(records->Boxes, isBoxValid)) {
+      return false;
+    }
+  }
+  // A segment the restore leaves as it is must still end at path points.
+  return std::ranges::all_of(before.Segments, [&](const LayoutSegment &segment) {
+    const bool touched = removed(segment.Key) ||
+                         std::ranges::find(command.Set.Segments, segment.Key,
+                                           &SegmentRecord::Key) != command.Set.Segments.end();
+    return touched || (!removed(segment.Intent.From) && !removed(segment.Intent.To));
+  });
+}
+
+// Makes the restore's changes to path points and segments in the store: removes, then adds points
+// and segments, which take keys in that order, then sets. Removing a box's key in a layout changes
+// nothing.
+template <typename Store> void applyRestore(Store &store, const RestoreIntent &command) {
+  for (const EntityKey key : command.Remove) {
+    store.destroy(key);
+  }
+  std::map<EntityKey, EntityKey> added;
+  for (const ParkPathPoint &point : command.Add.Points) {
+    added[point.Key] = store.addPoint(PathPointIntent{point.At, point.Radius, point.Taper});
+  }
+  const auto intentOf = [&added](const SegmentRecord &segment) {
+    const auto keyOf = [&added](EntityKey key) {
+      const auto found = added.find(key);
+      return found == added.end() ? key : found->second;
+    };
+    return PathSegmentIntent{segment.Kind,  keyOf(segment.From), keyOf(segment.To),
+                             segment.Width, segment.FromEdge,    segment.ToEdge};
+  };
+  for (const SegmentRecord &segment : command.Add.Segments) {
+    store.addSegment(intentOf(segment));
+  }
+  for (const ParkPathPoint &point : command.Set.Points) {
+    store.point(point.Key) = PathPointIntent{point.At, point.Radius, point.Taper};
+  }
+  for (const SegmentRecord &segment : command.Set.Segments) {
+    store.segment(segment.Key) = intentOf(segment);
+  }
+}
+
+// The solids after the restore: the world's, less the boxes it removes, with the poses it sets, and
+// with the boxes it adds, keyed from firstBoxKey on.
+std::vector<Solid> restoredSolids(const World &world, const RestoreIntent &command,
+                                  uint64_t firstBoxKey) {
+  std::vector<Solid> solids;
+  for (const Solid &solid : solidsOf(world)) {
+    const bool set =
+        std::ranges::find(command.Set.Boxes, solid.Key, &ParkBox::Key) != command.Set.Boxes.end();
+    if (!set && !isListed(command.Remove, solid.Key)) {
+      solids.push_back(solid);
+    }
+  }
+  for (const ParkBox &box : command.Set.Boxes) {
+    if (const std::optional<Solid> solid = solidOf(box.Key, box.At, boxSize(box.Kind))) {
+      solids.push_back(*solid);
+    }
+  }
+  for (size_t i = 0; i < command.Add.Boxes.size(); ++i) {
+    const ParkBox &box = command.Add.Boxes[i];
+    if (const std::optional<Solid> solid =
+            solidOf(EntityKey{firstBoxKey + i}, box.At, boxSize(box.Kind))) {
+      solids.push_back(*solid);
+    }
+  }
+  return solids;
+}
+
+// Whether the world accepts the restore: it names what it acts on, every segment it adds or
+// changes has a ground line that stays in the park, every piece of the surface it adds or changes
+// stays in the park and meets no solid, and every box it sets or adds stays in the park and
+// conflicts with no other solid and no piece of the surface.
+bool isRestoreAccepted(const World &world, const RestoreIntent &command) {
+  const PathLayout before = layoutOf(world);
+  if (!namesValid(world, before, command)) {
+    return false;
+  }
+  PathLayout after = before;
+  LayoutStore store(after, world.nextKey());
+  applyRestore(store, command);
+  // A point's radius or taper can change the paving at it without changing a segment's record.
+  std::vector<EntityKey> extra;
+  extra.reserve(command.Set.Points.size() + command.Add.Points.size());
+  for (const ParkPathPoint &point : command.Set.Points) {
+    extra.push_back(point.Key);
+  }
+  for (size_t i = 0; i < command.Add.Points.size(); ++i) {
+    extra.push_back(EntityKey{world.nextKey() + i});
+  }
+  const uint64_t firstBoxKey =
+      world.nextKey() + command.Add.Points.size() + command.Add.Segments.size();
+  const std::vector<Solid> solids = restoredSolids(world, command, firstBoxKey);
+  const Edited edited = editedBetween(before, after, extra, Wanted::Pieces);
+  const bool pathsFit =
+      std::ranges::all_of(edited.Segments,
+                          [](const ParkSegment &segment) {
+                            const std::optional<Line> line = lineOf(segment);
+                            return line && !leavesPark(*line);
+                          }) &&
+      std::ranges::all_of(edited.Surface.Pieces, [&solids](const SurfacePiece &piece) {
+        return !leavesPark(piece) && fits(piece, solids);
+      });
+  if (!pathsFit) {
+    return false;
+  }
+  const auto boxFits = [&](EntityKey key, const ParkBox &box) {
+    const std::optional<Solid> solid = solidOf(key, box.At, boxSize(box.Kind));
+    return solid && fits(*solid, solids, piecesNear(after, *solid));
+  };
+  for (const ParkBox &box : command.Set.Boxes) {
+    if (!boxFits(box.Key, box)) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < command.Add.Boxes.size(); ++i) {
+    if (!boxFits(EntityKey{firstBoxKey + i}, command.Add.Boxes[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 } // namespace
 
 bool isAccepted(const World &world, const AddPath &command) {
@@ -1642,7 +1849,7 @@ bool isAccepted(const World &world, const AddBox &command) {
     return false;
   }
   const std::optional<Solid> solid = solidOf(NULL_KEY, command.At, boxSize(command.Kind));
-  return solid && fits(*solid, solidsOf(world), piecesNear(world, *solid));
+  return solid && fits(*solid, solidsOf(world), piecesNear(layoutOf(world), *solid));
 }
 
 bool isAccepted(const World &world, const MoveBox &command) {
@@ -1651,7 +1858,7 @@ bool isAccepted(const World &world, const MoveBox &command) {
     return false;
   }
   const std::optional<Solid> solid = solidOf(command.Box, command.At, boxSize(box->Kind));
-  return solid && fits(*solid, solidsOf(world), piecesNear(world, *solid));
+  return solid && fits(*solid, solidsOf(world), piecesNear(layoutOf(world), *solid));
 }
 
 bool isAccepted(const World &world, const DeleteSegment &command) {
@@ -1688,6 +1895,10 @@ bool isAccepted(const World &world, const SetEdgeRadius &command) {
 
 bool isAccepted(const World &world, const SetTaperLength &command) {
   return acceptedPlan(world, planOf(world, command)).has_value();
+}
+
+bool isAccepted(const World &world, const RestoreIntent &command) {
+  return isRestoreAccepted(world, command);
 }
 
 void applyCommand(World &world, const AddPath &command) {
@@ -1771,6 +1982,21 @@ void applyCommand(World &world, const SetTaperLength &command) {
   if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
     WorldStore store(world);
     applyPlan(store, *plan);
+  }
+}
+
+void applyCommand(World &world, const RestoreIntent &command) {
+  if (!isRestoreAccepted(world, command)) {
+    return;
+  }
+  WorldStore store(world);
+  applyRestore(store, command);
+  for (const ParkBox &box : command.Set.Boxes) {
+    world.Registry.get<BoxIntent>(world.findEntity(box.Key)) = BoxIntent{box.Kind, box.At};
+  }
+  for (const ParkBox &box : command.Add.Boxes) {
+    const EntityKey key = world.createEntity();
+    world.Registry.emplace<BoxIntent>(world.findEntity(key), BoxIntent{box.Kind, box.At});
   }
 }
 

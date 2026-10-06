@@ -92,8 +92,8 @@ bool Application::runFrames() {
     const bool remade =
         Scene.syncPreview(Session.world(), Interactions.tentativeEdit(Session.world()));
 
-    ImDrawData *drawData =
-        Ui.build(Window.get(), Dialogs, Session.world(), Camera, Interactions, Scene.preview());
+    ImDrawData *drawData = Ui.build(Window.get(), Dialogs, Session, Camera, Interactions,
+                                    Scene.preview(), input.History);
 
     const bool lastFrame = FrameLimit > 0 && frame >= FrameLimit;
     // The meshes are updated after the panels, so a change of the checkbox shows in this frame.

@@ -166,14 +166,51 @@ struct SetTaperLength {
   bool operator==(const SetTaperLength &) const = default;
 };
 
+// A path segment's intent as RestoreIntent puts it: a ParkSegment without its ground line.
+struct SegmentRecord {
+  EntityKey Key = NULL_KEY;
+  PathKind Kind = PathKind::Guest;
+  EntityKey From = NULL_KEY;
+  EntityKey To = NULL_KEY;
+  double Width = 0.0;
+  double FromEdge = DEFAULT_EDGE_RADIUS;
+  double ToEdge = DEFAULT_EDGE_RADIUS;
+
+  bool operator==(const SegmentRecord &) const = default;
+};
+
+// Path points, segments, and boxes, each list in ascending key order unless its user says
+// otherwise.
+struct IntentRecords {
+  std::vector<ParkPathPoint> Points;
+  std::vector<SegmentRecord> Segments;
+  std::vector<ParkBox> Boxes;
+
+  bool operator==(const IntentRecords &) const = default;
+};
+
+// Intent put back as an undo or redo finds it. The path points, segments, and boxes Remove names
+// go. Each record in Set replaces the values of the one holding its key. Each record in Add is
+// added with a key from the counter, in the order listed, points first, then segments, then boxes.
+// Add's keys are names only: a segment that names one as From or To ends at the point added under
+// it.
+struct RestoreIntent {
+  std::vector<EntityKey> Remove;
+  IntentRecords Set;
+  IntentRecords Add;
+
+  bool operator==(const RestoreIntent &) const = default;
+};
+
 // Registers AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
-// RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, and SetTaperLength, in that order.
+// RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, SetTaperLength, and RestoreIntent,
+// in that order.
 void addParkEdits(WorldSchema &schema);
 
-// A tentative or committed edit to park intent: one of the twelve commands.
-using ParkEdit =
-    std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
-                 RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, SetTaperLength>;
+// A tentative or committed edit to park intent: one of the thirteen commands.
+using ParkEdit = std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint,
+                              InsertPoint, RemovePoint, SetCornerRadius, SetSegmentWidth,
+                              SetEdgeRadius, SetTaperLength, RestoreIntent>;
 
 // The stop's ground position: a NewPoint's own, an OnPoint's point's, the place Along of the way
 // from an OnSegment's segment's From point to its To point, or the place an OnBend names on its
@@ -200,13 +237,14 @@ std::vector<ParkPoint> pathCrossings(const World &world, const RemovePoint &remo
 // Each segment the edit adds, or whose ground line or width it changes, as it would lie after the
 // edit, in ascending key order, a new segment with the key the commit would give it. Given whether
 // or not the world refuses the edit for meeting a solid. Empty when the edit names nothing it acts
-// on, when a segment it adds or reshapes has no ground line, and for edits of boxes.
+// on, when a segment it adds or reshapes has no ground line, for edits of boxes, and for
+// RestoreIntent, which shows no ghost.
 std::vector<ParkSegment> editedSegments(const World &world, const ParkEdit &edit);
 
 // The pieces and edge lines of each segment and point whose part of the surface the edit changes,
 // as they would lie after the edit, in ascending key order of their owners. Empty when the edit
-// names nothing it acts on, when a segment it adds or reshapes has no ground line, and for edits of
-// boxes.
+// names nothing it acts on, when a segment it adds or reshapes has no ground line, for edits of
+// boxes, and for RestoreIntent, which shows no ghost.
 PavedSurface editedSurface(const World &world, const ParkEdit &edit);
 
 // Whether the command would be applied to the world: it describes a physical object, names what it
@@ -224,6 +262,7 @@ bool isAccepted(const World &world, const SetCornerRadius &command);
 bool isAccepted(const World &world, const SetSegmentWidth &command);
 bool isAccepted(const World &world, const SetEdgeRadius &command);
 bool isAccepted(const World &world, const SetTaperLength &command);
+bool isAccepted(const World &world, const RestoreIntent &command);
 
 // Whether the command the edit holds would be applied to the world.
 bool isAccepted(const World &world, const ParkEdit &edit);
@@ -245,6 +284,7 @@ void applyCommand(World &world, const SetCornerRadius &command);
 void applyCommand(World &world, const SetSegmentWidth &command);
 void applyCommand(World &world, const SetEdgeRadius &command);
 void applyCommand(World &world, const SetTaperLength &command);
+void applyCommand(World &world, const RestoreIntent &command);
 
 // Whether every solid and line has its geometry, stays in the park, and conflicts with no other.
 bool isPhysicallyValid(const World &world);

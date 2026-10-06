@@ -1,6 +1,8 @@
 #include "app/input/input_map.h"
 
 #include <SDL3/SDL_events.h>
+#include <SDL3/SDL_keyboard.h>
+#include <SDL3/SDL_keycode.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_scancode.h>
 
@@ -34,9 +36,18 @@ void addMouseInput(const SDL_Event &event, CameraInput &camera) {
 
 } // namespace
 
-void mapEvent(const SDL_Event &event, bool mouseWanted, FrameInput &input) {
+void mapEvent(const SDL_Event &event, bool mouseWanted, bool keyboardWanted, FrameInput &input) {
   if (event.type == SDL_EVENT_QUIT) {
     input.Quit = true;
+  } else if (event.type == SDL_EVENT_KEY_DOWN) {
+    if (!keyboardWanted && (event.key.mod & SDL_KMOD_CTRL) != 0) {
+      if (event.key.key == SDLK_Y) {
+        input.History = HistoryAction::Redo;
+      } else if (event.key.key == SDLK_Z) {
+        input.History =
+            (event.key.mod & SDL_KMOD_SHIFT) != 0 ? HistoryAction::Redo : HistoryAction::Undo;
+      }
+    }
   } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
     input.Buttons.Released = true;
   } else if (!mouseWanted) {

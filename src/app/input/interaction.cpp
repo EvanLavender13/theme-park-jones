@@ -33,6 +33,14 @@ void Interaction::pick(const World &world, std::optional<EntityKey> entity) {
 
 void Interaction::selectTool(ToolKind kind) { tpj::selectTool(Tool, kind); }
 
+bool Interaction::dropHeld() {
+  if (!Tool.Holding && Tool.Drawn.empty()) {
+    return false;
+  }
+  tpj::selectTool(Tool, Tool.Kind);
+  return true;
+}
+
 void Interaction::movePointer(const World &world, const PointerSample &pointer) {
   tpj::movePointer(Tool, world, pointer);
 }

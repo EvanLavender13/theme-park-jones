@@ -15,7 +15,7 @@ FrameInput gatherInput() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     ImGui_ImplSDL3_ProcessEvent(&event);
-    mapEvent(event, io.WantCaptureMouse, input);
+    mapEvent(event, io.WantCaptureMouse, io.WantCaptureKeyboard, input);
   }
   int count = 0;
   const bool *keys = SDL_GetKeyboardState(&count);

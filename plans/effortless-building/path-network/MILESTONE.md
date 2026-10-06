@@ -91,6 +91,8 @@ None of these features adds a test of its own unless it fixes a bug (docs/testin
 - Guides from the ends of nearby paths, straight on from where they stop, for lining a new path up with one it doesn't touch. Cities: Skylines 2 players turn such guides off when they pull roads out of line, so keep them to nearby ends.
 - Snapping a handle drag, such as a segment's width or a corner's radius, to whole numbers.
 - Reach in screen pixels for picking points and handles in Edit path, and for finishing a path, which still use meters.
+- Undo while a path is half drawn removes only its last stop, as Backspace does in Inkscape's pen tool.
+- RestoreIntent among tpj_scenarios' random edits, so the scenarios try it on worlds no undo would reach.
 
 ## Open questions
 

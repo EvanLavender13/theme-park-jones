@@ -21,33 +21,46 @@ namespace tpj {
 namespace {
 
 // Builds the Debug and Tools panels, setting the shown views from their checkboxes, selecting the
-// tool the player chose and starting the park action they pressed.
-void drawPanels(ParkDialogs &dialogs, const World &world, const OrbitCamera &camera,
-                ShownViews &shown, Interaction &interaction) {
+// tool the player chose, starting the park action they pressed, and undoing or redoing as the
+// panel or the keys ask, unless the tool drops a hold or a drawn path instead.
+void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &camera,
+                ShownViews &shown, Interaction &interaction, HistoryAction keys) {
+  const World &world = session.world();
   DebugStats stats;
   stats.SimTick = world.Tick;
   stats.Focus = camera.Focus;
   stats.Distance = camera.Distance;
   stats.Park = summarizePark(world);
   drawDebugPanel(stats, shown.Graph, shown.FoodOverlay);
-  const ToolPanelChoice choice = drawToolPanel(
-      interaction.tool().Kind, !interaction.tool().Drawn.empty(), dialogs.dialogShowing());
+  const ToolPanelChoice choice =
+      drawToolPanel(interaction.tool().Kind, !interaction.tool().Drawn.empty(), session.canUndo(),
+                    session.canRedo(), dialogs.dialogShowing());
   if (choice.Tool) {
     interaction.selectTool(*choice.Tool);
   }
   dialogs.press(choice.Park);
+  const HistoryAction asked = choice.History != HistoryAction::None ? choice.History : keys;
+  if (asked == HistoryAction::None || interaction.dropHeld()) {
+    return;
+  }
+  if (asked == HistoryAction::Undo) {
+    session.undo();
+  } else {
+    session.redo();
+  }
 }
 
 } // namespace
 
-ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, const World &world,
+ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, ParkSession &session,
                              const OrbitCamera &camera, Interaction &interaction,
-                             const Preview &preview) {
+                             const Preview &preview, HistoryAction keys) {
   const CameraView view = orbitCameraView(camera);
   beginUiFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
-  drawPanels(dialogs, world, camera, Shown, interaction);
+  drawPanels(dialogs, session, camera, Shown, interaction, keys);
+  const World &world = session.world();
   if (const std::optional<InspectorSubject> &subject = interaction.subject();
       subject && !drawInspector(inspectSubject(world, *subject))) {
     interaction.forgetSubject();

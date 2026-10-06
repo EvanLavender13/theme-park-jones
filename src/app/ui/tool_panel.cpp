@@ -22,7 +22,8 @@ constexpr ToolChoice TOOL_CHOICES[] = {{"Look", ToolKind::None},
 
 } // namespace
 
-ToolPanelChoice drawToolPanel(ToolKind current, bool drawing, bool dialogShowing) {
+ToolPanelChoice drawToolPanel(ToolKind current, bool drawing, bool canUndo, bool canRedo,
+                              bool dialogShowing) {
   ToolPanelChoice choice;
   ImGui::SetNextWindowPos(ImVec2(12.0f, 140.0f), ImGuiCond_FirstUseEver);
   if (ImGui::Begin("Tools", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -37,6 +38,18 @@ ToolPanelChoice drawToolPanel(ToolKind current, bool drawing, bool dialogShowing
     ImGui::SameLine();
     if (ImGui::Button("Save park")) {
       choice.Park = ParkAction::Save;
+    }
+    ImGui::EndDisabled();
+    ImGui::Separator();
+    ImGui::BeginDisabled(!canUndo);
+    if (ImGui::Button("Undo")) {
+      choice.History = HistoryAction::Undo;
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!canRedo);
+    if (ImGui::Button("Redo")) {
+      choice.History = HistoryAction::Redo;
     }
     ImGui::EndDisabled();
     ImGui::Separator();
