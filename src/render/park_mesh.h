@@ -97,8 +97,10 @@ inline constexpr float HANDLE_LIFT = 0.07f;
 inline constexpr Rgba HANDLE_COLOR{0.95f, 0.95f, 0.95f, 0.8f};
 // The color of edge handles, apart from radius handles.
 inline constexpr Rgba EDGE_HANDLE_COLOR{0.95f, 0.70f, 0.25f, 0.8f};
+// The color of taper handles.
+inline constexpr Rgba TAPER_HANDLE_COLOR{0.30f, 0.85f, 0.90f, 0.8f};
 
-// Adds a radius or edge handle centered on the point.
+// Adds a radius, edge, or taper handle centered on the point.
 void appendHandle(ParkMesh &mesh, ParkPoint at, Rgba color);
 
 // Path point markers are flat discs of this radius, this high, under handles and above join marks.

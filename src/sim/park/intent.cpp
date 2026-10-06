@@ -38,7 +38,7 @@ std::vector<ParkEntrance> parkEntrances(const World &world) {
 
 std::vector<ParkPathPoint> parkPathPoints(const World &world) {
   return collectIntent<PathPointIntent>(world, [](EntityKey key, const PathPointIntent &point) {
-    return ParkPathPoint{key, point.At, point.Radius};
+    return ParkPathPoint{key, point.At, point.Radius, point.Taper};
   });
 }
 

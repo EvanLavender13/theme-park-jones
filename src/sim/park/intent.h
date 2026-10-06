@@ -66,6 +66,9 @@ inline constexpr double DEFAULT_CORNER_RADIUS = 0.0;
 // The edge radius a new segment end takes, in meters: a sharp edge.
 inline constexpr double DEFAULT_EDGE_RADIUS = 0.0;
 
+// The taper length a new path point takes, in meters: a step.
+inline constexpr double DEFAULT_TAPER_LENGTH = 0.0;
+
 constexpr FootprintSize boxSize(BoxKind kind) {
   return kind == BoxKind::Shop ? FootprintSize{8.0, 6.0} : FootprintSize{12.0, 8.0};
 }
@@ -80,12 +83,14 @@ struct ParkEntrance {
   bool operator==(const ParkEntrance &) const = default;
 };
 
-// A path point's intent, as other modules read it: its ground position, and the radius of the
-// corner it makes when exactly two segments meet there.
+// A path point's intent, as other modules read it: its ground position, the radius of the corner
+// it makes when exactly two segments meet there, and the length over which the narrower of two
+// segments curves out to the wider one's side where they meet there, or 0 for its natural length.
 struct ParkPathPoint {
   EntityKey Key = NULL_KEY;
   ParkPoint At;
   double Radius = 0.0;
+  double Taper = DEFAULT_TAPER_LENGTH;
 
   bool operator==(const ParkPathPoint &) const = default;
 };

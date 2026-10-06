@@ -27,6 +27,11 @@ constexpr double SAME_POINT = 1e-9;
 constexpr double LEAST_AREA = 1e-12;
 // Directions whose cross product is within this of zero run along one line.
 constexpr double PARALLEL = 1e-9;
+// Where a taper's curve has no taper length to take, it runs this many times as far along the
+// narrower segment as it moves out.
+constexpr double TAPER_SLOPE = 2.0;
+// A taper's curve is cut into at most this many pieces.
+constexpr size_t MAX_CURVE_PIECES = 64;
 
 // A segment end's side, seen walking away from its point.
 enum Side : size_t { LEFT = 0, RIGHT = 1 };
@@ -157,12 +162,31 @@ struct Pair {
   double Most = 0.0;
 };
 
-// Lists reused from one point to the next, so building a surface allocates only while they grow.
+// Whether a point is a taper: exactly two segments of different widths use it, and on at least one
+// side the outline would step from one segment's side to the other's. If so, Narrow is the index in
+// the point's group of the narrower segment's end. For each pair, Curves says whether its step is
+// replaced by a curve, which leaves the narrower segment's side Lengths[pair] farther from the
+// point than its side would stop, and runs to where the wider segment's side begins. Start is how
+// far from the point the narrower segment's sides would stop, on the sides that curve, at the
+// farther of them. Length is the longest curve, and MaxLength the longest any curve can be.
+struct TaperFit {
+  bool Tapers = false;
+  size_t Narrow = 0;
+  std::array<bool, 2> Curves{};
+  std::array<double, 2> Lengths{};
+  double Start = 0.0;
+  double Length = 0.0;
+  double MaxLength = 0.0;
+};
+
+// Lists reused from one point to the next, so building a surface allocates only while they grow,
+// and the point's taper, after trimPoint.
 struct Scratch {
   std::vector<End> Group;
   std::vector<Pair> Pairs;
   std::vector<ParkPoint> Outline;
   std::vector<ParkPoint> Fan;
+  TaperFit Taper;
 };
 
 // Writes the pieces and edge lines of the owners it wants into a surface.
@@ -370,38 +394,30 @@ Pair pairOf(const Arm &a, const Arm &b, bool full, double asked) {
   return Pair{Turn::Fillet, radius, touchA(radius), touchB(radius), inner, least, most};
 }
 
-// The radius the edge from the end asks for: at a corner's inside, the corner's radius less the
-// narrower half width, and elsewhere the end's edge radius. Never below 0.
-double askedOf(const Shape &a, size_t whichA, const Shape &b, size_t whichB,
+// The radius the edge from the first arm's end asks for: at a corner's inside, the corner's radius
+// less the narrower of the arms' half widths, and elsewhere the end's edge radius. Never below 0.
+double askedOf(const Shape &a, size_t whichA, const Arm &armA, const Arm &armB,
                const ParkCorner *corner) {
-  if (corner != nullptr && ccw(a.outward(whichA), b.outward(whichB)) > 0.0) {
-    return std::max(corner->Radius - std::min(a.Half, b.Half), 0.0);
+  if (corner != nullptr && ccw(armA.Along, armB.Along) > 0.0) {
+    return std::max(corner->Radius - std::min(armA.Half, armB.Half), 0.0);
   }
   const double held = a.Edge[whichA];
   return std::isfinite(held) && held > 0.0 ? held : 0.0;
 }
 
-// Sorts a point's segments counter-clockwise, finds how the outline turns between each and the
-// next, and sets each segment's trims to where the edges on its two sides touch it. corner is the
-// point's corner, or null. When asking, each trim may reach the whole length, and the trims are
-// kept as what the end asks for.
-void trimPoint(Scratch &scratch, std::vector<Shape> &shapes, const ParkCorner *corner,
-               bool asking) {
-  std::vector<End> &ends = scratch.Group;
+// Finds how the outline turns from each of the point's segments, sorted counter-clockwise, to the
+// next, and sets each segment's trims to where the edges on its two sides touch it.
+void fitPoint(Scratch &scratch, std::vector<Shape> &shapes, const ParkCorner *corner, bool asking) {
+  const std::vector<End> &ends = scratch.Group;
   const auto along = [&shapes](const End &end) { return shapes[end.Shape].outward(end.Which); };
-  std::ranges::sort(ends, [&along, &shapes](const End &x, const End &y) {
-    if (comesBefore(along(x), along(y)) != comesBefore(along(y), along(x))) {
-      return comesBefore(along(x), along(y));
-    }
-    return std::tie(shapes[x.Shape].Key, x.Which) < std::tie(shapes[y.Shape].Key, y.Which);
-  });
   const size_t count = ends.size();
   const bool oneWay = std::ranges::all_of(ends, [&](const End &end) {
     return std::abs(ccw(along(ends[0]), along(end))) <= PARALLEL &&
            dot(along(ends[0]), along(end)) > 0.0;
   });
   const double start = corner != nullptr ? tangentOf(*corner) : 0.0;
-  const auto armOf = [&](const End &end) {
+  const auto armOf = [&](size_t index) {
+    const End &end = ends[index];
     const Shape &shape = shapes[end.Shape];
     if (asking) {
       return Arm{shape.outward(end.Which), shape.Half, start, {shape.Length, shape.Length}};
@@ -414,9 +430,10 @@ void trimPoint(Scratch &scratch, std::vector<Shape> &shapes, const ParkCorner *c
   scratch.Pairs.clear();
   for (size_t i = 0; i < count; ++i) {
     const End &a = ends[i];
-    const End &b = ends[(i + 1) % count];
-    const double asked = askedOf(shapes[a.Shape], a.Which, shapes[b.Shape], b.Which, corner);
-    scratch.Pairs.push_back(pairOf(armOf(a), armOf(b), oneWay && i + 1 == count, asked));
+    const Arm armA = armOf(i);
+    const Arm armB = armOf((i + 1) % count);
+    const double asked = askedOf(shapes[a.Shape], a.Which, armA, armB, corner);
+    scratch.Pairs.push_back(pairOf(armA, armB, oneWay && i + 1 == count, asked));
   }
   for (size_t i = 0; i < count; ++i) {
     const Pair &next = scratch.Pairs[i];
@@ -427,6 +444,87 @@ void trimPoint(Scratch &scratch, std::vector<Shape> &shapes, const ParkCorner *c
     if (asking) {
       shapes[ends[i].Shape].Asked[ends[i].Which] = trim;
     }
+  }
+}
+
+// Sorts a point's segments counter-clockwise, finds how the outline turns between each and the
+// next, and sets each segment's trims to where the edges on its two sides touch it. corner is the
+// point's corner, or null, and taper the taper length it holds, at least 0. Where the point is a
+// taper, the narrower segment's trim on each side that curves lies the curve's length farther out.
+// When asking, each trim may reach the whole length, and the trims are kept as what the end asks
+// for.
+void trimPoint(Scratch &scratch, std::vector<Shape> &shapes, const ParkCorner *corner, bool asking,
+               double taper) {
+  std::vector<End> &ends = scratch.Group;
+  const auto along = [&shapes](const End &end) { return shapes[end.Shape].outward(end.Which); };
+  std::ranges::sort(ends, [&along, &shapes](const End &x, const End &y) {
+    if (comesBefore(along(x), along(y)) != comesBefore(along(y), along(x))) {
+      return comesBefore(along(x), along(y));
+    }
+    return std::tie(shapes[x.Shape].Key, x.Which) < std::tie(shapes[y.Shape].Key, y.Which);
+  });
+  scratch.Taper = TaperFit{};
+  fitPoint(scratch, shapes, corner, asking);
+  if (ends.size() != 2 || shapes[ends[0].Shape].Half == shapes[ends[1].Shape].Half) {
+    return;
+  }
+  TaperFit found;
+  found.Narrow = shapes[ends[0].Shape].Half < shapes[ends[1].Shape].Half ? 0 : 1;
+  Shape &narrow = shapes[ends[found.Narrow].Shape];
+  const Shape &wide = shapes[ends[1 - found.Narrow].Shape];
+  const size_t which = ends[found.Narrow].Which;
+  const size_t wideWhich = ends[1 - found.Narrow].Which;
+  for (size_t i = 0; i < 2; ++i) {
+    // Each pair runs from its first end's left side to its second end's right side. A fillet joins
+    // them; anything else steps.
+    if (scratch.Pairs[i].Kind == Turn::Fillet) {
+      continue;
+    }
+    const Side side = i == found.Narrow ? LEFT : RIGHT;
+    const Side wideSide = side == LEFT ? RIGHT : LEFT;
+    const double before = narrow.Trim[which][side];
+    const double room = (asking ? narrow.Length : narrow.reach(which, side)) - before;
+    // How far the wider segment's side, where it begins, lies out from the narrower one's.
+    const ParkPoint across =
+        side == LEFT ? leftOf(narrow.outward(which)) : rightOf(narrow.outward(which));
+    const double out =
+        std::abs(dot(wide.trimmed(wideWhich, wideSide) - narrow.Ends[which], across) - narrow.Half);
+    const double length = std::max(std::min(taper > 0.0 ? taper : TAPER_SLOPE * out, room), 0.0);
+    found.MaxLength = found.Tapers ? std::max(found.MaxLength, room) : room;
+    found.Tapers = true;
+    found.Curves[i] = true;
+    found.Lengths[i] = length;
+    found.Start = std::max(found.Start, before);
+    found.Length = std::max(found.Length, length);
+    narrow.Trim[which][side] = before + length;
+    if (asking) {
+      narrow.Asked[which][side] = narrow.Trim[which][side];
+    }
+  }
+  found.MaxLength = std::max(found.MaxLength, 0.0);
+  scratch.Taper = found;
+}
+
+// Appends the points of the cubic curve from one place to another, leaving the first along one
+// unit direction and arriving at the second along another, each scaled by how far the second place
+// lies beyond the first along it, so that the curve never doubles back: the places between, cut so
+// that each piece lies within ARC_TOLERANCE of the curve. A cut into n pieces lies within
+// M / (8n²) of it, where M is the largest second derivative, which is at one of its ends.
+void appendCurve(std::vector<ParkPoint> &out, ParkPoint from, ParkPoint leaving, ParkPoint to,
+                 ParkPoint arriving) {
+  const ParkPoint chord = to - from;
+  const ParkPoint m0 = leaving * std::max(dot(chord, leaving), 0.0);
+  const ParkPoint m1 = arriving * std::max(dot(chord, arriving), 0.0);
+  const double bend = std::max(lengthOf(chord * 6.0 - m0 * 4.0 - m1 * 2.0),
+                               lengthOf(chord * -6.0 + m0 * 2.0 + m1 * 4.0));
+  const double wanted = std::ceil(std::sqrt(bend / (8.0 * ARC_TOLERANCE)));
+  const size_t pieces = std::clamp<size_t>(static_cast<size_t>(wanted), 1, MAX_CURVE_PIECES);
+  for (size_t k = 1; k < pieces; ++k) {
+    const double t = static_cast<double>(k) / static_cast<double>(pieces);
+    const double t2 = t * t;
+    const double t3 = t2 * t;
+    out.push_back(from * (2.0 * t3 - 3.0 * t2 + 1.0) + m0 * (t3 - 2.0 * t2 + t) +
+                  to * (3.0 * t2 - 2.0 * t3) + m1 * (t3 - t2));
   }
 }
 
@@ -443,13 +541,16 @@ std::pair<ParkPoint, ParkPoint> filletOf(ParkPoint at, const Pair &pair, ParkPoi
 }
 
 // Writes the outline from one segment's trimmed left corner, around the edge the pair makes at the
-// point, to the next segment's trimmed right corner.
+// point, to the next segment's trimmed right corner. Where the pair curves, a curve runs straight
+// from the one to the other, leaving and meeting each side with no corner.
 void outlinePair(std::vector<ParkPoint> &outline, ParkPoint at, const Pair &pair, const Shape &a,
-                 size_t whichA, const Shape &b, size_t whichB) {
+                 size_t whichA, const Shape &b, size_t whichB, bool curves) {
   const ParkPoint alongA = a.outward(whichA);
   const ParkPoint alongB = b.outward(whichB);
   outline.assign(1, a.trimmed(whichA, LEFT));
-  if (pair.Kind == Turn::Fillet) {
+  if (curves) {
+    appendCurve(outline, a.trimmed(whichA, LEFT), alongA * -1.0, b.trimmed(whichB, RIGHT), alongB);
+  } else if (pair.Kind == Turn::Fillet) {
     const ParkPoint center = filletOf(at, pair, alongA, a.Half, alongB).first;
     outline.push_back(a.edge(whichA, LEFT, pair.TouchFirst));
     if (pair.Inner) {
@@ -474,8 +575,8 @@ void outlinePair(std::vector<ParkPoint> &outline, ParkPoint at, const Pair &pair
 }
 
 // A point's paving and its edge lines, after trimPoint. At a corner, the paving belongs to the
-// segment on its side of the line into the corner. Elsewhere, it belongs to the point and is
-// fanned from it.
+// segment on its side of the line into the corner. Elsewhere, it belongs to the point, fanned from
+// it, or cut into triangles where its outline curves.
 void buildPoint(Output &output, Scratch &scratch, EntityKey point, ParkPoint at,
                 const std::vector<Shape> &shapes, const ParkCorner *corner) {
   const std::vector<End> &ends = scratch.Group;
@@ -484,21 +585,27 @@ void buildPoint(Output &output, Scratch &scratch, EntityKey point, ParkPoint at,
   std::vector<ParkPoint> &ring = scratch.Fan;
   ring.clear();
   for (size_t i = 0; i < count; ++i) {
+    const size_t j = (i + 1) % count;
     const Shape &a = shapes[ends[i].Shape];
-    const Shape &b = shapes[ends[(i + 1) % count].Shape];
+    const Shape &b = shapes[ends[j].Shape];
     const size_t whichA = ends[i].Which;
-    const size_t whichB = ends[(i + 1) % count].Which;
-    outlinePair(scratch.Outline, at, scratch.Pairs[i], a, whichA, b, whichB);
+    const size_t whichB = ends[j].Which;
+    const bool curves = scratch.Taper.Tapers && scratch.Taper.Curves[i];
+    outlinePair(scratch.Outline, at, scratch.Pairs[i], a, whichA, b, whichB, curves);
     ring.push_back(a.trimmed(whichA, RIGHT));
     ring.insert(ring.end(), scratch.Outline.begin(), scratch.Outline.end() - 1);
     scratch.Outline.insert(scratch.Outline.begin(), a.middle(whichA, LEFT));
     scratch.Outline.push_back(b.middle(whichB, RIGHT));
     output.edge(kind, point, scratch.Outline);
   }
-  if (corner == nullptr) {
+  if (corner == nullptr && !scratch.Taper.Tapers) {
     for (size_t i = 0; i < ring.size(); ++i) {
       output.piece(kind, point, {at, ring[i], ring[(i + 1) % ring.size()]});
     }
+    return;
+  }
+  if (corner == nullptr) {
+    triangulate(output, kind, ring, [point](ParkPoint /*centroid*/) { return point; });
     return;
   }
   // The first segment is the one the other lies counter-clockwise of.
@@ -544,6 +651,11 @@ void addEdges(std::vector<ParkEdge> &found, const Scratch &scratch,
 const PathPointIntent *findPoint(const PathLayout &layout, EntityKey key) {
   const auto found = std::ranges::lower_bound(layout.Points, key, {}, &LayoutPoint::Key);
   return found != layout.Points.end() && found->Key == key ? &found->Intent : nullptr;
+}
+
+// The taper length the point holds, or 0 when that is not finite or is below zero.
+double heldTaper(const PathPointIntent &point) {
+  return std::isfinite(point.Taper) && point.Taper > 0.0 ? point.Taper : 0.0;
 }
 
 bool touches(const ParkSegment &segment, const std::vector<EntityKey> &points) {
@@ -650,12 +762,13 @@ std::vector<EntityKey> farEndsOf(const PathGround &ground, const std::vector<Ent
 
 // Sets what each segment end at the points asks for: every point when points is null. A point's
 // trims depend on what the far ends of its segments ask for, so those are found first.
-void askPoints(const std::vector<std::tuple<EntityKey, EntityKey, End>> &ends,
+void askPoints(const PathLayout &layout,
+               const std::vector<std::tuple<EntityKey, EntityKey, End>> &ends,
                const PathGround &ground, Scratch &scratch, std::vector<Shape> &shapes,
                const std::vector<EntityKey> *points) {
-  forEachPoint(ends, ground, scratch, points, [&](EntityKey /*key*/, const ParkCorner *corner) {
+  forEachPoint(ends, ground, scratch, points, [&](EntityKey key, const ParkCorner *corner) {
     if (scratch.Group.size() > 1) {
-      trimPoint(scratch, shapes, corner, true);
+      trimPoint(scratch, shapes, corner, true, heldTaper(*findPoint(layout, key)));
     }
   });
 }
@@ -676,7 +789,7 @@ PavedSurface buildSurface(const PathLayout &layout, const PathGround &ground,
   PavedSurface surface;
   Output output(surface, wanted, focus == nullptr, edges);
   Scratch scratch;
-  askPoints(ends, ground, scratch, shapes, focus != nullptr ? &asked : nullptr);
+  askPoints(layout, ends, ground, scratch, shapes, focus != nullptr ? &asked : nullptr);
   // Every segment's trims are set before any edge line is written, since an edge line runs to the
   // middle between a side's trims at both ends. The second pass sets the same trims again.
   for (const bool writing : {false, true}) {
@@ -689,9 +802,10 @@ PavedSurface buildSurface(const PathLayout &layout, const PathGround &ground,
                      }
                      return;
                    }
-                   trimPoint(scratch, shapes, corner, false);
+                   const PathPointIntent &point = *findPoint(layout, key);
+                   trimPoint(scratch, shapes, corner, false, heldTaper(point));
                    if (writing) {
-                     buildPoint(output, scratch, key, findPoint(layout, key)->At, shapes, corner);
+                     buildPoint(output, scratch, key, point.At, shapes, corner);
                    }
                  });
   }
@@ -1062,18 +1176,83 @@ std::vector<ParkEdge> edgesOf(const PathLayout &layout, const PathGround &ground
   std::vector<Shape> shapes = shapesOf(layout, ground, nullptr);
   const std::vector<std::tuple<EntityKey, EntityKey, End>> ends = endsOf(shapes);
   Scratch scratch;
-  askPoints(ends, ground, scratch, shapes, nullptr);
+  askPoints(layout, ends, ground, scratch, shapes, nullptr);
   std::vector<ParkEdge> found;
   forEachPoint(ends, ground, scratch, nullptr, [&](EntityKey key, const ParkCorner *corner) {
     if (scratch.Group.size() < 2) {
       return;
     }
-    trimPoint(scratch, shapes, corner, false);
-    addEdges(found, scratch, shapes, key, findPoint(layout, key)->At, corner != nullptr);
+    const PathPointIntent &point = *findPoint(layout, key);
+    trimPoint(scratch, shapes, corner, false, heldTaper(point));
+    addEdges(found, scratch, shapes, key, point.At, corner != nullptr);
   });
   std::ranges::sort(found, {},
                     [](const ParkEdge &edge) { return std::pair{edge.Point, edge.Segment}; });
   return found;
+}
+
+namespace {
+
+// The points, in ascending key order, that exactly two segments of different widths use, as their
+// intent gives them. Every taper is one of them.
+std::vector<EntityKey> taperCandidates(const World &world) {
+  std::vector<std::pair<EntityKey, double>> ends;
+  for (const auto &&[entity, segment] : world.Registry.view<const PathSegmentIntent>().each()) {
+    ends.emplace_back(segment.From, segment.Width);
+    ends.emplace_back(segment.To, segment.Width);
+  }
+  std::ranges::sort(ends);
+  std::vector<EntityKey> candidates;
+  for (size_t first = 0; first < ends.size();) {
+    size_t last = first;
+    while (last < ends.size() && ends[last].first == ends[first].first) {
+      ++last;
+    }
+    if (last - first == 2 && ends[first].second != ends[first + 1].second) {
+      candidates.push_back(ends[first].first);
+    }
+    first = last;
+  }
+  return candidates;
+}
+
+// Each taper among the candidates, which are in ascending key order. Only the candidates and the
+// far ends of their segments are fitted.
+std::vector<ParkTaper> tapersAt(const PathLayout &layout, const PathGround &ground,
+                                const std::vector<EntityKey> &candidates) {
+  const std::vector<EntityKey> asked = farEndsOf(ground, candidates);
+  std::vector<Shape> shapes = shapesOf(layout, ground, &asked);
+  const std::vector<std::tuple<EntityKey, EntityKey, End>> ends = endsOf(shapes);
+  Scratch scratch;
+  askPoints(layout, ends, ground, scratch, shapes, &asked);
+  std::vector<ParkTaper> found;
+  forEachPoint(ends, ground, scratch, &candidates, [&](EntityKey key, const ParkCorner *corner) {
+    if (scratch.Group.size() != 2) {
+      return;
+    }
+    const PathPointIntent &point = *findPoint(layout, key);
+    trimPoint(scratch, shapes, corner, false, heldTaper(point));
+    if (!scratch.Taper.Tapers) {
+      return;
+    }
+    const TaperFit &taper = scratch.Taper;
+    const End &narrow = scratch.Group[taper.Narrow];
+    const ParkPoint along = shapes[narrow.Shape].outward(narrow.Which);
+    found.push_back(ParkTaper{key, point.At + along * taper.Start, shapes[narrow.Shape].Key, along,
+                              taper.Length, taper.MaxLength});
+  });
+  return found;
+}
+
+} // namespace
+
+std::vector<ParkTaper> parkTapers(const World &world) {
+  const std::vector<EntityKey> candidates = taperCandidates(world);
+  if (candidates.empty()) {
+    return {};
+  }
+  const PathLayout layout = layoutOf(world);
+  return tapersAt(layout, groundOf(layout), candidates);
 }
 
 std::vector<ParkEdge> parkEdges(const World &world) {
