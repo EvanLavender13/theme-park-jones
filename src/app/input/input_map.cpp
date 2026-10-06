@@ -56,4 +56,8 @@ void mapKeys(std::span<const bool> keys, bool keyboardWanted, CameraInput &camer
   camera.Rotate = keyAxis(keys, SDL_SCANCODE_Q, SDL_SCANCODE_E);
 }
 
+bool snapsOff(std::span<const bool> keys, bool keyboardWanted) {
+  return !keyboardWanted && (isHeld(keys, SDL_SCANCODE_LCTRL) || isHeld(keys, SDL_SCANCODE_RCTRL));
+}
+
 } // namespace tpj

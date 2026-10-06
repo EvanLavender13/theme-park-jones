@@ -214,16 +214,10 @@ private:
   std::vector<size_t> Parents;
 };
 
-// The midpoint of an entity's face, serving one network kind.
-struct Door {
-  EntityKey Entity = NULL_KEY;
-  Face Side = Face::Front;
-  GroundPoint At;
-};
-
 // Adds the door at the midpoint of the face of the pose's footprint for the size: the first two
-// corners for the front, the last two for the back. Nothing when the pose has no footprint.
-void addDoor(std::vector<Door> &doors, EntityKey entity, const Pose &pose, FootprintSize size,
+// corners for the front, the last two for the back. It faces out along the footprint's forward
+// direction for the front and against it for the back. Nothing when the pose has no footprint.
+void addDoor(std::vector<ParkDoor> &doors, EntityKey entity, const Pose &pose, FootprintSize size,
              Face face) {
   const std::optional<Footprint> footprint = footprintOf(pose, size);
   if (!footprint) {
@@ -232,14 +226,18 @@ void addDoor(std::vector<Door> &doors, EntityKey entity, const Pose &pose, Footp
   const size_t first = face == Face::Front ? 0 : 2;
   const ParkPoint &a = footprint->Corners[first];
   const ParkPoint &b = footprint->Corners[first + 1];
-  doors.push_back({.Entity = entity, .Side = face, .At = {(a.X + b.X) / 2.0, (a.Z + b.Z) / 2.0}});
+  const double out = face == Face::Front ? 1.0 : -1.0;
+  doors.push_back({.Entity = entity,
+                   .Side = face,
+                   .At = {(a.X + b.X) / 2.0, (a.Z + b.Z) / 2.0},
+                   .Out = {footprint->Forward.X * out, footprint->Forward.Z * out}});
 }
 
 // The doors serving the kind: an entrance's front serves guests, a shop's front guests and its back
 // backstage, and a depot's front backstage.
-std::vector<Door> doorsServing(const std::vector<ParkEntrance> &entrances,
-                               const std::vector<ParkBox> &boxes, PathKind kind) {
-  std::vector<Door> doors;
+std::vector<ParkDoor> doorsServing(const std::vector<ParkEntrance> &entrances,
+                                   const std::vector<ParkBox> &boxes, PathKind kind) {
+  std::vector<ParkDoor> doors;
   if (kind == PathKind::Guest) {
     for (const ParkEntrance &entrance : entrances) {
       addDoor(doors, entrance.Key, entrance.At, ENTRANCE_SIZE, Face::Front);
@@ -280,14 +278,14 @@ struct Connection {
 // The connectors of the doors whose nearest point on the path carriers lies within reach, each
 // the given width. The carriers are in key order.
 std::vector<Connection> findConnections(const std::vector<Carrier> &carriers,
-                                        const std::vector<Door> &doors, double width) {
+                                        const std::vector<ParkDoor> &doors, double width) {
   std::vector<Connection> connections;
   if (carriers.empty()) {
     return connections;
   }
   const Network lines = linesOnly(carriers);
-  for (const Door &door : doors) {
-    const std::optional<Place> place = lines.nearestPlace(door.At);
+  for (const ParkDoor &door : doors) {
+    const std::optional<Place> place = lines.nearestPlace(GroundPoint{door.At.X, door.At.Z});
     if (!place) {
       continue;
     }
@@ -374,7 +372,7 @@ uint32_t addStops(std::vector<Carrier> &carriers, const std::vector<Meeting> &me
   return nodeCount;
 }
 
-Network deriveNetwork(const std::vector<ParkSegment> &segments, const std::vector<Door> &doors,
+Network deriveNetwork(const std::vector<ParkSegment> &segments, const std::vector<ParkDoor> &doors,
                       PathKind kind) {
   std::vector<Carrier> carriers = pathCarriers(segments, kind);
   std::vector<Meeting> meetings = findMeetings(carriers);
@@ -446,6 +444,10 @@ const Network *previousNetwork(const World &world, PathKind kind) {
   }
   const PreviousNetwork *previous = world.Registry.try_get<PreviousNetwork>(entity);
   return previous != nullptr ? &previous->Held : nullptr;
+}
+
+std::vector<ParkDoor> parkDoors(const World &world, PathKind kind) {
+  return doorsServing(parkEntrances(world), parkBoxes(world), kind);
 }
 
 const Network &parkNetwork(const World &world, PathKind kind) {

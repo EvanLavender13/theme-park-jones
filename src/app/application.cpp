@@ -83,7 +83,10 @@ bool Application::runFrames() {
 
     updateOrbitCamera(Camera, input.Camera, static_cast<float>(step.Dt), 0.5f * PARK_SIZE_METERS);
     const CameraView view = orbitCameraView(Camera);
-    Interactions.movePointer(groundUnderCursor(readCursor(Window.get()), view));
+    const std::optional<CursorNdc> cursor = readCursor(Window.get());
+    Interactions.movePointer(
+        Session.world(), PointerSample{groundUnderCursor(cursor, view),
+                                       groundPerPixel(cursor, view).value_or(0.0), input.SnapsOff});
     // Made again only when the world ticks or the edit changes, so the ghost, the overlay, and the
     // tooltips show one candidate, and frames between ticks rebuild nothing.
     const bool remade =

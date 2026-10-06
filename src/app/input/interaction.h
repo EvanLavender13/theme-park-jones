@@ -36,7 +36,7 @@ public:
   void pick(const World &world, std::optional<EntityKey> entity);
   void forgetSubject() { Subject.reset(); }
   void selectTool(ToolKind kind);
-  void movePointer(std::optional<ParkPoint> ground);
+  void movePointer(const World &world, const PointerSample &pointer);
   [[nodiscard]] std::optional<ParkEdit> tentativeEdit(const World &world) const;
   [[nodiscard]] std::optional<EntityKey> highlighted(const World &world) const;
   // Where the tool's first click would start a path, as pathStart gives it.
@@ -47,6 +47,10 @@ public:
   [[nodiscard]] std::vector<EditHandle> editHandles(const World &world) const;
   // The handle under the pointer, as hoveredHandle gives it.
   [[nodiscard]] std::optional<EditHandle> hoveredHandle(const World &world) const;
+  // The guides of the snap in effect, as snapGuides gives them.
+  [[nodiscard]] std::vector<SnapGuide> snapGuides() const;
+  // The lengths the ghost shows, as measuredLengths gives them.
+  [[nodiscard]] std::vector<MeasuredLength> measuredLengths(const World &world) const;
 
 private:
   uint64_t Generation;

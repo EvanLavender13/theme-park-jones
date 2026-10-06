@@ -6,6 +6,7 @@
 #include "app/ui/graph_view.h"
 #include "app/ui/inspector_window.h"
 #include "app/ui/shop_context_tooltip.h"
+#include "app/ui/snap_guides.h"
 #include "app/ui/tool_panel.h"
 #include "legible/inspect.h"
 #include "legible/park_summary.h"
@@ -54,6 +55,7 @@ ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, const Wor
   if (Shown.Graph) {
     drawGraphView(world, view);
   }
+  drawSnapGuides(interaction.snapGuides(), interaction.measuredLengths(world), view);
   if (Shown.FoodOverlay) {
     drawFoodTooltip(previewedWorld(world, preview), groundUnderCursor(readCursor(window), view));
   }

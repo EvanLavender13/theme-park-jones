@@ -19,8 +19,9 @@ FrameInput gatherInput() {
   }
   int count = 0;
   const bool *keys = SDL_GetKeyboardState(&count);
-  mapKeys(std::span<const bool>(keys, static_cast<size_t>(count)), io.WantCaptureKeyboard,
-          input.Camera);
+  const std::span<const bool> held(keys, static_cast<size_t>(count));
+  mapKeys(held, io.WantCaptureKeyboard, input.Camera);
+  input.SnapsOff = snapsOff(held, io.WantCaptureKeyboard);
   return input;
 }
 

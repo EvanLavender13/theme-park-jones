@@ -7,6 +7,7 @@
 #include "sim/park/intent.h"
 
 #include <stdint.h>
+#include <vector>
 
 namespace tpj {
 
@@ -35,6 +36,21 @@ enum class Face : uint8_t { Front, Back };
 constexpr EntityKey connectorKey(EntityKey entity, Face face) {
   return deriveKey(entity, CONNECTOR_PURPOSE, static_cast<uint64_t>(face));
 }
+
+// A door: its entity, the face it is on, the middle of that face, and the unit direction out of
+// the face.
+struct ParkDoor {
+  EntityKey Entity = NULL_KEY;
+  Face Side = Face::Front;
+  ParkPoint At;
+  ParkPoint Out;
+
+  bool operator==(const ParkDoor &) const = default;
+};
+
+// The doors serving the kind: the entrances' first, then the boxes', each in key order of its
+// entity. An entity with no footprint has no door.
+std::vector<ParkDoor> parkDoors(const World &world, PathKind kind);
 
 // The kind's network as the last resolution derived it, or an empty network when the world holds
 // none, as before its first resolution.

@@ -11,11 +11,14 @@
 namespace tpj {
 
 // Where the cursor lies in normalized device coordinates, X from -1 at the window's left to 1 at
-// its right and Y from -1 at its bottom to 1 at its top, and the window's width over its height.
+// its right and Y from -1 at its bottom to 1 at its top, the window's width over its height, and
+// the span of one pixel across and up.
 struct CursorNdc {
   float X = 0.0f;
   float Y = 0.0f;
   float Aspect = 1.0f;
+  float PixelX = 0.0f;
+  float PixelY = 0.0f;
 
   bool operator==(const CursorNdc &) const = default;
 };
@@ -26,6 +29,11 @@ std::optional<CursorNdc> cursorNdc(int width, int height, float x, float y);
 // The ground under the cursor, as groundAtCursor gives it for the view, or none without a cursor.
 std::optional<ParkPoint> groundUnderCursor(const std::optional<CursorNdc> &cursor,
                                            const CameraView &view);
+// How many meters of ground one window pixel spans at the cursor: the mean of the distances from
+// the ground under it to the ground one pixel to its right and one pixel above it, or the one of
+// those that exists. None without a cursor, or when there is no ground under it or beside it.
+std::optional<double> groundPerPixel(const std::optional<CursorNdc> &cursor,
+                                     const CameraView &view);
 // The entity the cursor's ray first meets, as entityAtCursor gives it for the world and the view,
 // or none without a cursor.
 std::optional<EntityKey> entityUnderCursor(const World &world,

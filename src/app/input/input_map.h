@@ -20,6 +20,8 @@ struct PointerButtons {
 struct FrameInput {
   CameraInput Camera;
   PointerButtons Buttons;
+  // Whether the player holds the key that turns snapping off.
+  bool SnapsOff = false;
   bool Quit = false;
 };
 
@@ -33,6 +35,9 @@ void mapEvent(const SDL_Event &event, bool mouseWanted, FrameInput &input);
 // forward, D minus A right, and Q minus E rotate, a held key counting 1. A scancode past the end of
 // the keys counts as not held. While ImGui wants the keyboard it changes nothing.
 void mapKeys(std::span<const bool> keys, bool keyboardWanted, CameraInput &camera);
+// Whether the keys held, indexed by scancode, turn snapping off: either Ctrl key held, while ImGui
+// doesn't want the keyboard.
+bool snapsOff(std::span<const bool> keys, bool keyboardWanted);
 
 } // namespace tpj
 
