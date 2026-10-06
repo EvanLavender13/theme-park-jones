@@ -345,6 +345,15 @@ void resnap(ToolState &tool, const World &world, bool keepHolds) {
     held = std::move(tool.Snapped->Holds);
   }
   tool.Snapped.reset();
+  if (isPlaceTool(tool.Kind)) {
+    // A press keeps the frontage it was made with through the hold.
+    if (!tool.Holding) {
+      tool.Fronted = tool.Pointer && !tool.SnapsOff
+                         ? frontagePose(world, placedKind(tool.Kind), *tool.Pointer)
+                         : std::nullopt;
+    }
+    return;
+  }
   SnapQuery query;
   query.CatchReach = SNAP_CATCH_PIXELS * tool.MetersPerPixel;
   query.ReleaseReach = SNAP_RELEASE_PIXELS * tool.MetersPerPixel;
@@ -384,6 +393,7 @@ void selectTool(ToolState &tool, ToolKind kind) {
   tool.Grabbed.reset();
   tool.Drawn.clear();
   tool.Snapped.reset();
+  tool.Fronted.reset();
 }
 
 void movePointer(ToolState &tool, const World &world, const PointerSample &pointer) {
@@ -397,7 +407,7 @@ void movePointer(ToolState &tool, const World &world, const PointerSample &point
   }
   tool.Pointer = ground;
   if (tool.Holding && ground) {
-    if (isPlaceTool(tool.Kind)) {
+    if (isPlaceTool(tool.Kind) && !tool.Fronted) {
       const double dx = ground->X - tool.Landing.X;
       const double dz = ground->Z - tool.Landing.Z;
       if (dx * dx + dz * dz >= MIN_FACING_DRAG * MIN_FACING_DRAG) {
@@ -431,7 +441,8 @@ void pressPointer(ToolState &tool, const World &world) {
     }
   } else if (isPlaceTool(tool.Kind) && tool.Pointer) {
     tool.Holding = true;
-    tool.Landing = Pose{tool.Pointer->X, tool.Pointer->Z, tool.FacingX, tool.FacingZ};
+    tool.Landing =
+        tool.Fronted.value_or(Pose{tool.Pointer->X, tool.Pointer->Z, tool.FacingX, tool.FacingZ});
   } else if (tool.Kind == ToolKind::MoveBox && tool.Pointer) {
     const std::optional<EntityKey> key = boxAt(world, *tool.Pointer);
     const std::optional<Pose> pose = key ? boxPose(world, *key) : std::nullopt;
@@ -475,6 +486,9 @@ std::optional<ParkEdit> tentativeEdit(const ToolState &tool, const World &world)
   if (isPlaceTool(tool.Kind)) {
     if (tool.Holding) {
       return AddBox{placedKind(tool.Kind), tool.Landing};
+    }
+    if (tool.Fronted) {
+      return AddBox{placedKind(tool.Kind), *tool.Fronted};
     }
     if (tool.Pointer) {
       return AddBox{placedKind(tool.Kind),

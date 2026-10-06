@@ -1,6 +1,7 @@
 # The park's editing tools. They link the simulation alone, so tests drive them without a window
 # (principle 10).
 add_library(tpj_tools STATIC
+    frontage.cpp
     snapping.cpp
     tools.cpp)
 target_include_directories(tpj_tools PUBLIC ${CMAKE_SOURCE_DIR}/src)
