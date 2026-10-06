@@ -17,12 +17,7 @@ The capability grows over time, with transport rides as edges, one-way and queue
 
 ## Foundation criteria
 
-Resolving path intent derives one graph for each network kind: guest and backstage. Nodes sit at:
-
-- path endpoints;
-- snapped junctions;
-- places where paths of the same kind cross;
-- places where connectors meet a path.
+Resolving path intent derives one graph for each network kind: guest and backstage. Nodes sit at the path points that segments end at, and every segment of the kind that ends at a point shares its node. Nodes also sit at both ends of each connector. Paths of one kind that cross or overlap without sharing a point stay apart.
 
 Each edge's length is measured along the path's ground line. The game draws that line, and checks it when it refuses a path. Paths of different kinds never connect, even where they cross.
 

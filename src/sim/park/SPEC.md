@@ -15,7 +15,7 @@ segmentLine, cornerRadiusFor, arcOf, bendPlace, bendAlong, edgeRadiusFor, stopPo
 The park is a square PARK_SIZE on a side, centered on the origin of the ground.
 
 - A path point has a ground position, a corner radius, and a taper length. The radius is for the corner the point makes when exactly two segments meet there. The taper length is for where the point is a taper (Paved surface).
-- A path segment has a kind, guest or backstage, its two path points, From and To, a width, and an edge radius at each end. Segments share a point where the player joined them, and where a path was drawn or moved across them. Routes also joins segments of one kind wherever they cross, whether or not they share a point there (sim/routes/SPEC.md).
+- A path segment has a kind, guest or backstage, its two path points, From and To, a width, and an edge radius at each end. Segments share a point where the player joined them, and where a path was drawn or moved across them. Routes joins segments only where they share a point (sim/routes/SPEC.md).
 - A box has a kind, shop or depot, and a pose.
 - An entrance has a pose.
 
@@ -74,7 +74,7 @@ footprintOf returns the rectangle a pose covers for a size: its width across the
 
 A world is physically valid when no object leaves the park, no two solids overlap, and no segment meets a solid. Solids are the footprints of the entrance and the boxes. Paths occupy the paved surface. A footprint meets a path when it overlaps one of the surface's pieces by more than CONTACT_TOLERANCE. A segment leaves the park when its ground line comes nearer the park's edge than half its width, or when a piece of the surface it or its points own reaches past the park's edge by more than CONTACT_TOLERANCE.
 
-If objects only touch, within CONTACT_TOLERANCE, they never conflict, whatever rounding their facings bring. Segments never conflict with each other. Where they cross, routes derives a junction. If an entrance or box has no footprint, or a segment has an empty ground line, the world is invalid. A path point that no segment uses doesn't affect validity. Only a hand-written save can hold such an object. isPhysicallyValid returns whether a world is valid.
+If objects only touch, within CONTACT_TOLERANCE, they never conflict, whatever rounding their facings bring. Segments never conflict with each other, even where they cross or overlap. If an entrance or box has no footprint, or a segment has an empty ground line, the world is invalid. A path point that no segment uses doesn't affect validity. Only a hand-written save can hold such an object. isPhysicallyValid returns whether a world is valid.
 
 A segment's ground line can change when an edit changes a corner at its end, even when the edit leaves the segment's own points in place. A deletion or an insertion can make a corner, remove one, or change how far an arc may reach. The check covers every ground line an edit changes.
 
