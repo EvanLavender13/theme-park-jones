@@ -20,6 +20,7 @@ enum class ToolKind : uint8_t {
   PlaceDepot,
   MoveBox,
   EditPath,
+  RemovePoint,
   Delete
 };
 
@@ -41,12 +42,13 @@ inline constexpr double SIDE_REACH = 0.5;
 inline constexpr double MIN_PATH_WIDTH = 1.5;
 inline constexpr double MAX_PATH_WIDTH = 16.0;
 
-// What an Edit path handle sets: a corner's radius, an edge's radius, or a segment's width.
-enum class HandleKind : uint8_t { Radius, Edge, Side };
+// What an Edit path handle is: a path point's marker, which sets nothing, or what it sets: a
+// corner's radius, an edge's radius, or a segment's width.
+enum class HandleKind : uint8_t { Point, Radius, Edge, Side };
 
-// A handle Edit path takes hold of: a corner's radius handle, keyed by the corner's point, at At;
-// an edge handle, keyed by the edge's point and its segment, at At; or a segment's sides, keyed by
-// the segment.
+// A handle Edit path shows or takes hold of: a path point's marker, keyed by its point, at its
+// position; a corner's radius handle, keyed by the corner's point, at At; an edge handle, keyed by
+// the edge's point and its segment, at At; or a segment's sides, keyed by the segment.
 struct EditHandle {
   HandleKind Kind = HandleKind::Radius;
   EntityKey Key = NULL_KEY;
@@ -132,8 +134,10 @@ std::optional<EditHandle> handleAt(const World &world, ParkPoint point);
 // The segment with a ground line whose side lies nearest the point within SIDE_REACH. Ties go to
 // the lower key.
 std::optional<EntityKey> sideAt(const World &world, ParkPoint point);
-// Every corner's radius handle, in key order of its point, then every edge handle, in the order
-// parkEdges gives the edges, while EditPath is chosen and nothing is held. Empty otherwise.
+// Every path point's marker, in key order, then every corner's radius handle, in key order of its
+// point, then every edge handle, in the order parkEdges gives the edges, while EditPath is chosen
+// and nothing is held. Only the markers while RemovePoint is chosen and nothing is held. Empty
+// otherwise.
 std::vector<EditHandle> editHandles(const ToolState &tool, const World &world);
 // The radius handle, edge handle, or segment's sides under the pointer that a press with EditPath
 // would take, while nothing is held. None otherwise.

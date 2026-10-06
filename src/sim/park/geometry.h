@@ -37,6 +37,22 @@ std::optional<Footprint> footprintOf(const Pose &pose, FootprintSize size);
 // of 0 or less.
 double cornerRadiusFor(const ParkCorner &corner, double depth);
 
+// Where a corner's arc lies: its center, its radius, and where it touches each of the corner's two
+// segments, in the order of the corner's Along.
+struct CornerArc {
+  ParkPoint Center;
+  double Radius = 0.0;
+  std::array<ParkPoint, 2> Touch;
+};
+
+// The corner's arc. With a radius of 0, the center and both touches are the corner's point.
+CornerArc arcOf(const ParkCorner &corner);
+// The place on the corner's arc where the line from the arc's center through the point along of the
+// way from where the arc touches its first segment to where it touches the second meets the arc.
+ParkPoint bendPlace(const ParkCorner &corner, double along);
+// The fraction bendPlace takes for the place on the corner's arc nearest the point, from 0 to 1.
+double bendAlong(const ParkCorner &corner, ParkPoint point);
+
 } // namespace tpj
 
 #endif

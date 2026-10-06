@@ -10,6 +10,7 @@ add_library(tpj_sim STATIC
     musl_exp.cpp
     musl_log.cpp
     operations/operations.cpp
+    park/curves.cpp
     park/edits.cpp
     park/geometry.cpp
     park/intent.cpp

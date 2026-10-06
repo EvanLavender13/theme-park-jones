@@ -46,16 +46,16 @@ A ghost shows what an edit would do before it is committed. It is drawn by the s
 
 buildGhostMesh(world, edit, candidate) gives the edit's ghost:
 
-- every piece and edge line of the surface the edit adds or changes, as editedSurface gives them and drawn as the park draws them, and an added box or a moved box, translucent in its kind's color, or in an invalid tint when the world refuses the edit. If the world refuses an added path so that editedSurface gives none, the ghost shows the straight segments between its stops instead.
+- for every edit but a DeleteSegment, every piece and edge line of the surface the edit adds or changes, as editedSurface gives them and drawn as the park draws them, and an added box or a moved box, translucent in its kind's color, or in an invalid tint when the world refuses the edit. If the world refuses an added path so that editedSurface gives none, the ghost shows the straight segments between its stops instead.
 - a mark at each stop where an added path joins a point or segment, at a moved point's target when it is a point or segment, at the place where an inserted point goes, and at each place pathCrossings gives, in JOIN_MARK_COLOR
 - the new sides of a segment whose width the edit sets, in JOIN_MARK_COLOR, so a narrowed segment shows inside the wider one beneath it
-- the entity an accepted delete would remove, or every segment at a point an accepted DeletePoint deletes, in a delete tint, under the segments the deletion reshapes
+- the box or segment an accepted delete would remove, or both segments at a point an accepted RemovePoint merges, in a delete tint, under the segments the edit reshapes. A DeleteSegment's ghost is this tint, in the invalid tint when the world refuses it, the paving of each segment whose ground line the delete changes, as editedSegments gives them, and the candidate's walkways and starved marks.
 
 With the candidate world, the ghost also shows the candidate's walkways and starved marks. Where one of these lies on a committed one, it blends into it. Only the walkways the edit adds or moves, and the shops it would starve, stand out. When the delete tool hovers a backstage segment, the ghost marks each shop the deletion leaves with no depot. buildGhostMesh(world, edit) makes the candidate itself. If a caller already holds the candidate, the caller passes it instead.
 
 appendPathStart shows where a path would start before its first click: a translucent disc of the path's width, with a join mark when the click would join a point or segment. appendFinishMark marks the stop where a click would finish the path, in FINISH_MARK_COLOR, wider than a join mark and under it. Ghost and highlighted segments lie GHOST_LIFT above the park's paths, so they never flicker against the paths beneath them. appendEntity adds the box, segment, or path point a key holds, in a given color such as HIGHLIGHT_TINT. A box is shaped as the park draws it, a segment as its own pieces of the surface, which are its body and its halves of the corners at its ends, and a path point is a flat disc of JOIN_MARK_RADIUS. It adds nothing when the key holds none of these.
 
-appendHandle adds a radius or edge handle as a flat disc of RADIUS_HANDLE_SIZE, in a given color, above join marks. appendSides adds a strip along the inside of each of a segment's two sides, in a given color, above the segment's ghost. It adds nothing when the key holds no segment with a ground line.
+appendHandle adds a radius or edge handle as a flat disc of RADIUS_HANDLE_SIZE, in a given color, above join marks. appendPointMark adds a path point's marker as a flat disc of POINT_MARK_SIZE, in a given color, under handles and above join marks. appendSides adds a strip along the inside of each of a segment's two sides, in a given color, above the segment's ghost. It adds nothing when the key holds no segment with a ground line.
 
 ## Guests
 

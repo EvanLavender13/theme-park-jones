@@ -13,8 +13,8 @@ namespace {
 
 // The frame's ghost: the preview's edit with its candidate's walkways and starved marks, then where
 // a path tool's first click would start the path, and where a click would finish it, then the
-// highlight, then Edit path's radius and edge handles and the handle under the pointer, then the
-// inspected guest or shop's mark.
+// highlight, then the point markers, Edit path's radius and edge handles, and the handle under the
+// pointer, then the inspected guest or shop's mark.
 ParkMesh ghostMesh(const World &world, const Preview &preview, const PreviewLook &look) {
   ParkMesh mesh;
   if (preview.Edit) {
@@ -30,8 +30,12 @@ ParkMesh ghostMesh(const World &world, const Preview &preview, const PreviewLook
     appendEntity(mesh, world, *look.Highlight, HIGHLIGHT_TINT);
   }
   for (const EditHandle &handle : look.Handles) {
-    appendHandle(mesh, handle.At,
-                 handle.Kind == HandleKind::Radius ? HANDLE_COLOR : EDGE_HANDLE_COLOR);
+    if (handle.Kind == HandleKind::Point) {
+      appendPointMark(mesh, handle.At, POINT_MARK_COLOR);
+    } else {
+      appendHandle(mesh, handle.At,
+                   handle.Kind == HandleKind::Radius ? HANDLE_COLOR : EDGE_HANDLE_COLOR);
+    }
   }
   if (look.Hovered && look.Hovered->Kind != HandleKind::Side) {
     appendHandle(mesh, look.Hovered->At, HIGHLIGHT_TINT);

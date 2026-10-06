@@ -1,6 +1,7 @@
 #include "sim/park/surface.h"
 
 #include "sim/park/geometry.h"
+#include "sim/park/internal/around.h"
 #include "sim/park/internal/layout.h"
 
 #include <algorithm>
@@ -107,9 +108,10 @@ struct Shape {
   ParkPoint Along;
   double Half = 0.0;
   double Length = 0.0;
-  // Whether no other segment uses the end's point.
-  std::array<bool, 2> Free{};
   std::array<std::array<double, 2>, 2> Trim{};
+  // At each end and on each side, how far from that end's point the edge there would touch it if
+  // its reach were the whole length.
+  std::array<std::array<double, 2>, 2> Asked{};
   // The edge radius it holds at each end.
   std::array<double, 2> Edge{};
 
@@ -121,9 +123,11 @@ struct Shape {
     return Ends[end] + outward(end) * distance + across;
   }
   ParkPoint trimmed(size_t end, Side side) const { return edge(end, side, Trim[end][side]); }
-  // How far from the end's point its trims may reach: the whole length when the other end is
-  // free, so its trims there are 0, and otherwise half of it.
-  double reach(size_t end) const { return Free[1 - end] ? Length : Length / 2.0; }
+  // How far from the end's point its trim on the side may reach: the length less what the other end
+  // asks for on the same side, which is that end's other side, or half the length if that is more.
+  double reach(size_t end, Side side) const {
+    return std::max(Length - Asked[1 - end][side == LEFT ? RIGHT : LEFT], Length / 2.0);
+  }
   // The point of the side's edge halfway between where it stops at either end.
   ParkPoint middle(size_t end, Side side) const {
     const double far = Length - Trim[1 - end][side == LEFT ? RIGHT : LEFT];
@@ -314,12 +318,12 @@ double tangentOf(const ParkCorner &corner) {
 }
 
 // A segment's end at a point, as the edges there see it: its outward direction, its half width,
-// how far from the point it starts, and how far its trims may reach.
+// how far from the point it starts, and how far its trims may reach on each side.
 struct Arm {
   ParkPoint Along;
   double Half = 0.0;
   double Start = 0.0;
-  double Reach = 0.0;
+  std::array<double, 2> Reach{};
 };
 
 // How the outline turns from the first segment's left side to the right side of the second,
@@ -344,27 +348,26 @@ Pair pairOf(const Arm &a, const Arm &b, bool full, double asked) {
   double most = 0.0;
   if (inner) {
     least = std::max({0.0, radiusA(a.Start), radiusB(b.Start)});
-    most = std::min(radiusA(a.Reach), radiusB(b.Reach));
+    most = std::min(radiusA(a.Reach[LEFT]), radiusB(b.Reach[RIGHT]));
   } else {
     // A sharp outer edge reaches no farther behind the point than the wider width.
     const double behind = -2.0 * std::max(a.Half, b.Half);
     least = std::max({0.0, radiusA(behind), radiusB(behind)});
-    most = std::min(radiusA(a.Start), radiusB(b.Start));
+    // An outer edge touches each segment no farther than its start, and no farther than its reach,
+    // so it never runs into the paving at the segment's other end.
+    most = std::min(
+        {radiusA(std::min(a.Start, a.Reach[LEFT])), radiusB(std::min(b.Start, b.Reach[RIGHT]))});
+  }
+  // An inner edge with too little room to touch past its start fits the room it has. A sharper
+  // inner edge leaves more paving, so it still covers the line guests walk.
+  if (inner && least > most && most >= 0.0) {
+    least = most;
   }
   if (least > most) {
     return Pair{Turn::Step};
   }
   const double radius = std::clamp(asked, least, most);
   return Pair{Turn::Fillet, radius, touchA(radius), touchB(radius), inner, least, most};
-}
-
-// Whether a's direction comes before b's, counter-clockwise from +x seen from above.
-bool before(ParkPoint a, ParkPoint b) {
-  const auto halfOf = [](ParkPoint d) { return d.Z < 0.0 || (d.Z == 0.0 && d.X > 0.0) ? 0 : 1; };
-  if (halfOf(a) != halfOf(b)) {
-    return halfOf(a) < halfOf(b);
-  }
-  return ccw(a, b) > 0.0;
 }
 
 // The radius the edge from the end asks for: at a corner's inside, the corner's radius less the
@@ -380,13 +383,15 @@ double askedOf(const Shape &a, size_t whichA, const Shape &b, size_t whichB,
 
 // Sorts a point's segments counter-clockwise, finds how the outline turns between each and the
 // next, and sets each segment's trims to where the edges on its two sides touch it. corner is the
-// point's corner, or null.
-void trimPoint(Scratch &scratch, std::vector<Shape> &shapes, const ParkCorner *corner) {
+// point's corner, or null. When asking, each trim may reach the whole length, and the trims are
+// kept as what the end asks for.
+void trimPoint(Scratch &scratch, std::vector<Shape> &shapes, const ParkCorner *corner,
+               bool asking) {
   std::vector<End> &ends = scratch.Group;
   const auto along = [&shapes](const End &end) { return shapes[end.Shape].outward(end.Which); };
   std::ranges::sort(ends, [&along, &shapes](const End &x, const End &y) {
-    if (before(along(x), along(y)) != before(along(y), along(x))) {
-      return before(along(x), along(y));
+    if (comesBefore(along(x), along(y)) != comesBefore(along(y), along(x))) {
+      return comesBefore(along(x), along(y));
     }
     return std::tie(shapes[x.Shape].Key, x.Which) < std::tie(shapes[y.Shape].Key, y.Which);
   });
@@ -398,7 +403,13 @@ void trimPoint(Scratch &scratch, std::vector<Shape> &shapes, const ParkCorner *c
   const double start = corner != nullptr ? tangentOf(*corner) : 0.0;
   const auto armOf = [&](const End &end) {
     const Shape &shape = shapes[end.Shape];
-    return Arm{shape.outward(end.Which), shape.Half, start, shape.reach(end.Which)};
+    if (asking) {
+      return Arm{shape.outward(end.Which), shape.Half, start, {shape.Length, shape.Length}};
+    }
+    return Arm{shape.outward(end.Which),
+               shape.Half,
+               start,
+               {shape.reach(end.Which, LEFT), shape.reach(end.Which, RIGHT)}};
   };
   scratch.Pairs.clear();
   for (size_t i = 0; i < count; ++i) {
@@ -413,6 +424,9 @@ void trimPoint(Scratch &scratch, std::vector<Shape> &shapes, const ParkCorner *c
     std::array<double, 2> &trim = shapes[ends[i].Shape].Trim[ends[i].Which];
     trim[LEFT] = next.Kind == Turn::Fillet ? std::max(next.TouchFirst, 0.0) : 0.0;
     trim[RIGHT] = previous.Kind == Turn::Fillet ? std::max(previous.TouchSecond, 0.0) : 0.0;
+    if (asking) {
+      shapes[ends[i].Shape].Asked[ends[i].Which] = trim;
+    }
   }
 }
 
@@ -560,26 +574,13 @@ focusOf(const PathGround &ground, const std::vector<EntityKey> &focus) {
   return {std::move(wanted), std::move(built)};
 }
 
-// The shape of each segment with a ground line, or when built is given, of each that ends at a
+// The shape of each segment with a ground line, or when loaded is given, of each that ends at a
 // point in it.
 std::vector<Shape> shapesOf(const PathLayout &layout, const PathGround &ground,
-                            const std::vector<EntityKey> *built) {
-  // Each end of every segment with a ground line, by its point's key.
-  std::vector<EntityKey> used;
-  used.reserve(2 * ground.Segments.size());
-  for (const ParkSegment &segment : ground.Segments) {
-    if (!segment.Line.empty()) {
-      used.push_back(segment.From);
-      used.push_back(segment.To);
-    }
-  }
-  std::ranges::sort(used);
-  const auto free = [&used](EntityKey point) {
-    return std::ranges::equal_range(used, point).size() == 1;
-  };
+                            const std::vector<EntityKey> *loaded) {
   std::vector<Shape> shapes;
   for (const ParkSegment &segment : ground.Segments) {
-    if (segment.Line.empty() || (built != nullptr && !touches(segment, *built))) {
+    if (segment.Line.empty() || (loaded != nullptr && !touches(segment, *loaded))) {
       continue;
     }
     const ParkPoint from = findPoint(layout, segment.From)->At;
@@ -592,7 +593,7 @@ std::vector<Shape> shapesOf(const PathLayout &layout, const PathGround &ground,
                            (to - from) * (1.0 / length),
                            segment.Width / 2.0,
                            length,
-                           {free(segment.From), free(segment.To)},
+                           {},
                            {},
                            {segment.FromEdge, segment.ToEdge}});
   }
@@ -634,20 +635,48 @@ void forEachPoint(const std::vector<std::tuple<EntityKey, EntityKey, End>> &ends
   }
 }
 
+// The points, in ascending key order, and the far end of each segment at one of them.
+std::vector<EntityKey> farEndsOf(const PathGround &ground, const std::vector<EntityKey> &points) {
+  std::vector<EntityKey> reached = points;
+  for (const ParkSegment &segment : ground.Segments) {
+    if (touches(segment, points)) {
+      reached.push_back(segment.From);
+      reached.push_back(segment.To);
+    }
+  }
+  sortUnique(reached);
+  return reached;
+}
+
+// Sets what each segment end at the points asks for: every point when points is null. A point's
+// trims depend on what the far ends of its segments ask for, so those are found first.
+void askPoints(const std::vector<std::tuple<EntityKey, EntityKey, End>> &ends,
+               const PathGround &ground, Scratch &scratch, std::vector<Shape> &shapes,
+               const std::vector<EntityKey> *points) {
+  forEachPoint(ends, ground, scratch, points, [&](EntityKey /*key*/, const ParkCorner *corner) {
+    if (scratch.Group.size() > 1) {
+      trimPoint(scratch, shapes, corner, true);
+    }
+  });
+}
+
 // The surface of the owners wanted: every owner when focus is null, and otherwise those focusOf
 // gives. If edges is false, it has no edge lines.
 PavedSurface buildSurface(const PathLayout &layout, const PathGround &ground,
                           const std::vector<EntityKey> *focus, bool edges) {
   std::vector<EntityKey> wanted;
   std::vector<EntityKey> built;
+  std::vector<EntityKey> asked;
   if (focus != nullptr) {
     std::tie(wanted, built) = focusOf(ground, *focus);
+    asked = farEndsOf(ground, built);
   }
-  std::vector<Shape> shapes = shapesOf(layout, ground, focus != nullptr ? &built : nullptr);
+  std::vector<Shape> shapes = shapesOf(layout, ground, focus != nullptr ? &asked : nullptr);
   const std::vector<std::tuple<EntityKey, EntityKey, End>> ends = endsOf(shapes);
   PavedSurface surface;
   Output output(surface, wanted, focus == nullptr, edges);
   Scratch scratch;
+  askPoints(ends, ground, scratch, shapes, focus != nullptr ? &asked : nullptr);
   // Every segment's trims are set before any edge line is written, since an edge line runs to the
   // middle between a side's trims at both ends. The second pass sets the same trims again.
   for (const bool writing : {false, true}) {
@@ -660,7 +689,7 @@ PavedSurface buildSurface(const PathLayout &layout, const PathGround &ground,
                      }
                      return;
                    }
-                   trimPoint(scratch, shapes, corner);
+                   trimPoint(scratch, shapes, corner, false);
                    if (writing) {
                      buildPoint(output, scratch, key, findPoint(layout, key)->At, shapes, corner);
                    }
@@ -1031,16 +1060,17 @@ PavedSurface parkSurface(const World &world) {
 
 std::vector<ParkEdge> edgesOf(const PathLayout &layout, const PathGround &ground) {
   std::vector<Shape> shapes = shapesOf(layout, ground, nullptr);
+  const std::vector<std::tuple<EntityKey, EntityKey, End>> ends = endsOf(shapes);
   Scratch scratch;
+  askPoints(ends, ground, scratch, shapes, nullptr);
   std::vector<ParkEdge> found;
-  forEachPoint(
-      endsOf(shapes), ground, scratch, nullptr, [&](EntityKey key, const ParkCorner *corner) {
-        if (scratch.Group.size() < 2) {
-          return;
-        }
-        trimPoint(scratch, shapes, corner);
-        addEdges(found, scratch, shapes, key, findPoint(layout, key)->At, corner != nullptr);
-      });
+  forEachPoint(ends, ground, scratch, nullptr, [&](EntityKey key, const ParkCorner *corner) {
+    if (scratch.Group.size() < 2) {
+      return;
+    }
+    trimPoint(scratch, shapes, corner, false);
+    addEdges(found, scratch, shapes, key, findPoint(layout, key)->At, corner != nullptr);
+  });
   std::ranges::sort(found, {},
                     [](const ParkEdge &edge) { return std::pair{edge.Point, edge.Segment}; });
   return found;

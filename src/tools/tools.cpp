@@ -135,7 +135,8 @@ std::optional<Snap> nearestDrawnSnap(const World &world, PathKind kind,
     const double distance = distanceBetween(click, (*at)[i]);
     const bool made = std::holds_alternative<NewPoint>(drawn[i]) ||
                       std::holds_alternative<OnSegment>(drawn[i]) ||
-                      std::holds_alternative<OnDrawnSegment>(drawn[i]);
+                      std::holds_alternative<OnDrawnSegment>(drawn[i]) ||
+                      std::holds_alternative<OnBend>(drawn[i]);
     if (made && distance <= SNAP_REACH && (!nearest || distance < nearest->Distance)) {
       nearest = Snap{RepeatStop{i}, distance};
     }
@@ -185,11 +186,46 @@ std::optional<Snap> nearestDrawnSegmentSnap(const World &world, PathKind kind,
   return nearest;
 }
 
-// The nearest place within SNAP_REACH of the click on a segment of the kind that doesn't end at
-// the excluded point, or the segment's end point when that place lies within MIN_SEGMENT_LENGTH of
-// it. Ties go to the lower key.
+// The rounded corner at the point, or none. The corners are in ascending key order of their points.
+const ParkCorner *roundedAt(const std::vector<ParkCorner> &corners, EntityKey point) {
+  const auto found = std::ranges::lower_bound(corners, point, {}, &ParkCorner::Point);
+  return found != corners.end() && found->Point == point && found->Radius > 0.0 ? &*found : nullptr;
+}
+
+// How far from the point the arc of its rounded corner touches each of its segments, or 0.
+double tangentAt(const std::vector<ParkCorner> &corners, EntityKey point) {
+  const ParkCorner *corner = roundedAt(corners, point);
+  return corner == nullptr ? 0.0 : distanceBetween(corner->At, arcOf(*corner).Touch[0]);
+}
+
+// The nearest place on the straight part of the segment between two distinct positions, which runs
+// between where the arcs at its ends touch it: the fraction of the way from the first position to
+// the second, and its distance from the point. None when the straight part is shorter than
+// MIN_SEGMENT_LENGTH.
+std::optional<std::pair<double, double>> straightPlace(const std::vector<ParkCorner> &corners,
+                                                       const ParkSegment &segment, ParkPoint from,
+                                                       ParkPoint to, ParkPoint point) {
+  const double length = distanceBetween(from, to);
+  const double t0 = tangentAt(corners, segment.From);
+  const double t1 = tangentAt(corners, segment.To);
+  const double straight = length - t0 - t1;
+  if (straight < MIN_SEGMENT_LENGTH) {
+    return std::nullopt;
+  }
+  const ParkPoint along{(to.X - from.X) / length, (to.Z - from.Z) / length};
+  const ParkPoint s0{from.X + along.X * t0, from.Z + along.Z * t0};
+  const ParkPoint s1{to.X - along.X * t1, to.Z - along.Z * t1};
+  const double t = alongSegment(point, s0, s1);
+  const ParkPoint place{s0.X + t * (s1.X - s0.X), s0.Z + t * (s1.Z - s0.Z)};
+  return std::pair{(t0 + t * straight) / length, distanceBetween(point, place)};
+}
+
+// The nearest place within SNAP_REACH of the click on the straight part of a segment of the kind
+// that doesn't end at the excluded point, or the segment's end point when that place lies within
+// MIN_SEGMENT_LENGTH of it. Ties go to the lower key.
 std::optional<Snap> nearestSegmentSnap(const std::vector<ParkPathPoint> &points,
-                                       const std::vector<ParkSegment> &segments, PathKind kind,
+                                       const std::vector<ParkSegment> &segments,
+                                       const std::vector<ParkCorner> &corners, PathKind kind,
                                        ParkPoint click, EntityKey excluded) {
   const auto positionOf = [&points](EntityKey key) -> std::optional<ParkPoint> {
     const auto found = std::ranges::lower_bound(points, key, {}, &ParkPathPoint::Key);
@@ -204,9 +240,11 @@ std::optional<Snap> nearestSegmentSnap(const std::vector<ParkPathPoint> &points,
         segment.To == excluded) {
       continue;
     }
-    const double t = alongSegment(click, *from, *to);
-    const ParkPoint place{from->X + t * (to->X - from->X), from->Z + t * (to->Z - from->Z)};
-    const double distance = distanceBetween(click, place);
+    const auto place = straightPlace(corners, segment, *from, *to, click);
+    if (!place) {
+      continue;
+    }
+    const auto [t, distance] = *place;
     if (distance > SNAP_REACH || (nearest && distance >= nearest->Distance)) {
       continue;
     }
@@ -220,6 +258,56 @@ std::optional<Snap> nearestSegmentSnap(const std::vector<ParkPathPoint> &points,
     }
   }
   return nearest;
+}
+
+// The place on the corner's arc nearest the point, as an OnBend with its distance, or none when it
+// lies at an end of the arc.
+std::optional<Snap> bendPlaceNear(const ParkCorner &corner, ParkPoint point) {
+  const double along = bendAlong(corner, point);
+  if (!(along > 0.0) || !(along < 1.0)) {
+    return std::nullopt;
+  }
+  return Snap{OnBend{corner.Point, along}, distanceBetween(point, bendPlace(corner, along))};
+}
+
+// The nearest place within SNAP_REACH of the click on the arc of a rounded corner whose two
+// segments have the kind and neither ends at the excluded point. Ties go to the lower point key.
+std::optional<Snap> nearestBendSnap(const std::vector<ParkSegment> &segments,
+                                    const std::vector<ParkCorner> &corners, PathKind kind,
+                                    ParkPoint click, EntityKey excluded) {
+  std::optional<Snap> nearest;
+  for (const ParkCorner &corner : corners) {
+    if (!(corner.Radius > 0.0) || corner.Point == excluded) {
+      continue;
+    }
+    const bool fits = std::ranges::all_of(segments, [&](const ParkSegment &segment) {
+      const bool atCorner = segment.From == corner.Point || segment.To == corner.Point;
+      return !atCorner ||
+             (segment.Kind == kind && segment.From != excluded && segment.To != excluded);
+    });
+    if (!fits) {
+      continue;
+    }
+    const std::optional<Snap> place = bendPlaceNear(corner, click);
+    if (place && place->Distance <= SNAP_REACH &&
+        (!nearest || place->Distance < nearest->Distance)) {
+      nearest = place;
+    }
+  }
+  return nearest;
+}
+
+// The nearer of a segment snap and a bend snap, the segment winning a tie.
+std::optional<Snap> nearerSnap(std::optional<Snap> segment, std::optional<Snap> bend) {
+  return bend && (!segment || bend->Distance < segment->Distance) ? bend : segment;
+}
+
+// How many segments use the point.
+size_t segmentCount(const World &world, EntityKey point) {
+  return static_cast<size_t>(
+      std::ranges::count_if(parkSegments(world), [point](const ParkSegment &segment) {
+        return segment.From == point || segment.To == point;
+      }));
 }
 
 bool isPlaceTool(ToolKind kind) {
@@ -291,12 +379,15 @@ std::optional<Pose> boxPose(const World &world, EntityKey key) {
   return std::nullopt;
 }
 
-// The InsertPoint a click at the point makes on the segment under it, or none.
+// The InsertPoint a click at the point makes on the segment under it, or none: at the nearest
+// place on its ground line, on the arc of a rounded corner at either end, or else on its straight
+// part.
 std::optional<InsertPoint> insertAt(const World &world, ParkPoint point) {
   const std::optional<EntityKey> key = segmentAt(world, point);
   if (!key) {
     return std::nullopt;
   }
+  const std::vector<ParkCorner> corners = parkCorners(world);
   for (const ParkSegment &segment : parkSegments(world)) {
     if (segment.Key != *key) {
       continue;
@@ -306,7 +397,28 @@ std::optional<InsertPoint> insertAt(const World &world, ParkPoint point) {
     if (!from || !to) {
       return std::nullopt;
     }
-    return InsertPoint{*key, alongSegment(point, *from, *to)};
+    // The straight part's place first, so it wins a tie with an arc's.
+    std::vector<Snap> places;
+    if (const auto place = straightPlace(corners, segment, *from, *to, point)) {
+      places.push_back(Snap{OnSegment{segment.Key, place->first}, place->second});
+    }
+    for (const EntityKey end : {segment.From, segment.To}) {
+      if (const ParkCorner *corner = roundedAt(corners, end)) {
+        if (const std::optional<Snap> place = bendPlaceNear(*corner, point)) {
+          places.push_back(*place);
+        }
+      }
+    }
+    const auto nearest = std::ranges::min_element(places, {}, &Snap::Distance);
+    if (nearest != places.end()) {
+      if (const auto *onBend = std::get_if<OnBend>(&nearest->Stop)) {
+        return InsertPoint{*onBend};
+      }
+      if (const auto *onSegment = std::get_if<OnSegment>(&nearest->Stop)) {
+        return InsertPoint{*onSegment};
+      }
+    }
+    return std::nullopt;
   }
   return std::nullopt;
 }
@@ -454,7 +566,7 @@ void pressPointer(ToolState &tool, const World &world) {
     return;
   }
   tool.Dragged = false;
-  if (tool.Kind == ToolKind::Delete) {
+  if (tool.Kind == ToolKind::Delete || tool.Kind == ToolKind::RemovePoint) {
     tool.Holding = true;
   } else if (isPathTool(tool.Kind) && tool.Pointer) {
     if (const std::optional<PathStop> next = nextStop(tool, world)) {
@@ -524,12 +636,15 @@ std::optional<ParkEdit> tentativeEdit(const ToolState &tool, const World &world)
   if (tool.Kind == ToolKind::EditPath) {
     return editPathEdit(tool, world);
   }
+  if (tool.Kind == ToolKind::RemovePoint && tool.Pointer) {
+    if (const std::optional<EntityKey> point = pointAt(world, *tool.Pointer)) {
+      return RemovePoint{*point};
+    }
+    return std::nullopt;
+  }
   if (tool.Kind == ToolKind::Delete && tool.Pointer) {
     if (const std::optional<EntityKey> box = boxAt(world, *tool.Pointer)) {
       return DeleteBox{*box};
-    }
-    if (const std::optional<EntityKey> point = pointAt(world, *tool.Pointer)) {
-      return DeletePoint{*point};
     }
     if (const std::optional<EntityKey> segment = segmentAt(world, *tool.Pointer)) {
       return DeleteSegment{*segment};
@@ -566,6 +681,12 @@ std::optional<EntityKey> highlightedEntity(const ToolState &tool, const World &w
   if (tool.Kind == ToolKind::EditPath && !tool.Holding && tool.Pointer &&
       !handleAt(world, *tool.Pointer)) {
     return pointAt(world, *tool.Pointer);
+  }
+  if (tool.Kind == ToolKind::RemovePoint && !tool.Holding && tool.Pointer) {
+    const std::optional<EntityKey> point = pointAt(world, *tool.Pointer);
+    if (point && segmentCount(world, *point) == 2) {
+      return point;
+    }
   }
   return std::nullopt;
 }
@@ -613,7 +734,10 @@ PathStop snapStop(const World &world, PathKind kind, const std::vector<PathStop>
   if (onPoint) {
     return onPoint->Stop;
   }
-  const std::optional<Snap> onSegment = nearestSegmentSnap(points, segments, kind, point, NULL_KEY);
+  const std::vector<ParkCorner> corners = parkCorners(world);
+  const std::optional<Snap> onSegment =
+      nearerSnap(nearestSegmentSnap(points, segments, corners, kind, point, NULL_KEY),
+                 nearestBendSnap(segments, corners, kind, point, NULL_KEY));
   const std::optional<Snap> onDrawnSegment = nearestDrawnSegmentSnap(world, kind, drawn, point);
   // An existing segment wins a tie with a drawn one.
   if (onDrawnSegment && (!onSegment || onDrawnSegment->Distance < onSegment->Distance)) {
@@ -649,7 +773,9 @@ PointTarget snapPoint(const World &world, EntityKey point, ParkPoint at) {
   }
   std::optional<Snap> snap = nearestPointSnap(points, segments, used->Kind, at, point);
   if (!snap) {
-    snap = nearestSegmentSnap(points, segments, used->Kind, at, point);
+    const std::vector<ParkCorner> corners = parkCorners(world);
+    snap = nearerSnap(nearestSegmentSnap(points, segments, corners, used->Kind, at, point),
+                      nearestBendSnap(segments, corners, used->Kind, at, point));
   }
   if (snap) {
     if (const auto *onPoint = std::get_if<OnPoint>(&snap->Stop)) {
@@ -657,6 +783,9 @@ PointTarget snapPoint(const World &world, EntityKey point, ParkPoint at) {
     }
     if (const auto *onSegment = std::get_if<OnSegment>(&snap->Stop)) {
       return *onSegment;
+    }
+    if (const auto *onBend = std::get_if<OnBend>(&snap->Stop)) {
+      return *onBend;
     }
   }
   return NewPoint{at};
@@ -705,6 +834,11 @@ std::optional<EntityKey> sideAt(const World &world, ParkPoint point) {
 
 std::vector<EditHandle> editHandles(const ToolState &tool, const World &world) {
   std::vector<EditHandle> handles;
+  if ((tool.Kind == ToolKind::EditPath || tool.Kind == ToolKind::RemovePoint) && !tool.Holding) {
+    for (const ParkPathPoint &point : parkPathPoints(world)) {
+      handles.push_back(EditHandle{HandleKind::Point, point.Key, point.At});
+    }
+  }
   if (tool.Kind == ToolKind::EditPath && !tool.Holding) {
     for (const ParkCorner &corner : parkCorners(world)) {
       handles.push_back(EditHandle{HandleKind::Radius, corner.Point, radiusHandleOf(corner)});

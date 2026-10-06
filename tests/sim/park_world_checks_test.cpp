@@ -329,15 +329,15 @@ ChosenEdit insertingPointUnderGuests(const World &before) {
   REQUIRE(segmentKey != NULL_KEY);
   return {"inserting a point in the middle of a segment guests stand on, heading to the shop, "
           "splitting the segment under them",
-          InsertPoint{segmentKey, 0.5}};
+          InsertPoint{OnSegment{segmentKey, 0.5}}};
 }
 
 // The point's two segments merge into one and the other segment goes, so the guests on it are
 // carried onto the merged segment, and the networks and route distance are derived again.
-ChosenEdit deletingPointUnderGuests(const World &before) {
+ChosenEdit removingPointUnderGuests(const World &before) {
   const EntityKey pointKey = guestPointBetweenTwoSegmentsUnderGuests(before);
   REQUIRE(pointKey != NULL_KEY);
-  const DeletePoint del{pointKey};
+  const RemovePoint remove{pointKey};
   // Without a merge, this edit would only delete segments, as deletingGuestSegment already does.
   // The point merges its two segments when their far ends differ.
   std::vector<EntityKey> farEnds;
@@ -348,9 +348,9 @@ ChosenEdit deletingPointUnderGuests(const World &before) {
   }
   REQUIRE(farEnds.size() == 2);
   REQUIRE(farEnds[0] != farEnds[1]);
-  return {"deleting a guest point between two segments guests stand on, merging the segments "
+  return {"removing a guest point between two segments guests stand on, merging the segments "
           "under them",
-          del};
+          remove};
 }
 
 // The first corner, in key order of its point, whose two segments are both of guest kind, where a
@@ -459,7 +459,7 @@ std::vector<ChosenEdit> chosenEdits(const World &before) {
                                 deletingShop(before),
                                 movingPointUnderGuests(before),
                                 insertingPointUnderGuests(before),
-                                deletingPointUnderGuests(before),
+                                removingPointUnderGuests(before),
                                 roundingCornerUnderGuests(before),
                                 narrowingSegmentUnderGuests(before),
                                 curvingJunctionEdgeUnderGuests(before)};
