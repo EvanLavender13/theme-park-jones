@@ -92,6 +92,7 @@ It is useful on its own. Before any guest exists, the tooling view shows exactly
 ## Milestones
 
 1. `paths-become-routes`: guest and backstage graphs derived from committed or candidate path intent, with junctions, crossings, and edges measured by arc length. It also adds box connections by face within a fixed reach, the route distance field with distances and next edges for every anchored source, and the ImGui graph view. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value, shared-medium's first-field-and-flow, and effortless-building's sketch-a-park.
+2. `wide-routes`: nodes only at points and connector ends, so paths join on the network only where they share a point. Each segment's carrier takes its width, and doors connect within reach of a segment's edge. Member of the good-paths slice. Depends on: shared-medium's carrier-widths and effortless-building's path-network.
 
 Later milestones come from the deepening candidates, once the slice shows how networks are used.
 
