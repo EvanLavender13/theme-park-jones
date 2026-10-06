@@ -12,7 +12,7 @@ The player starts a new park and lays out a main street. They pick the guest pat
 
 From the far end they draw a side path at 90° to the street, 3 m wide, and turn it 45° partway along. A guide marks each angle as it snaps. The bend gets a default corner radius, and they drag its radius handle until the bend is a wide, smooth arc. They draw a second side path from the middle of the street. Clicking on the street's side snaps onto it, a marker shows the join, and the street splits there at a new shared point. They draw a loop path across the first side path. The ghost marks the crossing as a new junction before they commit. Once it is committed, the two paths meet at a shared point.
 
-Where paths meet, the paving reads as one surface. The inside corners are rounded, and the rounding grows with the paths' widths. A thin edge line runs along the outline of the whole surface and never across a join. Each path's free end is cut square.
+Where paths meet, the paving reads as one surface. The inside corners are sharp until the player curves them with their handles. A thin edge line runs along the outline of the whole surface and never across a join. Each path's free end is cut square.
 
 Next they adjust the layout. They drag the shared point where three paths meet, and every segment there follows. They click a segment to insert a point and pull it out to bend the path. They delete a point where a path kinked, and its two segments merge into one straight segment. They delete one segment of the loop, and only that segment goes. To put a point where no snap will let it go, they hold the suppress key and drag freely, and every guide disappears while they hold it. One undo puts back the deleted segment, and redo removes it again.
 
@@ -86,7 +86,7 @@ Simulation output changes on purpose, because route lengths change from today's 
 
 ## Open questions
 
-- Tuning values: the snap reach in screen pixels and its release band, the default and allowed widths, the default corner radius, how inside rounding grows with width, the frontage setback, and door reach. Members 2 and 3 set them while planning and adjust them by drawing main-street.park.
+- Door reach: navigable-networks/wide-routes sets it while planning and adjusts it on main-street.park. path-network's Tuning section settles effortless-building's values.
 
 ## Research notes
 
