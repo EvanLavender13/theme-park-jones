@@ -27,9 +27,43 @@ OpenedPark startingPark(const char *parkPath, uint64_t ticks) {
   return opened;
 }
 
-ParkSession::ParkSession(World world) : Current(std::move(world)) {}
+ParkSession::ParkSession(World world) : Current(std::move(world)) {
+  clearHistory(History, Current);
+}
 
-void ParkSession::step() { stepWorld(Current, Commands); }
+void ParkSession::step() {
+  // An undo or redo applies alone, so the history can tell which keys its restored things took.
+  if (Restore) {
+    CommandQueue alone;
+    queueEdit(alone, *Restore);
+    Restore.reset();
+    stepWorld(Current, alone);
+    noteEdits(History, Current);
+    return;
+  }
+  const bool edited = !Commands.empty();
+  stepWorld(Current, Commands);
+  if (edited) {
+    noteEdits(History, Current);
+  }
+}
+
+void ParkSession::undo() {
+  if (Commands.empty() && !Restore) {
+    Restore = undoEdit(History);
+  }
+}
+
+void ParkSession::redo() {
+  if (Commands.empty() && !Restore) {
+    Restore = redoEdit(History);
+  }
+}
+
+// The lists alone decide, so the buttons don't flicker off while an edit waits for its tick.
+bool ParkSession::canUndo() const { return !History.Undos.empty(); }
+
+bool ParkSession::canRedo() const { return !History.Redos.empty(); }
 
 void ParkSession::useFileRequest(const FileRequest &request, ParkFileEdge &edge) {
   if (request.Action == ParkAction::Save) {
@@ -58,6 +92,8 @@ void ParkSession::useFileRequest(const FileRequest &request, ParkFileEdge &edge)
 void ParkSession::replace(World world) {
   Current = std::move(world);
   Commands.clear();
+  Restore.reset();
+  clearHistory(History, Current);
   ++Generation;
 }
 

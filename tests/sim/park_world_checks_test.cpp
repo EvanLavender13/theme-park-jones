@@ -494,6 +494,61 @@ ChosenEdit settingTaperAtGuestJunctionUnderGuests(const World &before) {
           set};
 }
 
+// The world's segment with the key, requiring that there is one.
+ParkSegment segmentWithKey(const World &world, EntityKey key) {
+  std::optional<ParkSegment> found;
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Key == key) {
+      found = segment;
+    }
+  }
+  REQUIRE(found.has_value());
+  return found.value_or(ParkSegment{});
+}
+
+// The key of the candidate's segment with the old segment's kind, points, width, and edge radii,
+// requiring that no segment there holds the old key.
+std::optional<EntityKey> segmentEqualTo(const World &candidate, const ParkSegment &old,
+                                        EntityKey oldKey) {
+  std::optional<EntityKey> restoredKey;
+  for (const ParkSegment &segment : parkSegments(candidate)) {
+    REQUIRE(segment.Key != oldKey);
+    if (segment.Kind == old.Kind && segment.From == old.From && segment.To == old.To &&
+        segment.Width == old.Width && segment.FromEdge == old.FromEdge &&
+        segment.ToEdge == old.ToEdge) {
+      restoredKey = segment.Key;
+    }
+  }
+  return restoredKey;
+}
+
+// The segment guests stand on goes and an equal one comes back under a fresh key, as an undo of
+// its deletion puts it back, so the guests on it are carried onto the new carrier, and the
+// networks and route distance are derived again. The added record is named by the world's next
+// key, which holds no entity.
+ChosenEdit restoringGuestSegmentUnderFreshKey(const World &before) {
+  const EntityKey segmentKey = guestSegmentUnderGuestHeadingToShop(before);
+  REQUIRE(segmentKey != NULL_KEY);
+  const ParkSegment old = segmentWithKey(before, segmentKey);
+  const EntityKey name{before.nextKey()};
+  RestoreIntent restore;
+  restore.Remove = {segmentKey};
+  restore.Add.Segments = {
+      SegmentRecord{name, old.Kind, old.From, old.To, old.Width, old.FromEdge, old.ToEdge}};
+  REQUIRE(isAccepted(before, ParkEdit{restore}));
+  // Without the segment back under a new key with guests on it, this edit would check nothing
+  // that deletingGuestSegment doesn't.
+  const World candidate = makeCandidate(before, queueOf(ParkEdit{restore}));
+  const std::optional<EntityKey> restoredKey = segmentEqualTo(candidate, old, segmentKey);
+  REQUIRE(restoredKey.has_value());
+  const EntityKey restored = restoredKey.value_or(NULL_KEY);
+  REQUIRE(static_cast<uint64_t>(restored) >= before.nextKey());
+  REQUIRE(someGuestStandsOn(candidate, restored));
+  return {"putting back a guest segment guests stand on under a fresh key, as an undo of its "
+          "deletion does, carrying the guests on it onto the new key",
+          restore};
+}
+
 // The edits of warm.park, made from the world as a cycle leaves it. Each requires the state it was
 // chosen for, so a change to warm.park that loses that state fails here rather than quietly
 // checking less.
@@ -509,7 +564,8 @@ std::vector<ChosenEdit> chosenEdits(const World &before) {
                                 roundingCornerUnderGuests(before),
                                 narrowingSegmentUnderGuests(before),
                                 curvingJunctionEdgeUnderGuests(before),
-                                settingTaperAtGuestJunctionUnderGuests(before)};
+                                settingTaperAtGuestJunctionUnderGuests(before),
+                                restoringGuestSegmentUnderFreshKey(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);
     REQUIRE(isAccepted(before, chosen.Edit));

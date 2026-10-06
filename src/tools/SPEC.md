@@ -4,7 +4,7 @@ The park's editing tools: what the player's pointer does to the park. A tool nev
 
 ## Boundary
 
-A ToolState holds one tool, of a ToolKind: None, GuestPath, BackstagePath, PlaceShop, PlaceDepot, MoveBox, EditPath, RemovePoint, or Delete. The app drives it with four calls: selectTool, movePointer, pressPointer, and releasePointer. The app reads tentativeEdit, the edit the ghost shows, and highlightedEntity, the entity the tool marks. boxAt, segmentAt, pointAt, handleAt, and sideAt are the picking queries the tools use. frontagePose gives the pose of a box that fronts a segment. editHandles and hoveredHandle give the handles Edit path shows. snapGuides and measuredLengths give what the app draws for snapping.
+A ToolState holds one tool, of a ToolKind: None, GuestPath, BackstagePath, PlaceShop, PlaceDepot, MoveBox, EditPath, RemovePoint, or Delete. The app drives it with four calls: selectTool, movePointer, pressPointer, and releasePointer. The app reads tentativeEdit, the edit the ghost shows, and highlightedEntity, the entity the tool marks. boxAt, segmentAt, pointAt, handleAt, and sideAt are the picking queries the tools use. frontagePose gives the pose of a box that fronts a segment. editHandles and hoveredHandle give the handles Edit path shows. snapGuides and measuredLengths give what the app draws for snapping. An EditHistory holds the committed edits to undo and redo. clearHistory, noteEdits, undoEdit, and redoEdit change it, and canUndo and canRedo read it.
 
 ## Input
 
@@ -70,3 +70,13 @@ The ghost shows the reshaped segments. If the player clicks a point, a handle, o
 Remove point marks the path point under the pointer, as pointAt gives it, when exactly two segments use it, and a click removes it with RemovePoint, merging its two segments. If the player clicks away from every point, nothing is committed.
 
 Delete removes the box under the pointer. If there is no box, it removes the segment under the pointer, and any point no other segment uses. The ghost shows what it removes.
+
+## History
+
+The history holds a list of edits to undo and a list of edits to redo. Each edit is the intent it changed: the path points, segments, and boxes it removed, those it added, and those it changed, before and after. The entrance never changes.
+
+clearHistory empties both lists and takes the world's intent as the intent the history saw last. noteEdits takes the world after a cycle that applied commands. It compares the world's intent with the intent the history saw last, then takes the world's intent as the intent it saw last. If nothing changed, it records nothing. Otherwise the change is one edit, even when several commands made it in one cycle. If the change came from an undo, the edit goes on the redo list. If it came from a redo, it goes on the undo list. Any other change goes on the undo list and empties the redo list.
+
+undoEdit takes the last edit off the undo list and gives the RestoreIntent that reverses it. The command removes what the edit added, sets what it changed back to how it was before, and adds back what it removed. redoEdit does the same for the last edit on the redo list, so the command reverses the undo. If there is no edit to take, each gives none. While a command that either gave hasn't been noted, both give none. If noteEdits then sees no change, as when the world refused the command, the edit goes back where it was. canUndo and canRedo give whether undoEdit and redoEdit would give a command.
+
+What an undo or redo adds back takes fresh keys. If its command applies alone in its cycle, noteEdits finds the key each restored record took. From then on, the history uses the new key wherever an edit names the old one.

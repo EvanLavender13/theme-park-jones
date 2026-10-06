@@ -36,6 +36,9 @@ public:
   void pick(const World &world, std::optional<EntityKey> entity);
   void forgetSubject() { Subject.reset(); }
   void selectTool(ToolKind kind);
+  // Drops what the tool holds or has drawn, as selecting it again does, and gives whether there was
+  // anything: a held press or a drawn stop.
+  bool dropHeld();
   void movePointer(const World &world, const PointerSample &pointer);
   [[nodiscard]] std::optional<ParkEdit> tentativeEdit(const World &world) const;
   [[nodiscard]] std::optional<EntityKey> highlighted(const World &world) const;

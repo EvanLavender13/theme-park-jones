@@ -4,8 +4,11 @@
 #include "app/session/park_file.h"
 #include "app/session/park_file_requests.h"
 #include "sim/command_queue.h"
+#include "sim/park/edits.h"
 #include "sim/world.h"
+#include "tools/history.h"
 
+#include <optional>
 #include <stdint.h>
 #include <string>
 
@@ -36,8 +39,8 @@ World resolvedNewPark();
 // cannot be read or loaded.
 OpenedPark startingPark(const char *parkPath, uint64_t ticks);
 
-// The world the app holds and the commands waiting for its next cycle. It is the one place the
-// world is replaced, and its generation changes exactly when the world is.
+// The world the app holds, the commands waiting for its next cycle, and the history of its edits.
+// It is the one place the world is replaced, and its generation changes exactly when the world is.
 class ParkSession {
 public:
   explicit ParkSession(World world);
@@ -47,13 +50,22 @@ public:
   // Changes exactly when the world is replaced, to a value it has not had.
   [[nodiscard]] uint64_t generation() const { return Generation; }
 
-  // One cycle with the queued commands, which it empties.
+  // One cycle with the waiting undo or redo alone, when one waits, or else with the queued
+  // commands, which it empties. Either way, the history then notes what the cycle changed.
   void step();
+  // Asks for an undo, or a redo: the history's command waits to apply alone in the next cycle.
+  // Nothing happens while a command is queued or waits, or when there is nothing to undo or redo.
+  void undo();
+  void redo();
+  // Whether the history holds an edit to undo, or to redo. An edit an undo or redo has taken
+  // counts on neither list until its cycle runs.
+  [[nodiscard]] bool canUndo() const;
+  [[nodiscard]] bool canRedo() const;
   // Acts on a request. Save writes the world as it is to withParkExtension of the path, first
   // asking the edge when that added the extension and a file exists there, and saving nothing
   // unless it confirms. New replaces the world with resolvedNewPark(), and Open with openParkFile's
   // world. A failed open or save leaves the world as it was and reports its message to the edge.
-  // Replacing the world empties the queue.
+  // Replacing the world empties the queue and the history.
   void useFileRequest(const FileRequest &request, ParkFileEdge &edge);
 
 private:
@@ -61,6 +73,9 @@ private:
 
   World Current;
   CommandQueue Commands;
+  EditHistory History;
+  // The undo's or redo's command waiting to apply alone in the next cycle.
+  std::optional<RestoreIntent> Restore;
   uint64_t Generation = 0;
 };
 
