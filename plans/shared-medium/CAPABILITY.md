@@ -144,11 +144,12 @@ It is useful on its own. The principles promise exact attribution, exact conserv
 
 3. `carrier-widths`: every carrier gets a walkable width, with queries for the width and direction at a place, and carryOver keeps a place at its ground position when its ground survives an edit under a different carrier key. It is a member of the good-paths slice. Depends on: first-field-and-flow.
 
+4. `ground-fields`: a second kind of field, with one entry for each entity at a ground position, sampled within a radius of a ground point, so guests can sense the guests near them on the paving. It is a member of the good-paths slice. Depends on: first-field-and-flow.
+
 Later milestones come from the deepening candidates, once the slice has shown where the medium is under strain.
 
 ## Deepening candidates
 
-- Ground-domain fields: fields sampled at ground positions that spread over open ground instead of along routes, such as noise and smell. Gated on: a mechanic that needs one.
 - On-demand fields: storage that evaluates emitters when a field is queried, instead of holding published entries. Gated on: a field whose published form would be too large, or too costly to keep current.
 - Change-driven resolution: consumers learn when the context they sample has changed in a way that matters, so most of the world can rest most of the time (design notes, "Resolution over time"). Gated on: profiling that shows the per-tick cost of sampling matters.
 - Edge capacity: flows limited by the capacity of the network they cross, as decision 0018 expects for supplies. Gated on: a flow whose congestion the player should manage.

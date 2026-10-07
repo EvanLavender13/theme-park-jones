@@ -1,0 +1,17 @@
+# Research: ground-fields
+
+## How should a field sampled within a radius of a ground point find its entries, cheaply and in a fixed order?
+
+Crowd and steering code finds nearby agents with a uniform grid over the ground. Detour's crowd keeps a proximity grid that it clears and refills with every agent once per update, then asks it for the agents whose cells overlap a small box. OpenSteer's bin lattice does the same with fixed bins, and Teschner's spatial hashing maps cells to buckets when the ground has no fixed bounds. In each, a query visits only the few cells that overlap its circle, so its cost grows with the agents near the point, not with all agents. Refilling the grid each update costs one pass over the agents. That is work that grows with the movers, which decision 0031 allows in a tick.
+
+For a ground field, this means building a lookup by cell from the readable entries whenever the swap changes them, and keeping it beside the entries as derived data that saves, hashes, and comparisons never see. The field's existing ByPlace orders work the same way. If a cell is about the size of the radius most samples use, a sample visits a 3 by 3 block of cells.
+
+A dense grid, with one slot for every cell over the park, would make each rebuild visit every cell. That grows with the park's area, not with the entries, which decision 0031 forbids. Instead, each entry's cell is packed into one integer key, and the entries are sorted by that key, then by entity key. A sample finds each cell it overlaps by binary search. The rebuild then grows with the number of entries, whatever the park's size, as a hashed grid like Detour's does. A sorted array also gives the same order on every build, and it allocates only while the field grows.
+
+Cells come out in the order the sample visits them, not in key order. To keep the order fixed (principle 10), a sample sorts what it found by entity key before returning it. A guest finds only a handful of neighbours, so the sort is cheap. A hash map from cell to list would also work, but its iteration order is unspecified, and it allocates as cells appear.
+
+An entity's entry has to go when the entity does, or sampling would find guests that have left the park. The flow ledger already handles removed endpoints at the swap after their removal. A ground field can drop gone entities' entries at the same point, and skip them in a sample until then.
+
+Rejected: a dense grid over the whole park — its rebuild visits every cell, so it grows with the park's area. A scan of every entry for each sample — with 2,000 guests each sampling once a tick, that is millions of distance checks a tick, growing with guests times guests. A k-d tree or quadtree — rebuilding it every tick costs more than refilling a grid and gives nothing at the even density of guests on paths. Keeping entries at network places, as the other fields do — a guest's ground position is no longer a place on a center line, and nearness across a wide path is a straight-line measure, not a route.
+
+Sources: https://github.com/recastnavigation/recastnavigation/blob/main/DetourCrowd/Source/DetourProximityGrid.cpp — the crowd's grid, cleared and refilled every update and queried by box; https://opensteer.sourceforge.net/ — OpenSteer's bin lattice for neighbour queries; https://matthias-research.github.io/pages/publications/tetraederCollision.pdf — spatial hashing of cells for unbounded space.
