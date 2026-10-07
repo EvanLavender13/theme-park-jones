@@ -1,6 +1,6 @@
 # medium
 
-The shared medium: the networks things are placed on, the fields sampled on them, and the flow ledger that moves conserved units between entities. It is how one module affects another without reading its internals (principles 3 and 6, decision 0005). It is part of tpj_sim and follows its contract (src/sim/SPEC.md).
+The shared medium: the networks things are placed on, the fields sampled on them or on the ground, and the flow ledger that moves conserved units between entities. It is how one module affects another without reading its internals (principles 3 and 6, decision 0005). It is part of tpj_sim and follows its contract (src/sim/SPEC.md).
 
 ## Boundary
 
@@ -9,9 +9,10 @@ Modules include these headers:
 - sim/medium/network.h for networks, places, and carry-over
 - sim/medium/field.h for fields
 - sim/medium/kept_field.h for kept fields
+- sim/medium/ground_field.h for ground fields
 - sim/medium/flow.h for flows
 
-The medium owns no network, field, or flow kind of its own. Each owning module defines its fields and flow kinds as types. It registers them with addField, addKeptField, or addFlow, which register their components and resolvers with the schema. addNetworkComponent registers Network as the derived component type network, so that producers such as routes can put it on entities they derive. The medium reads nothing from other modules.
+The medium owns no network, field, or flow kind of its own. Each owning module defines its fields and flow kinds as types. It registers them with addField, addKeptField, addGroundField, or addFlow, which register their components and resolvers with the schema. addNetworkComponent registers Network as the derived component type network, so that producers such as routes can put it on entities they derive. The medium reads nothing from other modules.
 
 ## Networks
 
@@ -36,7 +37,7 @@ A Place is a carrier key and a distance along it. It names the same ground posit
 
 resolve gives a place's position in a network: either the node whose stop is exactly at its distance, or the edge that encloses it, with its offsets from both ends. If a place is on a carrier the network lacks, or off the carrier's ends, it resolves to nothing, which is a legitimate result, not an error (principle 2). A node's stopPlaces are exactly the places that resolve to it.
 
-groundPoint gives a place's ground position, interpolated along the carrier's polyline. nearestPlace snaps a ground position to the nearest place on any carrier. nearestPlaceOn snaps it to the nearest place on one carrier. A junction is equally near on every carrier that stops there, and ties are broken deterministically. nearestPlace, nearestPlaceOn, and directionAt, and carryOver's check that a snapped place lies on a place's old ground, are the medium's only straight-line measures. The first two and that check are used only to snap a ground position onto a network, and directionAt only to scale a direction to unit length. None of them measures how far anything travels (principle 4).
+groundPoint gives a place's ground position, interpolated along the carrier's polyline. nearestPlace snaps a ground position to the nearest place on any carrier. nearestPlaceOn snaps it to the nearest place on one carrier. A junction is equally near on every carrier that stops there, and ties are broken deterministically. nearestPlace, nearestPlaceOn, and directionAt, carryOver's check that a snapped place lies on a place's old ground, and the radius a ground field is sampled within are the medium's only straight-line measures. The first two and that check are used only to snap a ground position onto a network, directionAt only to scale a direction to unit length, and a ground field's radius only to find the entities near a point. None of them measures how far anything travels (principle 4).
 
 widthAt gives the walkable width at a place, and directionAt gives the direction of travel there, as a unit vector on the ground pointing toward higher distances along its carrier. At a point where the carrier's polyline bends, the direction is that of the piece ahead. At the carrier's end, it is that of the last piece. Where a place doesn't resolve, both give nothing. If the piece has no length on the ground, directionAt gives nothing.
 
@@ -74,6 +75,16 @@ A kept field holds values that accumulate where movers go. The values persist be
 A system calls keepEntry while stepping to set a source's value at a place. A source holds at most one entry per place. Changes become readable at the swap that ends the tick, and the last change at a place in a tick wins. An entry then stays readable, unchanged, until its place is changed again. If the source already holds an entry at a place, changing it costs a binary search.
 
 sampleField and fieldValue read kept values through the owner's rules. keptValue reads one source's value at exactly one place. keptEntries gives a source's entries as held, so its owner can carry them. The owner carries its entries across a resolution in its own finisher, with replaceKeptEntries. replaceKeptEntries refuses entries it cannot hold, such as two at one place, and changes nothing when it refuses.
+
+## Ground fields
+
+A ground field holds one entry for each entity at a ground position, instead of entries at places on a network. Through it, an entity senses the entities near it on the ground, as guests do to step around one another (principle 3). Its owning module defines it as a type naming its name and its entry type. addGroundField registers it, and refuses a malformed name, or a name another field has, with std::invalid_argument. Its entries are state, which saves, hashes, and worldsEqual see (principle 1). Resolution leaves them as they are.
+
+A system calls setGroundEntry while stepping to give an entity's entry a ground position and a value, and dropGroundEntry to remove it. Changes become readable at the swap that ends the tick. An entry then stays readable, unchanged, until it changes again. Each entity's entry changes at most once a tick, and a drop counts as a change even when the entity has no entry. If a change comes outside stepping, for the null key, at a ground position that isn't finite, or for an entity already changed this tick, it is refused and changes nothing. The result is then the same whatever order systems run in (principle 10).
+
+When an entity is gone, sampling gives no entry for it, and the next swap removes its entry.
+
+sampleGroundField fills a list with the entries whose ground position is within a radius of a point, the radius included. Each comes with its entity's key, its position, and its value, in ascending key order. If the radius is negative or not a number, or the point isn't finite, it gives nothing. It reuses the list it is given, and allocates only while the list or the field grows, so systems can sample for every mover each tick. A sample's work grows with the entries near its point, not with every entry in the field. The swap's work grows with the field's entries, never with the size of the park (decision 0031).
 
 ## Flows
 

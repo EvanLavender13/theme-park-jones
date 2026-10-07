@@ -2,6 +2,7 @@
 #define TPJ_SCENARIOS_STALLS_H
 
 #include "sim/medium/field.h"
+#include "sim/medium/ground_field.h"
 
 #include <string_view>
 
@@ -22,6 +23,12 @@ struct Crowd {
   using Entry = double;
   static constexpr std::string_view Name = "crowd";
   static constexpr FieldKind Kind = FieldKind::Scalar;
+};
+
+// Where each visitor stands, with its distance along the track as the value.
+struct VisitorPresence {
+  using Entry = double;
+  static constexpr std::string_view Name = "visitor-presence";
 };
 
 // Goods the depot makes and ships to stalls, which sell them.

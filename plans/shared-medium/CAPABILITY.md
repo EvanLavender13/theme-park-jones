@@ -65,7 +65,7 @@ This capability adds the medium's machinery, not any park field or flow of its o
 
 A network is nodes, and edges with lengths. navigable-networks publishes the networks, deriving them from path intent. Every edge is a stretch of a carrier. A carrier is a line with a stable key, such as a drawn path or a box's connector. In synthetic networks, each edge is its own carrier.
 
-A network place is a carrier and a distance along it. Every field is sampled at places. Carriers come from intent, so if a holder keeps a place across a re-derivation, the place survives edges being split or merged under it.
+A network place is a carrier and a distance along it. Every field on a network is sampled at places. Carriers come from intent, so if a holder keeps a place across a re-derivation, the place survives edges being split or merged under it.
 
 The network type offers one carry-over operation. A holder applies it to its own places, using the networks from before and after a re-derivation, so nobody reads another's internals. It has four outcomes:
 
@@ -84,6 +84,8 @@ In a field, a producer publishes per-source entries at places. A consumer sample
 Publications made while stepping are double-buffered and become visible on the next tick. Resolution runs after the swap that ends a tick, and its publications are visible at once, so a preview needs no stepping (decision 0025, principle 8).
 
 Resolved entries are derived, and stepped entries are state. If a source has stepped entries, a sample uses them instead of its resolved ones (first-field-and-flow's layer rule).
+
+A ground field holds one entry for each entity at a ground position, instead of entries at places. Systems set and drop entries while stepping, and an entry stays until it changes. A consumer samples it within a radius of a ground point and gets the entries there in key order. When an entity is gone, its entry goes too. believable-guests' guest presence is the first ground field.
 
 A flow is integer units of a named kind. Units are created at an endpoint, moved as packets between endpoints, held in endpoint stocks, and consumed. Creating and consuming are the only ways a unit enters or leaves a kind. A conversion, such as supplies into meals, is recorded as both.
 
@@ -110,7 +112,7 @@ The slice's medium map in plans/slices/boxes-and-tubes/SLICE.md names each of th
   - packets go back to their sender;
   - units with neither endpoint left are consumed as undeliverable;
   - a removed endpoint's stock goes to the entities its units are addressed to, or is consumed as discarded.
-- Principle 4 is kept by sampling only at network places. Distances between places are measured only along the network, by navigable-networks. The medium's straight-line measures are the nearest-point queries, carry-over's check that a snapped place lies on a place's old ground, and the direction query. The first two are used only to snap a ground position onto the network, and the direction query only to scale a direction to unit length.
+- Principle 4 is kept by measuring every distance between places along the network, by navigable-networks. The medium's straight-line measures are the nearest-point queries, carry-over's check that a snapped place lies on a place's old ground, the direction query, and a ground field's sampling radius. The first two are used only to snap a ground position onto the network, the direction query only to scale a direction to unit length, and the radius only to find the entities near a point. None of them measures how far anything travels.
 
 ## Dependencies
 

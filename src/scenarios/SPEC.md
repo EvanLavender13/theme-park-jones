@@ -22,7 +22,7 @@ registeredScenarios lists the synthetic scenarios. Each is named and seeded, and
 - sim math
 - entity creation and destruction
 - derived entities
-- the medium's fields and flows
+- the medium's fields, ground fields, and flows
 - random park edits, with the guests and shops they affect
 - a food shop whose supply is cut and restored
 

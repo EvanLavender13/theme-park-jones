@@ -5,11 +5,13 @@
 #include "sim/entity_key.h"
 #include "sim/medium/field.h"
 #include "sim/medium/flow.h"
+#include "sim/medium/ground_field.h"
 #include "sim/medium/network.h"
 #include "sim/mix.h"
 #include "sim/schema.h"
 #include "sim/world.h"
 
+#include <bit>
 #include <cmath>
 #include <memory>
 #include <span>
@@ -83,6 +85,9 @@ constexpr uint64_t SHIP_PURPOSE = hashName("stalls-ship");
 constexpr uint64_t CHOOSE_PURPOSE = hashName("stalls-choose");
 constexpr uint64_t SPAWN_PURPOSE = hashName("stalls-spawn");
 constexpr uint32_t RETIREMENT_AGE = 240;
+// How far a visitor looks for other visitors when it chooses a stall. A sample this wide covers at
+// most 4 cells, fewer than the visitors present from tick 1 on, so it reads through the cell order.
+constexpr double VISITOR_REACH = 2.0;
 constexpr uint64_t SPAWN_INTERVAL = 20;
 constexpr uint32_t SERVICE_DELAY = 3;
 
@@ -202,17 +207,26 @@ void stepStalls(World &world) {
   }
 }
 
-// Each visitor adds to the crowd where it stands, finishes a visit that came back, and otherwise,
-// on its turn, sends a visit to a stall it draws, weighted by the offers there.
+// Each visitor adds to the crowd where it stands, and marks where it stands in visitor presence,
+// dropping its mark in its last tick if its key is even. It finishes a visit that came back, and
+// otherwise, on its turn, sends a visit to a stall it draws, weighted by the offers there. The draw
+// also depends on the visitors near it.
 void stepVisitors(World &world) {
   const Network *network = trackNetwork(world);
   if (network == nullptr) {
     return;
   }
   const std::vector<EntityKey> stalls = keysWith<Stall>(world);
+  std::vector<GroundSample<double>> nearby;
   for (const EntityKey key : keysWith<Visitor>(world)) {
     Visitor visitor = world.Registry.get<Visitor>(world.findEntity(key));
     visitor.Age += 1;
+    const GroundPoint standing{.X = visitor.Distance, .Z = 0.0};
+    if (visitor.Age >= RETIREMENT_AGE && static_cast<uint64_t>(key) % 2 == 0) {
+      dropGroundEntry<VisitorPresence>(world, key);
+    } else {
+      setGroundEntry<VisitorPresence>(world, key, standing, visitor.Distance);
+    }
     publishStepped<Crowd>(world, key, {{.At = trackPlace(world, visitor.Distance), .Value = 1.0}});
     const int64_t returned = unitsHeld<Visits>(world, key, key);
     if (returned > 0) {
@@ -229,8 +243,17 @@ void stepVisitors(World &world) {
         }
         weights.push_back(weight);
       }
-      const EntityKey stall = stalls[drawPick(drawKey(world, key, CHOOSE_PURPOSE, 0),
-                                              std::span<const double>(weights))];
+      sampleGroundField<VisitorPresence>(world, standing, VISITOR_REACH, nearby);
+      Hasher neighbours;
+      for (const GroundSample<double> &sample : nearby) {
+        if (sample.Key != key) {
+          neighbours.add(static_cast<uint64_t>(sample.Key));
+          neighbours.add(std::bit_cast<uint64_t>(sample.Value));
+        }
+      }
+      const EntityKey stall =
+          stalls[drawPick(drawKey(world, key, CHOOSE_PURPOSE, neighbours.value()),
+                          std::span<const double>(weights))];
       createUnits<Visits>(world, key, key, 1);
       sendUnits<Visits>(world, key, stall, key, 1,
                         travelDelay(visitor.Distance, stallDistance(world, stall)));
@@ -269,6 +292,7 @@ Scenario stallsScenario() {
         schema->addComponent<Visitor>("visitor", DataKind::State);
         addField<StallOffer>(*schema);
         addField<Crowd>(*schema);
+        addGroundField<VisitorPresence>(*schema);
         addFlow<Goods>(*schema);
         addFlow<Visits>(*schema);
         schema->addResolver("track-network", resolveTrack);

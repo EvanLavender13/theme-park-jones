@@ -49,7 +49,7 @@ A tooling view in ImGui draws the derived graphs over the park, with their nodes
 
 ## Medium
 
-- Networks: this capability produces the park's guest and backstage graphs in shared-medium's network type, including the nodes anchored to box entities. believable-guests moves guests along the guest graph. plausible-operations finds the anchored nodes of its shops and depots. Every field is sampled at places on these networks.
+- Networks: this capability produces the park's guest and backstage graphs in shared-medium's network type, including the nodes anchored to box entities. believable-guests moves guests along the guest graph. plausible-operations finds the anchored nodes of its shops and depots. Every field on a network is sampled at places on these networks.
 - Route distance: an entry field this capability produces. It has one entry for each source at each place, and each entry holds the distance and the next edge. Three capabilities sample it:
   - believable-guests, to choose (decision 0019) and to move;
   - plausible-operations, for a shop's supply route length, for whether the shop is supplied, and for the delay it gives supply packets;
