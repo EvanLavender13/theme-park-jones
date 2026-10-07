@@ -104,6 +104,8 @@ This is the smallest version in which the park's layout visibly matters to someo
 
 1. `hungry-guests`: arrivals, stays, and hunger from keyed draws. At junctions, guests choose by softmax among food offers, carrying on, and heading home, with a commitment bonus. They move by next edges and wander by keyed draws. They queue through guest visits, eat meals, and leave. The milestone also adds the rules for stranded guests, hungry footfall, inspection records that explain choices, and guests drawn as simple shapes. Guests are the first holders of places. navigable-networks' paths-become-routes handed this milestone the design of how the previous networks stay available until guests carry their places over. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value, shared-medium's first-field-and-flow, navigable-networks' paths-become-routes, and plausible-operations' supplied-food-shop.
 
+2. `spread-guests`: each guest walks at its own speed and is drawn on its own line across the path, keeping to a side by the way it walks, moving smoothly through corners and junctions, and moving toward its next turn. Guests walk through shaping points without choosing. Member of the good-paths slice. Depends on: hungry-guests, shared-medium's carrier-widths, and navigable-networks' wide-routes.
+
 Later milestones come from the deepening candidates once the slice has been played.
 
 ## Deepening candidates
