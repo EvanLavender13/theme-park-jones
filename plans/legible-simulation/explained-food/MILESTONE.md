@@ -69,7 +69,6 @@ Unordered pool this milestone draws later features from.
 - The ghost's own contribution marked in the preview's hover, so the player sees which term the edit adds or removes.
 - Hovering an option in the guest inspector's choice table highlights that shop and the route the guest would take to it.
 - The camera following an inspected guest.
-- Shading exact at every ground point near a line's own bends, where the far side of the bend can show through. Gated on: the approximation being visible in captures.
 
 ## Open questions
 
