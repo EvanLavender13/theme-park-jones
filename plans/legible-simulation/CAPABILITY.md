@@ -24,7 +24,7 @@ Each shop's term is its attributed contribution. At every sampled place, the ter
 
 A library computes availability and its attribution. It reads the simulation's fields and has no rendering, so integration tests can use it headless. It doesn't write to the world, and it isn't part of the simulation's state, hash, or saves.
 
-The food-availability overlay shades the ground within a fixed band of a guest path. Each spot takes the value at the nearest path place. Beyond the band, there is no shading. The color ramp is perceptually uniform and colorblind-safe, and zero is clearly distinct from the rest. The app's --overlay food option turns the overlay on from the start, for scripted captures.
+The food-availability overlay shades the paving of guest paths across its whole width. Each spot of a path's paving takes the value at the place on that path's line nearest the spot. Junction paving takes it from the nearest of its paths, and where paving of unjoined paths overlaps, the nearest line's value shows. The ground beside paths, door walkways, and backstage paths are not shaded. The color ramp is perceptually uniform and colorblind-safe. Zero is clearly distinct from the rest of the ramp and from unshaded paving. The app's --overlay food option turns the overlay on from the start, for scripted captures.
 
 When the player hovers over a shaded spot, the game lists each contributing shop with:
 
@@ -77,7 +77,7 @@ This capability produces nothing that the simulation uses. It samples and reads:
 - Food offer from plausible-operations, route distance from navigable-networks, and hungry footfall from believable-guests. It reads all three through shared-medium's field interface, in committed or candidate worlds.
 - Candidate worlds from deterministic-simulation. navigable-networks and plausible-operations resolve them from the tentative intent that effortless-building's ghost supplies (decision 0025). This capability doesn't call another capability's derivation directly.
 - Inspection records from believable-guests and plausible-operations (decision 0025). The guests' records include each guest's ground position, for picking.
-- Park intent from effortless-building. It uses guest paths to place the overlay's band, and box kinds and poses to pick shops and find depots. It also reads the tentative edits, placements and deletions, that previews resolve.
+- Park intent from effortless-building. It uses the paved surface of guest paths to place the overlay, and box kinds and poses to pick shops and find depots. It also reads the tentative edits, placements and deletions, that previews resolve.
 - Networks from navigable-networks, through shared-medium's Network queries, to find path places, anchors, and connectors.
 
 Food availability is a scalar field that this capability computes for display, from the fields above. If a park entity ever needs it, move it into the medium. deterministic-simulation's walk will then cover it.
@@ -87,7 +87,7 @@ Food availability is a scalar field that this capability computes for display, f
 - Principle 8 is this capability's reason to exist. The hover shows that attribution rebuilds each value exactly. The world checks confirm that a candidate equals the world that commits the same commands, so previews equal the committed result.
 - Principle 10 is at risk if tooling feeds back into the simulation. The library only reads. Previews run on copies, so they leave the committed world's hash unchanged.
 - Principle 6 is at risk if inspectors read components directly. They read only inspection records and fields.
-- Principle 4 holds because availability is measured along routes. Shading near a path takes the path's value, so it never implies straight-line access.
+- Principle 4 holds because availability is measured along routes. Shading on a path takes the value at a place on that path's line, so it never implies straight-line access.
 - Principle 1: overlays, previews, and inspectors are derived, and they aren't saved.
 
 ## Dependencies
@@ -112,7 +112,8 @@ It is useful for development too. Every other capability's behavior becomes obse
 
 ## Milestones
 
-1. `explained-food`: the food-availability library with exact attribution, and the banded overlay with hover attribution and the --overlay option. Previews of placements and deletions run on candidate worlds rebuilt each tick, and a shop ghost shows its context. Guests and shops get inspectors. Member of the boxes-and-tubes slice. Depends on: every other member milestone of the slice.
+1. `explained-food`: the food-availability library with exact attribution, and the food overlay with hover attribution and the --overlay option. Previews of placements and deletions run on candidate worlds rebuilt each tick, and a shop ghost shows its context. Guests and shops get inspectors. Member of the boxes-and-tubes slice. Depends on: every other member milestone of the slice.
+2. `wide-overlay`: the food overlay shades the guest paving itself, across every width, with the hover over the shaded paving. Member of the good-paths slice. Depends on: navigable-networks' wide-routes.
 
 Later milestones are drawn from the deepening candidates once the slice has been played.
 

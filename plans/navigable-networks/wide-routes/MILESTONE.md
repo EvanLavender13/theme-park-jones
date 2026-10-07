@@ -6,7 +6,7 @@ Status: complete
 
 ## Summary
 
-wide-routes builds the guest and backstage networks from the points and segments the player drew. A network's nodes come only from points and from the two ends of each connector, so paths join on the network exactly where they join on the paving. Segments of one kind that cross or overlap without sharing a point stay apart, as their edge lines show. Each segment's carrier takes the segment's own width. A door connects when it lies within reach of a segment's edge, not its center line, so the shops along main-street.park's 10 m street finally connect to guests. It is the slice's third member. path-network has published segments with their points and widths, and carrier-widths has given every carrier a width. wide-overlay and spread-guests read the widths and nodes this milestone derives.
+wide-routes builds the guest and backstage networks from the points and segments the player drew. A network's nodes come only from points and from the two ends of each connector, so paths join on the network exactly where they join on the paving. Segments of one kind that cross or overlap without sharing a point stay apart, as their edge lines show. Each segment's carrier takes the segment's own width. A door connects when it lies within reach of a segment's edge, not its center line, so the shops along main-street.park's 10 m street finally connect to guests. It is the slice's third member. path-network has published segments with their points and widths, and carrier-widths has given every carrier a width. spread-guests reads the widths and nodes this milestone derives.
 
 ## Acceptance criteria
 
@@ -24,7 +24,7 @@ Simulation output changes on purpose. A door that was out of reach can now conne
 
 The milestone adds no fields or flows. It changes what the networks hold.
 
-- Networks: point-nodes takes nodes from points and widths from segments, and edge-reach changes which doors connect. routes produces them in shared-medium's network type. Consumers: believable-guests' spread-guests walks guests through nodes and draws them across each carrier's width, and legible-simulation's wide-overlay sizes the overlay by width. plausible-operations and every field read the networks unchanged.
+- Networks: point-nodes takes nodes from points and widths from segments, and edge-reach changes which doors connect. routes produces them in shared-medium's network type. Consumers: believable-guests' spread-guests walks guests through nodes and draws them across each carrier's width. plausible-operations and every field read the networks unchanged.
 - Park intent (decision 0025): routes reads segments with their point keys and widths through parkSegments, doors through parkEntrances, parkBoxes, and footprintOf, and the drawn paving that reach is measured to through parkSurface and pieceDistance. It no longer reads where lines meet.
 - Route distance: unchanged in kind. It is measured along segment center lines, the arcs of their rounded corners, and connectors.
 
