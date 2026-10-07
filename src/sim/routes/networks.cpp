@@ -192,8 +192,9 @@ struct Connection {
   double PathDistance = 0.0;
 };
 
-// The connectors of the doors whose nearest point on the path carriers lies within reach, each
-// the given width. The carriers are in key order.
+// The connectors of the doors, each the given width. A door connects to the path carrier whose
+// edge, half its width out from its line, lies nearest, when that edge lies within reach. The
+// carriers are in key order, so the lower key wins a tie.
 std::vector<Connection> findConnections(const std::vector<Carrier> &carriers,
                                         const std::vector<ParkDoor> &doors, double width) {
   std::vector<Connection> connections;
@@ -202,18 +203,28 @@ std::vector<Connection> findConnections(const std::vector<Carrier> &carriers,
   }
   const Network lines = linesOnly(carriers);
   for (const ParkDoor &door : doors) {
-    const std::optional<Place> place = lines.nearestPlace(GroundPoint{door.At.X, door.At.Z});
-    if (!place) {
-      continue;
+    const GroundPoint at{door.At.X, door.At.Z};
+    std::optional<Place> place;
+    GroundPoint point;
+    double reach = 0.0;
+    double edge = 0.0;
+    for (const Carrier &carrier : carriers) {
+      const std::optional<Place> on = lines.nearestPlaceOn(carrier.Key, at);
+      const std::optional<GroundPoint> ground = on ? lines.groundPoint(*on) : std::nullopt;
+      if (!ground) {
+        continue;
+      }
+      const double dx = ground->X - at.X;
+      const double dz = ground->Z - at.Z;
+      const double distance = std::sqrt((dx * dx) + (dz * dz));
+      if (!place || distance - (0.5 * carrier.Width) < edge) {
+        place = on;
+        point = *ground;
+        reach = distance;
+        edge = distance - (0.5 * carrier.Width);
+      }
     }
-    const std::optional<GroundPoint> point = lines.groundPoint(*place);
-    if (!point) {
-      continue;
-    }
-    const double dx = point->X - door.At.X;
-    const double dz = point->Z - door.At.Z;
-    const double reach = std::sqrt((dx * dx) + (dz * dz));
-    if (reach > CONNECTION_REACH || !(reach > JUNCTION_TOLERANCE)) {
+    if (!place || edge > CONNECTION_REACH || !(reach > JUNCTION_TOLERANCE)) {
       continue;
     }
     // A path keyed like the connector, which only a hand-written save holds, keeps carrier keys
@@ -227,7 +238,7 @@ std::vector<Connection> findConnections(const std::vector<Carrier> &carriers,
         {.Connector = {.Key = key,
                        .Width = width,
                        .Points = {{.X = door.At.X, .Z = door.At.Z, .Distance = 0.0},
-                                  {.X = point->X, .Z = point->Z, .Distance = reach}},
+                                  {.X = point.X, .Z = point.Z, .Distance = reach}},
                        .Stops = {}},
          .Entity = door.Entity,
          .Path = static_cast<size_t>(path - carriers.begin()),

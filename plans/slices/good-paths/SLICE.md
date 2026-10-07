@@ -86,7 +86,7 @@ Simulation output changes on purpose, because route lengths change from today's 
 
 ## Open questions
 
-- Door reach: navigable-networks/wide-routes sets it while planning and adjusts it on main-street.park. path-network's Tuning section settles effortless-building's values.
+None.
 
 ## Research notes
 

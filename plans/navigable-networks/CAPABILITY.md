@@ -21,7 +21,7 @@ Resolving path intent derives one graph for each network kind: guest and backsta
 
 Each edge's length is measured along the path's ground line. The game draws that line, and checks it when it refuses a path. Paths of different kinds never connect, even where they cross.
 
-Each kind of box connects to a network from the face that serves that network kind. It connects to the nearest point of a path of that kind, within a short fixed reach:
+Each kind of box connects to a network from the face that serves that network kind. It connects to the path of that kind whose edge is nearest, within a short fixed reach of that edge, at the nearest point of the path's center line:
 
 - a shop's front connects to a guest path, and its back connects to a backstage path;
 - a depot's front connects to a backstage path;
@@ -58,7 +58,7 @@ A tooling view in ImGui draws the derived graphs over the park, with their nodes
 
 ## Principles
 
-- Principle 4 is this capability's reason to exist. Distances are measured only along graph edges. The one straight-line measure is a connection's fixed reach, from a box face to the nearest path point. Check that every other distance follows the network by playing and with the graph tooling view.
+- Principle 4 is this capability's reason to exist. Distances are measured only along graph edges. The one straight-line measure is a connection's fixed reach, from a door to the nearest path edge. Check that every other distance follows the network by playing and with the graph tooling view.
 - Principle 1 and decision 0007 are at risk if the derived networks depend on edit history. The park world checks guard them, because a saved world must load back and resolve equal, and a loaded world keeps none of its edit history.
 - Principle 10 is at risk from tie-breaking and from floating-point lengths and meetings. The tie rules are fixed. Lengths and meetings use basic operations under the simulation's flags. The cross-build script covers both.
 - Principle 2 is at risk when a box or path is removed. Unconnected boxes and unreachable places are ordinary states. They have no entries, and nothing crashes.

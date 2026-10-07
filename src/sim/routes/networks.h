@@ -17,8 +17,8 @@ class WorldSchema;
 // Connectors that meet a carrier this close to each other, or to its end, stop there at one node.
 inline constexpr double JUNCTION_TOLERANCE = 0.001;
 
-// A door farther than this from every path of its kind has no connector.
-inline constexpr double CONNECTION_REACH = 4.0;
+// A door farther than this from the edge of every segment of its kind has no connector.
+inline constexpr double CONNECTION_REACH = 3.0;
 
 inline constexpr uint64_t NETWORK_PURPOSE = hashName("network");
 
