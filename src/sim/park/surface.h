@@ -48,6 +48,26 @@ std::span<const ParkPoint> edgePoints(const PavedSurface &surface, const EdgeLin
 // The park's paved surface. A segment with an empty ground line adds nothing.
 PavedSurface parkSurface(const World &world);
 
+// A strip of paving from a door to a segment, joined to it: its kind, the segment it joins, the
+// door, the unit direction out of the door's face, where it meets the segment's ground line, and
+// its width.
+struct Walkway {
+  PathKind Kind = PathKind::Guest;
+  EntityKey Joins = NULL_KEY;
+  ParkPoint Door;
+  ParkPoint Out;
+  ParkPoint Meets;
+  double Width = 0.0;
+
+  bool operator==(const Walkway &) const = default;
+};
+
+// How far a walkway's far end lies past the place it meets its segment, in meters.
+inline constexpr double WALKWAY_OVERLAP = 0.01;
+
+// The park's paved surface with the walkways added, each joined to its segment.
+PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways);
+
 // An edge of the paving at a path point, where its outline turns from one segment's left side, seen
 // walking away from the point, to the right side of the next segment counter-clockwise: the point,
 // that segment, the unit direction along each of the two away from the point, that segment's

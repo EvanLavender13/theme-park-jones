@@ -1109,6 +1109,49 @@ std::vector<EntityKey> pointsNear(const PathLayout &layout, const PathGround &gr
   return points;
 }
 
+// A walkway's door end leans along its door's face only while its line leaves the face at least
+// this steeply, as the cosine between them.
+constexpr double LEAST_WALKWAY_LEAN = 0.1;
+
+// Adds the walkway's piece and its edge lines along both sides and across its far end, owned by the
+// segment it joins. Nothing when that segment has no ground line, its width is not above 0, or its
+// door and the place it meets lie closer together than MIN_SEGMENT_LENGTH.
+void addWalkway(PavedSurface &surface, const PathGround &ground, const Walkway &walkway) {
+  const bool joins = std::ranges::any_of(ground.Segments, [&](const ParkSegment &segment) {
+    return segment.Key == walkway.Joins && segment.Kind == walkway.Kind && !segment.Line.empty();
+  });
+  const double length = lengthOf(walkway.Meets - walkway.Door);
+  if (!joins || !(walkway.Width > 0.0) || !(length >= MIN_SEGMENT_LENGTH)) {
+    return;
+  }
+  const ParkPoint along = (walkway.Meets - walkway.Door) * (1.0 / length);
+  const ParkPoint left = leftOf(along);
+  const double half = walkway.Width / 2.0;
+  const double lean = dot(along, walkway.Out);
+  // The door corner on the side s, on the face's line through the door when the walkway leans.
+  const auto doorCorner = [&](double s) {
+    const ParkPoint side = walkway.Door + left * (half * s);
+    double t = lean >= LEAST_WALKWAY_LEAN ? -half * s * dot(left, walkway.Out) / lean : 0.0;
+    if (!(std::abs(t) < length)) {
+      t = 0.0;
+    }
+    return side + along * t;
+  };
+  const ParkPoint end = walkway.Meets + along * WALKWAY_OVERLAP;
+  const ParkPoint right = doorCorner(-1.0);
+  const ParkPoint farRight = end - left * half;
+  const ParkPoint farLeft = end + left * half;
+  const ParkPoint leftDoor = doorCorner(1.0);
+  surface.Pieces.push_back(
+      SurfacePiece{walkway.Kind, walkway.Joins, {right, farRight, farLeft, leftDoor}, 4});
+  for (const auto &[from, to] :
+       {std::pair{right, farRight}, std::pair{farRight, farLeft}, std::pair{farLeft, leftDoor}}) {
+    surface.Edges.push_back(EdgeLine{walkway.Kind, walkway.Joins, surface.EdgePoints.size(), 2});
+    surface.EdgePoints.push_back(from);
+    surface.EdgePoints.push_back(to);
+  }
+}
+
 } // namespace
 
 std::span<const ParkPoint> pieceCorners(const SurfacePiece &piece) {
@@ -1170,6 +1213,21 @@ std::vector<EntityKey> pointsAffected(const PathLayout &layout, const PathGround
 PavedSurface parkSurface(const World &world) {
   const PathLayout layout = layoutOf(world);
   return surfaceOf(layout, groundOf(layout));
+}
+
+PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways) {
+  const PathLayout layout = layoutOf(world);
+  const PathGround ground = groundOf(layout);
+  PavedSurface surface = buildSurface(layout, ground, nullptr, true);
+  for (const Walkway &walkway : walkways) {
+    addWalkway(surface, ground, walkway);
+  }
+  std::ranges::stable_sort(surface.Pieces, {}, &SurfacePiece::Owner);
+  std::ranges::stable_sort(surface.Edges, {}, &EdgeLine::Owner);
+  const std::vector<SurfacePiece> pieces = surface.Pieces;
+  Joins joins(ground);
+  hideJoined(surface, pieces, joins);
+  return surface;
 }
 
 std::vector<ParkEdge> edgesOf(const PathLayout &layout, const PathGround &ground) {

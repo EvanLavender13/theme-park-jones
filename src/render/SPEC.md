@@ -7,7 +7,7 @@ Draws views of the park through SDL_GPU (decision 0009). It reads what it needs 
 render reads:
 
 - intent through sim/park's public queries and geometry
-- the networks through parkNetwork and the Network type's queries
+- the networks through parkNetwork, connectorWalkways, and the Network type's queries
 - guests through parkGuests and guestRecord
 - shops through shopRecord
 
@@ -36,7 +36,7 @@ Shaders are GLSL in shaders/. They are compiled to SPIR-V at build time and load
 
 ## The park
 
-buildParkMesh gives a world's park as the player sees it. Each entrance, path, and box is in its place, at its size and height. If a door has a connector, the door gets a walkway to the path it reaches, in its kind's width and color. Guest paths, backstage paths, shops, depots, and the entrance each have their own opaque color. Paths draw as the paved surface parkSurface gives: each piece filled in its kind's color, and a strip EDGE_LINE_WIDTH wide along each edge line, on the paving's side, in a darker shade of that color, above the fills. Where an edge line turns sharply, its strip has no gap. A walkway ends round where it meets its path. A walkway starts flush with its door's face. Each starved shop has a mark floating over its roof, in a color unlike any other in the scene.
+buildParkMesh gives a world's park as the player sees it. Each entrance, path, and box is in its place, at its size and height. If a door has a connector, its walkway is drawn as part of the paved surface, joined to the segment it reaches (connectorWalkways). Guest paths, backstage paths, shops, depots, and the entrance each have their own opaque color. Paths draw as the paved surface parkSurface gives: each piece filled in its kind's color, and a strip EDGE_LINE_WIDTH wide along each edge line, on the paving's side, in a darker shade of that color, above the fills. Where an edge line turns sharply, its strip has no gap. Each starved shop has a mark floating over its roof, in a color unlike any other in the scene.
 
 meshBounds gives the smallest rectangle on the ground that holds a mesh's vertices, or none for an empty mesh.
 
@@ -46,12 +46,12 @@ A ghost shows what an edit would do before it is committed. It is drawn by the s
 
 buildGhostMesh(world, edit, candidate) gives the edit's ghost:
 
-- for every edit but a DeleteSegment, every piece and edge line of the surface the edit adds or changes, as editedSurface gives them and drawn as the park draws them, and an added box or a moved box, translucent in its kind's color, or in an invalid tint when the world refuses the edit. If the world refuses an added path so that editedSurface gives none, the ghost shows the straight segments between its stops instead.
+- for every edit but a DeleteSegment, every piece and edge line of the surface the edit adds or changes, as editedSurface gives them and drawn as the park draws them, with the walkways of the segments they belong to joined as the park joins them when the world accepts the edit, and an added box or a moved box, translucent in its kind's color, or in an invalid tint when the world refuses the edit. If the world refuses an added path so that editedSurface gives none, the ghost shows the straight segments between its stops instead.
 - a mark at each stop where an added path joins a point or segment, at a moved point's target when it is a point or segment, at the place where an inserted point goes, and at each place pathCrossings gives, in JOIN_MARK_COLOR
 - the new sides of a segment whose width the edit sets, in JOIN_MARK_COLOR, so a narrowed segment shows inside the wider one beneath it
-- the box or segment an accepted delete would remove, or both segments at a point an accepted RemovePoint merges, in a delete tint, under the segments the edit reshapes. A DeleteSegment's ghost is this tint, in the invalid tint when the world refuses it, the paving of each segment whose ground line the delete changes, as editedSegments gives them, and the candidate's walkways and starved marks.
+- the box or segment an accepted delete would remove, or both segments at a point an accepted RemovePoint merges, in a delete tint, under the segments the edit reshapes. A DeleteSegment's ghost is this tint, in the invalid tint when the world refuses it, the paving of each segment whose ground line the delete changes, as editedSegments gives them, with its walkways joined as the park joins them when the world accepts the delete, and the candidate's walkways and starved marks.
 
-With the candidate world, the ghost also shows the candidate's walkways and starved marks. Where one of these lies on a committed one, it blends into it. Only the walkways the edit adds or moves, and the shops it would starve, stand out. When the delete tool hovers a backstage segment, the ghost marks each shop the deletion leaves with no depot. buildGhostMesh(world, edit) makes the candidate itself. If a caller already holds the candidate, the caller passes it instead.
+With the candidate world, the ghost also shows the candidate's walkways as strips over the paving, and its starved marks. Where one of these lies on a committed one, it blends into it. Only the walkways the edit adds or moves, and the shops it would starve, stand out. When the delete tool hovers a backstage segment, the ghost marks each shop the deletion leaves with no depot. buildGhostMesh(world, edit) makes the candidate itself. If a caller already holds the candidate, the caller passes it instead.
 
 appendPathStart shows where a path would start before its first click: a translucent disc of the path's width, with a join mark when the click would join a point or segment. appendFinishMark marks the stop where a click would finish the path, in FINISH_MARK_COLOR, wider than a join mark and under it. Ghost and highlighted segments lie GHOST_LIFT above the park's paths, so they never flicker against the paths beneath them. appendEntity adds the box, segment, or path point a key holds, in a given color such as HIGHLIGHT_TINT. A box is shaped as the park draws it, a segment as its own pieces of the surface, which are its body and its halves of the corners at its ends, and a path point is a flat disc of JOIN_MARK_RADIUS. It adds nothing when the key holds none of these.
 
