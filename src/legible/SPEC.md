@@ -26,7 +26,7 @@ views calls availability.h for availabilityValues and availabilityBends. The app
 
 An availability at a place is how well one need is served by the sources a guest standing there can reach. It is the sum, over the supplied sources the guest can reach, of each source's relief discounted by the time it would take to be served there, walking and waiting (decision 0020).
 
-An AvailabilityDefinition in availability.h says which need. It gives the offer its sources publish, the curve that discounts a relief by time, and Full, the value at which an overlay of it is fully saturated. Adding an availability for another need, such as thirst, takes a new definition and no new code.
+An AvailabilityDefinition in availability.h says which need. It gives the offer its sources publish, the curve that discounts a relief by time, and Half, the value an overlay of it shades halfway up its ramp. Adding an availability for another need, such as thirst, takes a new definition and no new code.
 
 availabilityAt(world, definition, place) gives the value and each source's contribution: its relief, route distance, wait, effective time, and term. The terms add up to the value exactly, so the value is attributed to its sources (principle 8). Sources' offers are found the same way guests find them.
 
@@ -36,7 +36,7 @@ availabilityBends(world, definition) gives the places along each guest segment's
 
 Distance is measured along the paths, so if a source is across a fence, its distance is the length of its route (principle 4). Every reachable supplied source contributes, however far. Its term only falls as its effective time grows (principle 5). If a place can reach no supplied source, or is not on the guest network, its value is 0.
 
-Food availability is FOOD_AVAILABILITY, in food.h. Its sources are shops' food offers. Its Full is a meal's relief with no walk and no wait, so a color means the same availability in every park. foodAvailability(world, place) gives it at a place.
+Food availability is FOOD_AVAILABILITY, in food.h. Its sources are shops' food offers. Its Half is a meal's relief with no walk and no wait, so a color means the same availability in every park. foodAvailability(world, place) gives it at a place.
 
 ## Previews
 

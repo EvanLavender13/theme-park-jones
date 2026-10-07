@@ -50,7 +50,7 @@ struct Renderer {
   uint32_t OverlayIndexCount = 0;
   SDL_GPUBuffer *OverlayShape = nullptr;
   SDL_GPUBuffer *OverlayShades = nullptr;
-  float OverlayFull = 1.0f;
+  float OverlayHalf = 1.0f;
   SDL_GPUTexture *ColorTarget = nullptr;
   SDL_GPUTexture *DepthTarget = nullptr;
   int DepthFormat = 0;

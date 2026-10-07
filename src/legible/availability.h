@@ -25,12 +25,12 @@ using OfferAtNode = std::optional<OfferEntry> (*)(const World &world, const Netw
                                                   uint32_t node, EntityKey source);
 
 // What an availability measures: the offer it reads, the curve that discounts a relief by the
-// effective time in seconds, at least one point ascending in X, and the positive availability at
-// which an overlay of it is fully saturated.
+// effective time in seconds, at least one point ascending in X, and the positive availability that
+// an overlay of it shades halfway up its ramp.
 struct AvailabilityDefinition {
   OfferAtNode Offer = nullptr;
   std::span<const CurvePoint> Curve;
-  double Full = 1.0;
+  double Half = 1.0;
 };
 
 // One source's part of an availability at a place: its offer's relief, its route distance in

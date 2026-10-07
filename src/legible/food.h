@@ -18,7 +18,7 @@ inline constexpr std::array<CurvePoint, 4> FOOD_DISCOUNT_CURVE{
     {{0.0, 1.0}, {60.0, 0.5}, {120.0, 0.2}, {240.0, 0.0}}};
 
 // Food availability: shops' food offers, discounted by FOOD_DISCOUNT_CURVE, with an overlay of it
-// fully saturated at a meal's relief with no walk and no wait.
+// halfway up its ramp at a meal's relief with no walk and no wait.
 extern const AvailabilityDefinition FOOD_AVAILABILITY;
 
 // One shop's part of the food availability at a place, and the food availability at a place.

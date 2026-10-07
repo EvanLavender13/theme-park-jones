@@ -21,7 +21,7 @@ layout(std430, set = 2, binding = 1) readonly buffer Shades {
 layout(std140, set = 3, binding = 0) uniform Ramp {
     vec4 colors[5];
     vec4 zero;
-    vec4 full;
+    vec4 middle;
 } ramp;
 
 const vec3 SKY = vec3(0.62, 0.76, 0.90);
@@ -125,7 +125,8 @@ vec3 rampColor(float value) {
     if (!(value > 0.0)) {
         return ramp.zero.rgb;
     }
-    float scaled = min(value / ramp.full.x, 1.0) * 4.0;
+    // A value v shades v / (v + middle) of the way up the ramp, so no value clips at the top.
+    float scaled = value / (value + ramp.middle.x) * 4.0;
     uint index = min(uint(scaled), 3u);
     return mix(ramp.colors[index].rgb, ramp.colors[index + 1u].rgb, scaled - float(index));
 }

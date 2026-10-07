@@ -8,7 +8,7 @@
 namespace tpj {
 
 const AvailabilityDefinition FOOD_AVAILABILITY{&sourceEntryAtNode<FoodOffer>, FOOD_DISCOUNT_CURVE,
-                                               0.5};
+                                               MEAL_RELIEF};
 
 FoodAvailability foodAvailability(const World &world, const Place &place) {
   return availabilityAt(world, FOOD_AVAILABILITY, place);

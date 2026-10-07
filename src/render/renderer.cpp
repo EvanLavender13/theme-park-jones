@@ -29,11 +29,11 @@ struct CameraUniforms {
 };
 
 // Matches the std140 `Ramp` block in overlay.frag: the ramp's colors, the color for none, and the
-// value the ramp reaches its top at, in Full's first float.
+// value that shades halfway up the ramp, in Middle's first float.
 struct RampUniforms {
   Rgba Colors[OVERLAY_RAMP.size()];
   Rgba Zero;
-  float Full[4];
+  float Middle[4];
 };
 
 void logError(const char *what) {
@@ -615,7 +615,7 @@ bool setOverlayShape(Renderer &renderer, const OverlayShape &shape) {
 bool setOverlayShades(Renderer &renderer, const OverlayShades &shades) {
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayShades);
   renderer.OverlayShades = nullptr;
-  renderer.OverlayFull = static_cast<float>(shades.Full);
+  renderer.OverlayHalf = static_cast<float>(shades.Half);
   return uploadStorage(renderer.Device, shadeWords(shades), renderer.OverlayShades);
 }
 
@@ -679,7 +679,7 @@ void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const C
     ramp.Colors[i] = OVERLAY_RAMP[i];
   }
   ramp.Zero = OVERLAY_ZERO_COLOR;
-  ramp.Full[0] = renderer.OverlayFull;
+  ramp.Middle[0] = renderer.OverlayHalf;
   SDL_PushGPUFragmentUniformData(commands, 0, &ramp, sizeof(ramp));
 
   SDL_GPUColorTargetInfo colorTarget = {};

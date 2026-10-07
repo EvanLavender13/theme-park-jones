@@ -8,4 +8,4 @@ The library tpj_views links tpj_render and tpj_legible. Like render, it builds o
 
 ## Availability overlays
 
-availabilityShades(world, shape, definition) gives render's shades of an overlay shape: the definition's availability at each of availabilityBends' places, saturating at its Full. The app shades its food overlay with FOOD_AVAILABILITY. tpj_bench times the same call, so what is timed is what is shown. For another need, the shades come from the same call with that need's definition.
+availabilityShades(world, shape, definition) gives render's shades of an overlay shape: the definition's availability at each of availabilityBends' places, halfway up the ramp at its Half. The app shades its food overlay with FOOD_AVAILABILITY. tpj_bench times the same call, so what is timed is what is shown. For another need, the shades come from the same call with that need's definition.

@@ -81,18 +81,18 @@ struct OverlayKnot {
 };
 
 // The values the overlay blends between: where each of the shape's lines' knots begin, with one
-// more entry where the last line's end, the knots, and the value at which the ramp reaches its
-// top.
+// more entry where the last line's end, the knots, and the value that shades halfway up the
+// ramp.
 struct OverlayShades {
   std::vector<uint32_t> FirstKnots;
   std::vector<OverlayKnot> Knots;
-  double Full = 1.0;
+  double Half = 1.0;
 };
 
 // The shades of the values at the places: for each line of the shape, the places on it in
 // ascending distance, with their values. Places on no line of the shape are left out.
 OverlayShades shadeOverlay(const OverlayShape &shape, std::span<const Place> places,
-                           std::span<const double> values, double full);
+                           std::span<const double> values, double half);
 
 } // namespace tpj
 

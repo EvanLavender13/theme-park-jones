@@ -279,9 +279,9 @@ std::optional<Place> overlayPlace(const OverlayShape &shape, GroundPoint point) 
 }
 
 OverlayShades shadeOverlay(const OverlayShape &shape, std::span<const Place> places,
-                           std::span<const double> values, double full) {
+                           std::span<const double> values, double half) {
   OverlayShades shades;
-  shades.Full = full;
+  shades.Half = half;
   shades.FirstKnots.assign(shape.Lines.size() + 1, 0);
   // Each place's line, or NO_LINE when it is on none of the shape's.
   constexpr uint32_t NO_LINE = UINT32_MAX;
