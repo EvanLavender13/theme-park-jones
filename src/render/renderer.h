@@ -3,6 +3,7 @@
 
 #include "render/math.h"
 #include "render/park_mesh.h"
+#include "render/paving_overlay.h"
 
 #include <stdint.h>
 
@@ -32,9 +33,6 @@ struct Renderer {
   SDL_GPUBuffer *TerrainVertices = nullptr;
   SDL_GPUBuffer *TerrainIndices = nullptr;
   uint32_t TerrainIndexCount = 0;
-  SDL_GPUBuffer *OverlayVertices = nullptr;
-  SDL_GPUBuffer *OverlayIndices = nullptr;
-  uint32_t OverlayIndexCount = 0;
   SDL_GPUGraphicsPipeline *ParkPipeline = nullptr;
   SDL_GPUBuffer *ParkVertices = nullptr;
   SDL_GPUBuffer *ParkIndices = nullptr;
@@ -46,6 +44,13 @@ struct Renderer {
   SDL_GPUBuffer *GhostVertices = nullptr;
   SDL_GPUBuffer *GhostIndices = nullptr;
   uint32_t GhostIndexCount = 0;
+  SDL_GPUGraphicsPipeline *OverlayPipeline = nullptr;
+  SDL_GPUBuffer *OverlayVertices = nullptr;
+  SDL_GPUBuffer *OverlayIndices = nullptr;
+  uint32_t OverlayIndexCount = 0;
+  SDL_GPUBuffer *OverlayShape = nullptr;
+  SDL_GPUBuffer *OverlayShades = nullptr;
+  float OverlayFull = 1.0f;
   SDL_GPUTexture *ColorTarget = nullptr;
   SDL_GPUTexture *DepthTarget = nullptr;
   int DepthFormat = 0;
@@ -64,10 +69,13 @@ void destroyRenderer(Renderer &renderer);
 // nothing. Returns false and logs through SDL on failure.
 bool setParkMesh(Renderer &renderer, const ParkMesh &mesh);
 
-// Uploads the food overlay's mesh drawn from now on, replacing the one before, drawn opaque over
-// the terrain and under the park. An empty mesh draws nothing. Returns false and logs through SDL
-// on failure.
-bool setOverlayMesh(Renderer &renderer, const ParkMesh &mesh);
+// Uploads the paving overlay's shape drawn from now on, replacing the one before, drawn opaque over
+// the guest paving and under its edge lines. An empty shape draws nothing. Returns false and logs
+// through SDL on failure.
+bool setOverlayShape(Renderer &renderer, const OverlayShape &shape);
+// Uploads the shades the overlay's shape is colored by from now on, replacing the ones before. They
+// must be the shades of the shape last set. Returns false and logs through SDL on failure.
+bool setOverlayShades(Renderer &renderer, const OverlayShades &shades);
 
 // Uploads the translucent mesh of ghosts and highlights drawn from now on, replacing the one
 // before. An empty mesh draws nothing. Returns false and logs through SDL on failure.

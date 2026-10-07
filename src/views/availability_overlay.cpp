@@ -1,19 +1,14 @@
 #include "views/availability_overlay.h"
 
-#include "render/band_overlay.h"
-
-#include <span>
 #include <vector>
 
 namespace tpj {
 
-ParkMesh buildAvailabilityOverlay(const World &world, const AvailabilityDefinition &definition) {
-  return buildBandOverlay(
-      world,
-      [&world, &definition](std::span<const Place> places) {
-        return availabilityValues(world, definition, places);
-      },
-      definition.Full);
+OverlayShades availabilityShades(const World &world, const OverlayShape &shape,
+                                 const AvailabilityDefinition &definition) {
+  const std::vector<Place> bends = availabilityBends(world, definition);
+  const std::vector<double> values = availabilityValues(world, definition, bends);
+  return shadeOverlay(shape, bends, values, definition.Full);
 }
 
 } // namespace tpj

@@ -25,6 +25,10 @@ CursorRay cursorRay(const CameraView &view, float aspect, float ndcX, float ndcY
 // ground. None when the eye is not above the ground or the ray does not descend.
 std::optional<ParkPoint> groundAtCursor(const CameraView &view, float aspect, float ndcX,
                                         float ndcY);
+// The point at the height above the ground under a cursor at normalized device coordinates, where
+// its ray meets that level. None when the eye is not above that level or the ray does not descend.
+std::optional<ParkPoint> pointAtCursor(const CameraView &view, float aspect, float ndcX, float ndcY,
+                                       float height);
 
 // Where the ray first meets the upright box appendBox draws for the pose, size, and height: the
 // least ray parameter at least 0 inside it, edges included. None when the ray misses it or the

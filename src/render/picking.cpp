@@ -41,11 +41,16 @@ CursorRay cursorRay(const CameraView &view, float aspect, float ndcX, float ndcY
 
 std::optional<ParkPoint> groundAtCursor(const CameraView &view, float aspect, float ndcX,
                                         float ndcY) {
+  return pointAtCursor(view, aspect, ndcX, ndcY, 0.0f);
+}
+
+std::optional<ParkPoint> pointAtCursor(const CameraView &view, float aspect, float ndcX, float ndcY,
+                                       float height) {
   const CursorRay ray = cursorRay(view, aspect, ndcX, ndcY);
-  if (ray.Origin.Y <= 0.0f || ray.Direction.Y >= 0.0f) {
+  if (ray.Origin.Y <= height || ray.Direction.Y >= 0.0f) {
     return std::nullopt;
   }
-  const float t = -ray.Origin.Y / ray.Direction.Y;
+  const float t = (height - ray.Origin.Y) / ray.Direction.Y;
   return ParkPoint{ray.Origin.X + ray.Direction.X * t, ray.Origin.Z + ray.Direction.Z * t};
 }
 

@@ -11,7 +11,7 @@ render reads:
 - guests through parkGuests and guestRecord
 - shops through shopRecord
 
-It depends on no module but sim and core. The band overlay shades by values it is given, and views supplies them.
+It depends on no module but sim and core. The paving overlay shades by values it is given, and views supplies them.
 
 The app calls these headers:
 
@@ -19,8 +19,10 @@ The app calls these headers:
 - park_mesh.h for buildParkMesh, buildGhostMesh, appendEntity, appendHandle, appendSides, meshBounds, HIGHLIGHT_TINT, HANDLE_COLOR, EDGE_HANDLE_COLOR, and TAPER_HANDLE_COLOR
 - guest_mesh.h for buildGuestMesh and appendGuestEntity
 - graph_overlay.h for buildGraphOverlay, graphColor, and the GRAPH_ drawing constants
-- band_overlay.h for OVERLAY_BAND, the reach of the food tooltip
-- picking.h for groundAtCursor and entityAtCursor
+- paving_overlay.h for buildOverlayShape, overlayPlace, and OVERLAY_HEIGHT
+- picking.h for groundAtCursor, pointAtCursor, and entityAtCursor
+
+views calls paving_overlay.h for shadeOverlay.
 
 ## The renderer
 
@@ -28,9 +30,9 @@ createRenderer claims the window and sets up the GPU device and Dear ImGui's SDL
 
 World space is right-handed and in meters, with +Y up. The terrain is a flat square of a size given at creation, centered on the origin, with 1 m and 10 m grid lines that fade with distance.
 
-Each of setParkMesh, setGuestMesh, setOverlayMesh, and setGhostMesh replaces the mesh set by its previous call. If a mesh is empty, nothing is drawn for it.
+Each of setParkMesh, setGuestMesh, and setGhostMesh replaces the mesh set by its previous call, and setOverlayShape and setOverlayShades replace the paving overlay's shape and shades. If a mesh or the overlay's shape is empty, nothing is drawn for it.
 
-drawFrame draws one CameraView. It draws the terrain, then the food overlay, then the park mesh, then guests, all lit and depth tested. Then it draws ghosts and highlights translucent over them. Paths, boxes, and guests draw over the overlay where they lie above it. Paths never flicker through the terrain, and guest paths never flicker through backstage paths where they cross. A ghost never hides what lies behind it. If a highlight lies exactly on a box or ribbon, it still shows. When ImGui's draw data is given, it draws over the scene. If the window is minimized, drawFrame skips the frame, and that counts as success. With a capture path, drawFrame saves the frame, UI included, as a BMP before it returns.
+drawFrame draws one CameraView. It draws the terrain, then the park mesh, then the paving overlay, then guests, all lit and depth tested. Then it draws ghosts and highlights translucent over them. The overlay draws over the guest paving and under its edge lines, and boxes and guests draw over it. Paths never flicker through the terrain, and guest paths never flicker through backstage paths where they cross. A ghost never hides what lies behind it. If a highlight lies exactly on a box or ribbon, it still shows. When ImGui's draw data is given, it draws over the scene. If the window is minimized, drawFrame skips the frame, and that counts as success. With a capture path, drawFrame saves the frame, UI included, as a BMP before it returns.
 
 Shaders are GLSL in shaders/. They are compiled to SPIR-V at build time and loaded from shaders/ next to the executable.
 
@@ -61,15 +63,21 @@ appendHandle adds a radius, edge, or taper handle as a flat disc of RADIUS_HANDL
 
 buildGuestMesh draws each guest that has a position as an upright box where it stands. The box is shaded from blue when the guest is sated to pink when it is hungry. appendGuestEntity adds one guest's box, where buildGuestMesh draws it, in a given color. It adds nothing when the guest has no position.
 
-## Band overlay
+## Paving overlay
 
-buildBandOverlay(world, values, full) draws a band along each guest path. Each place on the band is shaded by the value that values gives for it. The shading runs from gray for none, through a perceptually uniform, colorblind-safe ramp from dark purple to yellow, and reaches yellow at full. It calls values once per build, with every place it shades, so whatever computes the values sees the whole build at once.
+buildOverlayShape(world) gives the guest paving's overlay shape: each piece of the paved surface that belongs to a guest segment or to a point where guest segments meet, without door walkways, the lines of the guest segments, and which pieces of different owners overlap. It depends only on the park's path points and segments, so it changes only when they do.
 
-For the same `full`, a color means the same value in every park. The ramp keeps every positive value distinguishable from none. The band covers the ground within OVERLAY_BAND of each guest path. It lies over the terrain and under every path. Each band sits slightly higher near its own path, so where bands overlap, the nearest path's value is on top. Connectors and backstage paths have no band.
+Each spot of the shape has an overlay place, which overlayPlace(shape, point) gives, or none when the shape holds no piece there. A spot of a segment's paving takes the place on that segment's line nearest it. A spot of a point's paving takes the nearest place on the lines of the guest segments at that point. Where paving of several owners holds a spot, the nearest of their places wins, and ties go to the lower segment key.
+
+shadeOverlay(shape, places, values, full) gives the shades: for each of the shape's lines, the values at the given places on it, in ascending distance. Between two consecutive places on a line, a value blends linearly. The renderer colors each pixel of the shape by the value at its overlay place: a near white for none, and above none a perceptually uniform, colorblind-safe ramp from dark purple to yellow, reaching yellow at full. For the same `full`, a color means the same value in every park. The ramp keeps every positive value distinguishable from none, and none is distinguishable from both kinds of paving. The renderer finds each pixel's place in single precision, so a pixel within a millimeter of a tie between two lines may take either, and a pixel on the outline of an overlap may take the other piece's place.
+
+The shading lies OVERLAY_HEIGHT above the ground: over the guest paving and under its edge lines, ghosts, boxes, and guests. The ground beside paths, door walkways, and backstage paths are not shaded.
 
 ## Picking
 
 groundAtCursor gives the point on the ground under a cursor for a camera view. It gives none when the eye is not above the ground or the ray does not descend. The ray through the cursor matches drawFrame's projection, so the point picked is the point drawn under the cursor.
+
+pointAtCursor gives the point at a height above the ground under a cursor, where its ray meets that level. It gives none when the eye is not above that level or the ray does not descend. groundAtCursor is pointAtCursor at height 0.
 
 entityAtCursor gives the key of the nearest entrance, box, or guest that the cursor's ray meets, or none. It uses the shapes the park and guest meshes draw. Paths, walkways, and starved marks do not stop the ray, so a click meets what stands on the ground.
 

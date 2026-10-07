@@ -3,6 +3,7 @@
 
 #include "legible/inspect.h"
 #include "legible/preview.h"
+#include "render/paving_overlay.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/world.h"
@@ -56,6 +57,11 @@ public:
   // first call, when the preview was just made again, or when the look differs from the last
   // call's. Remembers the look.
   bool syncLook(bool remade, const PreviewLook &look);
+  // Keeps the food overlay's shape for the previewed world: while shown, built again when the
+  // world's path points or segments differ from those it was last built from, and while not
+  // shown, empty. Returns whether the shape changed.
+  bool syncOverlayShape(const World &previewed, bool shown);
+  [[nodiscard]] const OverlayShape &overlayShape() const { return Shape; }
 
 private:
   // The intent a park mesh was built from.
@@ -73,6 +79,15 @@ private:
   std::optional<uint64_t> GuestTick;
   KeptPreview Kept;
   std::optional<PreviewLook> Look;
+  // The path points and segments the overlay's shape was built from, while it is shown.
+  struct ShapedPaths {
+    std::vector<ParkPathPoint> Points;
+    std::vector<ParkSegment> Segments;
+
+    bool operator==(const ShapedPaths &) const = default;
+  };
+  std::optional<ShapedPaths> Shaped;
+  OverlayShape Shape;
 };
 
 } // namespace tpj

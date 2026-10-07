@@ -11,6 +11,7 @@ WorldMeshes SceneSync::syncWorld(const World &world, uint64_t generation) {
     Intent.reset();
     GuestTick.reset();
     Kept = {};
+    Shaped.reset();
     meshes.FrameCamera = true;
   }
   DrawnIntent current{parkEntrances(world), parkPathPoints(world), parkSegments(world),
@@ -35,6 +36,24 @@ bool SceneSync::syncLook(bool remade, const PreviewLook &look) {
     return false;
   }
   Look = look;
+  return true;
+}
+
+bool SceneSync::syncOverlayShape(const World &previewed, bool shown) {
+  if (!shown) {
+    Shaped.reset();
+    if (Shape.Pieces.empty()) {
+      return false;
+    }
+    Shape = {};
+    return true;
+  }
+  ShapedPaths current{parkPathPoints(previewed), parkSegments(previewed)};
+  if (Shaped == current) {
+    return false;
+  }
+  Shaped = std::move(current);
+  Shape = buildOverlayShape(previewed);
   return true;
 }
 

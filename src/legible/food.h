@@ -2,7 +2,6 @@
 #define TPJ_LEGIBLE_FOOD_H
 
 #include "legible/availability.h"
-#include "legible/path_place.h"
 #include "sim/guests/guests.h"
 #include "sim/medium/network.h"
 
@@ -30,10 +29,6 @@ using FoodAvailability = Availability;
 // says meals are supplied contributes its relief discounted by its effective time, and the value
 // is their terms added in order. Changes nothing.
 FoodAvailability foodAvailability(const World &world, const Place &place);
-
-// The food availability at the guest path place nearest the point, when the point lies within the
-// reach of it, and none otherwise.
-std::optional<FoodAvailability> foodNear(const World &world, GroundPoint point, double reach);
 
 } // namespace tpj
 

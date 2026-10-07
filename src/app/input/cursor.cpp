@@ -23,6 +23,14 @@ std::optional<ParkPoint> groundUnderCursor(const std::optional<CursorNdc> &curso
   return groundAtCursor(view, cursor->Aspect, cursor->X, cursor->Y);
 }
 
+std::optional<ParkPoint> pointUnderCursor(const std::optional<CursorNdc> &cursor,
+                                          const CameraView &view, float height) {
+  if (!cursor) {
+    return std::nullopt;
+  }
+  return pointAtCursor(view, cursor->Aspect, cursor->X, cursor->Y, height);
+}
+
 std::optional<double> groundPerPixel(const std::optional<CursorNdc> &cursor,
                                      const CameraView &view) {
   if (!cursor) {

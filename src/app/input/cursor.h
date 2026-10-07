@@ -29,6 +29,10 @@ std::optional<CursorNdc> cursorNdc(int width, int height, float x, float y);
 // The ground under the cursor, as groundAtCursor gives it for the view, or none without a cursor.
 std::optional<ParkPoint> groundUnderCursor(const std::optional<CursorNdc> &cursor,
                                            const CameraView &view);
+// The point at the height under the cursor, as pointAtCursor gives it for the view, or none without
+// a cursor.
+std::optional<ParkPoint> pointUnderCursor(const std::optional<CursorNdc> &cursor,
+                                          const CameraView &view, float height);
 // How many meters of ground one window pixel spans at the cursor: the mean of the distances from
 // the ground under it to the ground one pixel to its right and one pixel above it, or the one of
 // those that exists. None without a cursor, or when there is no ground under it or beside it.

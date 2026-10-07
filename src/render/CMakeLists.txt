@@ -1,7 +1,7 @@
 # Rendering through SDL_GPU. Shaders are GLSL compiled to SPIR-V at build time, so SDL_GPU
 # selects its Vulkan backend on every platform (decision 0009).
 add_library(tpj_render STATIC
-    band_overlay.cpp
+    paving_overlay.cpp
     graph_overlay.cpp
     guest_mesh.cpp
     math.cpp
@@ -13,6 +13,8 @@ target_link_libraries(tpj_render PUBLIC tpj_core tpj_sim SDL3::SDL3 tpj_imgui)
 tpj_configure_target(tpj_render)
 
 set(TPJ_SHADER_SOURCES
+    overlay.vert
+    overlay.frag
     park.vert
     park.frag
     terrain.vert

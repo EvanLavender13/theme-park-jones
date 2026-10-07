@@ -6,6 +6,7 @@
 #include <imgui.h>
 #include <imgui_impl_sdlgpu3.h>
 
+#include <bit>
 #include <stddef.h>
 #include <vector>
 
@@ -27,12 +28,20 @@ struct CameraUniforms {
   float Eye[4];
 };
 
+// Matches the std140 `Ramp` block in overlay.frag: the ramp's colors, the color for none, and the
+// value the ramp reaches its top at, in Full's first float.
+struct RampUniforms {
+  Rgba Colors[OVERLAY_RAMP.size()];
+  Rgba Zero;
+  float Full[4];
+};
+
 void logError(const char *what) {
   SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s: %s", what, SDL_GetError());
 }
 
 SDL_GPUShader *loadShader(SDL_GPUDevice *device, const char *fileName, SDL_GPUShaderStage stage,
-                          uint32_t uniformBufferCount) {
+                          uint32_t uniformBufferCount, uint32_t storageBufferCount) {
   char path[1024];
   SDL_snprintf(path, sizeof(path), "%sshaders/%s", SDL_GetBasePath(), fileName);
   size_t size = 0;
@@ -49,6 +58,7 @@ SDL_GPUShader *loadShader(SDL_GPUDevice *device, const char *fileName, SDL_GPUSh
   info.format = SDL_GPU_SHADERFORMAT_SPIRV;
   info.stage = stage;
   info.num_uniform_buffers = uniformBufferCount;
+  info.num_storage_buffers = storageBufferCount;
   SDL_GPUShader *shader = SDL_CreateGPUShader(device, &info);
   SDL_free(code);
   if (shader == nullptr) {
@@ -70,16 +80,24 @@ SDL_GPUTextureFormat chooseDepthFormat(SDL_GPUDevice *device) {
   return SDL_GPU_TEXTUREFORMAT_D16_UNORM;
 }
 
+// The buffers a fragment shader reads: its uniform buffers and its storage buffers.
+struct FragmentBuffers {
+  uint32_t Uniforms = 0;
+  uint32_t Storage = 0;
+};
+
 // A lit, depth-tested pipeline with back faces culled. Depth is reversed: nearer is greater. A
 // translucent one blends by alpha, passes equal depths, and writes no depth.
 SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *vertexFile,
                                         const char *fragmentFile,
                                         const SDL_GPUVertexAttribute *attributes,
-                                        uint32_t attributeCount, uint32_t pitch, bool translucent) {
+                                        uint32_t attributeCount, uint32_t pitch, bool translucent,
+                                        FragmentBuffers fragmentBuffers) {
   SDL_GPUShader *vertexShader =
-      loadShader(renderer.Device, vertexFile, SDL_GPU_SHADERSTAGE_VERTEX, 1);
+      loadShader(renderer.Device, vertexFile, SDL_GPU_SHADERSTAGE_VERTEX, 1, 0);
   SDL_GPUShader *fragmentShader =
-      loadShader(renderer.Device, fragmentFile, SDL_GPU_SHADERSTAGE_FRAGMENT, 0);
+      loadShader(renderer.Device, fragmentFile, SDL_GPU_SHADERSTAGE_FRAGMENT,
+                 fragmentBuffers.Uniforms, fragmentBuffers.Storage);
   if (vertexShader == nullptr || fragmentShader == nullptr) {
     SDL_ReleaseGPUShader(renderer.Device, vertexShader);
     SDL_ReleaseGPUShader(renderer.Device, fragmentShader);
@@ -144,7 +162,7 @@ bool createTerrainPipeline(Renderer &renderer) {
   attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
   attributes[1].offset = offsetof(TerrainVertex, Normal);
   renderer.TerrainPipeline = createPipeline(renderer, "terrain.vert.spv", "terrain.frag.spv",
-                                            attributes, 2, sizeof(TerrainVertex), false);
+                                            attributes, 2, sizeof(TerrainVertex), false, {});
   return renderer.TerrainPipeline != nullptr;
 }
 
@@ -166,10 +184,26 @@ bool createParkPipeline(Renderer &renderer) {
   attributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
   attributes[2].offset = offsetof(ParkVertex, Color);
   renderer.ParkPipeline = createPipeline(renderer, "park.vert.spv", "park.frag.spv", attributes, 3,
-                                         sizeof(ParkVertex), false);
+                                         sizeof(ParkVertex), false, {});
   renderer.GhostPipeline = createPipeline(renderer, "park.vert.spv", "park.frag.spv", attributes, 3,
-                                          sizeof(ParkVertex), true);
+                                          sizeof(ParkVertex), true, {});
   return renderer.ParkPipeline != nullptr && renderer.GhostPipeline != nullptr;
+}
+
+bool createOverlayPipeline(Renderer &renderer) {
+  SDL_GPUVertexAttribute attributes[2] = {};
+  attributes[0].location = 0;
+  attributes[0].buffer_slot = 0;
+  attributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+  attributes[0].offset = offsetof(OverlayVertex, Position);
+  attributes[1].location = 1;
+  attributes[1].buffer_slot = 0;
+  attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UINT;
+  attributes[1].offset = offsetof(OverlayVertex, Piece);
+  renderer.OverlayPipeline =
+      createPipeline(renderer, "overlay.vert.spv", "overlay.frag.spv", attributes, 2,
+                     sizeof(OverlayVertex), false, FragmentBuffers{1, 2});
+  return renderer.OverlayPipeline != nullptr;
 }
 
 constexpr uint32_t TERRAIN_VERTICES_PER_SIDE = TERRAIN_CELLS_PER_SIDE + 1;
@@ -274,6 +308,94 @@ bool uploadMesh(SDL_GPUDevice *device, const void *vertices, uint32_t vertexByte
     logError("Cannot submit mesh upload");
   }
   return submitted;
+}
+
+// Creates a storage buffer the graphics shaders read and uploads the words into it.
+bool uploadStorage(SDL_GPUDevice *device, const std::vector<uint32_t> &words,
+                   SDL_GPUBuffer *&buffer) {
+  const auto bytes = static_cast<uint32_t>(words.size() * sizeof(uint32_t));
+  buffer = createBuffer(device, SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, bytes);
+  SDL_GPUTransferBufferCreateInfo transferInfo = {};
+  transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+  transferInfo.size = bytes;
+  SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
+  if (buffer == nullptr || transfer == nullptr) {
+    logError("Cannot create storage buffer");
+    SDL_ReleaseGPUTransferBuffer(device, transfer);
+    return false;
+  }
+  void *mapped = SDL_MapGPUTransferBuffer(device, transfer, false);
+  if (mapped == nullptr) {
+    logError("Cannot map storage transfer buffer");
+    SDL_ReleaseGPUTransferBuffer(device, transfer);
+    return false;
+  }
+  SDL_memcpy(mapped, words.data(), bytes);
+  SDL_UnmapGPUTransferBuffer(device, transfer);
+  SDL_GPUCommandBuffer *commands = SDL_AcquireGPUCommandBuffer(device);
+  if (commands == nullptr) {
+    logError("Cannot acquire command buffer");
+    SDL_ReleaseGPUTransferBuffer(device, transfer);
+    return false;
+  }
+  SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(commands);
+  SDL_GPUTransferBufferLocation source = {};
+  source.transfer_buffer = transfer;
+  SDL_GPUBufferRegion destination = {};
+  destination.buffer = buffer;
+  destination.size = bytes;
+  SDL_UploadToGPUBuffer(copy, &source, &destination, false);
+  SDL_EndGPUCopyPass(copy);
+  const bool submitted = SDL_SubmitGPUCommandBuffer(commands);
+  SDL_ReleaseGPUTransferBuffer(device, transfer);
+  if (!submitted) {
+    logError("Cannot submit storage upload");
+  }
+  return submitted;
+}
+
+uint32_t wordOf(double value) { return std::bit_cast<uint32_t>(static_cast<float>(value)); }
+
+// The shape as overlay.frag reads it: five offsets, to the pieces, the line references, the
+// lines, the points, and the overlaps, then each of them in turn.
+std::vector<uint32_t> shapeWords(const OverlayShape &shape) {
+  std::vector<uint32_t> words(5, 0);
+  words[0] = static_cast<uint32_t>(words.size());
+  for (const OverlayPiece &piece : shape.Pieces) {
+    for (const ParkPoint &corner : piece.Corners) {
+      words.push_back(wordOf(corner.X));
+      words.push_back(wordOf(corner.Z));
+    }
+    words.insert(words.end(), {piece.Count, piece.FirstLine, piece.LineCount, piece.FirstOverlap,
+                               piece.OverlapCount});
+  }
+  words[1] = static_cast<uint32_t>(words.size());
+  words.insert(words.end(), shape.LineRefs.begin(), shape.LineRefs.end());
+  words[2] = static_cast<uint32_t>(words.size());
+  for (const OverlayLine &line : shape.Lines) {
+    words.insert(words.end(), {line.FirstPoint, line.PointCount});
+  }
+  words[3] = static_cast<uint32_t>(words.size());
+  for (const CarrierPoint &point : shape.Points) {
+    words.insert(words.end(), {wordOf(point.X), wordOf(point.Z), wordOf(point.Distance)});
+  }
+  words[4] = static_cast<uint32_t>(words.size());
+  words.insert(words.end(), shape.Overlaps.begin(), shape.Overlaps.end());
+  return words;
+}
+
+// The shades as overlay.frag reads them: the offset to the knots, where each line's knots begin
+// and where the last ends, then each knot's distance and value.
+std::vector<uint32_t> shadeWords(const OverlayShades &shades) {
+  std::vector<uint32_t> words;
+  words.reserve(1 + shades.FirstKnots.size() + 2 * shades.Knots.size());
+  words.push_back(static_cast<uint32_t>(1 + shades.FirstKnots.size()));
+  words.insert(words.end(), shades.FirstKnots.begin(), shades.FirstKnots.end());
+  for (const OverlayKnot &knot : shades.Knots) {
+    words.push_back(wordOf(knot.Distance));
+    words.push_back(wordOf(knot.Value));
+  }
+  return words;
 }
 
 bool createTerrainMesh(Renderer &renderer, float terrainSize) {
@@ -388,7 +510,7 @@ bool createRenderer(Renderer &renderer, SDL_Window *window, float terrainSize) {
   }
   renderer.DepthFormat = chooseDepthFormat(renderer.Device);
   if (!createTerrainPipeline(renderer) || !createParkPipeline(renderer) ||
-      !createTerrainMesh(renderer, terrainSize)) {
+      !createOverlayPipeline(renderer) || !createTerrainMesh(renderer, terrainSize)) {
     return false;
   }
 
@@ -418,6 +540,9 @@ void destroyRenderer(Renderer &renderer) {
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.TerrainPipeline);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayVertices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayIndices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayShape);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayShades);
+  SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.OverlayPipeline);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkVertices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkIndices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.GuestVertices);
@@ -464,9 +589,34 @@ bool setParkMesh(Renderer &renderer, const ParkMesh &mesh) {
                      renderer.ParkIndexCount);
 }
 
-bool setOverlayMesh(Renderer &renderer, const ParkMesh &mesh) {
-  return replaceMesh(renderer, mesh, renderer.OverlayVertices, renderer.OverlayIndices,
-                     renderer.OverlayIndexCount);
+bool setOverlayShape(Renderer &renderer, const OverlayShape &shape) {
+  // SDL_GPU defers the release until the GPU no longer uses the buffers.
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayVertices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayIndices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayShape);
+  renderer.OverlayVertices = nullptr;
+  renderer.OverlayIndices = nullptr;
+  renderer.OverlayShape = nullptr;
+  renderer.OverlayIndexCount = 0;
+  if (shape.Indices.empty()) {
+    return true;
+  }
+  const auto vertexBytes = static_cast<uint32_t>(shape.Vertices.size() * sizeof(OverlayVertex));
+  const auto indexBytes = static_cast<uint32_t>(shape.Indices.size() * sizeof(uint32_t));
+  if (!uploadMesh(renderer.Device, shape.Vertices.data(), vertexBytes, shape.Indices.data(),
+                  indexBytes, renderer.OverlayVertices, renderer.OverlayIndices) ||
+      !uploadStorage(renderer.Device, shapeWords(shape), renderer.OverlayShape)) {
+    return false;
+  }
+  renderer.OverlayIndexCount = static_cast<uint32_t>(shape.Indices.size());
+  return true;
+}
+
+bool setOverlayShades(Renderer &renderer, const OverlayShades &shades) {
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayShades);
+  renderer.OverlayShades = nullptr;
+  renderer.OverlayFull = static_cast<float>(shades.Full);
+  return uploadStorage(renderer.Device, shadeWords(shades), renderer.OverlayShades);
 }
 
 bool setGhostMesh(Renderer &renderer, const ParkMesh &mesh) {
@@ -497,6 +647,22 @@ void drawMesh(SDL_GPURenderPass *pass, SDL_GPUGraphicsPipeline *pipeline, SDL_GP
   SDL_DrawGPUIndexedPrimitives(pass, indexCount, 1, 0, 0, 0);
 }
 
+// Draws the paving overlay's pieces, colored from its shape and shades, or nothing without them.
+void drawOverlay(SDL_GPURenderPass *pass, const Renderer &renderer) {
+  if (renderer.OverlayIndexCount == 0 || renderer.OverlayShape == nullptr ||
+      renderer.OverlayShades == nullptr) {
+    return;
+  }
+  SDL_GPUBuffer *storage[2] = {renderer.OverlayShape, renderer.OverlayShades};
+  SDL_BindGPUGraphicsPipeline(pass, renderer.OverlayPipeline);
+  SDL_BindGPUFragmentStorageBuffers(pass, 0, storage, 2);
+  const SDL_GPUBufferBinding vertexBinding = {renderer.OverlayVertices, 0};
+  SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
+  const SDL_GPUBufferBinding indexBinding = {renderer.OverlayIndices, 0};
+  SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+  SDL_DrawGPUIndexedPrimitives(pass, renderer.OverlayIndexCount, 1, 0, 0, 0);
+}
+
 void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const CameraView &camera) {
   const float aspect =
       static_cast<float>(renderer.TargetWidth) / static_cast<float>(renderer.TargetHeight);
@@ -508,6 +674,13 @@ void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const C
   uniforms.Eye[2] = camera.Eye.Z;
   uniforms.Eye[3] = 1.0f;
   SDL_PushGPUVertexUniformData(commands, 0, &uniforms, sizeof(uniforms));
+  RampUniforms ramp = {};
+  for (size_t i = 0; i < OVERLAY_RAMP.size(); ++i) {
+    ramp.Colors[i] = OVERLAY_RAMP[i];
+  }
+  ramp.Zero = OVERLAY_ZERO_COLOR;
+  ramp.Full[0] = renderer.OverlayFull;
+  SDL_PushGPUFragmentUniformData(commands, 0, &ramp, sizeof(ramp));
 
   SDL_GPUColorTargetInfo colorTarget = {};
   colorTarget.texture = renderer.ColorTarget;
@@ -534,13 +707,12 @@ void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const C
   SDL_DrawGPUIndexedPrimitives(pass, renderer.TerrainIndexCount, 1, 0, 0, 0);
 
   // The camera uniforms pushed before the pass serve these pipelines too. The overlay lies just
-  // over the terrain, and the park's paths, boxes, and guests over it. Guests are opaque boxes,
+  // over the guest paving and under its edge lines, boxes, and guests. Guests are opaque boxes,
   // drawn as the park's are. Ghosts and highlights come after everything opaque, so they blend over
   // it.
-  drawMesh(pass, renderer.ParkPipeline, renderer.OverlayVertices, renderer.OverlayIndices,
-           renderer.OverlayIndexCount);
   drawMesh(pass, renderer.ParkPipeline, renderer.ParkVertices, renderer.ParkIndices,
            renderer.ParkIndexCount);
+  drawOverlay(pass, renderer);
   drawMesh(pass, renderer.ParkPipeline, renderer.GuestVertices, renderer.GuestIndices,
            renderer.GuestIndexCount);
   drawMesh(pass, renderer.GhostPipeline, renderer.GhostVertices, renderer.GhostIndices,
