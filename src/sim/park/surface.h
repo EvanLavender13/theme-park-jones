@@ -44,12 +44,14 @@ struct PavedSurface {
 std::span<const ParkPoint> pieceCorners(const SurfacePiece &piece);
 // The positions the edge line of the surface runs through.
 std::span<const ParkPoint> edgePoints(const PavedSurface &surface, const EdgeLine &edge);
+// How far the point lies from the piece, in meters: 0 when it lies on the piece.
+double pieceDistance(const SurfacePiece &piece, ParkPoint point);
 
 // The park's paved surface. A segment with an empty ground line adds nothing.
 PavedSurface parkSurface(const World &world);
 
 // A strip of paving from a door to a segment, joined to it: its kind, the segment it joins, the
-// door, the unit direction out of the door's face, where it meets the segment's ground line, and
+// door, the unit direction out of the door's face, where it ends inside the segment's paving, and
 // its width.
 struct Walkway {
   PathKind Kind = PathKind::Guest;

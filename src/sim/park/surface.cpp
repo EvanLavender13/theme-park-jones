@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <initializer_list>
+#include <limits>
 #include <optional>
 #include <span>
 #include <stddef.h>
@@ -1160,6 +1161,31 @@ std::span<const ParkPoint> pieceCorners(const SurfacePiece &piece) {
 
 std::span<const ParkPoint> edgePoints(const PavedSurface &surface, const EdgeLine &edge) {
   return std::span(surface.EdgePoints).subspan(edge.First, edge.Count);
+}
+
+double pieceDistance(const SurfacePiece &piece, ParkPoint point) {
+  const std::span<const ParkPoint> corners = pieceCorners(piece);
+  if (corners.empty()) {
+    return std::numeric_limits<double>::infinity();
+  }
+  bool inside = true;
+  double nearest = std::numeric_limits<double>::infinity();
+  for (size_t i = 0; i < corners.size(); ++i) {
+    const ParkPoint from = corners[i];
+    const ParkPoint side = corners[(i + 1) % corners.size()] - from;
+    const double length = lengthOf(side);
+    if (length < SAME_POINT) {
+      nearest = std::min(nearest, lengthOf(point - from));
+      continue;
+    }
+    // The inside of a counter-clockwise piece lies to the left of each side.
+    if (dot(point - from, leftOf(side)) < 0.0) {
+      inside = false;
+    }
+    const double along = std::clamp(dot(point - from, side) / (length * length), 0.0, 1.0);
+    nearest = std::min(nearest, lengthOf(point - (from + side * along)));
+  }
+  return inside ? 0.0 : nearest;
 }
 
 PavedSurface surfaceOf(const PathLayout &layout, const PathGround &ground) {

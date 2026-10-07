@@ -21,7 +21,7 @@ Resolving path intent derives one graph for each network kind: guest and backsta
 
 Each edge's length is measured along the path's ground line. The game draws that line, and checks it when it refuses a path. Paths of different kinds never connect, even where they cross.
 
-Each kind of box connects to a network from the face that serves that network kind. It connects to the path of that kind whose edge is nearest, within a short fixed reach of that edge, at the nearest point of the path's center line:
+Each kind of box connects to a network from the face that serves that network kind. It connects to the path of that kind whose paving, as drawn, is nearest, within a short fixed reach of that paving, at the nearest point of the path's center line:
 
 - a shop's front connects to a guest path, and its back connects to a backstage path;
 - a depot's front connects to a backstage path;
