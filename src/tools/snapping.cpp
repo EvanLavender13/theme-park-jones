@@ -200,21 +200,50 @@ bool onPaving(const SnapScene &scene, ParkPoint place) {
   });
 }
 
+// Whether any segment at the point is left out.
+bool anyLeftOutAt(const SnapScene &scene, EntityKey point) {
+  for (size_t s = 0; s < scene.Segments.size(); ++s) {
+    if (scene.LeftOut[s] && uses(scene.Segments[s], point)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Where a path point is caught, and the stop it gives. If its corner is rounded and no segment at
+// it is left out, that is the middle of its arc, where the paving is. Otherwise it is the point.
+std::pair<ParkPoint, PathStop> pointTarget(const SnapScene &scene, const ParkPathPoint &point) {
+  if (const ParkCorner *corner = roundedAt(scene.Corners, point.Key)) {
+    const ParkPoint middle = bendPlace(*corner, 0.5);
+    if (distanceBetween(middle, point.At) > MIN_SEGMENT_LENGTH && !anyLeftOutAt(scene, point.Key)) {
+      return {middle, OnBend{point.Key, 0.5}};
+    }
+  }
+  return {point.At, OnPoint{point.Key}};
+}
+
 // The nearest point target within reach: a path point of the kind, a point a drawn stop makes
 // other than the last, or a door's target. An earlier one wins a tie.
 std::optional<Snap> pointSnap(const World &world, const SnapScene &scene) {
   const SnapQuery &query = scene.Query;
   std::optional<Snap> nearest;
-  // Only a point within the release reach can catch, so the costlier test of its kind waits.
+  // A rounded corner's arc lies between its point and its center, so a corner within the release
+  // reach of the pointer has its point within that reach plus the corner's depth. Only those pay
+  // for the costlier tests.
   for (const ParkPathPoint &point : scene.Points) {
-    const double distance = distanceBetween(query.Pointer, point.At);
-    if (point.Key != query.Dragged && distance <= query.ReleaseReach &&
-        isKindsPoint(scene.Segments, point.Key, query.Kind)) {
-      consider(scene, nearest,
-               makeSnap(OnPoint{point.Key}, distance, point.At,
-                        {{GuideKind::Point, point.At, point.At}},
-                        {{HoldKind::Point, point.Key, 0}}));
+    if (point.Key == query.Dragged) {
+      continue;
     }
+    const ParkCorner *corner = roundedAt(scene.Corners, point.Key);
+    const double depth = corner == nullptr ? 0.0 : distanceBetween(point.At, corner->Middle);
+    if (distanceBetween(query.Pointer, point.At) > query.ReleaseReach + depth ||
+        !isKindsPoint(scene.Segments, point.Key, query.Kind)) {
+      continue;
+    }
+    const auto [at, stop] = pointTarget(scene, point);
+    consider(scene, nearest,
+             makeSnap(stop, distanceBetween(query.Pointer, at), at, {{GuideKind::Point, at, at}},
+                      {{HoldKind::Point, point.Key, 0}}));
   }
   for (size_t i = 0; i + 1 < scene.Drawn.size(); ++i) {
     const PathStop &stop = query.Drawn[i];
