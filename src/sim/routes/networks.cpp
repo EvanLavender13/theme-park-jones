@@ -379,6 +379,51 @@ std::vector<ParkDoor> parkDoors(const World &world, PathKind kind) {
   return doorsServing(parkEntrances(world), parkBoxes(world), kind);
 }
 
+std::vector<Walkway> connectorWalkways(const World &world, PathKind kind) {
+  const Network &network = parkNetwork(world, kind);
+  const std::vector<ParkDoor> doors = parkDoors(world, kind);
+  // Only connectors' doors are anchored, so a carrier whose first stop is anchored is a connector.
+  const auto isConnector = [&network](const Carrier &carrier) {
+    return !carrier.Stops.empty() && network.nodeAnchor(carrier.Stops.front().Node) != NULL_KEY;
+  };
+  std::vector<Walkway> walkways;
+  for (const Carrier &carrier : network.carriers()) {
+    if (!isConnector(carrier)) {
+      continue;
+    }
+    const EntityKey entity = network.nodeAnchor(carrier.Stops.front().Node);
+    const Face face = carrier.Key == connectorKey(entity, Face::Front) ? Face::Front : Face::Back;
+    const auto door = std::ranges::find_if(doors, [&](const ParkDoor &candidate) {
+      return candidate.Entity == entity && candidate.Side == face;
+    });
+    if (door == doors.end()) {
+      continue;
+    }
+    // stopPlaces lists places in ascending carrier key, so this is the lowest-keyed segment there.
+    EntityKey segment = NULL_KEY;
+    for (const Place &place : network.stopPlaces(carrier.Stops.back().Node)) {
+      const auto other =
+          std::ranges::lower_bound(network.carriers(), place.Carrier, {}, &Carrier::Key);
+      if (place.Carrier != carrier.Key && other != network.carriers().end() &&
+          other->Key == place.Carrier && !isConnector(*other)) {
+        segment = place.Carrier;
+        break;
+      }
+    }
+    if (segment == NULL_KEY) {
+      continue;
+    }
+    const CarrierPoint &meets = carrier.Points.back();
+    walkways.push_back(Walkway{.Kind = kind,
+                               .Joins = segment,
+                               .Door = door->At,
+                               .Out = door->Out,
+                               .Meets = {meets.X, meets.Z},
+                               .Width = carrier.Width});
+  }
+  return walkways;
+}
+
 const Network &parkNetwork(const World &world, PathKind kind) {
   static const Network EMPTY;
   const entt::entity entity = world.findEntity(networkKey(kind));

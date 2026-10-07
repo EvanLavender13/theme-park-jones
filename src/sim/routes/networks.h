@@ -5,6 +5,7 @@
 #include "sim/medium/network.h"
 #include "sim/mix.h"
 #include "sim/park/intent.h"
+#include "sim/park/surface.h"
 
 #include <stdint.h>
 #include <vector>
@@ -51,6 +52,9 @@ struct ParkDoor {
 // The doors serving the kind: the entrances' first, then the boxes', each in key order of its
 // entity. An entity with no footprint has no door.
 std::vector<ParkDoor> parkDoors(const World &world, PathKind kind);
+
+// A walkway for each connector of the kind's network, in key order of the connector.
+std::vector<Walkway> connectorWalkways(const World &world, PathKind kind);
 
 // The kind's network as the last resolution derived it, or an empty network when the world holds
 // none, as before its first resolution.

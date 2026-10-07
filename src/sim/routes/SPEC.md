@@ -4,7 +4,7 @@ This module serves the navigable-networks capability (plans/navigable-networks).
 
 ## Boundary
 
-routes reads intent only through parkSegments, parkEntrances, parkBoxes, and footprintOf (sim/park/SPEC.md, decision 0025). It publishes networks in the medium's Network type and route distance in the medium's fields (sim/medium/SPEC.md). Other modules read both through parkNetwork, previousNetwork, the Network type's queries, sampleField, and routeEntryAt, and the doors connectors start from through parkDoors, not through how they were derived.
+routes reads intent only through parkSegments, parkEntrances, parkBoxes, and footprintOf (sim/park/SPEC.md, decision 0025). It publishes networks in the medium's Network type and route distance in the medium's fields (sim/medium/SPEC.md). Other modules read both through parkNetwork, previousNetwork, the Network type's queries, sampleField, and routeEntryAt, and the doors connectors start from through parkDoors, and their walkways through connectorWalkways, not through how they were derived.
 
 addRoutes registers the derived type PreviousNetwork, the resolver path-networks, and route distance's two fields and its resolver. makeParkSchema calls it after addParkEdits. addDropPreviousNetworks registers the finisher that removes the previous networks. addPark calls it after every finisher that reads them.
 
@@ -31,6 +31,8 @@ parkDoors gives the doors serving a kind: the entrances' first, then the boxes',
 A door's distance from a segment is its distance from the segment's ground line, less half the segment's width: how far it stands from the segment's edge. If a segment of the kind a door serves lies within CONNECTION_REACH of it, the door gets a connector to the nearest such segment, the lower key winning a tie. A connector is a short straight carrier keyed connectorKey(entity, face). It runs from the door to the nearest point on that segment's ground line, and stops that segment's carrier there at a node. If no segment of its kind is within reach, a door has no connector, and nothing else about its entity changes (principle 2). If a door is flush against a segment's edge, it still gets a connector. If it lies on the nearest segment's ground line, within JUNCTION_TOLERANCE, which only a hand-written save allows, it has no connector.
 
 Each connector's door end is a node of its own, anchored to the door's entity. These are the networks' only anchors. An entity finds where it meets a network through anchoredNodes. If an entity has no connector on a network, it is not on that network.
+
+connectorWalkways gives a walkway (sim/park/SPEC.md) for each connector of a kind's network, in key order of the connector. It runs from the connector's door, along the door's face, to where the connector meets its segment, with the connector's width, joined to that segment. If the connector meets the segment at a path point, it is joined to the lowest-keyed segment of the kind that ends there.
 
 ## Previous networks
 

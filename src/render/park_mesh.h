@@ -148,6 +148,9 @@ void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint
 // is anchored.
 void appendWalkways(ParkMesh &mesh, const World &world, float alpha);
 
+// Every door's walkway in the world, guest then backstage, as connectorWalkways gives them.
+std::vector<Walkway> parkWalkways(const World &world);
+
 // Adds an open-bottomed box of the height over the pose's footprint, or nothing when the pose has
 // no footprint.
 void appendBox(ParkMesh &mesh, const Pose &pose, FootprintSize size, float height, Rgba color);

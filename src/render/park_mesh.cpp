@@ -426,6 +426,14 @@ void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint
               0.5 * pathWidth(kind), pathLift(kind), color);
 }
 
+std::vector<Walkway> parkWalkways(const World &world) {
+  std::vector<Walkway> walkways = connectorWalkways(world, PathKind::Guest);
+  for (const Walkway &walkway : connectorWalkways(world, PathKind::Backstage)) {
+    walkways.push_back(walkway);
+  }
+  return walkways;
+}
+
 void appendWalkways(ParkMesh &mesh, const World &world, float alpha) {
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
     const Network &network = parkNetwork(world, kind);
@@ -473,8 +481,7 @@ ParkMesh buildParkMesh(const World &world) {
   for (const ParkEntrance &entrance : parkEntrances(world)) {
     appendBox(mesh, entrance.At, ENTRANCE_SIZE, ENTRANCE_HEIGHT, ENTRANCE_COLOR);
   }
-  appendSurface(mesh, parkSurface(world), 0.0f, pathColor);
-  appendWalkways(mesh, world, 1.0f);
+  appendSurface(mesh, parkSurface(world, parkWalkways(world)), 0.0f, pathColor);
   for (const ParkBox &box : parkBoxes(world)) {
     appendBox(mesh, box.At, boxSize(box.Kind), boxHeight(box.Kind), boxColor(box.Kind));
   }
@@ -524,28 +531,62 @@ void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color)
 
 namespace {
 
-// The pieces and edge lines of editedSurface that belong to the segments editedSegments gives.
-PavedSurface reshapedBy(const World &world, const ParkEdit &edit) {
-  const std::vector<ParkSegment> reshaped = editedSegments(world, edit);
-  const PavedSurface surface = editedSurface(world, edit);
-  const auto isReshaped = [&reshaped](EntityKey owner) {
-    return std::ranges::any_of(
-        reshaped, [owner](const ParkSegment &segment) { return segment.Key == owner; });
+// The pieces and edge lines of the surface whose owners are among the keys, which are sorted.
+PavedSurface ownedBy(const PavedSurface &surface, const std::vector<EntityKey> &owners) {
+  const auto owned = [&owners](EntityKey owner) {
+    return std::ranges::binary_search(owners, owner);
   };
   PavedSurface own;
   for (const SurfacePiece &piece : surface.Pieces) {
-    if (isReshaped(piece.Owner)) {
+    if (owned(piece.Owner)) {
       own.Pieces.push_back(piece);
     }
   }
   for (const EdgeLine &edge : surface.Edges) {
-    if (isReshaped(edge.Owner)) {
+    if (owned(edge.Owner)) {
       const std::span<const ParkPoint> points = edgePoints(surface, edge);
       own.Edges.push_back(EdgeLine{edge.Kind, edge.Owner, own.EdgePoints.size(), points.size()});
       own.EdgePoints.insert(own.EdgePoints.end(), points.begin(), points.end());
     }
   }
   return own;
+}
+
+// The surface's owners, sorted.
+std::vector<EntityKey> ownersOf(const PavedSurface &surface) {
+  std::vector<EntityKey> owners;
+  owners.reserve(surface.Pieces.size() + surface.Edges.size());
+  for (const SurfacePiece &piece : surface.Pieces) {
+    owners.push_back(piece.Owner);
+  }
+  for (const EdgeLine &edge : surface.Edges) {
+    owners.push_back(edge.Owner);
+  }
+  std::ranges::sort(owners);
+  const auto [first, last] = std::ranges::unique(owners);
+  owners.erase(first, last);
+  return owners;
+}
+
+// The pieces and edge lines the owners hold in the park's surface with its walkways, so a ghost's
+// walkways join their segments as the committed park's do.
+PavedSurface ownedWithWalkways(const World &world, const std::vector<EntityKey> &owners) {
+  return ownedBy(parkSurface(world, parkWalkways(world)), owners);
+}
+
+// The pieces and edge lines that belong to the segments editedSegments gives: from the candidate's
+// surface with its walkways when there is one, and from editedSurface otherwise.
+PavedSurface reshapedBy(const World &world, const ParkEdit &edit,
+                        const std::optional<World> &candidate) {
+  std::vector<EntityKey> reshaped;
+  for (const ParkSegment &segment : editedSegments(world, edit)) {
+    reshaped.push_back(segment.Key);
+  }
+  std::ranges::sort(reshaped);
+  if (candidate) {
+    return ownedWithWalkways(*candidate, reshaped);
+  }
+  return ownedBy(editedSurface(world, edit), reshaped);
 }
 
 } // namespace
@@ -568,7 +609,7 @@ ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
   if (const auto *del = std::get_if<DeleteSegment>(&edit)) {
     // A segment's deletion shows only what goes, and the segments whose line it reshapes.
     appendEntity(mesh, world, del->Segment, accepted ? DELETE_TINT : INVALID_TINT);
-    appendSurface(mesh, reshapedBy(world, edit), GHOST_LIFT,
+    appendSurface(mesh, reshapedBy(world, edit, candidate), GHOST_LIFT,
                   [accepted](PathKind kind) { return ghostColor(accepted, pathColor(kind)); });
     if (candidate) {
       appendWalkways(mesh, *candidate, GHOST_ALPHA);
@@ -579,9 +620,12 @@ ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
   if (accepted) {
     appendDeleted(mesh, world, edit);
   }
-  const PavedSurface surface = editedSurface(world, edit);
+  PavedSurface surface = editedSurface(world, edit);
   if (const auto *path = std::get_if<AddPath>(&edit); path != nullptr && surface.Pieces.empty()) {
     appendStraightPath(mesh, world, *path, ghostColor(accepted, pathColor(path->Kind)));
+  }
+  if (candidate && !surface.Pieces.empty()) {
+    surface = ownedWithWalkways(*candidate, ownersOf(surface));
   }
   appendSurface(mesh, surface, GHOST_LIFT,
                 [accepted](PathKind kind) { return ghostColor(accepted, pathColor(kind)); });
