@@ -1,37 +1,49 @@
 # Research: spread-guests
 
+The good-paths slice's RESEARCH.md covers why guests walk on the paving itself, how string-pulling along a network route works, and why guests sense one another through a ground field. This file covers what the milestone adds to that.
+
 ## What makes guests on a wide path look natural rather than formulaic?
 
 Real walkers differ in speed. Weidmann's review gives a mean free walking speed of 1.34 m/s, with most people between about 0.97 and 1.65 m/s, and later field data fit a normal distribution with a standard deviation of 0.26 to 0.37 m/s. When every guest walks at one speed, guests that arrive together keep their spacing for their whole stay and nobody overtakes, which reads as marching. Varying speed per guest is the cheapest fix with the largest effect.
 
 In two-way flow, walkers sort into lanes by direction, and in right-hand-traffic countries the lanes form on the right. A spread that ignores direction puts both directions everywhere and looks random. A spread biased to one side by the way each guest walks shows two streams on a wide street.
 
-Walkers keep clear of walls and edges, so a path's outer strip is used less than its middle. A per-guest line taken from a distribution that thins out toward the edges, such as the mean of two uniform draws, looks more natural than a flat one.
+Walkers keep clear of walls and edges, so a path's outer strip is used less than its middle. A per-guest share of the width taken from a distribution that thins out toward the edges, such as the mean of two uniform draws, looks more natural than a flat one.
 
-Walkers cut the inside of corners and cross a junction diagonally toward the way they leave it. A line kept parallel to the center line makes guests on the outside of a bend take the long way round and funnels everyone through the junction's middle, which looks like vehicles on lanes.
-
-A line that never changes looks ruled. A slow wander made from a few slow waves per guest, with unrelated frequencies and phases from its key, avoids both the ruled look and the visible in-step swaying of one wave.
-
-Rejected: one fixed sideways offset per guest with a single sine drift — lanes and swaying in step are both visible on a long street. Offsets spread evenly across the width — no streams by direction, and guests hug the edges as often as the middle. Speed varied only in drawing — the drawn guest would leave its simulated place behind.
+Rejected: one fixed sideways offset per guest beside the center line — it jumps where the line bends or the width changes, which the slice's research records. Shares spread evenly across the width — no streams by direction, and guests hug the edges as often as the middle. Speed varied only in drawing — the drawn guest would leave its simulated position behind.
 
 Sources: https://www.researchgate.net/publication/303264378_Free_speed_distributions_for_pedestrian_traffic — free speed distributions; https://www.researchgate.net/figure/The-walking-speed-of-pedestrians-is-distributed-normally-with-an-estimated-mean-of-134_fig4_286071735 — mean 1.34 m/s, normal; https://www.sciencedirect.com/science/article/abs/pii/S0378437119302596 — lane formation and overtaking in two-way flow; https://arxiv.org/pdf/1606.03434 — two-way lanes form on the right.
 
-## How can a guest's drawn position stay continuous through junctions, width changes, and turnarounds?
+## How does a guest walk a straight line across the paving's pieces and stay on it?
 
-A guest's simulated place is a carrier and a distance. Its drawn position is that place's ground point moved sideways. If the sideways move is worked out only from the guest's current state, it jumps wherever its inputs jump:
+Detour answers three questions with three queries over convex polygons. findNearestPoly finds the polygon under a point, or the nearest one, through a spatial lookup of polygon bounds. raycast walks a straight line from polygon to polygon: in each polygon it finds the edge the line leaves through, and if that edge is shared it carries on into the neighbour, and if not, the line has hit a wall. moveAlongSurface moves an agent toward a target and, if the target is off the mesh, stops it at the nearest point it can reach, so it slides along walls instead of leaving the mesh. All three cost work in proportion to the polygons the line or move crosses, a handful for a short step.
 
-- At a node where the path bends without a rounded corner, the direction of travel turns at once, so a sideways offset swings by its length times the turn.
-- Where the width changes at a node, an offset kept as a fraction of the half-width changes its length at once.
-- When a guest turns back at a dead end, its side by direction flips across the path.
+The guest paving is already convex pieces whose shared edges match exactly (the slice's research). A guest-owned walkable mesh can be built from them once per resolution, as derived data: pieces joined where an edge of one equals an edge of another, walkways joined to the paving they overlap, and a lookup by cell to find the piece under a point. A guest then aims with the raycast and steps with the constrained move. Pieces of segments that overlap without sharing a point are never joined, so a line on one path can't pass onto another that crosses over it.
 
-A blend over a short distance before and after each node would hide the first two, but it needs the edge the guest is about to take before the node and the edge it came from after it. A wandering guest picks its next edge only at the node and stores no previous edge. Storing that in the simulation would be state kept only for drawing.
+The mesh only works if joined paving really has no gaps. Any piece edge that is neither on the outline nor shared exactly with one other piece is a hole a guest can't cross. A check over every park in tests/parks and tests/parks/stress, run once while the mesh is built, shows whether such edges exist.
 
-The common game pattern separates the drawn position from the simulated one at the boundary between simulation and drawing. Logic uses the true position, and only what is drawn is smoothed. A follower does this here: the drawing keeps one drawn position per guest and moves it toward the guest's target position, its place's ground point plus its sideways line, by a fixed fraction per tick of simulated time. That covers every jump above with one mechanism. A turnaround becomes a short U-turn, and a follower naturally cuts the inside of corners. Its cost is a lag along the path of the speed times the time constant: about 0.65 m at 1.3 m/s with a 0.5 s constant. Stepping it by simulated ticks, not by frame time, keeps its shape the same at any frame rate, and a paused park holds still.
+## How does a guest's box, not just its centre, stay on the paving?
 
-The follower must not hide real simulation jumps. When a carry-over moves a guest farther in one tick than any guest walks, the drawn position should jump with it, so the player still sees it and the slice's check that nobody jumps along a path stays meaningful.
+Navigation meshes keep an agent's body inside by eroding the walkable area by the agent's radius when the mesh is built, so the agent's centre may go anywhere on the eroded mesh. Funnel implementations that don't erode narrow each portal by the radius at both ends instead, so the path's corners stand off the walls.
 
-The follower is drawing state. It isn't saved and the simulation never reads it (principles 1 and 10). A loaded park or a guest seen for the first time starts at its target, so a capture of a loaded park shows every guest on its line.
+Eroding the paving's pieces one by one doesn't erode their union: where two pieces meet at a concave outline corner, a point can be far from its own piece's walls and still near the other piece's. A guest's straight-line check can instead require that no wall edge comes nearer the line than the guest's clearance, testing the walls of the pieces the line crosses and of their neighbours. The constrained move uses the same clearance. A clearance of half a guest box's diagonal keeps the whole drawn box on the paving at any angle. A guest arriving at a door, or appearing at the entrance's door, has to stand at the door, so the door end of a walkway is the one place where a guest's box may meet the paving's edge.
 
-Rejected: a pure function of the guest's current state with blends at nodes — it can't know a wanderer's next or last edge. Storing the previous edge or the drawn offset in guest state — simulation state that only drawing reads. Smoothing by frame time — the shape of a turn would change with frame rate. Interpolating between ticks alone — it smooths time, not the jumps in space at nodes.
+Rejected: eroding each piece by the clearance — it misses walls of neighbouring pieces at concave corners. Keeping only the centre on the paving — at a sharp inside corner, half the box overhangs the grass, which the user ruled out.
 
-Sources: https://gamedev.net/forums/topic/651736-fixed-timestep-with-smooth-rendering/5120266/ — drawn position kept apart from the simulated one; https://github.com/lawnjelly/smoothing-addon — smoothing only at the boundary to the renderer, logic on true positions.
+Sources: https://recastnav.com/classdtNavMeshQuery.html — findNearestPoly, raycast, and moveAlongSurface; http://digestingduck.blogspot.com/2010/03/simple-stupid-funnel-algorithm.html — string-pulling assumes portals already allow for the agent's radius; https://moonjump.com/game-dev-mechanics-navigation-meshes-navmesh-how-it-works/ — eroding the walkable area by the agent's radius.
+
+## When does a guest decide its next turn?
+
+Walking straight toward the farthest visible point of a route only works if the route runs past the next node. A guest heading to a shop or home already knows its whole route, because route distance's next steps chain from node to node. A wandering guest picks its next edge only at the node, so until then its route ends at the node, and it would aim at the node's centre every time it nears one. On a street with a connector node at every shop, that pulls wanderers back to the middle every few meters. People decide a turn before they reach it. Making the choice for each node about 10 m before reaching it, and the wanderer's pick with it, keeps the route running past the next node, so a guest only bends toward a node when it actually turns there.
+
+A node with exactly two edges and no anchor is a shaping point. It exists only so the drawn path can bend, so choosing there would make the number of points the player draws change how guests behave. Guests walk on through it without choosing.
+
+Rejected: choosing at the node, as guests do today — wanderers would converge on node centres. Storing a long planned route for wanderers — a pick for the next node is all the aim needs.
+
+## How do guests step around one another?
+
+Predictive models avoid collisions by extrapolating each neighbour's motion and reacting to the time until the nearest approach, not to the distance alone. Karamouzas and colleagues' model does this with a small sideways force for the soonest predicted collisions in a short horizon, and it reproduces lane formation and gives shorter, less curved paths than distance-based forces. Reynolds' unaligned collision avoidance is the same idea in its simplest form. Each guest reads where its neighbours stood and how they moved at the end of the last tick, from guest presence, so the result doesn't depend on the order guests step in. Sampling within a few meters covers what a walker reacts to in a horizon of a couple of seconds, and it keeps a sample within the ground field's cell order (4 m cells). The sidestep is folded into the constrained move, so it can never push a guest off the paving.
+
+Rejected: reciprocal velocity obstacles (RVO, ORCA) — more than simple sidestepping needs, as the slice's research records. Avoidance by distance alone — guests swerve at walkers that are passing safely.
+
+Sources: https://sites.google.com/site/ikaramouzas/pam — the predictive avoidance model; https://www.red3d.com/cwr/steer/Unaligned.html — unaligned collision avoidance.

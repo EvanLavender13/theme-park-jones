@@ -44,7 +44,7 @@ When a guest heads home, it walks to the entrance by route distance and leaves t
 
 Edits can strand a guest. Each case has a defined result:
 
-- If the guest's path is deleted, its place resolves to no place. The guest moves to the nearest point of the guest network. If no guest network is left, it leaves the park.
+- If the paving under a guest is deleted, the guest moves to the nearest point of the guest paving where its box fits. If no guest paving is left, it leaves the park.
 - If its target has no route distance entry at its place, because the shop or a path ahead was deleted, the guest drops the target at once. It re-scores where it stands instead of waiting for a junction.
 - If its target's offer now says no meals, the guest also drops the target at once and re-scores where it stands.
 - If the guest has no route home when its stay ends, it keeps wandering until a route exists.
@@ -72,7 +72,9 @@ Guest state goes into park files in tests/parks/, where the park world checks co
 - Guest visits: a flow this capability supplies to plausible-operations' shops. Each visit comes back served or unserved.
 - Meals: a flow drawn from plausible-operations. A guest consumes its meal when it eats. Hunger stays private.
 - Hungry footfall: a scalar field this capability produces on the guest network. legible-simulation samples it for preview context.
-- Networks and anchors: through shared-medium's network type, guests move on the guest network, and arrive and leave at the entrance's anchor. Each guest carries its place over each re-derivation with shared-medium's carry-over operation.
+- Networks and anchors: through shared-medium's network type, guests take their routes from the guest network, and arrive and leave at the entrance's anchor. Each guest's place on the network is the nearest place on the carrier of the paving it stands on.
+- Park intent's derived shape (decision 0025): guests walk on the guest paving's pieces from sim/park, with each walkway's piece and its connector's key. Each guest keeps its ground position across each re-derivation while paving still lies there.
+- Guest presence: a ground field in shared-medium's medium that this capability produces and samples. Each guest publishes where it stood and how it moved, and steps aside from the guests near it, without reading their state.
 - Park intent (decision 0025): the entrance, from effortless-building. Its entity key identifies the anchor where guests arrive, and the route distance source they head home to.
 - Keyed random draws and the simulation's exp, from deterministic-simulation, for softmax and variation.
 - Inspection records (decision 0025): read by legible-simulation and tests.
@@ -84,7 +86,7 @@ Guest state goes into park files in tests/parks/, where the park world checks co
 - Principle 10 is at risk if choices depend on iteration order or on the C runtime's exp. Draws are keyed on the guest, purpose, tick, and index. The exp is the simulation's own.
 - Principle 5 is at risk from thresholds. Hunger acts through a curve against a carry-on option. Footfall is weighted, not thresholded.
 - Principle 2 is at risk when edits happen under a walking guest. The criteria above define each case: deleted paths, dead ends, starved or deleted targets, cut routes to a target, and cut routes home.
-- Principle 4 is kept because every choice and every movement uses route distance. The one straight-line use is snapping a stranded guest onto the network with shared-medium's nearest-point query.
+- Principle 4 is kept because every choice uses route distance, and a guest walking anywhere on its route's paving travels that route (decision 0038). The straight-line measures are a guest's walk across the paving toward points of its route, guest presence's sampling radius, and moving a stranded guest to the nearest paving. None of them measures how far a guest travels.
 
 ## Dependencies
 
@@ -104,7 +106,7 @@ This is the smallest version in which the park's layout visibly matters to someo
 
 1. `hungry-guests`: arrivals, stays, and hunger from keyed draws. At junctions, guests choose by softmax among food offers, carrying on, and heading home, with a commitment bonus. They move by next edges and wander by keyed draws. They queue through guest visits, eat meals, and leave. The milestone also adds the rules for stranded guests, hungry footfall, inspection records that explain choices, and guests drawn as simple shapes. Guests are the first holders of places. navigable-networks' paths-become-routes handed this milestone the design of how the previous networks stay available until guests carry their places over. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value, shared-medium's first-field-and-flow, navigable-networks' paths-become-routes, and plausible-operations' supplied-food-shop.
 
-2. `spread-guests`: each guest walks at its own speed and is drawn on its own line across the path, keeping to a side by the way it walks, moving smoothly through corners and junctions, and moving toward its next turn. Guests walk through shaping points without choosing. Member of the good-paths slice. Depends on: hungry-guests, shared-medium's carrier-widths, and navigable-networks' wide-routes.
+2. `spread-guests`: guests walk on the paving itself, each with its own ground position and speed. Each walks straight toward the farthest point of its network route it can reach with its box on the paving, keeps to its own side, and steps around nearby guests, which it senses through guest presence. Its place on the network follows from where it stands. Guests decide each turn about 10 m before it and walk through shaping points without choosing. Member of the good-paths slice. Depends on: hungry-guests, shared-medium's carrier-widths and ground-fields, and navigable-networks' wide-routes.
 
 Later milestones come from the deepening candidates once the slice has been played.
 
@@ -118,7 +120,7 @@ Later milestones come from the deepening candidates once the slice has been play
 - Groups and families that choose together.
 - Crowding: guests avoid busy paths, through navigable-networks' crowding cost.
 - Thoughts: short statements for the player, drawn from choice explanations, as in RollerCoaster Tycoon. Gated on: the player-facing UI question.
-- Walking off a deleted path, instead of moving to the nearest point of the network.
+- Walking off deleted paving, instead of moving to the nearest point of the guest paving.
 - Aggregate guests at scale: distant or numerous guests are simulated as flows, and individuals are shown near the camera. Gated on: profiling.
 - Local knowledge and wayfinding: a guest knows only what it has noticed. Each attraction publishes a noticeability that fades with route distance. A guest follows route distance's next steps with some uncertainty, and a park map lowers that uncertainty. Guests without maps wander, and can get lost in a large park. Builds on fuzzy choice.
 - Fuzzy choice: a guest weighs only a few options it happens to notice, such as nearby or recently seen shops and rides. It doesn't score every reachable option at every junction. With this, a choice's cost doesn't grow with the number of attractions, and decisions feel human rather than exhaustive.
