@@ -4,6 +4,7 @@
 #include "app/input/platform_input.h"
 #include "app/scene/scene_uploads.h"
 #include "core/profile.h"
+#include "legible/preview.h"
 #include "render/renderer.h"
 
 #include <SDL3/SDL.h>
@@ -91,9 +92,16 @@ bool Application::runFrames() {
     // tooltips show one candidate, and frames between ticks rebuild nothing.
     const bool remade =
         Scene.syncPreview(Session.world(), Interactions.tentativeEdit(Session.world()));
+    // Kept current before the panels, for the food tooltip, and again after them, so a change of
+    // the checkbox shows in this frame.
+    bool shapeChanged = Scene.syncOverlayShape(previewedWorld(Session.world(), Scene.preview()),
+                                               Ui.shown().FoodOverlay);
 
     ImDrawData *drawData = Ui.build(Window.get(), Dialogs, Session, Camera, Interactions,
-                                    Scene.preview(), input.History);
+                                    Scene.preview(), Scene.overlayShape(), input.History);
+    shapeChanged = Scene.syncOverlayShape(previewedWorld(Session.world(), Scene.preview()),
+                                          Ui.shown().FoodOverlay) ||
+                   shapeChanged;
 
     const bool lastFrame = FrameLimit > 0 && frame >= FrameLimit;
     // The meshes are updated after the panels, so a change of the checkbox shows in this frame.
@@ -104,8 +112,10 @@ bool Application::runFrames() {
                            Interactions.pathFinish(Session.world()),
                            Interactions.editHandles(Session.world()),
                            Interactions.hoveredHandle(Session.world())};
-    if ((Scene.syncLook(remade, look) &&
-         !uploadPreviewMeshes(renderer, Session.world(), Scene.preview(), look)) ||
+    const bool lookChanged = Scene.syncLook(remade, look);
+    if (((lookChanged || shapeChanged) &&
+         !uploadPreviewMeshes(renderer, Session.world(), Scene.preview(), look,
+                              Scene.overlayShape(), shapeChanged)) ||
         !drawFrame(renderer, view, drawData, lastFrame ? CapturePath : nullptr)) {
       return false;
     }

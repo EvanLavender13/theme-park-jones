@@ -15,12 +15,12 @@ It makes candidate worlds only with makeCandidate (decision 0025). It takes a wo
 
 The app calls:
 
-- food.h for foodNear
+- food.h for foodAvailability
 - preview.h for keepPreview and previewedWorld
 - inspect.h for pickSubject and inspectSubject
 - park_summary.h for summarizePark
 
-views calls availability.h for availabilityValues. The app and tpj_bench read FOOD_AVAILABILITY from food.h.
+views calls availability.h for availabilityValues and availabilityBends. The app and tpj_bench read FOOD_AVAILABILITY from food.h.
 
 ## Availability
 
@@ -32,13 +32,11 @@ availabilityAt(world, definition, place) gives the value and each source's contr
 
 availabilityValues(world, definition, places) gives the value at each of many places in one call. Each value is exactly what availabilityAt gives at that place, so a shade and the tooltip over it agree. It finds each source's offer once per call, however many of the places reach the source. It keeps nothing after it returns.
 
+availabilityBends(world, definition) gives the places along each guest segment's line where its availability can bend: each stop of the line, and inside each edge each place where a supplied source's route turns from one end to the other, or its effective time reaches a point of the curve. They come in ascending segment key, then ascending distance. Between two consecutive bends on a line, availability is linear in distance, so the values at the bends give it exactly everywhere.
+
 Distance is measured along the paths, so if a source is across a fence, its distance is the length of its route (principle 4). Every reachable supplied source contributes, however far. Its term only falls as its effective time grows (principle 5). If a place can reach no supplied source, or is not on the guest network, its value is 0.
 
 Food availability is FOOD_AVAILABILITY, in food.h. Its sources are shops' food offers. Its Full is a meal's relief with no walk and no wait, so a color means the same availability in every park. foodAvailability(world, place) gives it at a place.
-
-## Path places
-
-foodNear(world, point, reach) gives food availability at the guest path place nearest a ground point, if that place lies within the reach, and none otherwise. It never picks a place on a connector. Ties between segments go to the lower key. The straight-line distance only locates the point beside the paths. What is explained there is measured along routes (principle 4).
 
 ## Previews
 

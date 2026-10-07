@@ -16,16 +16,17 @@ benchPark times the stages a player waits on, on a loaded park, in this order:
 
 - resolution
 - a preview of an edit that leaves the park as it is (only when the park has a box)
-- the food overlay
+- the food overlay's shape
+- the food overlay's shades
 - the park mesh
 - the guest mesh
 - a run of ticks with no commands
 
-It leaves the loaded world unchanged. Each stage except ticks is warmed up and then repeated. Ticks times each of its calls. Each stage gives the median, least, and greatest of its times in nanoseconds. It also gives a result computed from its work, either a hash or a vertex count. The result keeps the work from being optimized away. If a build did different work, its result is different.
+It leaves the loaded world unchanged. Each stage except ticks is warmed up and then repeated. Ticks times each of its calls. Each stage gives the median, least, and greatest of its times in nanoseconds. It also gives a result computed from its work: a hash, a vertex count, or a count of values. The result keeps the work from being optimized away. If a build did different work, its result is different.
 
 ## tpj_bench
 
-tpj_bench [--ticks N] FILE writes `park <path> ticks <t> warm-ups <w> repetitions <r>`, then one line per stage: `stage <name> count <c> median <m> least <l> greatest <g> <result-name> <result>`. The result name is hash, vertices, or frames. N defaults to DEFAULT_TICKS, which is two minutes of game time, so a launch measures sustained play. Output is written only after every stage has run.
+tpj_bench [--ticks N] FILE writes `park <path> ticks <t> warm-ups <w> repetitions <r>`, then one line per stage: `stage <name> count <c> median <m> least <l> greatest <g> <result-name> <result>`. The result name is hash, vertices, values, or frames. N defaults to DEFAULT_TICKS, which is two minutes of game time, so a launch measures sustained play. Output is written only after every stage has run.
 
 tpj_bench --full-park PATH [--warm-ticks N] writes the full park (scenarios/SPEC.md) to PATH. The text is the same on every build.
 

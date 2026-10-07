@@ -7,6 +7,7 @@
 #include "app/session/park_dialogs.h"
 #include "app/session/park_session.h"
 #include "legible/preview.h"
+#include "render/paving_overlay.h"
 
 struct ImDrawData;
 struct SDL_Window;
@@ -34,10 +35,11 @@ public:
   // Inspector while the interaction has a subject, forgetting it when
   // closed; the graph over the scene while it is shown; the snap's guides and the measured
   // lengths; the food tooltip at the cursor while the overlay is, on the preview's candidate when
-  // it has one; and a shop ghost's context.
+  // it has one, over the overlay's shape; and a shop ghost's context.
   [[nodiscard]] ImDrawData *build(SDL_Window *window, ParkDialogs &dialogs, ParkSession &session,
                                   const OrbitCamera &camera, Interaction &interaction,
-                                  const Preview &preview, HistoryAction keys);
+                                  const Preview &preview, const OverlayShape &overlayShape,
+                                  HistoryAction keys);
 
 private:
   ShownViews Shown;

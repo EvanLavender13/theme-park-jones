@@ -53,15 +53,6 @@ ParkMesh ghostMesh(const World &world, const Preview &preview, const PreviewLook
   return mesh;
 }
 
-// The food overlay while it is shown, shaded by the food availability at each place, and an empty
-// mesh while it is not.
-ParkMesh foodOverlayMesh(const World &world, bool show) {
-  if (!show) {
-    return {};
-  }
-  return buildAvailabilityOverlay(world, FOOD_AVAILABILITY);
-}
-
 } // namespace
 
 bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes &meshes,
@@ -81,10 +72,14 @@ bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes
 }
 
 bool uploadPreviewMeshes(Renderer &renderer, const World &world, const Preview &preview,
-                         const PreviewLook &look) {
-  return setGhostMesh(renderer, ghostMesh(world, preview, look)) &&
-         setOverlayMesh(renderer,
-                        foodOverlayMesh(previewedWorld(world, preview), look.FoodOverlay));
+                         const PreviewLook &look, const OverlayShape &shape, bool shapeChanged) {
+  if (!setGhostMesh(renderer, ghostMesh(world, preview, look)) ||
+      (shapeChanged && !setOverlayShape(renderer, shape))) {
+    return false;
+  }
+  return !look.FoodOverlay ||
+         setOverlayShades(renderer, availabilityShades(previewedWorld(world, preview), shape,
+                                                       FOOD_AVAILABILITY));
 }
 
 } // namespace tpj

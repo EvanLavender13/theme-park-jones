@@ -2,15 +2,15 @@
 #define TPJ_VIEWS_AVAILABILITY_OVERLAY_H
 
 #include "legible/availability.h"
-#include "render/park_mesh.h"
+#include "render/paving_overlay.h"
 #include "sim/world.h"
 
 namespace tpj {
 
-// An availability's overlay as the app shows it: render's band along each guest path, shaded by
-// the availability at each place and saturating at the definition's Full. Changes nothing in the
-// world.
-ParkMesh buildAvailabilityOverlay(const World &world, const AvailabilityDefinition &definition);
+// An availability's shades of an overlay shape, as the app shows them: the availability at each of
+// availabilityBends' places, saturating at the definition's Full. Changes nothing in the world.
+OverlayShades availabilityShades(const World &world, const OverlayShape &shape,
+                                 const AvailabilityDefinition &definition);
 
 } // namespace tpj
 

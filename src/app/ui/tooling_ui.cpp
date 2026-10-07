@@ -54,7 +54,8 @@ void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &c
 
 ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, ParkSession &session,
                              const OrbitCamera &camera, Interaction &interaction,
-                             const Preview &preview, HistoryAction keys) {
+                             const Preview &preview, const OverlayShape &overlayShape,
+                             HistoryAction keys) {
   const CameraView view = orbitCameraView(camera);
   beginUiFrame();
   ImGui_ImplSDL3_NewFrame();
@@ -70,7 +71,8 @@ ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, ParkSessi
   }
   drawSnapGuides(interaction.snapGuides(), interaction.measuredLengths(world), view);
   if (Shown.FoodOverlay) {
-    drawFoodTooltip(previewedWorld(world, preview), groundUnderCursor(readCursor(window), view));
+    drawFoodTooltip(previewedWorld(world, preview), overlayShape,
+                    pointUnderCursor(readCursor(window), view, OVERLAY_HEIGHT));
   }
   if (preview.Shop) {
     drawShopContextTooltip(*preview.Shop);

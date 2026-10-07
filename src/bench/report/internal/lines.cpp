@@ -116,11 +116,14 @@ StageResult readStageLine(const TextLine &line) {
   } else if (line.Fields[10] == "vertices") {
     stage.Kind = ResultKind::Vertices;
     stage.Result = readCount(line, 11);
+  } else if (line.Fields[10] == "values") {
+    stage.Kind = ResultKind::Values;
+    stage.Result = readCount(line, 11);
   } else if (line.Fields[10] == "frames") {
     stage.Kind = ResultKind::Frames;
     stage.Result = readCount(line, 11);
   } else {
-    refuseLine(line, "expected 'hash', 'vertices', or 'frames' as " + fieldName(10));
+    refuseLine(line, "expected 'hash', 'vertices', 'values', or 'frames' as " + fieldName(10));
   }
   return stage;
 }

@@ -66,6 +66,13 @@ Availability availabilityAt(const World &world, const AvailabilityDefinition &de
 std::vector<double> availabilityValues(const World &world, const AvailabilityDefinition &definition,
                                        std::span<const Place> places);
 
+// The places along each guest segment's line where its availability can bend: each stop of the
+// line, and inside each edge each place where a supplied source's route turns from one end to the
+// other, or its effective time reaches a point of the curve. In ascending segment key, then
+// ascending distance, each once. Between two consecutive bends on a line, availability is linear
+// in distance.
+std::vector<Place> availabilityBends(const World &world, const AvailabilityDefinition &definition);
+
 } // namespace tpj
 
 #endif

@@ -4,6 +4,7 @@
 #include "legible/preview.h"
 #include "render/guest_mesh.h"
 #include "render/park_mesh.h"
+#include "render/paving_overlay.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "views/availability_overlay.h"
@@ -104,9 +105,14 @@ std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
         StageResult{"preview", preview.Times, ResultKind::Hash, hashWorld(*candidate)});
   }
 
-  stages.push_back(meshStage("food-overlay", park, [](const World &world) {
-    return buildAvailabilityOverlay(world, FOOD_AVAILABILITY);
-  }));
+  stages.push_back(meshStage("food-overlay-shape", park, buildOverlayShape));
+  // What a tick costs while the overlay is shown: the shape is built only when the paths change.
+  const OverlayShape shape = buildOverlayShape(park);
+  const auto shades = timeRepeated(nothing, [&park, &shape](Nothing /*input*/) {
+    return availabilityShades(park, shape, FOOD_AVAILABILITY);
+  });
+  stages.push_back(
+      StageResult{"food-overlay", shades.Times, ResultKind::Values, shades.Last.Knots.size()});
   stages.push_back(meshStage("park-mesh", park, buildParkMesh));
   stages.push_back(meshStage("guest-mesh", park, buildGuestMesh));
 
@@ -132,6 +138,9 @@ std::string stageLine(const StageResult &stage) {
     break;
   case ResultKind::Vertices:
     result = " vertices " + std::to_string(stage.Result);
+    break;
+  case ResultKind::Values:
+    result = " values " + std::to_string(stage.Result);
     break;
   case ResultKind::Frames:
     result = " frames " + std::to_string(stage.Result);

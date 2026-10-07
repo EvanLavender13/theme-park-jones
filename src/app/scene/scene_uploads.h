@@ -4,6 +4,7 @@
 #include "app/input/orbit_camera.h"
 #include "app/scene/scene_sync.h"
 #include "legible/preview.h"
+#include "render/paving_overlay.h"
 #include "render/renderer.h"
 #include "sim/world.h"
 
@@ -14,11 +15,11 @@ namespace tpj {
 bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes &meshes,
                        OrbitCamera &camera);
 // Builds the ghost, meaning the preview's edit with its candidate's walkways and starved marks,
-// then the look's highlight, then its inspected guest or shop's mark, and the food overlay of the
-// previewed world while the look shows it and an empty mesh otherwise, and gives both to the
-// renderer. False if an upload failed.
+// then the look's highlight, then its inspected guest or shop's mark, and gives it to the
+// renderer, with the food overlay's shape when it changed, and while the look shows the overlay,
+// the shape's shades by the previewed world's food availability. False if an upload failed.
 bool uploadPreviewMeshes(Renderer &renderer, const World &world, const Preview &preview,
-                         const PreviewLook &look);
+                         const PreviewLook &look, const OverlayShape &shape, bool shapeChanged);
 
 } // namespace tpj
 

@@ -1,22 +1,22 @@
 #include "app/ui/food_tooltip.h"
 
 #include "legible/food.h"
-#include "render/band_overlay.h"
+#include "render/paving_overlay.h"
 
 #include <imgui.h>
 
 namespace tpj {
 
-void drawFoodTooltip(const World &world, std::optional<ParkPoint> ground) {
-  if (!ground) {
+void drawFoodTooltip(const World &world, const OverlayShape &shape,
+                     std::optional<ParkPoint> point) {
+  if (!point) {
     return;
   }
-  const std::optional<FoodAvailability> available =
-      foodNear(world, GroundPoint{ground->X, ground->Z}, OVERLAY_BAND);
-  if (!available || !ImGui::BeginTooltip()) {
+  const std::optional<Place> place = overlayPlace(shape, GroundPoint{point->X, point->Z});
+  if (!place || !ImGui::BeginTooltip()) {
     return;
   }
-  const FoodAvailability &food = *available;
+  const FoodAvailability food = foodAvailability(world, *place);
   ImGui::Text("Food %.3f", food.Value);
   if (food.Contributions.empty()) {
     ImGui::TextUnformatted("No supplied shop reachable");
