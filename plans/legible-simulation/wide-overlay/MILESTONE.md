@@ -2,11 +2,11 @@
 
 Slice: good-paths
 
-Status: planned
+Status: complete
 
 ## Summary
 
-wide-overlay moves the food overlay onto the paths. Today it shades a band of ground beside each guest path, under the paving. On main-street.park's 10 m street, the paving covers most of that band, so the overlay is hidden where the park matters most. After this milestone, the overlay shades the guest paving itself, across the whole width of every segment and junction, through tapers and rounded corners. Each spot takes the food availability at a place on the line of the path whose paving it is. The hover tooltip shows over the shaded paving. This is the slice's fourth member. wide-routes has made every path's paving and network match what the player drew, so the overlay can now follow the paving.
+wide-overlay moves the food overlay onto the paths. Before it, the overlay shaded a band of ground beside each guest path, under the paving. On main-street.park's 10 m street, the paving covered most of that band, so the overlay was hidden where the park matters most. After this milestone, the overlay shades the guest paving itself, across the whole width of every segment and junction, through tapers and rounded corners. Each spot takes the food availability at a place on the line of the path whose paving it is. The hover tooltip shows over the shaded paving. This is the slice's fourth member. wide-routes has made every path's paving and network match what the player drew, so the overlay can now follow the paving.
 
 ## Acceptance criteria
 
@@ -21,7 +21,7 @@ wide-overlay moves the food overlay onto the paths. Today it shades a band of gr
 The milestone adds no fields or flows, and the simulation uses nothing it produces.
 
 - Park intent's derived shape (decision 0025): the paved surface sim/park publishes, its guest pieces only, without walkways. paving-overlay reads it to place the shading and the hover.
-- Networks (shared-medium, navigable-networks): the guest network's segment carriers and nearestPlace, to find the place on a path's line that each spot of its paving takes its value from. paving-overlay reads them as the band does today.
+- Networks (shared-medium, navigable-networks): the guest network's segment carriers, to find the place on a path's line that each spot of its paving takes its value from.
 - Food availability (legible-simulation's own library): computed from food offer and route distance, as today. paving-overlay reads it unchanged.
 - Candidate worlds (deterministic-simulation): the overlay and hover read the previewed world, as today.
 
@@ -47,12 +47,12 @@ Unordered pool this milestone draws later features from.
 
 ## Open questions
 
-- Whether shading the paving's pieces keeps the overlay's rebuild at every tick cheap enough on the stress parks. paving-overlay resolves this with the runtime report, comparing the app with the overlay shown before and after.
+None. The runtime report settled the overlay's cost: on windows-release, the food-overlay stage fell from 3.61 ms to 3.26 ms per tick on full.park and from 256 µs to 27 µs on winding-path.
 
 ## Research notes
 
 - Cities: Skylines colors the roads themselves by traffic and service coverage, and Planet Coaster players asked for heatmaps on the paths, so values that belong to path places read best on the paths.
-- The overlay draws the guest paving's own pieces in the ramp's colors, cut across each segment's line about every meter, so every spot of paving is shaded by construction. Each spot shows its own path's value, and where pieces of unjoined paths overlap, each shaded spot lies lower the farther it is from its own line, at one rate for all lines, so the nearest line's value shows. The hover uses the same rule. A band cut or masked to the paving was rejected, because its reach would have to be sized to the paving, and one flat color per piece loses the gradient along a street.
+- The overlay draws the guest paving's own pieces, so every spot of paving is shaded by construction. A shader colors each pixel by the value at the nearest place on its piece's lines, and where pieces of other owners overlap, the nearest line's value shows. Availability is linear between the bends the CPU finds along each line, so the shading is exact, and each tick uploads only the values at the bends. The hover uses the same rule. A band cut or masked to the paving was rejected, because its reach would have to be sized to the paving, and one flat color per piece loses the gradient along a street.
 - The zero color must differ from backstage paving's blue gray as well as from the ramp, so a guest path with no food doesn't look like a backstage path.
 
 Depth is in RESEARCH.md.
