@@ -176,26 +176,6 @@ void startFlush(ParkMesh &mesh, size_t first, const std::vector<CarrierPoint> &l
   }
 }
 
-// The normal of an entrance's or box's front and back faces: its footprint's Forward. None when the
-// key holds neither, or its pose has no footprint.
-std::optional<ParkPoint> faceNormalOf(const World &world, EntityKey entity) {
-  std::optional<Footprint> footprint;
-  for (const ParkEntrance &entrance : parkEntrances(world)) {
-    if (entrance.Key == entity) {
-      footprint = footprintOf(entrance.At, ENTRANCE_SIZE);
-    }
-  }
-  for (const ParkBox &box : parkBoxes(world)) {
-    if (box.Key == entity) {
-      footprint = footprintOf(box.At, boxSize(box.Kind));
-    }
-  }
-  if (!footprint) {
-    return std::nullopt;
-  }
-  return footprint->Forward;
-}
-
 // Adds a segment's ribbon and round joints along the line, the width wide, the lift above the
 // ground. The line has at least two points.
 void appendSegmentAt(ParkMesh &mesh, const std::vector<CarrierPoint> &line, double width,
@@ -436,18 +416,17 @@ std::vector<Walkway> parkWalkways(const World &world) {
 
 void appendWalkways(ParkMesh &mesh, const World &world, float alpha) {
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
-    const Network &network = parkNetwork(world, kind);
     const Rgba base = pathColor(kind);
     const Rgba color{base.R, base.G, base.B, alpha};
-    for (const Carrier &carrier : network.carriers()) {
-      // path-networks anchors each connector's door node, and no other node.
-      if (carrier.Stops.empty()) {
-        continue;
-      }
-      const EntityKey entity = network.nodeAnchor(carrier.Stops.front().Node);
-      if (entity != NULL_KEY) {
-        appendWalkway(mesh, kind, carrier.Points, faceNormalOf(world, entity), color);
-      }
+    // Each strip runs where the park draws the walkway, not along the connector's turn inside
+    // the paving.
+    for (const Walkway &walkway : connectorWalkways(world, kind)) {
+      const double length =
+          std::hypot(walkway.Meets.X - walkway.Door.X, walkway.Meets.Z - walkway.Door.Z);
+      const std::vector<CarrierPoint> points{
+          {.X = walkway.Door.X, .Z = walkway.Door.Z, .Distance = 0.0},
+          {.X = walkway.Meets.X, .Z = walkway.Meets.Z, .Distance = length}};
+      appendWalkway(mesh, kind, points, walkway.Out, color);
     }
   }
 }

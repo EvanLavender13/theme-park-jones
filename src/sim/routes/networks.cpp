@@ -9,6 +9,7 @@
 #include <cmath>
 #include <numeric>
 #include <optional>
+#include <span>
 #include <stddef.h>
 #include <stdint.h>
 #include <utility>
@@ -192,39 +193,200 @@ struct Connection {
   double PathDistance = 0.0;
 };
 
+// Each owner of the kind's pieces with the least distance from the point to any of its pieces, in
+// ascending key order of the owner. The pieces are in ascending key order of their owner.
+void ownerDistances(std::vector<std::pair<EntityKey, double>> &out,
+                    const std::vector<SurfacePiece> &pieces, PathKind kind, ParkPoint point) {
+  out.clear();
+  for (const SurfacePiece &piece : pieces) {
+    if (piece.Kind != kind) {
+      continue;
+    }
+    const double distance = pieceDistance(piece, point);
+    if (!out.empty() && out.back().first == piece.Owner) {
+      out.back().second = std::min(out.back().second, distance);
+    } else {
+      out.emplace_back(piece.Owner, distance);
+    }
+  }
+}
+
+// The least distance the owners give the key, or none when they don't hold it.
+std::optional<double> distanceOf(const std::vector<std::pair<EntityKey, double>> &owners,
+                                 EntityKey key) {
+  const auto found =
+      std::ranges::lower_bound(owners, key, {}, &std::pair<EntityKey, double>::first);
+  if (found == owners.end() || found->first != key) {
+    return std::nullopt;
+  }
+  return found->second;
+}
+
+// Sets each carrier's paving distance from the owners' distances: the least that its own key and
+// the keys of the points it ends at give, or none. Returns the least over every carrier, or none.
+std::optional<double> pavingDistances(std::vector<std::optional<double>> &paving,
+                                      const PathCarriers &paths,
+                                      const std::vector<std::pair<EntityKey, double>> &owners) {
+  std::optional<double> least;
+  for (size_t i = 0; i < paths.Carriers.size(); ++i) {
+    std::optional<double> own;
+    for (const EntityKey owner :
+         {paths.Carriers[i].Key, paths.Ends[i].first, paths.Ends[i].second}) {
+      const std::optional<double> distance = distanceOf(owners, owner);
+      if (distance && (!own || *distance < *own)) {
+        own = distance;
+      }
+    }
+    if (own && (!least || *own < *least)) {
+      least = own;
+    }
+    paving[i] = own;
+  }
+  return least;
+}
+
+// Where a door meets the line of the carrier it connects to: the place, its ground point, and its
+// distance from the door.
+struct LineMeeting {
+  Place At;
+  GroundPoint Point;
+  double Reach = 0.0;
+};
+
+// Of the carriers whose paving lies within JUNCTION_TOLERANCE of the least, where the door meets
+// the line that lies nearest it, the first in key order winning a tie.
+std::optional<LineMeeting> nearestLine(const Network &lines, const std::vector<Carrier> &carriers,
+                                       const std::vector<std::optional<double>> &paving,
+                                       double least, ParkPoint door) {
+  const GroundPoint at{door.X, door.Z};
+  std::optional<LineMeeting> nearest;
+  for (size_t i = 0; i < carriers.size(); ++i) {
+    const std::optional<double> &own = paving[i];
+    if (!own || *own > least + JUNCTION_TOLERANCE) {
+      continue;
+    }
+    const std::optional<Place> on = lines.nearestPlaceOn(carriers[i].Key, at);
+    const std::optional<GroundPoint> ground = on ? lines.groundPoint(*on) : std::nullopt;
+    if (!on || !ground) {
+      continue;
+    }
+    const double dx = ground->X - at.X;
+    const double dz = ground->Z - at.Z;
+    const double distance = std::sqrt((dx * dx) + (dz * dz));
+    if (!nearest || distance < nearest->Reach) {
+      nearest = LineMeeting{*on, *ground, distance};
+    }
+  }
+  return nearest;
+}
+
+// How far along the ray from the point in the unit direction it first meets a piece of the kind,
+// within the limit, or none. 0 when the point lies on one.
+std::optional<double> rayEntry(const std::vector<SurfacePiece> &pieces, PathKind kind,
+                               ParkPoint from, ParkPoint direction, double limit) {
+  std::optional<double> least;
+  for (const SurfacePiece &piece : pieces) {
+    if (piece.Kind != kind) {
+      continue;
+    }
+    const std::span<const ParkPoint> corners = pieceCorners(piece);
+    double enter = 0.0;
+    double leave = limit;
+    bool missed = corners.empty();
+    for (size_t i = 0; !missed && i < corners.size(); ++i) {
+      const ParkPoint &corner = corners[i];
+      const ParkPoint &next = corners[(i + 1) % corners.size()];
+      const double sideX = next.X - corner.X;
+      const double sideZ = next.Z - corner.Z;
+      const double length = std::sqrt((sideX * sideX) + (sideZ * sideZ));
+      if (length < 1e-9) {
+        continue;
+      }
+      // The inside of a counter-clockwise piece lies to the left of each side.
+      const double inwardX = sideZ / length;
+      const double inwardZ = -sideX / length;
+      const double start = ((from.X - corner.X) * inwardX) + ((from.Z - corner.Z) * inwardZ);
+      const double change = (direction.X * inwardX) + (direction.Z * inwardZ);
+      if (change == 0.0) {
+        missed = start < 0.0;
+      } else if (change > 0.0) {
+        enter = std::max(enter, -start / change);
+      } else {
+        leave = std::min(leave, -start / change);
+      }
+      missed = missed || enter > leave;
+    }
+    if (!missed && (!least || enter < *least)) {
+      least = enter;
+    }
+  }
+  return least;
+}
+
+// The connector's points from the door to where it meets the carrier, and the distance along the
+// carrier there. It runs straight out of the door's face to the paving of the kind, then to the
+// carrier's line, unless the meeting already lies straight out of the face, the ray meets no
+// paving within reach, or the door stands on paving.
+std::pair<std::vector<CarrierPoint>, double> connectorRoute(const Network &lines,
+                                                            const std::vector<SurfacePiece> &pieces,
+                                                            PathKind kind, const ParkDoor &door,
+                                                            const LineMeeting &meeting) {
+  std::vector<CarrierPoint> points{
+      {.X = door.At.X, .Z = door.At.Z, .Distance = 0.0},
+      {.X = meeting.Point.X, .Z = meeting.Point.Z, .Distance = meeting.Reach}};
+  const double ahead = (((meeting.Point.X - door.At.X) * door.Out.X) +
+                        ((meeting.Point.Z - door.At.Z) * door.Out.Z)) /
+                       meeting.Reach;
+  if (ahead >= 1.0 - 1e-9) {
+    return {points, meeting.At.Distance};
+  }
+  const std::optional<double> entry =
+      rayEntry(pieces, kind, door.At, door.Out, CONNECTION_REACH + JUNCTION_TOLERANCE);
+  if (!entry || !(*entry > 0.0)) {
+    return {points, meeting.At.Distance};
+  }
+  const GroundPoint at{door.At.X + (door.Out.X * *entry), door.At.Z + (door.Out.Z * *entry)};
+  const std::optional<Place> on = lines.nearestPlaceOn(meeting.At.Carrier, at);
+  const std::optional<GroundPoint> ground = on ? lines.groundPoint(*on) : std::nullopt;
+  if (!on || !ground) {
+    return {points, meeting.At.Distance};
+  }
+  const double dx = ground->X - at.X;
+  const double dz = ground->Z - at.Z;
+  const double leg = std::sqrt((dx * dx) + (dz * dz));
+  points[1] = {.X = at.X, .Z = at.Z, .Distance = *entry};
+  if (leg <= JUNCTION_TOLERANCE) {
+    points[1] = {.X = ground->X, .Z = ground->Z, .Distance = *entry};
+  } else {
+    points.push_back({.X = ground->X, .Z = ground->Z, .Distance = *entry + leg});
+  }
+  return {points, on->Distance};
+}
+
 // The connectors of the doors, each the given width. A door connects to the path carrier whose
-// edge, half its width out from its line, lies nearest, when that edge lies within reach. The
-// carriers are in key order, so the lower key wins a tie.
-std::vector<Connection> findConnections(const std::vector<Carrier> &carriers,
+// paving lies nearest, when that paving lies within reach. A carrier's paving is the pieces its
+// segment owns and those of the points it ends at. Of carriers whose paving lies equally near, the
+// one whose line lies nearest wins, then the lower key.
+std::vector<Connection> findConnections(const PathCarriers &paths,
+                                        const std::vector<SurfacePiece> &pieces, PathKind kind,
                                         const std::vector<ParkDoor> &doors, double width) {
+  const std::vector<Carrier> &carriers = paths.Carriers;
   std::vector<Connection> connections;
   if (carriers.empty()) {
     return connections;
   }
   const Network lines = linesOnly(carriers);
+  std::vector<std::pair<EntityKey, double>> owners;
+  std::vector<std::optional<double>> paving(carriers.size());
   for (const ParkDoor &door : doors) {
-    const GroundPoint at{door.At.X, door.At.Z};
-    std::optional<Place> place;
-    GroundPoint point;
-    double reach = 0.0;
-    double edge = 0.0;
-    for (const Carrier &carrier : carriers) {
-      const std::optional<Place> on = lines.nearestPlaceOn(carrier.Key, at);
-      const std::optional<GroundPoint> ground = on ? lines.groundPoint(*on) : std::nullopt;
-      if (!ground) {
-        continue;
-      }
-      const double dx = ground->X - at.X;
-      const double dz = ground->Z - at.Z;
-      const double distance = std::sqrt((dx * dx) + (dz * dz));
-      if (!place || distance - (0.5 * carrier.Width) < edge) {
-        place = on;
-        point = *ground;
-        reach = distance;
-        edge = distance - (0.5 * carrier.Width);
-      }
+    ownerDistances(owners, pieces, kind, door.At);
+    const std::optional<double> least = pavingDistances(paving, paths, owners);
+    if (!least || *least > CONNECTION_REACH) {
+      continue;
     }
-    if (!place || edge > CONNECTION_REACH || !(reach > JUNCTION_TOLERANCE)) {
+    const std::optional<LineMeeting> meeting =
+        nearestLine(lines, carriers, paving, *least, door.At);
+    if (!meeting || !(meeting->Reach > JUNCTION_TOLERANCE)) {
       continue;
     }
     // A path keyed like the connector, which only a hand-written save holds, keeps carrier keys
@@ -233,16 +395,13 @@ std::vector<Connection> findConnections(const std::vector<Carrier> &carriers,
     if (std::ranges::binary_search(carriers, key, {}, &Carrier::Key)) {
       continue;
     }
-    const auto path = std::ranges::lower_bound(carriers, place->Carrier, {}, &Carrier::Key);
+    const auto path = std::ranges::lower_bound(carriers, meeting->At.Carrier, {}, &Carrier::Key);
+    auto [points, pathDistance] = connectorRoute(lines, pieces, kind, door, *meeting);
     connections.push_back(
-        {.Connector = {.Key = key,
-                       .Width = width,
-                       .Points = {{.X = door.At.X, .Z = door.At.Z, .Distance = 0.0},
-                                  {.X = point.X, .Z = point.Z, .Distance = reach}},
-                       .Stops = {}},
+        {.Connector = {.Key = key, .Width = width, .Points = std::move(points), .Stops = {}},
          .Entity = door.Entity,
          .Path = static_cast<size_t>(path - carriers.begin()),
-         .PathDistance = place->Distance});
+         .PathDistance = pathDistance});
   }
   return connections;
 }
@@ -300,14 +459,15 @@ uint32_t addStops(std::vector<Carrier> &carriers, const std::vector<Meeting> &me
   return nodeCount;
 }
 
-Network deriveNetwork(const std::vector<ParkSegment> &segments, const std::vector<ParkDoor> &doors,
+Network deriveNetwork(const std::vector<ParkSegment> &segments,
+                      const std::vector<SurfacePiece> &pieces, const std::vector<ParkDoor> &doors,
                       PathKind kind) {
   PathCarriers paths = pathCarriers(segments, kind);
   std::vector<Meeting> meetings = pointMeetings(paths);
-  std::vector<Carrier> carriers = std::move(paths.Carriers);
-
   // Each connector meets its path at its connection.
-  std::vector<Connection> connections = findConnections(carriers, doors, pathWidth(kind));
+  std::vector<Connection> connections =
+      findConnections(paths, pieces, kind, doors, pathWidth(kind));
+  std::vector<Carrier> carriers = std::move(paths.Carriers);
   const size_t pathCount = carriers.size();
   for (Connection &connection : connections) {
     meetings.push_back({.First = connection.Path,
@@ -342,8 +502,10 @@ void resolvePathNetworks(World &world) {
   const std::vector<ParkSegment> segments = parkSegments(world);
   const std::vector<ParkEntrance> entrances = parkEntrances(world);
   const std::vector<ParkBox> boxes = parkBoxes(world);
+  const PavedSurface surface = parkSurface(world);
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
-    Network network = deriveNetwork(segments, doorsServing(entrances, boxes, kind), kind);
+    Network network =
+        deriveNetwork(segments, surface.Pieces, doorsServing(entrances, boxes, kind), kind);
     const EntityKey key =
         world.createDerivedEntity(NULL_KEY, NETWORK_PURPOSE, static_cast<uint64_t>(kind));
     const entt::entity entity = world.findEntity(key);
@@ -413,12 +575,20 @@ std::vector<Walkway> connectorWalkways(const World &world, PathKind kind) {
     if (segment == NULL_KEY) {
       continue;
     }
-    const CarrierPoint &meets = carrier.Points.back();
+    // A connector that turns at the paving gives a walkway along its first part only, reaching
+    // half its width into the paving, or to the line if that is nearer.
+    ParkPoint meets{carrier.Points.back().X, carrier.Points.back().Z};
+    if (carrier.Points.size() > 2) {
+      const CarrierPoint &entry = carrier.Points[1];
+      const double into =
+          std::min(0.5 * carrier.Width, carrier.Points.back().Distance - entry.Distance);
+      meets = {entry.X + (door->Out.X * into), entry.Z + (door->Out.Z * into)};
+    }
     walkways.push_back(Walkway{.Kind = kind,
                                .Joins = segment,
                                .Door = door->At,
                                .Out = door->Out,
-                               .Meets = {meets.X, meets.Z},
+                               .Meets = meets,
                                .Width = carrier.Width});
   }
   return walkways;

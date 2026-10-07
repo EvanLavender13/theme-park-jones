@@ -44,7 +44,7 @@ The milestone adds no fields or flows. It changes park intent, which decision 00
 - Paved surface: sim/park derives the surface's pieces from the published segments and points. The physical-validity check tests boxes against them, and the renderer draws them, so what is drawn and what is refused are one shape (feature 5). Nothing saves them.
 - Tentative intent: every new command previews on a candidate world, as placements do today.
 - Tools' session state: snaps, guides, and the undo history live in tpj_tools. None of it is intent, and none of it is saved (principle 1). The history holds each committed edit with its inverse. If undo restores something deleted, the restored thing gets a fresh key from the counter, so keys are never reused (src/sim/SPEC.md).
-- Frontage: the place tools read published segments' center lines and widths, not the drawn surface.
+- Frontage: the place tools read the paved surface's edge lines and pieces, as wide-routes' drawn-edges changed them to.
 
 ## Dependencies
 
@@ -78,7 +78,6 @@ None of these features adds a test of its own unless it fixes a bug (docs/testin
 ## Deepening candidates
 
 - Frontage when moving a box, not only when placing one.
-- A box fronting the inside of a tight curve moves out until its whole front face clears the paving by the setback, not only the face's middle.
 - Typing an exact length while drawing, as SketchUp does.
 - Locking the current direction with a held key, so the pointer can leave the line and still draw along it.
 - Showing the ghost of an undo's inverse while the undo control is hovered (decision 0029).

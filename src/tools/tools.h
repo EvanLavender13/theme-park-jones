@@ -4,8 +4,10 @@
 #include "sim/entity_key.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
+#include "sim/routes/networks.h"
 #include "sim/world.h"
 
+#include <numbers>
 #include <optional>
 #include <stdint.h>
 #include <vector>
@@ -33,8 +35,18 @@ inline constexpr double SNAP_CATCH_PIXELS = 10.0;
 inline constexpr double SNAP_RELEASE_PIXELS = 14.0;
 // A path that snaps to a door ends this far clear of the door's face, in meters.
 inline constexpr double DOOR_CLEARANCE = 0.25;
-// A box that fronts a segment has its front face this far beyond the segment's paving, in meters.
+// A box that fronts paving has its front face this far outside it, in meters.
 inline constexpr double FRONTAGE_SETBACK = 1.0;
+// Where a box fronts a corner of the paving's edge lines that turns by this much or less, in
+// radians, it turns with the pointer, as along a curve. At a sharper corner it lines up with one
+// side.
+inline constexpr double FRONTAGE_CORNER_TURN = std::numbers::pi / 6.0;
+// A fronting box that doesn't fit where it first fronts tries places this far apart along the
+// edge lines, in meters.
+inline constexpr double FRONTAGE_STEP = 0.25;
+// A fronting box that doesn't fit moves straight out by at most this, in meters, so its front
+// door stays within CONNECTION_REACH of the paving it fronts.
+inline constexpr double FRONTAGE_PUSH = CONNECTION_REACH - FRONTAGE_SETBACK;
 // A press or hover this near a path point picks it, in meters.
 inline constexpr double POINT_REACH = 2.0;
 // Edit path keeps a corner's radius handle at least this far from its point, in meters.
@@ -213,8 +225,8 @@ std::optional<EditHandle> handleAt(const World &world, ParkPoint point);
 // The segment with a ground line whose side lies nearest the point within SIDE_REACH. Ties go to
 // the lower key.
 std::optional<EntityKey> sideAt(const World &world, ParkPoint point);
-// The pose of a box of the kind that fronts the segment near the point, as tools/SPEC.md's Place
-// shop and Place depot state, or none when no segment of the kind its front door serves is near.
+// The pose of a box of the kind that fronts the paving near the point, as tools/SPEC.md's Place
+// shop and Place depot state, or none when no paving of the kind its front door serves is near.
 std::optional<Pose> frontagePose(const World &world, BoxKind kind, ParkPoint point);
 // Every path point's marker, in key order, then every corner's radius handle, in key order of its
 // point, then every edge handle, in the order parkEdges gives the edges, then every taper handle,
