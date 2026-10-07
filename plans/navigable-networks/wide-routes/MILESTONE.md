@@ -2,7 +2,7 @@
 
 Slice: good-paths
 
-Status: planned
+Status: complete
 
 ## Summary
 
@@ -11,7 +11,7 @@ wide-routes builds the guest and backstage networks from the points and segments
 ## Acceptance criteria
 
 1. Each segment with a ground line is a carrier of its kind's network, keyed by the segment and following its ground line, with the segment's width. Each connector is a carrier with its kind's walkway width, today's fixed path width. A network has a node for each point that one of its carriers ends at, shared by every carrier that ends there, and a node at each end of each connector. Where a connector meets a segment within JUNCTION_TOLERANCE of the segment's end, or of where another connector meets it, they share one node. A network has no other nodes: segments of one kind that cross, touch, or overlap without sharing a point don't join. (capture: main-street.park with --graph; play: hold the suppress key and draw a guest path along another, and the graph view shows no node where they overlap)
-2. A door connects to the segment of the kind it serves whose paving, as drawn, lies nearest, when that paving lies within CONNECTION_REACH, 3 m. A segment's paving is its own pieces of the paved surface and the pieces of the points it ends at. Ties go to the segment whose center line is nearer, then to the lower key. The connector runs from the door to the nearest point of that segment's center line, and its length counts in routes (principle 4). (capture: main-street.park with --graph shows a connector from every shop's front door to the street, every shop's back door and the depot's door to the backstage path, and the entrance to its path)
+2. A door connects to the segment of the kind it serves whose paving, as drawn, lies nearest, when that paving lies within CONNECTION_REACH, 3 m. A segment's paving is its own pieces of the paved surface and the pieces of the points it ends at. Ties go to the segment whose center line is nearer, then to the lower key. The connector runs straight out of the door's face to the paving, then to the nearest point of that segment's center line, or straight to that point when it lies straight ahead, and its length counts in routes (principle 4). (capture: main-street.park with --graph shows a connector from every shop's front door to the street, every shop's back door and the depot's door to the backstage path, and the entrance to its path)
 3. A shop or depot placed by the frontage snap beside paving of any shape, whether a straight side, a free end, a taper, a junction, or the inside or outside of a corner, sharp or rounded, is accepted wherever it has room and gets a front-door connector. (check: drawn-edges' probe; play; the slice's integration test 2 checks the widest width)
 4. A door's walkway is drawn as part of the paving, joined to the segment it reaches like a path drawn onto it: no edge line crosses it there. (capture, and play by the user)
 5. The park world checks pass over every park, so the networks are derived from intent alone and loads and candidates derive them equal. food_loop_test passes. (ctest)
