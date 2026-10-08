@@ -1,6 +1,6 @@
 # Slice: Good Paths
 
-Status: planned
+Status: complete
 
 ## Summary
 
