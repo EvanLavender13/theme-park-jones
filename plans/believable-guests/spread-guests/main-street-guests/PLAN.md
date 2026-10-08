@@ -138,3 +138,14 @@ Run: `R='C:/Users/EvanUhhh/source/repos/ThemeParkJones'; (cd build/sidestep && /
 Expected: two lines. The first gives the sampling cost with the lookup already built. The second gives the tick, the sampling cost, the guests, and the mean and most entries per sample, and it goes into the Baseline note. The mean is a few entries, far below the number of guests.
 
 Step 3: Add a "Baseline" note under this task with full.park's medians for windows-release resolution, preview, ticks, and the app's frames, the over-budget count, and the cost check's line. Commit it on main by pathspec with the subject `Plans: Record the good-paths runtime baseline`.
+
+Baseline, taken on main at fdaddc0 with scripts/runtime-report.sh --launches 3 and kept as build/good-paths-baseline.report. full.park medians, in µs, with their ranges:
+
+- windows-release resolution 6101.1 [5773.3 6129.3]
+- windows-release preview 9039.0 [8444.7 9055.5]
+- windows-release ticks 6830.9 [6811.9 6858.1]
+- windows-release-app frames 4451.3 [4424.9 4464.4]
+- windows-release-app-overlay frames 5284.4 [5248.0 5553.6]
+- over-budget 0 of 25
+
+The cost check on the new full.park: `tick 7831 us, sampling every guest 615 us, 2031 guests, mean 3.7 entries per sample, most 18`. A guest's sample finds a few of the 2,031 guests, so its work grows with the guests near it, which confirms ground-fields' deferred criterion 7.
