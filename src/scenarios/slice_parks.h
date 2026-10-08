@@ -10,6 +10,11 @@ namespace tpj {
 // The warm-up tests/parks/warm.park takes from fed.park: about 73 s of game time, long enough that
 // cutting its backstage segment strands a waiting guest and a shipment in transit.
 inline constexpr uint64_t WARM_TICKS = 2200;
+// The warm-up tests/parks/warm-main-street.park takes from main-street.park: 151 s of game time,
+// long enough that guests arrive and leave about equally often, so they fill the park in every
+// activity. It isn't a multiple of ARRIVAL_INTERVAL, so no guest arrives on the last cycle, and
+// every guest that isn't waiting holds its guest presence entry.
+inline constexpr uint64_t MAIN_STREET_WARM_TICKS = 4530;
 
 // The boxes-and-tubes slice's three park files, as saves.
 struct SliceParks {
@@ -23,6 +28,9 @@ struct SliceParks {
 // queued for each backstage segment, in ascending key order, and saves it as Cut. Throws LoadError
 // as loadWorld does.
 SliceParks makeSliceParks(std::string_view text, uint64_t warmTicks);
+// Loads the text with makeParkSchema, resolves it, steps it warmTicks cycles with no commands, and
+// gives its save. Throws LoadError as loadWorld does.
+std::string makeWarmPark(std::string_view text, uint64_t warmTicks);
 
 } // namespace tpj
 

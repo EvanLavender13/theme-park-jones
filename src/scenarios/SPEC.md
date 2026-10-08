@@ -36,12 +36,13 @@ tpj_scenarios --compare left right exits with status 0 when the two outputs hold
 
 ## Slice parks
 
-tpj_scenarios --slice-parks fed warm cut makes the boxes-and-tubes slice's parks from fed:
+tpj_scenarios --slice-parks fed warm cut main-street warm-main-street makes the boxes-and-tubes slice's parks from fed, and the good-paths slice's warm park from main-street:
 
 - warm is the park after WARM_TICKS cycles, which is long enough for a guest to be waiting at the shop and a shipment to be in transit.
 - cut is warm one cycle later with its backstage paths deleted, so the shop's supply is gone from the first tick.
+- warm-main-street is main-street after MAIN_STREET_WARM_TICKS cycles, long enough that guests arrive and leave about equally often, so they fill the park in every activity. main-street is read and never written.
 
-tests/parks/fed.park, warm.park, and cut.park are its output. If the simulation's rules change, running it again remakes the parks under the new rules. It writes no file when it fails.
+tests/parks/fed.park, warm.park, cut.park, and warm-main-street.park are its output. If the simulation's rules change, running it again remakes the parks under the new rules. It writes no file when it fails.
 
 ## The full park
 
