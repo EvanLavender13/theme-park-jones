@@ -68,6 +68,8 @@ Step 2: Check that it holds guest presence, and its guests' activities.
 Run: `build/sidestep/build.sh held && build/sidestep/held.exe tests/parks/warm-main-street.park && grep -o 'activity=[a-z-]*' tests/parks/warm-main-street.park | sort | uniq -c`
 Expected: the presence line reports entries above 0, equal to the guests that aren't waiting. The counts list wandering, heading-to-shop, waiting, and heading-home guests, about 50 to 60 in all. If one activity is missing, report it before going on: the warm-up is too short or too long, and MAIN_STREET_WARM_TICKS needs another value.
 
+Deviation, minor: the park holds 64 guests, a few above the 50 to 60 expected: 16 wandering, 22 heading to a shop, 10 waiting, and 16 heading home, with 54 presence entries for the 54 that aren't waiting. Every activity is there, so MAIN_STREET_WARM_TICKS stays 4530.
+
 Step 3: Check that its guests stay on the paving.
 
 Run: `build/paving-walk/build.sh stays && build/paving-walk/stays.exe tests/parks/warm-main-street.park`

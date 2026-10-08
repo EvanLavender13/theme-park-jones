@@ -30,4 +30,13 @@ SliceParks makeSliceParks(std::string_view text, uint64_t warmTicks) {
   return parks;
 }
 
+std::string makeWarmPark(std::string_view text, uint64_t warmTicks) {
+  World world = loadWorld(makeParkSchema(), text);
+  resolveWorld(world);
+  for (uint64_t i = 0; i < warmTicks; ++i) {
+    stepWorld(world);
+  }
+  return saveWorld(world);
+}
+
 } // namespace tpj

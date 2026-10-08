@@ -3,7 +3,7 @@
 //
 //   tpj_scenarios [--ticks N] [FILE...]
 //   tpj_scenarios --compare LEFT RIGHT
-//   tpj_scenarios --slice-parks FED WARM CUT
+//   tpj_scenarios --slice-parks FED WARM CUT MAIN_STREET WARM_MAIN_STREET
 //
 // Timings go to standard error, so they never enter the compared output.
 
@@ -116,16 +116,24 @@ bool writeFile(const std::string &path, const std::string &text) {
   return !file.fail();
 }
 
-// Makes the slice's parks from FED's text and writes them to FED, WARM, and CUT.
+// Makes the slice's parks from FED's text and writes them to FED, WARM, and CUT, and makes the
+// warm main street park from MAIN_STREET's text and writes it to WARM_MAIN_STREET. It never writes
+// MAIN_STREET.
 int writeSliceParks(const std::vector<std::string> &arguments) {
-  if (arguments.size() != 4) {
-    std::cerr << "tpj_scenarios: --slice-parks takes three files\n";
+  if (arguments.size() != 6) {
+    std::cerr << "tpj_scenarios: --slice-parks takes five files\n";
     return 1;
   }
   const std::string &fedPath = arguments[1];
   const std::optional<std::string> fed = readFile(fedPath);
   if (!fed) {
     std::cerr << "tpj_scenarios: cannot read " << fedPath << '\n';
+    return 1;
+  }
+  const std::string &mainStreetPath = arguments[4];
+  const std::optional<std::string> mainStreet = readFile(mainStreetPath);
+  if (!mainStreet) {
+    std::cerr << "tpj_scenarios: cannot read " << mainStreetPath << '\n';
     return 1;
   }
   tpj::SliceParks parks;
@@ -135,6 +143,13 @@ int writeSliceParks(const std::vector<std::string> &arguments) {
     std::cerr << "tpj_scenarios: " << fedPath << ": " << error.what() << '\n';
     return 1;
   }
+  std::string warmMainStreet;
+  try {
+    warmMainStreet = tpj::makeWarmPark(*mainStreet, tpj::MAIN_STREET_WARM_TICKS);
+  } catch (const tpj::LoadError &error) {
+    std::cerr << "tpj_scenarios: " << mainStreetPath << ": " << error.what() << '\n';
+    return 1;
+  }
   const std::array<const std::string *, 3> texts{&parks.Fed, &parks.Warm, &parks.Cut};
   for (size_t i = 0; i < texts.size(); ++i) {
     const std::string &path = arguments[i + 1];
@@ -142,6 +157,11 @@ int writeSliceParks(const std::vector<std::string> &arguments) {
       std::cerr << "tpj_scenarios: cannot write " << path << '\n';
       return 1;
     }
+  }
+  const std::string &warmMainStreetPath = arguments[5];
+  if (!writeFile(warmMainStreetPath, warmMainStreet)) {
+    std::cerr << "tpj_scenarios: cannot write " << warmMainStreetPath << '\n';
+    return 1;
   }
   return 0;
 }
