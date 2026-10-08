@@ -70,9 +70,9 @@ struct CurvePoint {
 };
 
 // What a guest publishes about itself for display and tests (decision 0025): what it is doing,
-// where it stands, where that is on the ground (none while its place does not resolve), how
-// hungry it is, the tick its stay ends, the shop it is heading to or waiting at, and the meals it
-// has eaten and the last of them. Nothing in the park reads it.
+// its place on the guest network, the ground position it stands on, how hungry it is, the tick its
+// stay ends, the shop it is heading to or waiting at, and the meals it has eaten and the last of
+// them. Nothing in the park reads it.
 struct GuestRecord {
   GuestActivity Activity = GuestActivity::Wandering;
   Place At;
@@ -98,6 +98,11 @@ inline constexpr double HUNGER_RATE_MAX = 1.0 / 1350.0;
 inline constexpr double STARTING_HUNGER_MAX = 0.4;
 // Meters per second a guest walks.
 inline constexpr double WALK_SPEED = 1.3;
+// Meters a guest keeps from every line bounding the paving it walks on: half the diagonal of its
+// 0.6 m box, so the box stays on the paving at any angle.
+inline constexpr double GUEST_CLEARANCE = 0.45;
+// Meters of route ahead of its place that a guest looks along for its aim.
+inline constexpr double AIM_LOOKAHEAD = 30.0;
 // How much an offer's relief matters at each hunger.
 inline constexpr std::array<CurvePoint, 4> HUNGER_CURVE{
     {{0.0, 0.0}, {0.3, 0.1}, {0.7, 0.8}, {1.0, 1.0}}};

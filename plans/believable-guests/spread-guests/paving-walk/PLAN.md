@@ -179,6 +179,8 @@ Step 5: Build.
 Run: `cmake.exe --build --preset windows-debug --target tpj_sim`
 Expected: the build succeeds with no warnings.
 
+Deviation, minor: GroundWall holds GroundPoints rather than ParkPoints, since the queries take GroundPoints, and Task 7's queries were written in this task instead of as stubs.
+
 ### Task 7: The ground's queries
 
 Files:
@@ -295,6 +297,8 @@ Step 4: Build and run the app on main-street.park long enough for guests to arri
 Run: `cmake.exe --build --preset windows-debug --target tpj_app && build/windows-debug/ThemeParkJones.exe --park tests/parks/main-street.park --ticks 3600 --capture build/windows-debug/paving-walk-street.bmp`
 Expected: the app prints `GPU driver: vulkan` and exits with status 0. Look at the capture: guests stand on the paving, none on the grass, and some stand off the center lines.
 
+Deviation, from review: a guest only reached the end when its aim was on the route's last stretch. A connector whose first part is shorter than GUEST_CLEARANCE has no point on that stretch the box can reach, so its guests stopped for good. A guest now reaches the end when it stands at its aim, the aim can't move on, and no node of the route lies between the aim and the end. A fixed distance from the end wouldn't do, since a slanted door can leave the nearest reachable point several meters back.
+
 ### Task 10: Carry guests by their ground position
 
 Files:
@@ -333,6 +337,8 @@ Step 3: Run the park world checks and the food loop.
 
 Run: `cmake.exe --build --preset windows-debug --target tpj_sim_tests tpj_integration_tests && build/windows-debug/tpj_sim_tests.exe 2>&1 | tail -3 && build/windows-debug/tpj_integration_tests.exe 2>&1 | tail -3`
 Expected: both report `All tests passed`. If a check that needs a guest waiting at the shop or heading to it fails on warm.park, that is a Major deviation: stop and report it.
+
+Deviation, minor: in the remade warm.park, the first segment under a guest heading to the shop is the entrance path, where the world checks' crossing path runs into the shop and isn't accepted. tests/sim/park_world_checks_test.cpp's addingPathCrossingGuestSegment now takes the first such segment where the crossing is accepted. What the checks assert is unchanged.
 
 ### Task 12: Check that guests stay on the paving
 

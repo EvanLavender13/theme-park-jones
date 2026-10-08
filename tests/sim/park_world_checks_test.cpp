@@ -131,19 +131,28 @@ bool someGuest(const World &world, GuestActivity activity, EntityKey target) {
   });
 }
 
-// A guest segment that a guest heading to a shop stands on.
-EntityKey guestSegmentUnderGuestHeadingToShop(const World &world) {
+// The guest segments that guests heading to a shop stand on, in key order of the guests, each
+// once.
+std::vector<EntityKey> guestSegmentsUnderGuestsHeadingToShop(const World &world) {
+  std::vector<EntityKey> keys;
   for (const GuestRecord &record : guestsOf(world)) {
     if (record.Activity != GuestActivity::HeadingToShop) {
       continue;
     }
     for (const ParkSegment &segment : parkSegments(world)) {
-      if (segment.Kind == PathKind::Guest && segment.Key == record.At.Carrier) {
-        return segment.Key;
+      if (segment.Kind == PathKind::Guest && segment.Key == record.At.Carrier &&
+          std::ranges::find(keys, segment.Key) == keys.end()) {
+        keys.push_back(segment.Key);
       }
     }
   }
-  return NULL_KEY;
+  return keys;
+}
+
+// A guest segment that a guest heading to a shop stands on.
+EntityKey guestSegmentUnderGuestHeadingToShop(const World &world) {
+  const std::vector<EntityKey> keys = guestSegmentsUnderGuestsHeadingToShop(world);
+  return keys.empty() ? NULL_KEY : keys.front();
 }
 
 EntityKey firstShop(const World &world) {
@@ -217,28 +226,35 @@ ChosenEdit addingPathEndingOnGuestSegment(const World &before) {
   return {};
 }
 
-// A guest path drawn across the segment guests stand on joins it where they cross: both split at a
+// A guest path drawn across a segment guests stand on joins it where they cross: both split at a
 // new point the path adds, so the guests on the segment's far part are carried onto a new carrier,
 // and the networks and route distance are derived again. The path's ends lie 6 m from the
-// segment's middle, square to it, one on each side.
+// segment's middle, square to it, one on each side. The segment is the first under a guest heading
+// to a shop where the world accepts such a path, since one may run into a box.
 ChosenEdit addingPathCrossingGuestSegment(const World &before) {
-  const EntityKey segmentKey = guestSegmentUnderGuestHeadingToShop(before);
-  REQUIRE(segmentKey != NULL_KEY);
-  const std::optional<ParkPoint> middlePosition = stopPosition(before, OnSegment{segmentKey, 0.5});
-  REQUIRE(middlePosition.has_value());
-  const ParkPoint middlePoint = middlePosition.value_or(ParkPoint{});
-  const ParkPoint square = squareToSegment(before, segmentKey);
-  constexpr double OFFSET = 6.0;
-  const ParkPoint oneSide{middlePoint.X + (OFFSET * square.X), middlePoint.Z + (OFFSET * square.Z)};
-  const ParkPoint otherSide{middlePoint.X - (OFFSET * square.X),
-                            middlePoint.Z - (OFFSET * square.Z)};
-  const AddPath add{PathKind::Guest, {NewPoint{oneSide}, NewPoint{otherSide}}};
-  REQUIRE(isAccepted(before, ParkEdit{add}));
-  // Without a crossing, this edit would only add a free-standing path and check nothing new.
-  REQUIRE_FALSE(pathCrossings(before, add).empty());
-  return {"a guest path crossing the middle of a segment guests stand on, splitting the segment "
-          "under them",
-          add};
+  for (const EntityKey segmentKey : guestSegmentsUnderGuestsHeadingToShop(before)) {
+    const std::optional<ParkPoint> middlePosition =
+        stopPosition(before, OnSegment{segmentKey, 0.5});
+    REQUIRE(middlePosition.has_value());
+    const ParkPoint middlePoint = middlePosition.value_or(ParkPoint{});
+    const ParkPoint square = squareToSegment(before, segmentKey);
+    constexpr double OFFSET = 6.0;
+    const ParkPoint oneSide{middlePoint.X + (OFFSET * square.X),
+                            middlePoint.Z + (OFFSET * square.Z)};
+    const ParkPoint otherSide{middlePoint.X - (OFFSET * square.X),
+                              middlePoint.Z - (OFFSET * square.Z)};
+    const AddPath add{PathKind::Guest, {NewPoint{oneSide}, NewPoint{otherSide}}};
+    if (!isAccepted(before, ParkEdit{add})) {
+      continue;
+    }
+    // Without a crossing, this edit would only add a free-standing path and check nothing new.
+    REQUIRE_FALSE(pathCrossings(before, add).empty());
+    return {"a guest path crossing the middle of a segment guests stand on, splitting the segment "
+            "under them",
+            add};
+  }
+  FAIL("no guest segment under a guest heading to a shop accepts a path crossing its middle");
+  return {};
 }
 
 // A new shop is connected to both networks, supplied, and offered.
