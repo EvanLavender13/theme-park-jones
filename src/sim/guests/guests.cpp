@@ -2,7 +2,9 @@
 
 #include "sim/draw.h"
 #include "sim/guests/internal/footfall.h"
+#include "sim/guests/internal/ground.h"
 #include "sim/guests/internal/guest.h"
+#include "sim/guests/internal/route_ahead.h"
 #include "sim/medium/field.h"
 #include "sim/medium/flow.h"
 #include "sim/medium/network.h"
@@ -33,6 +35,9 @@ using RouteSample = std::vector<SampledEntry<RouteEntry>>;
 
 // Meters a guest walks each tick.
 constexpr double WALK_STEP = WALK_SPEED * SIM_TICK_SECONDS;
+// An aim that moves less than this, in meters, when it is advanced, can come no closer to the end
+// of its route, so halving can't creep it on for ever.
+constexpr double AIM_SETTLED = 0.01;
 
 // The keys of the entrances, ascending.
 std::vector<EntityKey> entranceKeys(const World &world) {
@@ -57,23 +62,6 @@ const RouteEntry *homeEntry(const RouteSample &routes, const std::vector<EntityK
   return nearest;
 }
 
-// The least entrance entry at the place, ties to the lower key, or none, as homeEntry finds it in a
-// sample there.
-std::optional<RouteEntry> homeEntryAt(const World &world, const Network &network,
-                                      const Place &place, const std::vector<EntityKey> &entrances) {
-  std::optional<RouteEntry> nearest;
-  // Entrances come in ascending key order, so keeping only a strictly less distance breaks ties
-  // to the lower key.
-  for (const EntityKey entrance : entrances) {
-    const std::optional<RouteEntry> entry =
-        routeEntryAt(world, PathKind::Guest, network, place, entrance);
-    if (entry && (!nearest || entry->Distance < nearest->Distance)) {
-      nearest = entry;
-    }
-  }
-  return nearest;
-}
-
 // The source's offer when it says meals are supplied: its first food-offer entry at the place of
 // its lowest anchored node, or none. With an entry in route distance at the guest's place, the
 // offer is reachable.
@@ -91,21 +79,6 @@ std::optional<OfferEntry> suppliedOffer(const World &world, const Network &netwo
   return offer;
 }
 
-// The steps out of the node, in edge order: each edge starting at it walked forward, then each
-// ending at it walked back.
-std::vector<RouteStep> stepsFrom(const Network &network, uint32_t node) {
-  std::vector<RouteStep> steps;
-  for (const NetworkEdge &edge : network.edges()) {
-    if (edge.From == node) {
-      steps.push_back({edge.Carrier, edge.FromDistance, edge.ToDistance});
-    }
-    if (edge.To == node) {
-      steps.push_back({edge.Carrier, edge.ToDistance, edge.FromDistance});
-    }
-  }
-  return steps;
-}
-
 // Whether the step at a node goes back along the edge the guest came in on: its own carrier, from
 // where it stands, against the way it walks.
 bool isWayBack(const RouteStep &step, const Guest &guest) {
@@ -113,29 +86,42 @@ bool isWayBack(const RouteStep &step, const Guest &guest) {
          (step.To > step.From) != guest.Forward;
 }
 
+// Lists walking reuses from guest to guest within a step, so it allocates nothing per guest once
+// they have grown.
+struct WalkLists {
+  RouteAhead Route;
+  std::vector<RouteStep> Steps;
+  std::vector<uint64_t> Weights;
+};
+
 // A wandering guest's step: on to the stop ahead inside an edge, and at a node a keyed pick among
-// the steps other than the way back, or the way back when there is no other.
+// the steps other than the way back, or the way back when there is no other. The steps out of a
+// node are the edges meeting it, each walked away from it, in the order edgeEnds gives them.
 RouteStep wanderStep(const World &world, EntityKey key, const Guest &guest, const Network &network,
-                     const NetworkPosition &position, uint64_t &picks) {
+                     const NetworkPosition &position, uint64_t &picks, WalkLists &lists) {
   if (const auto *inside = std::get_if<EdgePosition>(&position)) {
     const NetworkEdge &edge = network.edges()[inside->Edge];
     return {guest.At.Carrier, guest.At.Distance,
             guest.Forward ? edge.ToDistance : edge.FromDistance};
   }
-  std::vector<RouteStep> onward;
+  lists.Steps.clear();
   RouteStep back;
-  for (const RouteStep &step : stepsFrom(network, std::get<NodePosition>(position).Node)) {
+  for (const EdgeEnd &end : network.edgeEnds(std::get<NodePosition>(position).Node)) {
+    const NetworkEdge &edge = network.edges()[end.Edge];
+    const RouteStep step = end.AtFrom ? RouteStep{edge.Carrier, edge.FromDistance, edge.ToDistance}
+                                      : RouteStep{edge.Carrier, edge.ToDistance, edge.FromDistance};
     if (isWayBack(step, guest)) {
       back = step;
     } else {
-      onward.push_back(step);
+      lists.Steps.push_back(step);
     }
   }
-  if (onward.empty()) {
+  if (lists.Steps.empty()) {
     return back;
   }
-  const std::vector<uint64_t> weights(onward.size(), 1);
-  return onward[drawPick(drawKey(world, key, hashName("guest-wander"), picks++), weights)];
+  lists.Weights.assign(lists.Steps.size(), 1);
+  return lists.Steps[drawPick(drawKey(world, key, hashName("guest-wander"), picks++),
+                              std::span<const uint64_t>(lists.Weights))];
 }
 
 // The options a guest weighs where it stands, scored as a choice scores them, and each offer's
@@ -233,25 +219,6 @@ void sendVisit(World &world, EntityKey key, EntityKey shop) {
   sendUnits<GuestVisits>(world, key, shop, key, 1, VISIT_DELAY);
 }
 
-// Walks the guest along the step, by the lesser of the distance left and the gap to the step's
-// To, which it subtracts from the distance left. At a node it joins the step's carrier at From.
-void walkStep(Guest &guest, const RouteStep &step, bool atNode, double &left) {
-  if (atNode) {
-    guest.At = {step.Carrier, step.From};
-  }
-  guest.Forward = step.To > guest.At.Distance;
-  const double gap = std::abs(step.To - guest.At.Distance);
-  if (left < gap) {
-    // Rounding never carries the guest past the stop it walks toward.
-    const double walked = guest.Forward ? guest.At.Distance + left : guest.At.Distance - left;
-    guest.At.Distance = guest.Forward ? std::min(walked, step.To) : std::max(walked, step.To);
-    left = 0.0;
-  } else {
-    guest.At.Distance = step.To;
-    left -= gap;
-  }
-}
-
 // Where the guest's heading takes it from its place: its target shop's route entry or the least
 // entrance entry, whichever it heads for. A guest heading to a shop whose offer it can no longer
 // reach drops the target, and one heading home with no entrance entry stops, each becoming
@@ -275,7 +242,7 @@ Heading headingOf(const World &world, Guest &guest, const Network &network,
     }
   }
   if (guest.Activity == GuestActivity::HeadingHome) {
-    heading.Home = homeEntryAt(world, network, guest.At, entrances);
+    heading.Home = leastEntryAt(world, network, guest.At, entrances);
     if (!heading.Home) {
       guest.Activity = GuestActivity::Wandering;
       heading.Dropped = true;
@@ -284,12 +251,97 @@ Heading headingOf(const World &world, Guest &guest, const Network &network,
   return heading;
 }
 
-// Walks the guest WALK_STEP along the guest network. It drops a target it can no longer reach,
-// sends its visit at its target's anchor, and chooses when it must and at every node it leaves,
-// at most once between steps. Returns false when the guest reaches its entrance heading home,
-// and leaves.
+// Where a pass of a guest's walk left it along its route: the spot of its place, and its aim's spot
+// before and after the pass advanced it.
+struct WalkedPass {
+  RouteSpot At;
+  RouteSpot Aimed;
+  RouteSpot Aim;
+};
+
+// Advances the guest's aim along the route and walks it straight toward the aim, by as much of the
+// distance left as that takes, which it subtracts. The line to the aim is clear, so every point
+// along it is too. The guest's place becomes the spot of the route nearest where it now stands,
+// never past the aim, and it walks the way that spot's stretch runs.
+WalkedPass walkTowardAim(Guest &guest, const GuestGround &ground, uint32_t group,
+                         const RouteAhead &route, double &left) {
+  WalkedPass pass;
+  pass.Aimed = spotOf(route, guest.Aim).value_or(RouteSpot{});
+  pass.Aim = advanceAim(ground, group, guest.Ground, route, pass.Aimed);
+  const GroundPoint toward = pointAt(route, pass.Aim);
+  const double gapX = toward.X - guest.Ground.X;
+  const double gapZ = toward.Z - guest.Ground.Z;
+  const double gap = std::sqrt((gapX * gapX) + (gapZ * gapZ));
+  if (left >= gap) {
+    guest.Ground = toward;
+    left -= gap;
+  } else {
+    guest.Ground = {guest.Ground.X + (gapX * left / gap), guest.Ground.Z + (gapZ * left / gap)};
+    left = 0.0;
+  }
+  pass.At = nearestSpot(route, guest.Ground, pass.Aim);
+  guest.At = placeAt(route, pass.At);
+  guest.Aim = placeAt(route, pass.Aim);
+  if (pass.At.Point > 0) {
+    const RoutePoint &stretch = route.Points[pass.At.Point];
+    guest.Forward = stretch.To > stretch.From;
+  }
+  return pass;
+}
+
+// Whether the guest has reached the end of its route: it stands on it, or it stands at its aim with
+// no node of the route between the aim and the end, and the pass moved the aim less than
+// AIM_SETTLED, so its box can come no closer. A door's end lies along its face, so where the
+// connector meets it at a slant, or its last part is short, the nearest the box can come may lie
+// well back from the door.
+bool reachedEnd(const Guest &guest, const RouteAhead &route, const WalkedPass &pass) {
+  if (!route.Ends) {
+    return false;
+  }
+  const size_t last = route.Points.size() - 1;
+  if (guest.Ground == route.Points[last].At) {
+    return true;
+  }
+  const GroundPoint aim = pointAt(route, pass.Aim);
+  const GroundPoint aimed = pointAt(route, pass.Aimed);
+  const double movedX = aim.X - aimed.X;
+  const double movedZ = aim.Z - aimed.Z;
+  return guest.Ground == aim && !nodeAhead(route, pass.Aim) &&
+         (movedX * movedX) + (movedZ * movedZ) < AIM_SETTLED * AIM_SETTLED;
+}
+
+// What a pass of a guest's walk did: reached the end of its route, moved its place past a node of
+// it, moved its place, moved only where it stands, or moved nothing.
+enum class Pass : uint8_t { ReachedEnd, PassedNode, PlaceMoved, GroundMoved, Stayed };
+
+// One pass of a guest's walk along its route: it walks toward its aim, and at the end of its route
+// its place and aim become the route's end.
+Pass walkPass(Guest &guest, const GuestGround &ground, uint32_t group, const RouteAhead &route,
+              double &left) {
+  const Place was = guest.At;
+  const GroundPoint stood = guest.Ground;
+  const WalkedPass pass = walkTowardAim(guest, ground, group, route, left);
+  if (reachedEnd(guest, route, pass)) {
+    guest.At = placeAt(route, {route.Points.size() - 1, 1.0});
+    guest.Aim = guest.At;
+    return Pass::ReachedEnd;
+  }
+  if (passesNode(route, pass.At)) {
+    return Pass::PassedNode;
+  }
+  if (guest.At != was) {
+    return Pass::PlaceMoved;
+  }
+  return guest.Ground != stood ? Pass::GroundMoved : Pass::Stayed;
+}
+
+// Walks the guest WALK_STEP across the guest paving, straight toward its aim along its route. It
+// drops a target it can no longer reach, sends its visit when it reaches the end of its route at
+// its target, and chooses when it must and at every node its place reaches or passes, at most once
+// until its place moves. Returns false when the guest reaches its entrance heading home, and
+// leaves.
 bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
-          const std::vector<EntityKey> &entrances) {
+          const GuestGround &ground, const std::vector<EntityKey> &entrances, WalkLists &lists) {
   double left = WALK_STEP;
   uint64_t picks = 0;
   uint64_t choices = 0;
@@ -315,21 +367,48 @@ bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
       choose(world, key, guest, network, entrances, choices);
       chosen = true;
       mustChoose = false;
+      // A new choice can change the route, so the aim starts again from the place.
+      guest.Aim = guest.At;
       continue;
     }
     if (left <= 0.0) {
       return true;
     }
-    RouteStep step;
-    if (heading.Target) {
-      step = heading.Target->Next;
-    } else if (heading.Home) {
-      step = heading.Home->Next;
-    } else {
-      step = wanderStep(world, key, guest, network, *position, picks);
+    const std::optional<uint32_t> group = ground.groupOf(guest.At.Carrier);
+    if (!group) {
+      return true;
     }
-    walkStep(guest, step, atNode, left);
-    chosen = false;
+    RouteStep first;
+    std::span<const EntityKey> sources;
+    if (heading.Target) {
+      first = heading.Target->Next;
+      sources = std::span<const EntityKey>(&guest.Target, 1);
+    } else if (heading.Home) {
+      first = heading.Home->Next;
+      sources = entrances;
+    } else {
+      first = wanderStep(world, key, guest, network, *position, picks, lists);
+    }
+    RouteAhead &route = lists.Route;
+    traceRoute(world, network, guest.At, first, sources, route);
+    if (route.Points.empty()) {
+      return true;
+    }
+
+    switch (walkPass(guest, ground, *group, route, left)) {
+    case Pass::PassedNode:
+      mustChoose = true;
+      chosen = false;
+      break;
+    case Pass::ReachedEnd:
+    case Pass::PlaceMoved:
+      chosen = false;
+      break;
+    case Pass::GroundMoved:
+      break;
+    case Pass::Stayed:
+      return true;
+    }
   }
 }
 
@@ -384,8 +463,10 @@ bool awaitVisit(World &world, EntityKey key, Guest &guest) {
 // and then the entrances admit new ones.
 void stepGuests(World &world) {
   const Network &network = parkNetwork(world, PathKind::Guest);
+  const GuestGround &ground = guestGround(world);
   const std::vector<EntityKey> entrances = entranceKeys(world);
   std::vector<EntityKey> leaving;
+  WalkLists lists;
   for (const EntityKey key : parkGuests(world)) {
     Guest &guest = world.Registry.get<Guest>(world.findEntity(key));
     if (!network.resolve(guest.At)) {
@@ -396,7 +477,7 @@ void stepGuests(World &world) {
     if (guest.Activity == GuestActivity::Waiting && awaitVisit(world, key, guest)) {
       continue;
     }
-    if (!walk(world, key, guest, network, entrances)) {
+    if (!walk(world, key, guest, network, ground, entrances, lists)) {
       leaving.push_back(key);
     }
   }
@@ -418,10 +499,13 @@ void keepWayOverGround(Guest &guest, const Network &before, const Network &after
   }
 }
 
-// Carries each guest's place from the guest network before the resolution to the one it derived:
-// by carryOver, and for a retired place, to the new network's nearest place to where the guest
-// stood. A guest that carryOver puts on another carrier keeps walking the same way over the
-// ground. A place with neither is left as it is, and its guest leaves when it next steps. Nothing
+// Carries each guest across a resolution by where it stands. While its box fits on guest paving
+// there, it keeps its ground position: on the paving its place is carried to by carryOver when that
+// lies under it, and then at that carried place, and otherwise at the nearest place on the carrier
+// of the piece it stands on. Otherwise it moves to the nearest point where its box fits, and takes
+// its place from the piece there. A guest carried onto another carrier keeps walking the same way
+// over the ground. With no guest paving left, its place is left as it is, which no longer
+// resolves, and its guest leaves when it next steps. Its aim starts again from its place. Nothing
 // changes in a world's first resolution, which has no network before.
 void carryGuests(World &world) {
   const Network *before = previousNetwork(world, PathKind::Guest);
@@ -429,22 +513,36 @@ void carryGuests(World &world) {
     return;
   }
   const Network &after = parkNetwork(world, PathKind::Guest);
+  const GuestGround &ground = guestGround(world);
+  const auto moveTo = [&](Guest &guest, const Place &place) {
+    if (place.Carrier != guest.At.Carrier) {
+      keepWayOverGround(guest, *before, after, place);
+    }
+    guest.At = place;
+  };
   for (const EntityKey key : parkGuests(world)) {
     Guest &guest = world.Registry.get<Guest>(world.findEntity(key));
-    if (const std::optional<Place> carried = carryOver(guest.At, *before, after)) {
-      if (carried->Carrier != guest.At.Carrier) {
-        keepWayOverGround(guest, *before, after, *carried);
+    const std::optional<Place> carried = carryOver(guest.At, *before, after);
+    const std::optional<uint32_t> carriedGroup =
+        carried ? ground.groupOf(carried->Carrier) : std::nullopt;
+    const GroundPiece *piece = ground.pieceAt(guest.Ground, carriedGroup);
+    // Leaving door ends out keeps a guest that has just come through the entrance's door there.
+    if (piece != nullptr && ground.fits(piece->Group, guest.Ground, false)) {
+      if (carried && carriedGroup == piece->Group) {
+        moveTo(guest, *carried);
+      } else if (const std::optional<Place> nearest =
+                     after.nearestPlaceOn(piece->Carrier, guest.Ground)) {
+        moveTo(guest, *nearest);
       }
-      guest.At = *carried;
-      continue;
+    } else if (const std::optional<GroundSpot> fit = ground.nearestFit(guest.Ground)) {
+      guest.Ground = fit->At;
+      if (const GroundPiece *on = ground.pieceAt(fit->At, fit->Group)) {
+        if (const std::optional<Place> nearest = after.nearestPlaceOn(on->Carrier, fit->At)) {
+          moveTo(guest, *nearest);
+        }
+      }
     }
-    const std::optional<GroundPoint> stood = before->groundPoint(guest.At);
-    if (!stood) {
-      continue;
-    }
-    if (const std::optional<Place> nearest = after.nearestPlace(*stood)) {
-      guest.At = *nearest;
-    }
+    guest.Aim = guest.At;
   }
 }
 
@@ -472,7 +570,7 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
   GuestRecord record;
   record.Activity = state->Activity;
   record.At = state->At;
-  record.Position = parkNetwork(world, PathKind::Guest).groundPoint(state->At);
+  record.Position = state->Ground;
   record.Hunger = state->Hunger;
   record.StayUntil = state->StayUntil;
   record.Target = state->Target;
@@ -503,12 +601,15 @@ std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, Entity
 }
 
 EntityKey addGuest(World &world, const Place &place, uint64_t stayUntil) {
-  if (!parkNetwork(world, PathKind::Guest).resolve(place)) {
+  const std::optional<GroundPoint> ground = parkNetwork(world, PathKind::Guest).groundPoint(place);
+  if (!ground) {
     throw std::invalid_argument("addGuest: the place is not on the guest network");
   }
   const EntityKey key = world.createEntity();
   Guest guest;
   guest.At = place;
+  guest.Ground = *ground;
+  guest.Aim = place;
   guest.StayUntil = stayUntil;
   guest.HungerRate = HUNGER_RATE_MIN + guestDraw(world, key, "guest-hunger-rate") *
                                            (HUNGER_RATE_MAX - HUNGER_RATE_MIN);
@@ -539,6 +640,7 @@ size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options) {
 
 void addGuests(WorldSchema &schema) {
   schema.addComponent<Guest>("guest", DataKind::State);
+  addGuestGround(schema);
   schema.addSystem(&stepGuests);
   schema.addFinisher(&carryGuests);
   addFootfall(schema);

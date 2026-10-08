@@ -4,7 +4,9 @@ add_library(tpj_sim STATIC
     cycle.cpp
     draw.cpp
     guests/footfall.cpp
+    guests/ground.cpp
     guests/guests.cpp
+    guests/route_ahead.cpp
     medium/flow.cpp
     medium/network.cpp
     musl_exp.cpp

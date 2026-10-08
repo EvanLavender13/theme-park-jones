@@ -9,12 +9,15 @@
 
 namespace tpj {
 
-// State, on a guest's entity: where it stands on the guest network, whether it walks toward
-// higher distances along that place's carrier, what it is doing, how hungry it is and how fast
-// that rises, the tick its stay ends, the shop it is heading to or waiting at, the relief of the
-// offer it last picked, and the meals it has eaten and the last of them.
+// State, on a guest's entity: where it stands on the guest network, where it stands on the
+// ground, the place on its route it walks toward, whether it walks toward higher distances along
+// its place's carrier, what it is doing, how hungry it is and how fast that rises, the tick its
+// stay ends, the shop it is heading to or waiting at, the relief of the offer it last picked, and
+// the meals it has eaten and the last of them.
 struct Guest {
   Place At;
+  GroundPoint Ground;
+  Place Aim;
   bool Forward = true;
   GuestActivity Activity = GuestActivity::Wandering;
   double Hunger = 0.0;
@@ -28,6 +31,9 @@ struct Guest {
 
 template <typename Visitor> void visitFields(Visitor &visitor, Guest &guest) {
   visitor.field("at", guest.At);
+  visitor.field("x", guest.Ground.X);
+  visitor.field("z", guest.Ground.Z);
+  visitor.field("aim", guest.Aim);
   visitor.field("forward", guest.Forward);
   visitor.field("activity", guest.Activity);
   visitor.field("hunger", guest.Hunger);

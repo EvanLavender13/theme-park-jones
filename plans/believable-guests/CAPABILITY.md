@@ -72,7 +72,7 @@ Guest state goes into park files in tests/parks/, where the park world checks co
 - Guest visits: a flow this capability supplies to plausible-operations' shops. Each visit comes back served or unserved.
 - Meals: a flow drawn from plausible-operations. A guest consumes its meal when it eats. Hunger stays private.
 - Hungry footfall: a scalar field this capability produces on the guest network. legible-simulation samples it for preview context.
-- Networks and anchors: through shared-medium's network type, guests take their routes from the guest network, and arrive and leave at the entrance's anchor. Each guest's place on the network is the nearest place on the carrier of the paving it stands on.
+- Networks and anchors: through shared-medium's network type, guests take their routes from the guest network, and arrive and leave at the entrance's anchor. Each guest's place on the network is where it has got to along its route, the point of its route nearest where it stands.
 - Park intent's derived shape (decision 0025): guests walk on the guest paving's pieces from sim/park, with each walkway's piece and its connector's key. Each guest keeps its ground position across each re-derivation while paving still lies there.
 - Guest presence: a ground field in shared-medium's medium that this capability produces and samples. Each guest publishes where it stood and how it moved, and steps aside from the guests near it, without reading their state.
 - Park intent (decision 0025): the entrance, from effortless-building. Its entity key identifies the anchor where guests arrive, and the route distance source they head home to.

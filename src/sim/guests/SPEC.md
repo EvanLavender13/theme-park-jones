@@ -4,7 +4,7 @@ This module holds the park's visitors. It serves the believable-guests capabilit
 
 ## Boundary
 
-addGuests registers the guest state, the systems that step guests and their footfall, and the finishers that carry both across a resolution. addPark calls it after addOperations, so guests step after shops and depots.
+addGuests registers the guest state, the ground guests walk on and the resolver that derives it, the systems that step guests and their footfall, and the finishers that carry both across a resolution. addPark calls it after addOperations, so guests step after shops and depots.
 
 A guest reads the park only through the medium and intent:
 
@@ -12,7 +12,8 @@ A guest reads the park only through the medium and intent:
 - guest route distance;
 - the food-offer field;
 - its own guest-visits and meals stocks;
-- parkEntrances (decision 0025).
+- parkEntrances (decision 0025);
+- the guest paving, from parkSurface with the guest walkways, walkwayPiece, parkSegments, and keyedWalkways (decision 0025).
 
 A guest visits shops and receives meals through the guest-visits and meals flows. No other module reads a guest's state.
 
@@ -20,9 +21,9 @@ Other modules call guests.h (parkGuests, addGuest, guestRecord, and guestOptions
 
 ## Arriving and leaving
 
-Guests arrive at regular intervals at each entrance connected to the guest network, one per entrance at a time. Each guest stays for a drawn length of time. If an entrance has no connection, it admits no one, and that is a legitimate state (principle 2). A guest leaves the park when it walks back to an entrance after its stay. It also leaves when the guest network has nowhere left for it to stand.
+Guests arrive at regular intervals at each entrance connected to the guest network, one per entrance at a time. Each guest stays for a drawn length of time. If an entrance has no connection, it admits no one, and that is a legitimate state (principle 2). A guest leaves the park when it walks back to an entrance after its stay. It also leaves when no guest paving is left for it to stand on.
 
-addGuest(world, place, stayUntil) is the only way a guest comes into being. Arrivals use it, and so does code outside the module, such as park generators, which can't name any guest component (principle 6). It returns the new guest's key. If the place is not on the guest network, addGuest refuses it. A new guest's hunger and hunger rate are drawn, so guests differ from one another. The same world and seed always give the same guests (principle 8).
+addGuest(world, place, stayUntil) is the only way a guest comes into being. Arrivals use it, and so does code outside the module, such as park generators, which can't name any guest component (principle 6). It returns the new guest's key. If the place is not on the guest network, addGuest refuses it. A new guest stands at the place's ground position. A new guest's hunger and hunger rate are drawn, so guests differ from one another. The same world and seed always give the same guests (principle 8).
 
 ## Hunger
 
@@ -40,11 +41,17 @@ A shop scores higher the hungrier the guest is. It scores lower the farther away
 
 A guest finds shops only through route distance and the food-offer field. If it can't walk to a shop, or the shop's food-offer shows no meals, that shop is never an option. An entrance is never an option for food.
 
-A guest chooses at every node it leaves. It also chooses as soon as its target becomes unreachable or stops offering meals, and when its visit comes back.
+A guest chooses at every node its place reaches or passes. It also chooses as soon as its target becomes unreachable or stops offering meals, and when its visit comes back.
 
 ## Walking
 
-A guest walks at a fixed speed along the guest network's carriers and never cuts across (principle 4). Its speed doesn't depend on how the network is cut into edges. When a guest heads to a shop or home, it follows route distance there. When a guest wanders, it picks at random among the ways leading out of each node. It never turns back unless there is no other way, as at a path's end.
+A guest stands at a ground position of its own on the guest paving, and saves hold it. It walks inside the outline of the paving it is on: the visible edge lines of its own joined paving (sim/park/SPEC.md), and the end of each walkway at its door. Where paths that aren't joined overlap, the other path's edge lines don't bound it, so it stays on its own path.
+
+The network chooses a guest's route. When a guest heads to a shop or home, its route follows route distance there, node after node. When it wanders, its route runs to the next node, and at each node it picks at random among the ways leading out of it. It never turns back unless there is no other way, as at a path's end.
+
+A guest walks straight toward its aim at a fixed speed. Its aim is the farthest point of its route, looking at most AIM_LOOKAHEAD along it, that a straight line reaches with the guest's box on the paving. The aim never moves back along the route until the route changes. The box is on the paving while the guest keeps at least GUEST_CLEARANCE, half the diagonal of its box, from every line that bounds it. If the guest stands nearer a line than that, as at the entrance's door it arrives through, it never comes nearer that line and never crosses it. So a guest heading for a shop across a wide street walks straight to its door, and at a bend it cuts the inside without leaving the paving. Walking anywhere on its route's paving travels that route, so route distance still measures how far it goes (principle 4, decision 0038). The work of walking a guest depends on the paving near it and its route ahead, not on the size of the park.
+
+A guest's place on the network is the point of its route, between its place and its aim, nearest where it stands. Its place moves only forward along its route, so the guest passes each node of its route in order. A guest reaches the end of its route when it stands on it, or when it has walked as far toward it as its box allows, with no node of its route left between, as in front of a door or at a path's free end. Its speed doesn't depend on how the network is cut into edges.
 
 ## Visits and meals
 
@@ -52,7 +59,7 @@ When a guest arrives at its target shop, it sends the shop a visit through the g
 
 ## Carrying across an edit
 
-When the player edits the park, each guest keeps its ground position if a path or connector still runs over it, even one with a new key, as when an edit splits a path. The guest stays on its own path or connector if that one still runs over its ground. If the guest is carried onto another one that runs the other way there, it turns, so it keeps walking the same way over the ground. If nothing runs over where the guest stood, but its own path or connector is still there with a new shape, the guest moves to the nearest point of it. If its path or connector is deleted, the guest moves to the nearest point of the guest network. Carrying changes only where guests stand and which way they walk. If a guest is waiting, it keeps waiting. If it is heading to a shop, it keeps its target until its next walk. In a candidate, guests stand where committing the candidate's edit would put them (principle 8).
+When the player edits the park, a guest keeps its ground position if its box still fits on guest paving there. It stays on the paving its place is carried to (sim/medium/SPEC.md) if that paving lies under it, so where paths that aren't joined overlap, it stays on its own path. Its place is then the carried place. If the carried place isn't on the paving under it, its place is the nearest place on the carrier of the segment, point, or walkway it stands on. If its box no longer fits where it stands, the guest moves to the nearest point where it fits on the guest paving, and takes its place from the paving there. If no guest paving is left, it leaves the park when it next steps. If the guest is carried onto a carrier that runs the other way there, it turns, so it keeps walking the same way over the ground. Carrying changes only where guests stand, their places, and which way they walk. If a guest is waiting, it keeps waiting. If it is heading to a shop, it keeps its target until its next walk. In a candidate, guests stand where committing the candidate's edit would put them (principle 8).
 
 ## Hungry footfall
 
@@ -69,7 +76,7 @@ Across an edit:
 
 ## Inspection
 
-guestRecord(world, key) returns a guest's inspection record for display (decision 0025). The record holds its activity, place and ground position, hunger, stay, target, meals eaten, and last meal.
+guestRecord(world, key) returns a guest's inspection record for display (decision 0025). The record holds its activity, its place, the ground position it stands on, hunger, stay, target, meals eaten, and last meal.
 
 guestOptions(world, key) returns the options the guest would weigh if it chose now. Each option has its terms (Relief, Distance, Wait, Commitment), its Score, and its Probability. The Score is exactly the sum of the terms.
 
