@@ -4,20 +4,24 @@
 #include "sim/entity_key.h"
 #include "sim/guests/guests.h"
 #include "sim/medium/network.h"
+#include "sim/routes/route_distance.h"
 
 #include <stdint.h>
 
 namespace tpj {
 
 // State, on a guest's entity: where it stands on the guest network, where it stands on the
-// ground, the place on its route it walks toward, whether it walks toward higher distances along
-// its place's carrier, what it is doing, how hungry it is and how fast that rises, the tick its
-// stay ends, the shop it is heading to or waiting at, the relief of the offer it last picked, and
-// the meals it has eaten and the last of them.
+// ground, the place on its route it walks toward, the way it leaves the next node it has chosen
+// for (an empty step at the node when it isn't wandering, and with carrier NULL_KEY until it has
+// chosen), whether it walks toward higher distances along its place's carrier, what it is doing,
+// how hungry it is and how fast that rises, the tick its stay ends, the shop it is heading to or
+// waiting at, the relief of the offer it last picked, and the meals it has eaten and the last of
+// them.
 struct Guest {
   Place At;
   GroundPoint Ground;
   Place Aim;
+  RouteStep Turn;
   bool Forward = true;
   GuestActivity Activity = GuestActivity::Wandering;
   double Hunger = 0.0;
@@ -34,6 +38,7 @@ template <typename Visitor> void visitFields(Visitor &visitor, Guest &guest) {
   visitor.field("x", guest.Ground.X);
   visitor.field("z", guest.Ground.Z);
   visitor.field("aim", guest.Aim);
+  visitor.field("turn", guest.Turn);
   visitor.field("forward", guest.Forward);
   visitor.field("activity", guest.Activity);
   visitor.field("hunger", guest.Hunger);

@@ -7,9 +7,9 @@
 
 namespace tpj {
 
-// The warm-up tests/parks/warm.park takes from fed.park: about 67 s of game time, long enough that
+// The warm-up tests/parks/warm.park takes from fed.park: about 73 s of game time, long enough that
 // cutting its backstage segment strands a waiting guest and a shipment in transit.
-inline constexpr uint64_t WARM_TICKS = 2020;
+inline constexpr uint64_t WARM_TICKS = 2200;
 
 // The boxes-and-tubes slice's three park files, as saves.
 struct SliceParks {

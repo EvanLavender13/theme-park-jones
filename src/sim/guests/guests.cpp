@@ -79,13 +79,6 @@ std::optional<OfferEntry> suppliedOffer(const World &world, const Network &netwo
   return offer;
 }
 
-// Whether the step at a node goes back along the edge the guest came in on: its own carrier, from
-// where it stands, against the way it walks.
-bool isWayBack(const RouteStep &step, const Guest &guest) {
-  return step.Carrier == guest.At.Carrier && step.From == guest.At.Distance &&
-         (step.To > step.From) != guest.Forward;
-}
-
 // Lists walking reuses from guest to guest within a step, so it allocates nothing per guest once
 // they have grown.
 struct WalkLists {
@@ -94,23 +87,36 @@ struct WalkLists {
   std::vector<uint64_t> Weights;
 };
 
-// A wandering guest's step: on to the stop ahead inside an edge, and at a node a keyed pick among
-// the steps other than the way back, or the way back when there is no other. The steps out of a
-// node are the edges meeting it, each walked away from it, in the order edgeEnds gives them.
-RouteStep wanderStep(const World &world, EntityKey key, const Guest &guest, const Network &network,
-                     const NetworkPosition &position, uint64_t &picks, WalkLists &lists) {
+// A wandering guest's first step, which draws nothing: inside an edge, on to the stop ahead; at a
+// node, its turn when the turn starts there, or on through a shaping point; at any other node, a
+// step with carrier NULL_KEY, so its route is its place alone until it makes its choice there.
+RouteStep firstWanderStep(const Guest &guest, const Network &network,
+                          const NetworkPosition &position) {
   if (const auto *inside = std::get_if<EdgePosition>(&position)) {
     const NetworkEdge &edge = network.edges()[inside->Edge];
     return {guest.At.Carrier, guest.At.Distance,
             guest.Forward ? edge.ToDistance : edge.FromDistance};
   }
+  const uint32_t node = std::get<NodePosition>(position).Node;
+  if (startsAt(network, guest.Turn, node)) {
+    return guest.Turn;
+  }
+  if (isShapingPoint(network, node)) {
+    return onwardStep(network, node, guest.At, guest.Forward).value_or(RouteStep{});
+  }
+  return {};
+}
+
+// The step a wanderer arriving at the place, walking the way forward gives, picks out of the node:
+// a keyed pick among the steps out of it other than the way back, each walked along its edge away
+// from the node in the order edgeEnds gives them, or the way back when there is no other.
+RouteStep pickTurn(const World &world, EntityKey key, const Network &network, uint32_t node,
+                   const Place &at, bool forward, uint64_t &picks, WalkLists &lists) {
   lists.Steps.clear();
   RouteStep back;
-  for (const EdgeEnd &end : network.edgeEnds(std::get<NodePosition>(position).Node)) {
-    const NetworkEdge &edge = network.edges()[end.Edge];
-    const RouteStep step = end.AtFrom ? RouteStep{edge.Carrier, edge.FromDistance, edge.ToDistance}
-                                      : RouteStep{edge.Carrier, edge.ToDistance, edge.FromDistance};
-    if (isWayBack(step, guest)) {
+  for (const EdgeEnd &end : network.edgeEnds(node)) {
+    const RouteStep step = stepAway(network, end);
+    if (isWayBack(step, at, forward)) {
       back = step;
     } else {
       lists.Steps.push_back(step);
@@ -310,9 +316,9 @@ bool reachedEnd(const Guest &guest, const RouteAhead &route, const WalkedPass &p
          (movedX * movedX) + (movedZ * movedZ) < AIM_SETTLED * AIM_SETTLED;
 }
 
-// What a pass of a guest's walk did: reached the end of its route, moved its place past a node of
-// it, moved its place, moved only where it stands, or moved nothing.
-enum class Pass : uint8_t { ReachedEnd, PassedNode, PlaceMoved, GroundMoved, Stayed };
+// What a pass of a guest's walk did: reached the end of its route, moved its place, moved only
+// where it stands, or moved nothing.
+enum class Pass : uint8_t { ReachedEnd, PlaceMoved, GroundMoved, Stayed };
 
 // One pass of a guest's walk along its route: it walks toward its aim, and at the end of its route
 // its place and aim become the route's end.
@@ -326,34 +332,75 @@ Pass walkPass(Guest &guest, const GuestGround &ground, uint32_t group, const Rou
     guest.Aim = guest.At;
     return Pass::ReachedEnd;
   }
-  if (passesNode(route, pass.At)) {
-    return Pass::PassedNode;
-  }
   if (guest.At != was) {
     return Pass::PlaceMoved;
   }
   return guest.Ground != stood ? Pass::GroundMoved : Pass::Stayed;
 }
 
+// Traces the guest's route ahead: by its target's entries toward its shop, by the entrances' toward
+// home, or wandering on from its first wander step with its turn.
+void traceGuestRoute(const World &world, const Guest &guest, const Network &network,
+                     const NetworkPosition &position, const Heading &heading,
+                     const std::vector<EntityKey> &entrances, RouteAhead &route) {
+  if (heading.Target) {
+    traceRoute(world, network, guest.At, heading.Target->Next,
+               std::span<const EntityKey>(&guest.Target, 1), guest.Turn, route);
+  } else if (heading.Home) {
+    traceRoute(world, network, guest.At, heading.Home->Next, entrances, guest.Turn, route);
+  } else {
+    traceRoute(world, network, guest.At, firstWanderStep(guest, network, position), {}, guest.Turn,
+               route);
+  }
+}
+
+// How far a guest's walk has got within a step: the distance it has left, its draws so far for
+// wandering picks and for choices, whether it has chosen since its place last moved, and whether it
+// must choose.
+struct WalkProgress {
+  double Left = WALK_STEP;
+  uint64_t Picks = 0;
+  uint64_t Choices = 0;
+  bool Chosen = false;
+  bool MustChoose = false;
+};
+
+// Makes the guest's choice for the route's node at the index. It chooses unless it has since its
+// place last moved, and then its aim starts again from its place. It then sets its turn out of the
+// node: a wanderer's pick, or for any other guest the empty step at the node.
+void chooseFor(World &world, EntityKey key, Guest &guest, const Network &network,
+               const std::vector<EntityKey> &entrances, size_t index, WalkProgress &progress,
+               WalkLists &lists) {
+  const RoutePoint &point = lists.Route.Points[index];
+  const Place at{point.Carrier, point.To};
+  const bool forward = index == 0 ? guest.Forward : point.To > point.From;
+  const uint32_t node = point.NodeIndex;
+  if (!progress.Chosen) {
+    choose(world, key, guest, network, entrances, progress.Choices);
+    progress.Chosen = true;
+    guest.Aim = guest.At;
+  }
+  guest.Turn = guest.Activity == GuestActivity::Wandering
+                   ? pickTurn(world, key, network, node, at, forward, progress.Picks, lists)
+                   : RouteStep{at.Carrier, at.Distance, at.Distance};
+}
+
 // Walks the guest WALK_STEP across the guest paving, straight toward its aim along its route. It
-// drops a target it can no longer reach, sends its visit when it reaches the end of its route at
-// its target, and chooses when it must and at every node its place reaches or passes, at most once
-// until its place moves. Returns false when the guest reaches its entrance heading home, and
-// leaves.
+// drops a target it can no longer reach, and sends its visit when it reaches the end of its route
+// at its target. It makes its choice for each node of its route, other than a shaping point and the
+// node it is heading to, when it comes within TURN_LOOKAHEAD of it or stands on it, and chooses
+// when it must, at most once until its place moves. Its turn clears once its place passes the
+// turn's node. Returns false when the guest reaches its entrance heading home, and leaves.
 bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
           const GuestGround &ground, const std::vector<EntityKey> &entrances, WalkLists &lists) {
-  double left = WALK_STEP;
-  uint64_t picks = 0;
-  uint64_t choices = 0;
-  bool chosen = false;
-  bool mustChoose = false;
+  WalkProgress progress;
   for (;;) {
     const std::optional<NetworkPosition> position = network.resolve(guest.At);
     if (!position) {
       return false;
     }
     const Heading heading = headingOf(world, guest, network, entrances);
-    mustChoose = mustChoose || heading.Dropped;
+    progress.MustChoose = progress.MustChoose || heading.Dropped;
     if (heading.Target && heading.Target->Next.Carrier == NULL_KEY) {
       sendVisit(world, key, guest.Target);
       guest.Activity = GuestActivity::Waiting;
@@ -362,47 +409,42 @@ bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
     if (heading.Home && heading.Home->Next.Carrier == NULL_KEY) {
       return false;
     }
-    const bool atNode = std::holds_alternative<NodePosition>(*position);
-    if (!chosen && (mustChoose || (atNode && left > 0.0))) {
-      choose(world, key, guest, network, entrances, choices);
-      chosen = true;
-      mustChoose = false;
+    if (!progress.Chosen && progress.MustChoose) {
+      choose(world, key, guest, network, entrances, progress.Choices);
+      progress.Chosen = true;
+      progress.MustChoose = false;
       // A new choice can change the route, so the aim starts again from the place.
       guest.Aim = guest.At;
+      guest.Turn = {};
       continue;
     }
-    if (left <= 0.0) {
+    if (progress.Left <= 0.0) {
       return true;
     }
     const std::optional<uint32_t> group = ground.groupOf(guest.At.Carrier);
     if (!group) {
       return true;
     }
-    RouteStep first;
-    std::span<const EntityKey> sources;
-    if (heading.Target) {
-      first = heading.Target->Next;
-      sources = std::span<const EntityKey>(&guest.Target, 1);
-    } else if (heading.Home) {
-      first = heading.Home->Next;
-      sources = entrances;
-    } else {
-      first = wanderStep(world, key, guest, network, *position, picks, lists);
-    }
-    RouteAhead &route = lists.Route;
-    traceRoute(world, network, guest.At, first, sources, route);
+    traceGuestRoute(world, guest, network, *position, heading, entrances, lists.Route);
+    const RouteAhead &route = lists.Route;
     if (route.Points.empty()) {
       return true;
     }
+    const std::optional<size_t> node =
+        turnNode(route, heading.Target.has_value() || heading.Home.has_value());
+    if (node && !startsAt(network, guest.Turn, route.Points[*node].NodeIndex)) {
+      chooseFor(world, key, guest, network, entrances, *node, progress, lists);
+      continue;
+    }
 
-    switch (walkPass(guest, ground, *group, route, left)) {
-    case Pass::PassedNode:
-      mustChoose = true;
-      chosen = false;
-      break;
+    const Pass pass = walkPass(guest, ground, *group, route, progress.Left);
+    if (node && passedPoint(route, spotOf(route, guest.At).value_or(RouteSpot{}), *node)) {
+      guest.Turn = {};
+    }
+    switch (pass) {
     case Pass::ReachedEnd:
     case Pass::PlaceMoved:
-      chosen = false;
+      progress.Chosen = false;
       break;
     case Pass::GroundMoved:
       break;
@@ -437,7 +479,8 @@ void admitGuests(World &world, const Network &network) {
 }
 
 // A waiting guest's visit has come back when it holds it: it finishes the visit, eats any meal
-// that came with it, and stops waiting. Returns whether it is still waiting.
+// that came with it, and stops waiting. It forgets any choice it made at the shop's door, so it
+// chooses again there. Returns whether it is still waiting.
 bool awaitVisit(World &world, EntityKey key, Guest &guest) {
   const int64_t visits = unitsHeld<GuestVisits>(world, key, key);
   if (visits == 0) {
@@ -454,6 +497,7 @@ bool awaitVisit(World &world, EntityKey key, Guest &guest) {
   }
   guest.Activity = GuestActivity::Wandering;
   guest.Target = NULL_KEY;
+  guest.Turn = {};
   return false;
 }
 
@@ -499,14 +543,74 @@ void keepWayOverGround(Guest &guest, const Network &before, const Network &after
   }
 }
 
+// Whether both points are known and lie within ON_GROUND_TOLERANCE of each other.
+bool sameGround(const std::optional<GroundPoint> &a, const std::optional<GroundPoint> &b) {
+  if (!a || !b) {
+    return false;
+  }
+  const double x = b->X - a->X;
+  const double z = b->Z - a->Z;
+  return (x * x) + (z * z) <= ON_GROUND_TOLERANCE * ON_GROUND_TOLERANCE;
+}
+
+// The place carried across the edit, on whichever carrier passes there, when it stays at the same
+// ground position.
+std::optional<Place> heldPlace(const Place &place, const Network &before, const Network &after) {
+  const std::optional<Place> carried = carryOver(place, before, after);
+  if (!carried || !sameGround(before.groundPoint(place), after.groundPoint(*carried))) {
+    return std::nullopt;
+  }
+  return carried;
+}
+
+// The turn carried across the edit, or none when the edit moved its node, or moved or split the
+// edge it runs along. Ground positions are compared, not carriers or distances, because an edit can
+// give part of a carrier a new key, or move its start point and so change every distance along it.
+// An edge is found by its middle, which only its own carrier passes, and is kept when its two ends
+// stand where the turn's did.
+std::optional<RouteStep> carriedTurn(const RouteStep &turn, const Network &before,
+                                     const Network &after) {
+  if (turn.Carrier == NULL_KEY) {
+    return std::nullopt;
+  }
+  if (turn.From == turn.To) {
+    const std::optional<Place> node = heldPlace({turn.Carrier, turn.From}, before, after);
+    const std::optional<NetworkPosition> position = node ? after.resolve(*node) : std::nullopt;
+    if (!position || !std::holds_alternative<NodePosition>(*position)) {
+      return std::nullopt;
+    }
+    return RouteStep{node->Carrier, node->Distance, node->Distance};
+  }
+  const std::optional<Place> middle =
+      heldPlace({turn.Carrier, turn.From + ((turn.To - turn.From) * 0.5)}, before, after);
+  const std::optional<NetworkPosition> position = middle ? after.resolve(*middle) : std::nullopt;
+  const auto *inside = position ? std::get_if<EdgePosition>(&*position) : nullptr;
+  if (inside == nullptr) {
+    return std::nullopt;
+  }
+  const NetworkEdge &edge = after.edges()[inside->Edge];
+  const std::optional<GroundPoint> from = before.groundPoint({turn.Carrier, turn.From});
+  const std::optional<GroundPoint> to = before.groundPoint({turn.Carrier, turn.To});
+  const std::optional<GroundPoint> low = after.groundPoint({edge.Carrier, edge.FromDistance});
+  const std::optional<GroundPoint> high = after.groundPoint({edge.Carrier, edge.ToDistance});
+  if (sameGround(from, low) && sameGround(to, high)) {
+    return RouteStep{edge.Carrier, edge.FromDistance, edge.ToDistance};
+  }
+  if (sameGround(from, high) && sameGround(to, low)) {
+    return RouteStep{edge.Carrier, edge.ToDistance, edge.FromDistance};
+  }
+  return std::nullopt;
+}
+
 // Carries each guest across a resolution by where it stands. While its box fits on guest paving
 // there, it keeps its ground position: on the paving its place is carried to by carryOver when that
 // lies under it, and then at that carried place, and otherwise at the nearest place on the carrier
 // of the piece it stands on. Otherwise it moves to the nearest point where its box fits, and takes
 // its place from the piece there. A guest carried onto another carrier keeps walking the same way
 // over the ground. With no guest paving left, its place is left as it is, which no longer
-// resolves, and its guest leaves when it next steps. Its aim starts again from its place. Nothing
-// changes in a world's first resolution, which has no network before.
+// resolves, and its guest leaves when it next steps. It keeps its turn only where the edit left the
+// turn's node, and the edge it picked, where they were. Its aim starts again from its place.
+// Nothing changes in a world's first resolution, which has no network before.
 void carryGuests(World &world) {
   const Network *before = previousNetwork(world, PathKind::Guest);
   if (before == nullptr) {
@@ -542,6 +646,7 @@ void carryGuests(World &world) {
         }
       }
     }
+    guest.Turn = carriedTurn(guest.Turn, *before, after).value_or(RouteStep{});
     guest.Aim = guest.At;
   }
 }

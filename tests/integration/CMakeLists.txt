@@ -1,6 +1,7 @@
 # The integration tests run every capability together on the checked-in parks. They link the sim
 # and the tools, which need no window, so they run headless (principle 10).
 add_executable(tpj_integration_tests
+    early_turns_test.cpp
     food_loop_test.cpp
     frontage_test.cpp)
 # So that the tests include their shared fixtures as support/....

@@ -103,6 +103,8 @@ inline constexpr double WALK_SPEED = 1.3;
 inline constexpr double GUEST_CLEARANCE = 0.45;
 // Meters of route ahead of its place that a guest looks along for its aim.
 inline constexpr double AIM_LOOKAHEAD = 30.0;
+// Meters before a node, along its route, at which a guest makes its choice for it.
+inline constexpr double TURN_LOOKAHEAD = 10.0;
 // How much an offer's relief matters at each hunger.
 inline constexpr std::array<CurvePoint, 4> HUNGER_CURVE{
     {{0.0, 0.0}, {0.3, 0.1}, {0.7, 0.8}, {1.0, 1.0}}};
