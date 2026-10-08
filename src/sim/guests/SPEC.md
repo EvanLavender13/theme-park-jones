@@ -4,7 +4,7 @@ This module holds the park's visitors. It serves the believable-guests capabilit
 
 ## Boundary
 
-addGuests registers the guest state, the ground guests walk on and the resolver that derives it, the systems that step guests and their footfall, and the finishers that carry both across a resolution. addPark calls it after addOperations, so guests step after shops and depots.
+addGuests registers the guest state, guest presence, the ground guests walk on and the resolver that derives it, the systems that step guests and their footfall, and the finishers that carry both across a resolution. addPark calls it after addOperations, so guests step after shops and depots.
 
 A guest reads the park only through the medium and intent:
 
@@ -13,7 +13,8 @@ A guest reads the park only through the medium and intent:
 - the food-offer field;
 - its own guest-visits and meals stocks;
 - parkEntrances (decision 0025);
-- the guest paving, from parkSurface with the guest walkways, walkwayPiece, parkSegments, and keyedWalkways (decision 0025).
+- the guest paving, from parkSurface with the guest walkways, walkwayPiece, parkSegments, and keyedWalkways (decision 0025);
+- guest presence, which only guests publish and sample.
 
 A guest visits shops and receives meals through the guest-visits and meals flows. No other module reads a guest's state.
 
@@ -21,7 +22,7 @@ Other modules call guests.h (parkGuests, addGuest, guestRecord, and guestOptions
 
 ## Arriving and leaving
 
-Guests arrive at regular intervals at each entrance connected to the guest network, one per entrance at a time. Each guest stays for a drawn length of time. If an entrance has no connection, it admits no one, and that is a legitimate state (principle 2). A guest leaves the park when it walks back to an entrance after its stay. It also leaves when no guest paving is left for it to stand on.
+Guests arrive at regular intervals at each entrance connected to the guest network, one per entrance at a time. Each guest stays for a drawn length of time. If an entrance has no connection, it admits no one, and that is a legitimate state (principle 2). A guest leaves the park when it walks back to an entrance after its stay. It also leaves when no guest paving is left for it to stand on. A guest that leaves drops its entry in guest presence.
 
 addGuest(world, place, stayUntil) is the only way a guest comes into being. Arrivals use it, and so does code outside the module, such as park generators, which can't name any guest component (principle 6). It returns the new guest's key. If the place is not on the guest network, addGuest refuses it. A new guest stands at the place's ground position. A new guest's hunger, hunger rate, speed, and share of the width are drawn, so guests differ from one another. The same world and seed always give the same guests (principle 8).
 
@@ -52,6 +53,8 @@ The network chooses a guest's route. When a guest heads to a shop or home, its r
 A guest walks straight toward its aim at its own speed. Its aim is the farthest point of its route, moved to the guest's side and looking at most AIM_LOOKAHEAD along it, that a straight line reaches with the guest's box on the paving. The aim never moves back along the route until the route changes. The box is on the paving while the guest keeps at least GUEST_CLEARANCE, half the diagonal of its box, from every line that bounds it. If the guest stands nearer a line than that, as at the entrance's door it arrives through, it never comes nearer that line and never crosses it. So a guest heading for a shop across a wide street walks straight to its door, and at a bend it cuts the inside without leaving the paving. Walking anywhere on its route's paving travels that route, so route distance still measures how far it goes (principle 4, decision 0038). The work of walking a guest depends on the paving near it and its route ahead, not on the size of the park.
 
 Each guest walks at its own speed and keeps to its own side of its route for its whole stay, so faster guests overtake slower ones. Speeds spread evenly by WALK_SPEED_SPREAD either side of WALK_SPEED, so guests walk at WALK_SPEED on average. A guest's side is a place across the width its box can use, measured from the left of the way it walks. Sides lie from SIDE_BIAS of the way across up to the right edge, and fewer guests keep near either end of that range than near its middle. On a wide path, guests walking each way stream along opposite sides, and on a narrow one they walk close together. Each point of a guest's route is moved to its side. If the guest's box wouldn't fit at its side of a point, as at a door, at a path's free end, or around the outside of a junction, that point stays in the middle. So a guest heading for a door walks to the door itself.
+
+Guests step aside from one another. At the end of each tick it walks, a guest sets its entry in guest presence, the ground field guest-presence: where it stands, and its velocity over that tick. A guest that starts waiting at a shop drops its entry, and sets it again when it next walks. A guest senses other guests only through guest presence, from the entries within SIDESTEP_RADIUS of where it stands. Those say where each stood and how it was moving at the end of the last tick, so the order guests step in never changes where they walk (principle 10). For each guest ahead of it, a guest predicts where they would come nearest if both kept walking as they were. If that is within SIDESTEP_HORIZON and nearer than SIDESTEP_DISTANCE, it steps aside, away from where the other would be, fast enough to pass at SIDESTEP_DISTANCE, and right if the other would be dead ahead. Its steps aside from each such guest add up, to at most SIDESTEP_SPEED either way. Guests walking side by side at one pace don't step aside, and a guest doesn't step aside from those behind it. A guest steps aside only where its box stays on the paving and it can still walk straight to its aim from where it steps to. Otherwise it walks on toward its aim.
 
 A guest's place on the network is the point of its route, between its place and its aim, whose position on the guest's side lies nearest where it stands. Its place moves only forward along its route, so the guest passes each node of its route in order. A guest reaches the end of its route when it stands on it, or when it has walked as far toward it as its box allows, with no node of its route left between, as in front of a door or at a path's free end. Its speed doesn't depend on how the network is cut into edges.
 

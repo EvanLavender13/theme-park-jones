@@ -182,6 +182,8 @@ Expected: the build succeeds with no warnings.
 
 Step 2: Ask the user to play main-street.park and parks/busted-path.park with build/windows-release/ThemeParkJones.exe and check criteria 1 and 3. Guests walking toward each other should step apart before they meet and pass without overlapping. A faster guest should step out around a slower one. Guests walking side by side at one pace shouldn't swerve. Near an entrance, guests shouldn't step aside from a guest that has just left. Guests should still keep to their sides and reach shop doors. Fix what the user finds in code, as play findings are fixed, and adjust the four SIDESTEP values if the user asks.
 
+Play finding, no change: the user saw guests standing near shops, a little to one side, while the shop showed a queue of 0. A measure with sidestep on and off showed the same approach times, queue sizes, and slow guests either way. A served guest leaves the shop's queue at once but waits SERVICE_INTERVAL for its meal to come back, and it waits where its box came nearest the door. Two backlog items cover it: waiting guests lining up at the door (spread-guests), and the shop's record counting guests being served (plausible-operations).
+
 ### Task 11: Confirm the feature
 
 Files: none.

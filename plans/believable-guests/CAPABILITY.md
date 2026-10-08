@@ -86,7 +86,7 @@ Guest state goes into park files in tests/parks/, where the park world checks co
 - Principle 10 is at risk if choices depend on iteration order or on the C runtime's exp. Draws are keyed on the guest, purpose, tick, and index. The exp is the simulation's own.
 - Principle 5 is at risk from thresholds. Hunger acts through a curve against a carry-on option. Footfall is weighted, not thresholded.
 - Principle 2 is at risk when edits happen under a walking guest. The criteria above define each case: deleted paths, dead ends, starved or deleted targets, cut routes to a target, and cut routes home.
-- Principle 4 is kept because every choice uses route distance, and a guest walking anywhere on its route's paving travels that route (decision 0038). The straight-line measures are a guest's walk across the paving toward points of its route, guest presence's sampling radius, and moving a stranded guest to the nearest paving. None of them measures how far a guest travels.
+- Principle 4 is kept because every choice uses route distance, and a guest walking anywhere on its route's paving travels that route (decision 0038). The straight-line measures are a guest's walk across the paving toward points of its route, guest presence's sampling radius, the nearest approach between two guests, and moving a stranded guest to the nearest paving. None of them measures how far a guest travels.
 
 ## Dependencies
 
