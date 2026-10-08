@@ -39,6 +39,18 @@ double nearestAlong(GroundPoint a, GroundPoint b, GroundPoint point, double limi
   return std::clamp((((point.X - a.X) * x) + ((point.Z - a.Z) * z)) / length, 0.0, limit);
 }
 
+// Marks the point as the node at the place, with its index and whether it is a shaping point, when
+// the place resolves to a node.
+void markNode(const Network &network, const Place &place, RoutePoint &point) {
+  const std::optional<NetworkPosition> position = network.resolve(place);
+  const auto *node = position ? std::get_if<NodePosition>(&*position) : nullptr;
+  point.Node = node != nullptr;
+  if (node != nullptr) {
+    point.NodeIndex = node->Node;
+    point.Shaping = isShapingPoint(network, node->Node);
+  }
+}
+
 // Adds the points of the step to the route, from the distance along its carrier to its To, the
 // last a node, and adds what it walks to walked. If a point lies beyond AIM_LOOKAHEAD, it adds the
 // point AIM_LOOKAHEAD along instead and returns false, as it does when the carrier is missing.
@@ -76,7 +88,48 @@ bool walkStep(const Network &network, const RouteStep &step, double from, double
     }
   }
   const std::optional<GroundPoint> end = network.groundPoint({step.Carrier, step.To});
-  return end && add(step.To, *end, true);
+  if (!end || !add(step.To, *end, true)) {
+    return false;
+  }
+  markNode(network, {step.Carrier, step.To}, route.Points.back());
+  return true;
+}
+
+// The step a route toward the sources takes on from the end of the step: the least next step among
+// their entries there. None where it stops, and Ends set where it has arrived.
+std::optional<RouteStep> routeOn(const World &world, const Network &network, const RouteStep &step,
+                                 std::span<const EntityKey> sources, RouteAhead &route) {
+  const std::optional<RouteEntry> entry =
+      leastEntryAt(world, network, {step.Carrier, step.To}, sources);
+  if (!entry) {
+    return std::nullopt;
+  }
+  if (entry->Next.Carrier == NULL_KEY) {
+    route.Ends = true;
+    return std::nullopt;
+  }
+  return entry->Next;
+}
+
+// The step a wandering route takes on from the end of the step: on through a shaping point, and out
+// of the first other node along the turn when it starts there and isn't the way back. None where
+// the route ends, which sets Ends. A route that ran on back the way it came would let the aim reach
+// behind the guest, so where the turn goes back, the route stops at the node.
+std::optional<RouteStep> wanderOn(const Network &network, const RouteStep &step,
+                                  const RouteStep &turn, bool &turned, RouteAhead &route) {
+  const RoutePoint &end = route.Points.back();
+  const Place at{step.Carrier, step.To};
+  const bool forward = step.To > step.From;
+  std::optional<RouteStep> next;
+  if (end.Node && end.Shaping) {
+    next = onwardStep(network, end.NodeIndex, at, forward);
+  } else if (end.Node && !turned && startsAt(network, turn, end.NodeIndex) &&
+             !isWayBack(turn, at, forward)) {
+    turned = true;
+    next = turn;
+  }
+  route.Ends = !next;
+  return next;
 }
 
 } // namespace
@@ -96,44 +149,73 @@ std::optional<RouteEntry> leastEntryAt(const World &world, const Network &networ
   return least;
 }
 
+bool isShapingPoint(const Network &network, uint32_t node) {
+  return network.edgeEnds(node).size() == 2 && network.nodeAnchor(node) == NULL_KEY;
+}
+
+bool isWayBack(const RouteStep &step, const Place &at, bool forward) {
+  return step.Carrier == at.Carrier && step.From == at.Distance && (step.To > step.From) != forward;
+}
+
+RouteStep stepAway(const Network &network, const EdgeEnd &end) {
+  const NetworkEdge &edge = network.edges()[end.Edge];
+  return end.AtFrom ? RouteStep{edge.Carrier, edge.FromDistance, edge.ToDistance}
+                    : RouteStep{edge.Carrier, edge.ToDistance, edge.FromDistance};
+}
+
+std::optional<RouteStep> onwardStep(const Network &network, uint32_t node, const Place &at,
+                                    bool forward) {
+  for (const EdgeEnd &end : network.edgeEnds(node)) {
+    const RouteStep step = stepAway(network, end);
+    if (!isWayBack(step, at, forward)) {
+      return step;
+    }
+  }
+  return std::nullopt;
+}
+
+bool startsAt(const Network &network, const RouteStep &step, uint32_t node) {
+  if (step.Carrier == NULL_KEY) {
+    return false;
+  }
+  const std::optional<NetworkPosition> position = network.resolve({step.Carrier, step.From});
+  const auto *at = position ? std::get_if<NodePosition>(&*position) : nullptr;
+  return at != nullptr && at->Node == node;
+}
+
 void traceRoute(const World &world, const Network &network, const Place &place,
-                const RouteStep &first, std::span<const EntityKey> sources, RouteAhead &route) {
+                const RouteStep &first, std::span<const EntityKey> sources, const RouteStep &turn,
+                RouteAhead &route) {
   route.Points.clear();
   route.Ends = false;
   const std::optional<GroundPoint> start = network.groundPoint(place);
   if (!start) {
     return;
   }
-  const std::optional<NetworkPosition> position = network.resolve(place);
-  route.Points.push_back({*start, place.Carrier, place.Distance, place.Distance,
-                          position && std::holds_alternative<NodePosition>(*position)});
+  route.Points.push_back({*start, place.Carrier, place.Distance, place.Distance});
+  markNode(network, place, route.Points.back());
+  if (first.Carrier == NULL_KEY) {
+    route.Ends = true;
+    return;
+  }
   double walked = 0.0;
   // Inside an edge a step names the whole edge, so the first stretch starts where the guest is.
   double from = first.Carrier == place.Carrier ? place.Distance : first.From;
   RouteStep step = first;
+  bool turned = false;
   for (;;) {
     const double startedAt = walked;
     if (!walkStep(network, step, from, walked, route)) {
       return;
     }
-    if (sources.empty()) {
-      route.Ends = true;
-      return;
-    }
-    const std::optional<RouteEntry> entry =
-        leastEntryAt(world, network, {step.Carrier, step.To}, sources);
-    if (!entry) {
-      return;
-    }
-    if (entry->Next.Carrier == NULL_KEY) {
-      route.Ends = true;
-      return;
-    }
+    const std::optional<RouteStep> next = sources.empty()
+                                              ? wanderOn(network, step, turn, turned, route)
+                                              : routeOn(world, network, step, sources, route);
     // A step that walks nowhere would never end the loop.
-    if (walked == startedAt && entry->Next.From == entry->Next.To) {
+    if (!next || (walked == startedAt && next->From == next->To)) {
       return;
     }
-    step = entry->Next;
+    step = *next;
     from = step.From;
   }
 }
@@ -176,14 +258,28 @@ GroundPoint pointAt(const RouteAhead &route, RouteSpot spot) {
   return between(route.Points[spot.Point - 1].At, point.At, spot.Along);
 }
 
-bool passesNode(const RouteAhead &route, RouteSpot spot) {
-  for (size_t i = 1; i <= spot.Point; ++i) {
-    if (route.Points[i].Node && (i < spot.Point || spot.Along == 1.0)) {
-      return true;
+std::optional<size_t> turnNode(const RouteAhead &route, bool headedForEnd) {
+  double along = 0.0;
+  for (size_t i = 0; i < route.Points.size(); ++i) {
+    const RoutePoint &point = route.Points[i];
+    if (i > 0) {
+      along += std::abs(point.To - point.From);
     }
+    if (!point.Node || point.Shaping) {
+      continue;
+    }
+    if (along > TURN_LOOKAHEAD || (headedForEnd && route.Ends && i + 1 == route.Points.size())) {
+      return std::nullopt;
+    }
+    return i;
   }
-  // A spot at the very start of a stretch stands on the point before it.
-  return spot.Point >= 2 && spot.Along == 0.0 && route.Points[spot.Point - 1].Node;
+  return std::nullopt;
+}
+
+bool passedPoint(const RouteAhead &route, RouteSpot spot, size_t index) {
+  // A spot at the very start of the next stretch stands on the point.
+  return index + 1 < route.Points.size() &&
+         (spot.Point > index + 1 || (spot.Point == index + 1 && spot.Along > 0.0));
 }
 
 bool nodeAhead(const RouteAhead &route, RouteSpot spot) {

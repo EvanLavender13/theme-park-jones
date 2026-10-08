@@ -159,6 +159,8 @@ Step 3: Build and run the listed test.
 Run: `cmake.exe --build --preset windows-debug --target tpj_integration_tests && build/windows-debug/tpj_integration_tests.exe "*shaping*" 2>&1 | tail -3`
 Expected: `All tests passed`. Use the name the test-writer gave the test case, if the filter matches nothing.
 
+Deviation, from review: an edit can give part of a carrier a new key, so a turn whose node and edge stayed where they were was forgotten. An edit can also move a node's place onto another carrier that stops there. carriedTurn now compares ground positions only. For an empty step, the node's place is carried on whichever carrier passes there, and it must still stand on a node at the same ground position. For a wanderer's step, it carries the middle of the edge, which only that edge's carrier passes, and takes the edge enclosing it there. It keeps the turn when that edge's two ends stand where the turn's did, in either order, and rebuilds the turn on that edge.
+
 ### Task 10: Make the parks that hold guests again
 
 Files:
@@ -181,6 +183,8 @@ Step 3: Run the park world checks and the integration tests.
 Run: `cmake.exe --build --preset windows-debug --target tpj_sim_tests tpj_integration_tests && build/windows-debug/tpj_sim_tests.exe 2>&1 | tail -3 && build/windows-debug/tpj_integration_tests.exe 2>&1 | tail -3`
 Expected: both report `All tests passed`. If a check that needs a guest waiting at the shop or heading to it fails on warm.park, that is a Major deviation: stop and report it.
 
+Deviation, minor: at WARM_TICKS 2020, the remade warm.park had a guest waiting at the shop and one heading to it, but no shipment in transit. Meals now happen at slightly different times, so the second shipment leaves at tick 2089. The world checks' deleting-the-shop setup needs all three. A scratch probe (build/early-turns/warm.cpp) showed they all hold from tick 2089 to 2589. src/scenarios/slice_parks.h's WARM_TICKS is now 2200. What the checks assert is unchanged.
+
 ### Task 11: Check that guests stay on the paving and reach doors
 
 Files: none. This task runs paving-walk's scratch checks as they are.
@@ -189,6 +193,8 @@ Step 1: Rebuild the checks against the new library and run them.
 
 Run: `build/paving-walk/build.sh stays && build/paving-walk/build.sh door && build/paving-walk/stays.exe tests/parks/*.park parks/*.park && build/paving-walk/door.exe`
 Expected: every stays line ends in `0 guests off the paving`, and parks/busted-path.park, jank.park, and radii.park load. Every door line that isn't refused reports meals above 0 and `guests stuck heading to the shop 0`. If either fails, that is a deviation: find the cause before going on.
+
+Deviation, minor: the stays check found guests walking into a shop's door and staying there. When a guest's visit came back, it could choose the same shop again. That set the empty step that marks a choice at the door. When the next visit came back, the guest was wandering but still held that empty step, so it took the step as its way out and never chose again. awaitVisit now clears the turn when the visit comes back, so the guest chooses again at the door, as the spec says. After the fix every park reports 0 guests off the paving, and the warm.park window still holds from 2100 to 2580.
 
 ### Task 12: Play the feature
 
