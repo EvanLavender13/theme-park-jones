@@ -57,6 +57,17 @@ std::vector<ParkDoor> parkDoors(const World &world, PathKind kind);
 // A walkway for each connector of the kind's network, in key order of the connector.
 std::vector<Walkway> connectorWalkways(const World &world, PathKind kind);
 
+// A connector's walkway: the connector's key, and the walkway made for it.
+struct KeyedWalkway {
+  EntityKey Connector = NULL_KEY;
+  Walkway Way;
+
+  bool operator==(const KeyedWalkway &) const = default;
+};
+
+// Each walkway connectorWalkways gives, in the same order, with its connector's key.
+std::vector<KeyedWalkway> keyedWalkways(const World &world, PathKind kind);
+
 // The kind's network as the last resolution derived it, or an empty network when the world holds
 // none, as before its first resolution.
 const Network &parkNetwork(const World &world, PathKind kind);

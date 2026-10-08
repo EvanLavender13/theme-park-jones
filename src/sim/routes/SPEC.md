@@ -4,7 +4,7 @@ This module serves the navigable-networks capability (plans/navigable-networks).
 
 ## Boundary
 
-routes reads intent only through parkSegments, parkEntrances, parkBoxes, footprintOf, parkSurface, and pieceDistance (sim/park/SPEC.md, decision 0025). It publishes networks in the medium's Network type and route distance in the medium's fields (sim/medium/SPEC.md). Other modules read both through parkNetwork, previousNetwork, the Network type's queries, sampleField, and routeEntryAt, and the doors connectors start from through parkDoors, and their walkways through connectorWalkways, not through how they were derived.
+routes reads intent only through parkSegments, parkEntrances, parkBoxes, footprintOf, parkSurface, and pieceDistance (sim/park/SPEC.md, decision 0025). It publishes networks in the medium's Network type and route distance in the medium's fields (sim/medium/SPEC.md). Other modules read both through parkNetwork, previousNetwork, the Network type's queries, sampleField, and routeEntryAt, and the doors connectors start from through parkDoors, and their walkways through connectorWalkways and keyedWalkways, not through how they were derived.
 
 addRoutes registers the derived type PreviousNetwork, the resolver path-networks, and route distance's two fields and its resolver. makeParkSchema calls it after addParkEdits. addDropPreviousNetworks registers the finisher that removes the previous networks. addPark calls it after every finisher that reads them.
 
@@ -33,6 +33,8 @@ A door's distance from a segment is how far it stands from the segment's paving,
 Each connector's door end is a node of its own, anchored to the door's entity. These are the networks' only anchors. An entity finds where it meets a network through anchoredNodes. If an entity has no connector on a network, it is not on that network.
 
 connectorWalkways gives a walkway (sim/park/SPEC.md) for each connector of a kind's network, in key order of the connector. It has the connector's width and is joined to that segment. It starts at the connector's door, along the door's face, and runs straight along the connector's first part. If the connector runs straight to the ground line, the walkway ends there. Otherwise it ends straight out of the door, past where the connector meets the paving by half its width, or by the length of the connector's part from there to the ground line if that is less, so its square end lies inside the paving. If the connector meets the segment at a path point, it is joined to the lowest-keyed segment of the kind that ends there.
+
+keyedWalkways gives the same walkways as connectorWalkways, in the same order, each with the key of the connector it was made for.
 
 ## Previous networks
 
