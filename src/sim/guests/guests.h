@@ -106,6 +106,14 @@ inline constexpr double SIDE_BIAS = 0.5;
 // Meters a guest keeps from every line bounding the paving it walks on: half the diagonal of its
 // 0.6 m box, so the box stays on the paving at any angle.
 inline constexpr double GUEST_CLEARANCE = 0.45;
+// Meters around where a guest stands within which it senses other guests in guest presence.
+inline constexpr double SIDESTEP_RADIUS = 3.0;
+// Seconds ahead within which a guest steps aside from a nearest approach.
+inline constexpr double SIDESTEP_HORIZON = 3.0;
+// Meters apart, centre to centre, that a guest steps aside to pass another at.
+inline constexpr double SIDESTEP_DISTANCE = 0.9;
+// The fastest a guest steps aside, in meters per second.
+inline constexpr double SIDESTEP_SPEED = 0.6;
 // Meters of route ahead of its place that a guest looks along for its aim.
 inline constexpr double AIM_LOOKAHEAD = 10.0;
 // Meters before a node, along its route, at which a guest makes its choice for it.
@@ -147,9 +155,9 @@ double hungerCurve(double hunger);
 // Sets each option's softmax probability from the scores and returns the index the draw picks.
 // Throws std::invalid_argument for no options or a score that is not finite.
 size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options);
-// Registers the guest state, the system that steps guests and admits new ones, and the finisher
-// that carries their places across each resolution, and then hungry footfall's field, state,
-// system, and finisher. The routes and operations modules' registrations come first, and
+// Registers the guest state, guest presence, the system that steps guests and admits new ones, and
+// the finisher that carries their places across each resolution, and then hungry footfall's field,
+// state, system, and finisher. The routes and operations modules' registrations come first, and
 // addDropPreviousNetworks after.
 void addGuests(WorldSchema &schema);
 

@@ -6,6 +6,7 @@ add_library(tpj_sim STATIC
     guests/footfall.cpp
     guests/ground.cpp
     guests/guests.cpp
+    guests/presence.cpp
     guests/route_ahead.cpp
     medium/flow.cpp
     medium/network.cpp

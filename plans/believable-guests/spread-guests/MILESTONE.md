@@ -78,6 +78,7 @@ Unordered pool this milestone draws later features from.
 - Groups that walk side by side at one pace.
 - A guest's speed changing with tiredness or crowding.
 - Guests pausing or slowing where the paving is crowded, instead of only stepping aside.
+- Waiting guests line up in front of a shop's door instead of piling on the spot where they stopped.
 
 ## Open questions
 

@@ -4,9 +4,11 @@
 #include "sim/guests/internal/footfall.h"
 #include "sim/guests/internal/ground.h"
 #include "sim/guests/internal/guest.h"
+#include "sim/guests/internal/presence.h"
 #include "sim/guests/internal/route_ahead.h"
 #include "sim/medium/field.h"
 #include "sim/medium/flow.h"
+#include "sim/medium/ground_field.h"
 #include "sim/medium/network.h"
 #include "sim/mix.h"
 #include "sim/operations/operations.h"
@@ -21,6 +23,7 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <utility>
 #include <variant>
@@ -83,6 +86,7 @@ struct WalkLists {
   RouteAhead Route;
   std::vector<RouteStep> Steps;
   std::vector<uint64_t> Weights;
+  std::vector<GroundSample<Stride>> Near;
 };
 
 // A wandering guest's first step, which draws nothing: inside an edge, on to the stop ahead; at a
@@ -265,10 +269,13 @@ struct WalkedPass {
 
 // Advances the guest's aim along the route and walks it straight toward the aim, by as much of the
 // distance left as that takes, which it subtracts. The line to the aim is clear, so every point
-// along it is too. The guest's place becomes the spot of the route nearest where it now stands,
-// never past the aim, and it walks the way that spot's stretch runs.
-WalkedPass walkTowardAim(Guest &guest, const GuestGround &ground, uint32_t group,
-                         const RouteAhead &route, double &left) {
+// along it is too. On a pass that stops short of the aim, the guest steps aside from the guests
+// sampled near it, where the lines to the stepped point and from it to the aim are both clear, so
+// the line to its aim stays clear. The guest's place becomes the spot of the route nearest where it
+// now stands, never past the aim, and it walks the way that spot's stretch runs.
+WalkedPass walkTowardAim(Guest &guest, EntityKey key, const GuestGround &ground, uint32_t group,
+                         const RouteAhead &route, std::span<const GroundSample<Stride>> near,
+                         double &left) {
   WalkedPass pass;
   pass.Aimed = spotOf(route, guest.Aim).value_or(RouteSpot{});
   pass.Aim = advanceAim(ground, group, guest.Ground, route, pass.Aimed);
@@ -280,7 +287,17 @@ WalkedPass walkTowardAim(Guest &guest, const GuestGround &ground, uint32_t group
     guest.Ground = toward;
     left -= gap;
   } else {
-    guest.Ground = {guest.Ground.X + (gapX * left / gap), guest.Ground.Z + (gapZ * left / gap)};
+    const GroundDirection heading{gapX / gap, gapZ / gap};
+    const GroundPoint ahead{guest.Ground.X + (heading.X * left),
+                            guest.Ground.Z + (heading.Z * left)};
+    const GroundPoint aside = sidestep(key, guest.Ground, heading, guest.Speed, near);
+    const GroundPoint stepped{ahead.X + aside.X, ahead.Z + aside.Z};
+    if (aside != GroundPoint{} && ground.clearLine(group, guest.Ground, stepped) &&
+        ground.clearLine(group, stepped, toward)) {
+      guest.Ground = stepped;
+    } else {
+      guest.Ground = ahead;
+    }
     left = 0.0;
   }
   pass.At = nearestSpot(route, guest.Ground, pass.Aim);
@@ -321,11 +338,11 @@ enum class Pass : uint8_t { ReachedEnd, PlaceMoved, GroundMoved, Stayed };
 
 // One pass of a guest's walk along its route: it walks toward its aim, and at the end of its route
 // its place and aim become the route's end.
-Pass walkPass(Guest &guest, const GuestGround &ground, uint32_t group, const RouteAhead &route,
-              double &left) {
+Pass walkPass(Guest &guest, EntityKey key, const GuestGround &ground, uint32_t group,
+              const RouteAhead &route, std::span<const GroundSample<Stride>> near, double &left) {
   const Place was = guest.At;
   const GroundPoint stood = guest.Ground;
-  const WalkedPass pass = walkTowardAim(guest, ground, group, route, left);
+  const WalkedPass pass = walkTowardAim(guest, key, ground, group, route, near, left);
   if (reachedEnd(guest, ground, group, route, pass)) {
     guest.At = placeAt(route, {route.Points.size() - 1, 1.0});
     guest.Aim = guest.At;
@@ -395,6 +412,7 @@ bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
           const GuestGround &ground, const std::vector<EntityKey> &entrances, WalkLists &lists) {
   WalkProgress progress;
   progress.Left = guest.Speed * SIM_TICK_SECONDS;
+  sampleGroundField<GuestPresence>(world, guest.Ground, SIDESTEP_RADIUS, lists.Near);
   for (;;) {
     const std::optional<NetworkPosition> position = network.resolve(guest.At);
     if (!position) {
@@ -439,7 +457,7 @@ bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
       continue;
     }
 
-    const Pass pass = walkPass(guest, ground, *group, route, progress.Left);
+    const Pass pass = walkPass(guest, key, ground, *group, route, lists.Near, progress.Left);
     if (node && passedPoint(route, spotOf(route, guest.At).value_or(RouteSpot{}), *node)) {
       guest.Turn = {};
     }
@@ -506,8 +524,9 @@ bool awaitVisit(World &world, EntityKey key, Guest &guest) {
 
 // Each guest, in ascending key order, leaves when its place does not resolve, which carrying
 // leaves only when the guest network has no carrier, and otherwise gets hungrier, and unless it is
-// still waiting for its visit to come back, walks. Guests that leave go after all have stepped,
-// and then the entrances admit new ones.
+// still waiting for its visit to come back, walks. A guest that walks sets its entry in guest
+// presence, where it stands and how it moved, and one that starts waiting drops it. Guests that
+// leave drop their entries and go after all have stepped, and then the entrances admit new ones.
 void stepGuests(World &world) {
   const Network &network = parkNetwork(world, PathKind::Guest);
   const GuestGround &ground = guestGround(world);
@@ -524,11 +543,19 @@ void stepGuests(World &world) {
     if (guest.Activity == GuestActivity::Waiting && awaitVisit(world, key, guest)) {
       continue;
     }
+    const GroundPoint stood = guest.Ground;
     if (!walk(world, key, guest, network, ground, entrances, lists)) {
       leaving.push_back(key);
+    } else if (guest.Activity == GuestActivity::Waiting) {
+      dropGroundEntry<GuestPresence>(world, key);
+    } else {
+      setGroundEntry<GuestPresence>(world, key, guest.Ground,
+                                    Stride{(guest.Ground.X - stood.X) / SIM_TICK_SECONDS,
+                                           (guest.Ground.Z - stood.Z) / SIM_TICK_SECONDS});
     }
   }
   for (const EntityKey key : leaving) {
+    dropGroundEntry<GuestPresence>(world, key);
     world.destroyEntity(key);
   }
   admitGuests(world, network);
@@ -752,6 +779,7 @@ size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options) {
 
 void addGuests(WorldSchema &schema) {
   schema.addComponent<Guest>("guest", DataKind::State);
+  addGroundField<GuestPresence>(schema);
   addGuestGround(schema);
   schema.addSystem(&stepGuests);
   schema.addFinisher(&carryGuests);
