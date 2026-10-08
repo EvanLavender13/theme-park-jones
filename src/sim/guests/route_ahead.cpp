@@ -68,11 +68,12 @@ bool walkStep(const Network &network, const RouteStep &step, double from, double
       const double left = AIM_LOOKAHEAD - walked;
       const double cut = forward ? from + left : from - left;
       if (const std::optional<GroundPoint> cutAt = network.groundPoint({step.Carrier, cut})) {
-        route.Points.push_back({*cutAt, step.Carrier, from, cut, false});
+        route.Points.push_back(
+            {*cutAt, step.Carrier, from, cut, false, 0, false, carrier->Width, {}});
       }
       return false;
     }
-    route.Points.push_back({at, step.Carrier, from, distance, node});
+    route.Points.push_back({at, step.Carrier, from, distance, node, 0, false, carrier->Width, {}});
     walked += length;
     from = distance;
     return true;
@@ -130,6 +131,30 @@ std::optional<RouteStep> wanderOn(const Network &network, const RouteStep &step,
   }
   route.Ends = !next;
   return next;
+}
+
+// Whether the route's stretch at the index, from the point before it to the point at it, has length
+// on the ground.
+bool hasLength(const RouteAhead &route, size_t stretch) {
+  return squaredDistance(route.Points[stretch - 1].At, route.Points[stretch].At) > 0.0;
+}
+
+// The stretch a point is seen along: the one running into it, or for the first point the one
+// running out of it, and where that has no length, the nearest earlier one that has, else the
+// nearest later one. None when no stretch has length.
+std::optional<size_t> stretchFor(const RouteAhead &route, size_t point) {
+  const size_t own = point == 0 ? 1 : point;
+  for (size_t stretch = own; stretch >= 1; --stretch) {
+    if (hasLength(route, stretch)) {
+      return stretch;
+    }
+  }
+  for (size_t stretch = own + 1; stretch < route.Points.size(); ++stretch) {
+    if (hasLength(route, stretch)) {
+      return stretch;
+    }
+  }
+  return std::nullopt;
 }
 
 } // namespace
@@ -192,7 +217,9 @@ void traceRoute(const World &world, const Network &network, const Place &place,
   if (!start) {
     return;
   }
-  route.Points.push_back({*start, place.Carrier, place.Distance, place.Distance});
+  // The first point has no stretch running into it, so moveToSide never reads its Width.
+  route.Points.push_back(
+      {*start, place.Carrier, place.Distance, place.Distance, false, 0, false, 0.0, {}});
   markNode(network, place, route.Points.back());
   if (first.Carrier == NULL_KEY) {
     route.Ends = true;
@@ -217,6 +244,31 @@ void traceRoute(const World &world, const Network &network, const Place &place,
     }
     step = *next;
     from = step.From;
+  }
+}
+
+void moveToSide(double side, RouteAhead &route) {
+  if (route.Points.size() < 2) {
+    return;
+  }
+  for (size_t i = 0; i < route.Points.size(); ++i) {
+    RoutePoint &point = route.Points[i];
+    const std::optional<size_t> stretch = stretchFor(route, i);
+    if (!stretch) {
+      continue;
+    }
+    const GroundPoint from = route.Points[*stretch - 1].At;
+    const GroundPoint to = route.Points[*stretch].At;
+    const double usable = std::max(0.0, route.Points[*stretch].Width - (2.0 * GUEST_CLEARANCE));
+    const double offset = (side - 0.5) * usable;
+    if (offset == 0.0) {
+      continue;
+    }
+    const double length = std::sqrt(squaredDistance(from, to));
+    const double alongX = (to.X - from.X) / length;
+    const double alongZ = (to.Z - from.Z) / length;
+    // A quarter turn clockwise seen from above, the opposite of sim/park's leftOf.
+    point.Shift = {-alongZ * offset, alongX * offset};
   }
 }
 
@@ -250,12 +302,17 @@ Place placeAt(const RouteAhead &route, RouteSpot spot) {
   return {point.Carrier, point.From + ((point.To - point.From) * spot.Along)};
 }
 
-GroundPoint pointAt(const RouteAhead &route, RouteSpot spot) {
+GroundPoint pointAt(const GuestGround &ground, uint32_t group, const RouteAhead &route,
+                    RouteSpot spot) {
   const RoutePoint &point = route.Points[spot.Point];
-  if (spot.Point == 0 || spot.Along == 1.0) {
-    return point.At;
+  const GroundPoint middle = spot.Point == 0 || spot.Along == 1.0
+                                 ? point.At
+                                 : between(route.Points[spot.Point - 1].At, point.At, spot.Along);
+  if (point.Shift.X == 0.0 && point.Shift.Z == 0.0) {
+    return middle;
   }
-  return between(route.Points[spot.Point - 1].At, point.At, spot.Along);
+  const GroundPoint moved{middle.X + point.Shift.X, middle.Z + point.Shift.Z};
+  return ground.fits(group, moved, true) ? moved : middle;
 }
 
 std::optional<size_t> turnNode(const RouteAhead &route, bool headedForEnd) {
@@ -303,7 +360,7 @@ RouteSpot advanceAim(const GuestGround &ground, uint32_t group, GroundPoint from
       }
       candidate = {aim.Point + 1, 1.0};
     }
-    if (ground.clearLine(group, from, pointAt(route, candidate))) {
+    if (ground.clearLine(group, from, pointAt(ground, group, route, candidate))) {
       aim = candidate;
       continue;
     }
@@ -313,7 +370,7 @@ RouteSpot advanceAim(const GuestGround &ground, uint32_t group, GroundPoint from
     double blocked = 1.0;
     for (int i = 0; i < AIM_HALVINGS; ++i) {
       const double middle = 0.5 * (clear + blocked);
-      if (ground.clearLine(group, from, pointAt(route, {candidate.Point, middle}))) {
+      if (ground.clearLine(group, from, pointAt(ground, group, route, {candidate.Point, middle}))) {
         clear = middle;
       } else {
         blocked = middle;
@@ -324,11 +381,16 @@ RouteSpot advanceAim(const GuestGround &ground, uint32_t group, GroundPoint from
 }
 
 RouteSpot nearestSpot(const RouteAhead &route, GroundPoint point, RouteSpot aim) {
+  const auto moved = [](GroundPoint at, GroundPoint shift) {
+    return GroundPoint{at.X + shift.X, at.Z + shift.Z};
+  };
   RouteSpot best{0, 1.0};
-  double bestSquared = squaredDistance(route.Points.front().At, point);
+  double bestSquared =
+      squaredDistance(moved(route.Points.front().At, route.Points.front().Shift), point);
   for (size_t i = 1; i <= aim.Point; ++i) {
-    const GroundPoint a = route.Points[i - 1].At;
-    const GroundPoint b = route.Points[i].At;
+    const GroundPoint shift = route.Points[i].Shift;
+    const GroundPoint a = moved(route.Points[i - 1].At, shift);
+    const GroundPoint b = moved(route.Points[i].At, shift);
     const double along = nearestAlong(a, b, point, i == aim.Point ? aim.Along : 1.0);
     const double distance = squaredDistance(between(a, b, along), point);
     if (distance < bestSquared) {

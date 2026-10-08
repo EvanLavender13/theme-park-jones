@@ -34,7 +34,7 @@ Rejected: directionAt at each point — it resolves a place per point and points
 
 ## What side and speed values?
 
-A guest's side runs from 0 at the left of the usable width, seen the way it walks, to 1 at the right. Its side is SIDE_BIAS plus its share times (1 − SIDE_BIAS), and its share is the mean of two uniform draws. With SIDE_BIAS 0.4, sides run from 0.4 to 1 and peak at 0.7. On the 10 m main street the usable width is 9.1 m. A guest's offset from the middle runs from 0.9 m left to 4.55 m right and is most often 1.8 m right. The two streams' peaks lie 3.6 m apart, and they overlap only thinly in the middle. On a 3 m path the usable width is 2.1 m, so offsets run from 0.2 m left to 1.05 m right, and guests walk close together. SIDE_BIAS is a starting value that play adjusts.
+A guest's side runs from 0 at the left of the usable width, seen the way it walks, to 1 at the right. Its side is SIDE_BIAS plus its share times (1 − SIDE_BIAS), and its share is the mean of two uniform draws. With SIDE_BIAS 0.5, sides run from the middle to 1 and peak at 0.75. On the 10 m main street the usable width is 9.1 m. A guest's offset from the middle runs from 0 to 4.55 m right and is most often 2.3 m right. The two streams' peaks lie 4.5 m apart, and they don't overlap. On a 3 m path the usable width is 2.1 m, so offsets run from 0 to 1.05 m right, and guests walk close together. The plan started at 0.4, with peaks 3.6 m apart, and the user found the streams too close in play.
 
 Speed is drawn uniformly from WALK_SPEED − 0.3 to WALK_SPEED + 0.3, 1.0 to 1.6 m/s. Keeping WALK_SPEED as the mean keeps food availability's REFERENCE_SPEED (src/legible/availability.h) equal to how fast guests walk on average.
 

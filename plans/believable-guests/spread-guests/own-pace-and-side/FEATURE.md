@@ -43,6 +43,10 @@ src/sim/guests/SPEC.md:
 
     Each guest walks at its own speed and keeps to its own side of its route for its whole stay, so faster guests overtake slower ones. Speeds spread evenly by WALK_SPEED_SPREAD either side of WALK_SPEED, so guests walk at WALK_SPEED on average. A guest's side is a place across the width its box can use, measured from the left of the way it walks. Sides lie from SIDE_BIAS of the way across up to the right edge, and fewer guests keep near either end of that range than near its middle. On a wide path, guests walking each way stream along opposite sides, and on a narrow one they walk close together. Each point of a guest's route is moved to its side. If the guest's box wouldn't fit at its side of a point, as at a door, at a path's free end, or around the outside of a junction, that point stays in the middle. So a guest heading for a door walks to the door itself.
 
+- In Walking, replace "A guest's place on the network is the point of its route, between its place and its aim, nearest where it stands." with (added in play, see PLAN.md's Task 11 deviation from play):
+
+    A guest's place on the network is the point of its route, between its place and its aim, whose position on the guest's side lies nearest where it stands.
+
 ## Files affected
 
 - Modify: src/sim/guests/SPEC.md
@@ -67,4 +71,4 @@ src/sim/guests/SPEC.md:
 
 ## Open questions
 
-- Whether SIDE_BIAS 0.4 and a 1.0 to 1.6 m/s spread read as natural on main-street.park. Resolved by the user playing it and adjusting SIDE_BIAS and WALK_SPEED_SPREAD.
+- Whether SIDE_BIAS 0.5 and a 1.0 to 1.6 m/s spread read as natural on main-street.park. Resolved by the user playing it and adjusting SIDE_BIAS and WALK_SPEED_SPREAD.

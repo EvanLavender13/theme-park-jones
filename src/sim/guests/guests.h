@@ -96,13 +96,18 @@ inline constexpr double HUNGER_RATE_MIN = 1.0 / 2700.0;
 inline constexpr double HUNGER_RATE_MAX = 1.0 / 1350.0;
 // A guest arrives with a hunger drawn from 0 up to this.
 inline constexpr double STARTING_HUNGER_MAX = 0.4;
-// Meters per second a guest walks.
+// The mean speed guests walk at, in meters per second.
 inline constexpr double WALK_SPEED = 1.3;
+// A guest's speed is drawn uniformly from WALK_SPEED less this up to WALK_SPEED plus this.
+inline constexpr double WALK_SPEED_SPREAD = 0.3;
+// Where every guest's side starts, across the width its box can use seen the way it walks, from
+// 0 at the left to 1 at the right. Its share of the rest puts it between here and the right.
+inline constexpr double SIDE_BIAS = 0.5;
 // Meters a guest keeps from every line bounding the paving it walks on: half the diagonal of its
 // 0.6 m box, so the box stays on the paving at any angle.
 inline constexpr double GUEST_CLEARANCE = 0.45;
 // Meters of route ahead of its place that a guest looks along for its aim.
-inline constexpr double AIM_LOOKAHEAD = 30.0;
+inline constexpr double AIM_LOOKAHEAD = 10.0;
 // Meters before a node, along its route, at which a guest makes its choice for it.
 inline constexpr double TURN_LOOKAHEAD = 10.0;
 // How much an offer's relief matters at each hunger.
