@@ -19,7 +19,9 @@ class World;
 // A point of a guest's route ahead: where it is on the ground, the carrier of the stretch of route
 // that ends at it, the distances along that carrier where the stretch starts and ends, and whether
 // the point is a node. For a node, NodeIndex is its index in the network, and Shaping is whether
-// it is a shaping point.
+// it is a shaping point. Width is the width of the stretch's carrier, and Shift is how far the
+// guest's side lies from the point, and from each spot of the stretch, as an offset on the ground.
+// The first point's Shift is that of the place.
 struct RoutePoint {
   GroundPoint At;
   EntityKey Carrier = NULL_KEY;
@@ -28,6 +30,8 @@ struct RoutePoint {
   bool Node = false;
   uint32_t NodeIndex = 0;
   bool Shaping = false;
+  double Width = 0.0;
+  GroundPoint Shift;
 };
 
 // A guest's route ahead of its place: its points, the first at the place, and whether the last is
@@ -73,12 +77,22 @@ bool startsAt(const Network &network, const RouteStep &step, uint32_t node);
 void traceRoute(const World &world, const Network &network, const Place &place,
                 const RouteStep &first, std::span<const EntityKey> sources, const RouteStep &turn,
                 RouteAhead &route);
+// Sets each point's Shift to the guest's side, from 0 at the left to 1 at the right of the width a
+// guest's box can use there, seen the way the route runs into the point. The first point is seen
+// the way the route runs out of it, and a stretch with no length on the ground the way the nearest
+// one that has length runs. The usable width is that stretch's carrier's width less twice
+// GUEST_CLEARANCE. Shift stays zero where no stretch has length. Allocates nothing.
+void moveToSide(double side, RouteAhead &route);
 // The first spot of the route at the place, or none when the route doesn't pass it.
 std::optional<RouteSpot> spotOf(const RouteAhead &route, const Place &place);
 // The spot's place on the network.
 Place placeAt(const RouteAhead &route, RouteSpot spot);
-// The spot's ground position.
-GroundPoint pointAt(const RouteAhead &route, RouteSpot spot);
+// The spot's ground position on the guest's side of the route: its position on the network moved by
+// its stretch's Shift, where the guest's box fits there on the group's paving with door ends
+// counted, and otherwise its position on the network. It depends only on the spot and its stretch,
+// so a spot gives the same position however much of the route behind it was traced.
+GroundPoint pointAt(const GuestGround &ground, uint32_t group, const RouteAhead &route,
+                    RouteSpot spot);
 // The index of the first point of the route that is a node other than a shaping point, when it lies
 // within TURN_LOOKAHEAD along the route from its first point, and isn't the last point of a route
 // that ends there when headedForEnd is true; otherwise none.
@@ -92,7 +106,9 @@ bool nodeAhead(const RouteAhead &route, RouteSpot spot);
 // then, within the stretch to the first that isn't, as far as halving finds clear.
 RouteSpot advanceAim(const GuestGround &ground, uint32_t group, GroundPoint from,
                      const RouteAhead &route, RouteSpot aim);
-// The spot of the route, from its start up to the aim, nearest the point, ties to the earlier.
+// The spot of the route, from its start up to the aim, nearest the point, ties to the earlier. Each
+// stretch is measured where the guest walks it, moved by its Shift whether or not the guest's box
+// fits there, so a guest standing at its side of a spot is nearest that spot.
 RouteSpot nearestSpot(const RouteAhead &route, GroundPoint point, RouteSpot aim);
 
 } // namespace tpj

@@ -33,8 +33,6 @@ namespace {
 using GuestRouteDistance = RouteDistance<PathKind::Guest>;
 using RouteSample = std::vector<SampledEntry<RouteEntry>>;
 
-// Meters a guest walks each tick.
-constexpr double WALK_STEP = WALK_SPEED * SIM_TICK_SECONDS;
 // An aim that moves less than this, in meters, when it is advanced, can come no closer to the end
 // of its route, so halving can't creep it on for ever.
 constexpr double AIM_SETTLED = 0.01;
@@ -274,7 +272,7 @@ WalkedPass walkTowardAim(Guest &guest, const GuestGround &ground, uint32_t group
   WalkedPass pass;
   pass.Aimed = spotOf(route, guest.Aim).value_or(RouteSpot{});
   pass.Aim = advanceAim(ground, group, guest.Ground, route, pass.Aimed);
-  const GroundPoint toward = pointAt(route, pass.Aim);
+  const GroundPoint toward = pointAt(ground, group, route, pass.Aim);
   const double gapX = toward.X - guest.Ground.X;
   const double gapZ = toward.Z - guest.Ground.Z;
   const double gap = std::sqrt((gapX * gapX) + (gapZ * gapZ));
@@ -295,21 +293,22 @@ WalkedPass walkTowardAim(Guest &guest, const GuestGround &ground, uint32_t group
   return pass;
 }
 
-// Whether the guest has reached the end of its route: it stands on it, or it stands at its aim with
-// no node of the route between the aim and the end, and the pass moved the aim less than
-// AIM_SETTLED, so its box can come no closer. A door's end lies along its face, so where the
+// Whether the guest has reached the end of its route: it stands on it, on its side, or it stands at
+// its aim with no node of the route between the aim and the end, and the pass moved the aim less
+// than AIM_SETTLED, so its box can come no closer. A door's end lies along its face, so where the
 // connector meets it at a slant, or its last part is short, the nearest the box can come may lie
 // well back from the door.
-bool reachedEnd(const Guest &guest, const RouteAhead &route, const WalkedPass &pass) {
+bool reachedEnd(const Guest &guest, const GuestGround &ground, uint32_t group,
+                const RouteAhead &route, const WalkedPass &pass) {
   if (!route.Ends) {
     return false;
   }
   const size_t last = route.Points.size() - 1;
-  if (guest.Ground == route.Points[last].At) {
+  if (guest.Ground == pointAt(ground, group, route, {last, 1.0})) {
     return true;
   }
-  const GroundPoint aim = pointAt(route, pass.Aim);
-  const GroundPoint aimed = pointAt(route, pass.Aimed);
+  const GroundPoint aim = pointAt(ground, group, route, pass.Aim);
+  const GroundPoint aimed = pointAt(ground, group, route, pass.Aimed);
   const double movedX = aim.X - aimed.X;
   const double movedZ = aim.Z - aimed.Z;
   return guest.Ground == aim && !nodeAhead(route, pass.Aim) &&
@@ -327,7 +326,7 @@ Pass walkPass(Guest &guest, const GuestGround &ground, uint32_t group, const Rou
   const Place was = guest.At;
   const GroundPoint stood = guest.Ground;
   const WalkedPass pass = walkTowardAim(guest, ground, group, route, left);
-  if (reachedEnd(guest, route, pass)) {
+  if (reachedEnd(guest, ground, group, route, pass)) {
     guest.At = placeAt(route, {route.Points.size() - 1, 1.0});
     guest.Aim = guest.At;
     return Pass::ReachedEnd;
@@ -358,7 +357,7 @@ void traceGuestRoute(const World &world, const Guest &guest, const Network &netw
 // wandering picks and for choices, whether it has chosen since its place last moved, and whether it
 // must choose.
 struct WalkProgress {
-  double Left = WALK_STEP;
+  double Left = 0.0;
   uint64_t Picks = 0;
   uint64_t Choices = 0;
   bool Chosen = false;
@@ -385,15 +384,17 @@ void chooseFor(World &world, EntityKey key, Guest &guest, const Network &network
                    : RouteStep{at.Carrier, at.Distance, at.Distance};
 }
 
-// Walks the guest WALK_STEP across the guest paving, straight toward its aim along its route. It
-// drops a target it can no longer reach, and sends its visit when it reaches the end of its route
-// at its target. It makes its choice for each node of its route, other than a shaping point and the
-// node it is heading to, when it comes within TURN_LOOKAHEAD of it or stands on it, and chooses
-// when it must, at most once until its place moves. Its turn clears once its place passes the
-// turn's node. Returns false when the guest reaches its entrance heading home, and leaves.
+// Walks the guest as far as its speed takes it in a tick across the guest paving, straight toward
+// its aim along its route moved to its side. It drops a target it can no longer reach, and sends
+// its visit when it reaches the end of its route at its target. It makes its choice for each node
+// of its route, other than a shaping point and the node it is heading to, when it comes within
+// TURN_LOOKAHEAD of it or stands on it, and chooses when it must, at most once until its place
+// moves. Its turn clears once its place passes the turn's node. Returns false when the guest
+// reaches its entrance heading home, and leaves.
 bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
           const GuestGround &ground, const std::vector<EntityKey> &entrances, WalkLists &lists) {
   WalkProgress progress;
+  progress.Left = guest.Speed * SIM_TICK_SECONDS;
   for (;;) {
     const std::optional<NetworkPosition> position = network.resolve(guest.At);
     if (!position) {
@@ -426,6 +427,7 @@ bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
       return true;
     }
     traceGuestRoute(world, guest, network, *position, heading, entrances, lists.Route);
+    moveToSide(SIDE_BIAS + ((1.0 - SIDE_BIAS) * guest.Share), lists.Route);
     const RouteAhead &route = lists.Route;
     if (route.Points.empty()) {
       return true;
@@ -454,9 +456,10 @@ bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
   }
 }
 
-// The guest's uniform draw for the purpose, on its key and the world's seed and tick.
-double guestDraw(const World &world, EntityKey guest, const char *purpose) {
-  return drawUniform(drawKey(world, guest, hashName(purpose), 0));
+// The guest's uniform draw for the purpose with the index, on its key and the world's seed and
+// tick.
+double guestDraw(const World &world, EntityKey guest, const char *purpose, uint64_t index = 0) {
+  return drawUniform(drawKey(world, guest, hashName(purpose), index));
 }
 
 // Each entrance with a guest connector admits a guest at the end of every ARRIVAL_INTERVAL
@@ -719,6 +722,10 @@ EntityKey addGuest(World &world, const Place &place, uint64_t stayUntil) {
   guest.HungerRate = HUNGER_RATE_MIN + guestDraw(world, key, "guest-hunger-rate") *
                                            (HUNGER_RATE_MAX - HUNGER_RATE_MIN);
   guest.Hunger = guestDraw(world, key, "guest-starting-hunger") * STARTING_HUNGER_MAX;
+  guest.Speed = WALK_SPEED - WALK_SPEED_SPREAD +
+                guestDraw(world, key, "guest-speed") * 2.0 * WALK_SPEED_SPREAD;
+  guest.Share =
+      0.5 * (guestDraw(world, key, "guest-share", 0) + guestDraw(world, key, "guest-share", 1));
   world.Registry.emplace<Guest>(world.findEntity(key), guest);
   return key;
 }

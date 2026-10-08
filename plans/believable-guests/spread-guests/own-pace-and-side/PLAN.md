@@ -75,7 +75,7 @@ Step 1: Change WALK_SPEED's comment to `// The mean speed guests walk at, in met
     inline constexpr double WALK_SPEED_SPREAD = 0.3;
     // Where every guest's side starts, across the width its box can use seen the way it walks, from
     // 0 at the left to 1 at the right. Its share of the rest puts it between here and the right.
-    inline constexpr double SIDE_BIAS = 0.4;
+    inline constexpr double SIDE_BIAS = 0.5;
 
 ### Task 5: Save each guest's speed and share
 
@@ -164,6 +164,8 @@ Step 3: In walk, after traceGuestRoute, call `moveToSide(ground, *group, SIDE_BI
 Run: `cmake.exe --build --preset windows-debug --target tpj_sim`
 Expected: the build succeeds with no warnings.
 
+Deviation, minor: Task 11's stays check found guests coming nearer the paving's edge than GUEST_CLEARANCE in most parks. The aim is saved as a place, and its position is worked out again each pass. With Side stored per point, a spot between two points blended their Sides, and the first point is the guest's place, which moves every tick. Where one end of a stretch fell back to the middle and the other didn't, the aim's position moved between passes, so the guest walked toward a point it had never checked a clear line to. A probe counted that in about one pass in ten on main-street.park. Each point now holds Shift, the offset for the stretch running into it, and moveToSide sets it without testing fit. pointAt takes the ground and group, adds the stretch's Shift to the spot's position on the network, and keeps it only where the box fits there. A spot's position then depends only on the spot and its stretch, so it is the same on every pass, and the probe found no such walk. The spec's wording is unchanged.
+
 ### Task 10: Make the parks that hold guests again
 
 Files:
@@ -200,6 +202,17 @@ Expected:
 - Every door line that isn't refused reports meals above 0 and `guests stuck heading to the shop 0`.
 
 If any of these fails, that is a deviation: find the cause before going on.
+
+Deviation, major, for the user: main-street.park reports 60.9% of clear wide steps right of the middle and a mean offset of 0.45 m, short of the two thirds and 1 to 3 m expected. Split by activity, guests heading to a shop average 0.83 m right, wanderers 0.36 m, and guests heading home 1.6 m left. The 10 m street narrows into the 3 m path to the entrance at its north end. A guest's aim reaches up to AIM_LOOKAHEAD ahead, and on the narrow path or at a door the side shift is small or none. So a guest heading home from a shop on the east side walks diagonally across the street toward the narrow path, and guests heading to a shop walk straight to its door. Only guests whose aim stays on the street keep to their side. The expectation came from the side alone and missed this. Stalls, the stays check, and the door check pass. Whether the street reads as two streams is left to the user's play.
+
+Deviation, from play: the user played parks/busted-path.park and found no lanes on its wide plaza ("meh. not really"). Two changes, each measured with the lanes check split by activity:
+
+- AIM_LOOKAHEAD is now 10 m, down from 30 m. A guest holds its side until a door or a narrow path's mouth lies within 10 m along its route, and then cuts across to it, instead of crossing from 30 m away.
+- nearestSpot measures each stretch moved by its Shift, so a guest's place is the spot whose position on its side lies nearest where it stands. With the 10 m lookahead alone, 6 guests stalled in busted-path.park at a U-turn between two parallel carriers 0.7 m apart. A guest stood at its aim at its side of the route's end, but its place on the middle line stayed on the other carrier, so the route never grew. The guests spec's sentence on the place changes to match.
+
+With both, main-street.park reports 79.7% of clear wide steps right of the middle with a mean offset of 1.21 m, and busted-path.park 77.0% and 1.11 m. With the place change alone at 30 m, busted-path.park reports 57.8% and 0.62 m. Every park reports 0 stalled and 0 guests off the paving, and the door check reports no guest stuck.
+
+The user then found the streams close together, and SIDE_BIAS went from 0.4 to 0.5, so every guest's side lies right of the middle. main-street.park then reports 80.9% right and 1.27 m, and busted-path.park 88.0% and 1.61 m. Every park still reports 0 stalled and 0 guests off the paving, and the door check reports no guest stuck.
 
 ### Task 12: Play the feature
 

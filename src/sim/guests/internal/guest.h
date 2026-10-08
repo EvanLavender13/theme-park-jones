@@ -14,9 +14,9 @@ namespace tpj {
 // ground, the place on its route it walks toward, the way it leaves the next node it has chosen
 // for (an empty step at the node when it isn't wandering, and with carrier NULL_KEY until it has
 // chosen), whether it walks toward higher distances along its place's carrier, what it is doing,
-// how hungry it is and how fast that rises, the tick its stay ends, the shop it is heading to or
-// waiting at, the relief of the offer it last picked, and the meals it has eaten and the last of
-// them.
+// how hungry it is and how fast that rises, how fast it walks in meters per second, its share of
+// the width on its side, the tick its stay ends, the shop it is heading to or waiting at, the
+// relief of the offer it last picked, and the meals it has eaten and the last of them.
 struct Guest {
   Place At;
   GroundPoint Ground;
@@ -26,6 +26,8 @@ struct Guest {
   GuestActivity Activity = GuestActivity::Wandering;
   double Hunger = 0.0;
   double HungerRate = 0.0;
+  double Speed = WALK_SPEED;
+  double Share = 0.5;
   uint64_t StayUntil = 0;
   EntityKey Target = NULL_KEY;
   double MealRelief = 0.0;
@@ -43,6 +45,8 @@ template <typename Visitor> void visitFields(Visitor &visitor, Guest &guest) {
   visitor.field("activity", guest.Activity);
   visitor.field("hunger", guest.Hunger);
   visitor.field("hunger-rate", guest.HungerRate);
+  visitor.field("speed", guest.Speed);
+  visitor.field("share", guest.Share);
   visitor.field("stay-until", guest.StayUntil);
   visitor.field("target", guest.Target);
   visitor.field("meal-relief", guest.MealRelief);
