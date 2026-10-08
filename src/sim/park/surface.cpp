@@ -1118,12 +1118,29 @@ constexpr double LEAST_WALKWAY_LEAN = 0.1;
 // segment it joins. Nothing when that segment has no ground line, its width is not above 0, or its
 // door and the place it meets lie closer together than MIN_SEGMENT_LENGTH.
 void addWalkway(PavedSurface &surface, const PathGround &ground, const Walkway &walkway) {
-  const bool joins = std::ranges::any_of(ground.Segments, [&](const ParkSegment &segment) {
+  const std::optional<SurfacePiece> piece = walkwayPiece(ground.Segments, walkway);
+  if (!piece) {
+    return;
+  }
+  surface.Pieces.push_back(*piece);
+  const std::span<const ParkPoint> corners = pieceCorners(*piece);
+  for (size_t i = 0; i + 1 < corners.size(); ++i) {
+    surface.Edges.push_back(EdgeLine{piece->Kind, piece->Owner, surface.EdgePoints.size(), 2});
+    surface.EdgePoints.push_back(corners[i]);
+    surface.EdgePoints.push_back(corners[i + 1]);
+  }
+}
+
+} // namespace
+
+std::optional<SurfacePiece> walkwayPiece(std::span<const ParkSegment> segments,
+                                         const Walkway &walkway) {
+  const bool joins = std::ranges::any_of(segments, [&](const ParkSegment &segment) {
     return segment.Key == walkway.Joins && segment.Kind == walkway.Kind && !segment.Line.empty();
   });
   const double length = lengthOf(walkway.Meets - walkway.Door);
   if (!joins || !(walkway.Width > 0.0) || !(length >= MIN_SEGMENT_LENGTH)) {
-    return;
+    return std::nullopt;
   }
   const ParkPoint along = (walkway.Meets - walkway.Door) * (1.0 / length);
   const ParkPoint left = leftOf(along);
@@ -1143,17 +1160,8 @@ void addWalkway(PavedSurface &surface, const PathGround &ground, const Walkway &
   const ParkPoint farRight = end - left * half;
   const ParkPoint farLeft = end + left * half;
   const ParkPoint leftDoor = doorCorner(1.0);
-  surface.Pieces.push_back(
-      SurfacePiece{walkway.Kind, walkway.Joins, {right, farRight, farLeft, leftDoor}, 4});
-  for (const auto &[from, to] :
-       {std::pair{right, farRight}, std::pair{farRight, farLeft}, std::pair{farLeft, leftDoor}}) {
-    surface.Edges.push_back(EdgeLine{walkway.Kind, walkway.Joins, surface.EdgePoints.size(), 2});
-    surface.EdgePoints.push_back(from);
-    surface.EdgePoints.push_back(to);
-  }
+  return SurfacePiece{walkway.Kind, walkway.Joins, {right, farRight, farLeft, leftDoor}, 4};
 }
-
-} // namespace
 
 std::span<const ParkPoint> pieceCorners(const SurfacePiece &piece) {
   return {piece.Corners.data(), piece.Count};

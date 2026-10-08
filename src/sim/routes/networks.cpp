@@ -541,14 +541,14 @@ std::vector<ParkDoor> parkDoors(const World &world, PathKind kind) {
   return doorsServing(parkEntrances(world), parkBoxes(world), kind);
 }
 
-std::vector<Walkway> connectorWalkways(const World &world, PathKind kind) {
+std::vector<KeyedWalkway> keyedWalkways(const World &world, PathKind kind) {
   const Network &network = parkNetwork(world, kind);
   const std::vector<ParkDoor> doors = parkDoors(world, kind);
   // Only connectors' doors are anchored, so a carrier whose first stop is anchored is a connector.
   const auto isConnector = [&network](const Carrier &carrier) {
     return !carrier.Stops.empty() && network.nodeAnchor(carrier.Stops.front().Node) != NULL_KEY;
   };
-  std::vector<Walkway> walkways;
+  std::vector<KeyedWalkway> walkways;
   for (const Carrier &carrier : network.carriers()) {
     if (!isConnector(carrier)) {
       continue;
@@ -584,12 +584,23 @@ std::vector<Walkway> connectorWalkways(const World &world, PathKind kind) {
           std::min(0.5 * carrier.Width, carrier.Points.back().Distance - entry.Distance);
       meets = {entry.X + (door->Out.X * into), entry.Z + (door->Out.Z * into)};
     }
-    walkways.push_back(Walkway{.Kind = kind,
-                               .Joins = segment,
-                               .Door = door->At,
-                               .Out = door->Out,
-                               .Meets = meets,
-                               .Width = carrier.Width});
+    walkways.push_back(KeyedWalkway{.Connector = carrier.Key,
+                                    .Way = Walkway{.Kind = kind,
+                                                   .Joins = segment,
+                                                   .Door = door->At,
+                                                   .Out = door->Out,
+                                                   .Meets = meets,
+                                                   .Width = carrier.Width}});
+  }
+  return walkways;
+}
+
+std::vector<Walkway> connectorWalkways(const World &world, PathKind kind) {
+  const std::vector<KeyedWalkway> keyed = keyedWalkways(world, kind);
+  std::vector<Walkway> walkways;
+  walkways.reserve(keyed.size());
+  for (const KeyedWalkway &walkway : keyed) {
+    walkways.push_back(walkway.Way);
   }
   return walkways;
 }

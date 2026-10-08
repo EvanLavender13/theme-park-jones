@@ -6,6 +6,7 @@
 #include "sim/world.h"
 
 #include <array>
+#include <optional>
 #include <span>
 #include <stddef.h>
 #include <vector>
@@ -66,6 +67,11 @@ struct Walkway {
 
 // How far a walkway's far end lies past the place it meets its segment, in meters.
 inline constexpr double WALKWAY_OVERLAP = 0.01;
+
+// The piece parkSurface adds for the walkway, owned by the segment it joins, given the park's
+// segments as parkSegments gives them, or none when it adds nothing for it.
+std::optional<SurfacePiece> walkwayPiece(std::span<const ParkSegment> segments,
+                                         const Walkway &walkway);
 
 // The park's paved surface with the walkways added, each joined to its segment.
 PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways);
