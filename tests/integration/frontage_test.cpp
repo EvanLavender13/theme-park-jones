@@ -1,5 +1,6 @@
 // Frontage beside paving as it is drawn: a shop the frontage snap places beyond the sharp outside
-// corner of a wide guest path is accepted by the world and connected to the guest network.
+// corner of a wide guest path, or beside a segment of the widest width the tools allow, is
+// accepted by the world and connected to the guest network.
 
 #include "support/park_files.h"
 
@@ -75,6 +76,49 @@ TEST_CASE("A shop fronting a wide path's sharp outside corner is accepted and co
   resolveWorld(world);
 
   const std::optional<Pose> pose = frontagePose(world, BoxKind::Shop, ParkPoint{-22.5, -67.0});
+  REQUIRE(pose.has_value());
+  const AddBox place{BoxKind::Shop, pose.value_or(Pose{})};
+  REQUIRE(isAccepted(world, place));
+  applyCommand(world, place);
+  resolveWorld(world);
+
+  const std::vector<ParkBox> boxes = parkBoxes(world);
+  REQUIRE(boxes.size() == 1);
+  const EntityKey connector = connectorKey(boxes.front().Key, Face::Front);
+  const std::vector<Carrier> &carriers = parkNetwork(world, PathKind::Guest).carriers();
+  CHECK(std::ranges::any_of(carriers,
+                            [&](const Carrier &carrier) { return carrier.Key == connector; }));
+}
+
+// At the widest width, the door at the frontage setback lies far beyond connection reach of the
+// segment's center line, so this catches reach measured from the line instead of the paving.
+TEST_CASE(
+    "A shop fronting a guest segment of the widest width the tools allow connects to guests") {
+  World world = openPark(parkFile("new.park"));
+  const std::set<EntityKey> before = segmentKeys(world);
+
+  // A straight path well clear of new.park's own path and entrance, which lie along x = 0.
+  const double lineX = 60.0;
+  const AddPath path{PathKind::Guest, {NewPoint{{lineX, -60.0}}, NewPoint{{lineX, 20.0}}}};
+  REQUIRE(isAccepted(world, path));
+  applyCommand(world, path);
+  resolveWorld(world);
+
+  std::vector<EntityKey> added;
+  for (const EntityKey key : segmentKeys(world)) {
+    if (!before.contains(key)) {
+      added.push_back(key);
+    }
+  }
+  REQUIRE(added.size() == 1);
+  const SetSegmentWidth widen{added.front(), MAX_PATH_WIDTH};
+  REQUIRE(isAccepted(world, widen));
+  applyCommand(world, widen);
+  resolveWorld(world);
+
+  // The pointer lies just outside the paving's side, halfway along the segment.
+  const ParkPoint pointer{lineX + (MAX_PATH_WIDTH / 2.0) + FRONTAGE_SETBACK, -20.0};
+  const std::optional<Pose> pose = frontagePose(world, BoxKind::Shop, pointer);
   REQUIRE(pose.has_value());
   const AddBox place{BoxKind::Shop, pose.value_or(Pose{})};
   REQUIRE(isAccepted(world, place));

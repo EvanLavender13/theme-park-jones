@@ -1,9 +1,11 @@
 # The integration tests run every capability together on the checked-in parks. They link the sim
 # and the tools, which need no window, so they run headless (principle 10).
 add_executable(tpj_integration_tests
+    crossing_split_test.cpp
     early_turns_test.cpp
     food_loop_test.cpp
-    frontage_test.cpp)
+    frontage_test.cpp
+    undo_test.cpp)
 # So that the tests include their shared fixtures as support/....
 target_include_directories(tpj_integration_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(tpj_integration_tests PRIVATE tpj_sim tpj_tools Catch2::Catch2WithMain)
