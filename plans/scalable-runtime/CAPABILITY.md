@@ -113,6 +113,7 @@ Unordered pool this capability draws later milestones from.
 - Faster stepping: run systems in parallel or in batches, with bit-identical results. Gated on: the report showing ticks costly on the full park.
 - Resolution across cores: derive each source's route distance in parallel, with results identical to deriving them one after another. Gated on: the report showing resolution, and with it candidates, costly on a park with plazas.
 - Instanced guests: draw every guest from one shared mesh with a small per-guest instance buffer, instead of rebuilding and re-uploading a mesh of all guests every tick. Gated on: the report showing the guest mesh and its upload as a real share of the app's frame after indexed-sampling, or guests being drawn as models instead of simple shapes.
+- Ground field lookup by bucket: a ground field's by-cell lookup is rebuilt after each swap by sorting every entry, about 160 µs a tick for guest presence on the full park. Group entries into their cells in one pass instead.
 
 ## Open questions
 
