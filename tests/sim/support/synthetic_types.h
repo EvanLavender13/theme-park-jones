@@ -75,9 +75,7 @@ inline std::shared_ptr<const WorldSchema> makeSchema() {
   return schema;
 }
 
-template <typename T> T &componentOf(World &world, EntityKey key) {
-  return world.Registry.get<T>(world.findEntity(key));
-}
+template <typename T> T &componentOf(World &world, EntityKey key) { return world.get<T>(key); }
 
 // Counter keys 1 and 2 hold a probe and a tag each, key 3 holds nothing, and a key derived from 1
 // holds a cached value.
@@ -98,11 +96,11 @@ inline World buildWorld(std::shared_ptr<const WorldSchema> schema) {
   firstProbe.Target = second;
   firstProbe.Samples = {0.25, -3.0};
   firstProbe.Place = {.X = 4.5, .Z = -2.0};
-  world.Registry.emplace<Probe>(world.findEntity(first), firstProbe);
-  world.Registry.emplace<Probe>(world.findEntity(second));
-  world.Registry.emplace<Tag>(world.findEntity(first));
-  world.Registry.emplace<Tag>(world.findEntity(second));
-  world.Registry.emplace<Cached>(world.findEntity(derived), Cached{.Total = 42});
+  world.emplace<Probe>(first, firstProbe);
+  world.emplace<Probe>(second);
+  world.emplace<Tag>(first);
+  world.emplace<Tag>(second);
+  world.emplace<Cached>(derived, Cached{.Total = 42});
   return world;
 }
 

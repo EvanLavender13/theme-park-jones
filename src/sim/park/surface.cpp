@@ -1289,7 +1289,8 @@ namespace {
 // intent gives them. Every taper is one of them.
 std::vector<EntityKey> taperCandidates(const World &world) {
   std::vector<std::pair<EntityKey, double>> ends;
-  for (const auto &&[entity, segment] : world.Registry.view<const PathSegmentIntent>().each()) {
+  for (const EntityKey key : world.keysWith<PathSegmentIntent>()) {
+    const PathSegmentIntent &segment = world.get<PathSegmentIntent>(key);
     ends.emplace_back(segment.From, segment.Width);
     ends.emplace_back(segment.To, segment.Width);
   }

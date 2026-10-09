@@ -119,4 +119,11 @@ std::vector<EntityKey> World::keys() const {
   return result;
 }
 
+bool World::isLive(EntityKey key) const { return ByKey.contains(key); }
+
+bool World::holds(const ComponentType &type, EntityKey key) const {
+  const entt::entity entity = findEntity(key);
+  return entity != entt::null && type.Has(Registry, entity);
+}
+
 } // namespace tpj

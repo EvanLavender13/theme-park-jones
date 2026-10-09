@@ -44,6 +44,10 @@ Every entity has a stable EntityKey. When a component refers to another entity, 
 
 Resolvers create entities with createDerivedEntity. Its key is a pure function of an owner key, a purpose, and an index, and it never collides with a counter key. If an entity already holds the derived key, createDerivedEntity reuses that entity.
 
+Code reaches an entity's components through World, by key. get, tryGet, has, emplace, emplaceOrReplace, getOrEmplace, and remove each take the entity's key. If the key isn't live, tryGet gives nothing, has is false, and remove does nothing. isLive says whether a key names a live entity.
+
+keysWith<T>() lists the keys of the entities that hold T, in ascending order. If a system visits them in that order, it visits them in the same order in a copy and after a load.
+
 ## Schemas and the park
 
 Component types are registered by name with a DataKind (intent, state, or derived) and a visitFields function that lists the type's fields once. Every walk over the world runs through visitFields. The schema is built once and shared as a const value.

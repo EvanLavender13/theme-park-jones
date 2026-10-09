@@ -98,9 +98,7 @@ void orderSupplies(World &world, EntityKey shop, const std::optional<DepotRoute>
   sendUnits<SupplyOrders>(world, shop, route->Depot, shop, wanted, ORDER_DELAY);
 }
 
-bool isLive(const World &world, EntityKey key) {
-  return key != NULL_KEY && world.findEntity(key) != entt::null;
-}
+bool isLive(const World &world, EntityKey key) { return key != NULL_KEY && world.isLive(key); }
 
 // Consumes, as abandoned, every meal the shop holds, which only a gone guest's returned meal gives
 // it, and every visit it holds for a guest that is gone.
@@ -189,8 +187,7 @@ void serveFront(World &world, EntityKey shop, ShopService &service) {
 // service after.
 ShopService serveGuests(World &world, EntityKey shop, bool supplied) {
   abandonGone(world, shop);
-  const entt::entity entity = world.findEntity(shop);
-  const ShopService *stored = world.Registry.try_get<ShopService>(entity);
+  const ShopService *stored = world.tryGet<ShopService>(shop);
   ShopService service = stored == nullptr ? ShopService{} : *stored;
   service.Queue = reconciledQueue(world, shop, service.Queue);
   if (!supplied) {
@@ -198,7 +195,7 @@ ShopService serveGuests(World &world, EntityKey shop, bool supplied) {
   }
   serveFront(world, shop, service);
   if (stored != nullptr || !service.Queue.empty() || service.FreeAt != 0) {
-    world.Registry.emplace_or_replace<ShopService>(entity, service);
+    world.emplaceOrReplace<ShopService>(shop, service);
   }
   return service;
 }

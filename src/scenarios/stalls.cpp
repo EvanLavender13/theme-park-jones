@@ -69,7 +69,7 @@ struct PlaceStall {
 
 void applyCommand(World &world, const PlaceStall &command) {
   const EntityKey key = world.createEntity();
-  world.Registry.emplace<Stall>(world.findEntity(key), Stall{command.Distance});
+  world.emplace<Stall>(key, Stall{command.Distance});
 }
 
 struct RemoveStall {
@@ -94,7 +94,7 @@ constexpr uint32_t SERVICE_DELAY = 3;
 // The lowest key holding T, or NULL_KEY.
 template <typename T> EntityKey lowestKeyWith(const World &world) {
   for (const EntityKey key : world.keys()) {
-    if (world.Registry.all_of<T>(world.findEntity(key))) {
+    if (world.has<T>(key)) {
       return key;
     }
   }
@@ -105,7 +105,7 @@ template <typename T> EntityKey lowestKeyWith(const World &world) {
 template <typename T> std::vector<EntityKey> keysWith(const World &world) {
   std::vector<EntityKey> found;
   for (const EntityKey key : world.keys()) {
-    if (world.Registry.all_of<T>(world.findEntity(key))) {
+    if (world.has<T>(key)) {
       found.push_back(key);
     }
   }
@@ -113,8 +113,7 @@ template <typename T> std::vector<EntityKey> keysWith(const World &world) {
 }
 
 const Network *trackNetwork(const World &world) {
-  const entt::entity entity = world.findEntity(deriveKey(NULL_KEY, TRACK_PURPOSE, 0));
-  return entity == entt::null ? nullptr : world.Registry.try_get<Network>(entity);
+  return world.tryGet<Network>(deriveKey(NULL_KEY, TRACK_PURPOSE, 0));
 }
 
 Place trackPlace(const World &world, double distance) {
@@ -122,7 +121,7 @@ Place trackPlace(const World &world, double distance) {
 }
 
 double stallDistance(const World &world, EntityKey stall) {
-  return world.Registry.get<Stall>(world.findEntity(stall)).Distance;
+  return world.get<Stall>(stall).Distance;
 }
 
 uint32_t travelDelay(double from, double to) {
@@ -136,7 +135,7 @@ void resolveTrack(World &world) {
     return;
   }
   // Creating an entity may move the registry's storage, so the track is copied first.
-  const Track track = world.Registry.get<Track>(world.findEntity(owner));
+  const Track track = world.get<Track>(owner);
   Carrier carrier{.Key = owner,
                   .Width = TRACK_WIDTH,
                   .Points = {{.X = 0.0, .Z = 0.0, .Distance = 0.0},
@@ -149,8 +148,7 @@ void resolveTrack(World &world) {
     carrier.Stops.push_back({.Distance = distance, .Node = i});
   }
   const EntityKey key = world.createDerivedEntity(NULL_KEY, TRACK_PURPOSE, 0);
-  world.Registry.emplace_or_replace<Network>(world.findEntity(key),
-                                             Network({carrier}, track.Stops, {}));
+  world.emplaceOrReplace<Network>(key, Network({carrier}, track.Stops, {}));
 }
 
 // Publishes each stall's offer, its distance over 10, and a crowd of 1 at its place.
@@ -181,7 +179,7 @@ void stepDepot(World &world) {
   const std::vector<uint64_t> weights(stalls.size(), 1);
   const EntityKey stall =
       stalls[drawPick(drawKey(world, depot, SHIP_PURPOSE, 0), std::span<const uint64_t>(weights))];
-  const double from = world.Registry.get<Depot>(world.findEntity(depot)).Distance;
+  const double from = world.get<Depot>(depot).Distance;
   sendUnits<Goods>(world, depot, stall, NULL_KEY, held,
                    travelDelay(from, stallDistance(world, stall)));
 }
@@ -195,7 +193,7 @@ void stepStalls(World &world) {
                                {{.At = trackPlace(world, stallDistance(world, stall)),
                                  .Value = static_cast<double>(goods)}});
     for (const FlowHolding &holding : stockOf<Visits>(world, stall)) {
-      if (world.findEntity(holding.Handle) == entt::null) {
+      if (!world.isLive(holding.Handle)) {
         consumeUnits<Visits>(world, stall, holding.Handle, holding.Units, "abandoned");
       } else if (goods >= holding.Units) {
         consumeUnits<Goods>(world, stall, NULL_KEY, holding.Units, "sold");
@@ -219,7 +217,7 @@ void stepVisitors(World &world) {
   const std::vector<EntityKey> stalls = keysWith<Stall>(world);
   std::vector<GroundSample<double>> nearby;
   for (const EntityKey key : keysWith<Visitor>(world)) {
-    Visitor visitor = world.Registry.get<Visitor>(world.findEntity(key));
+    Visitor visitor = world.get<Visitor>(key);
     visitor.Age += 1;
     const GroundPoint standing{.X = visitor.Distance, .Z = 0.0};
     if (visitor.Age >= RETIREMENT_AGE && static_cast<uint64_t>(key) % 2 == 0) {
@@ -259,21 +257,21 @@ void stepVisitors(World &world) {
                         travelDelay(visitor.Distance, stallDistance(world, stall)));
       visitor.Out = true;
     }
-    world.Registry.replace<Visitor>(world.findEntity(key), visitor);
+    world.get<Visitor>(key) = visitor;
   }
 }
 
 // Visitors retire at RETIREMENT_AGE, and every SPAWN_INTERVAL ticks one arrives at a drawn place.
 void turnOverVisitors(World &world) {
   for (const EntityKey key : keysWith<Visitor>(world)) {
-    if (world.Registry.get<Visitor>(world.findEntity(key)).Age >= RETIREMENT_AGE) {
+    if (world.get<Visitor>(key).Age >= RETIREMENT_AGE) {
       world.destroyEntity(key);
     }
   }
   if (world.Tick % SPAWN_INTERVAL == 0) {
     const double distance = 60.0 * drawUniform(drawKey(world, NULL_KEY, SPAWN_PURPOSE, 0));
     const EntityKey key = world.createEntity();
-    world.Registry.emplace<Visitor>(world.findEntity(key), Visitor{.Distance = distance});
+    world.emplace<Visitor>(key, Visitor{.Distance = distance});
   }
 }
 
@@ -309,19 +307,17 @@ Scenario stallsScenario() {
       .Populate =
           [](World &world) {
             const EntityKey track = world.createEntity();
-            world.Registry.emplace<Track>(world.findEntity(track),
-                                          Track{.Length = 60.0, .Stops = 7});
+            world.emplace<Track>(track, Track{.Length = 60.0, .Stops = 7});
             const EntityKey depot = world.createEntity();
-            world.Registry.emplace<Depot>(world.findEntity(depot), Depot{.Distance = 0.0});
+            world.emplace<Depot>(depot, Depot{.Distance = 0.0});
             for (const double distance : {15.0, 32.5, 50.0}) {
               const EntityKey stall = world.createEntity();
-              world.Registry.emplace<Stall>(world.findEntity(stall), Stall{distance});
+              world.emplace<Stall>(stall, Stall{distance});
             }
             for (uint32_t i = 0; i < 6; ++i) {
               const EntityKey visitor = world.createEntity();
-              world.Registry.emplace<Visitor>(
-                  world.findEntity(visitor),
-                  Visitor{.Distance = 5.0 + 8.0 * i, .Age = 40 * i, .Out = false});
+              world.emplace<Visitor>(
+                  visitor, Visitor{.Distance = 5.0 + 8.0 * i, .Age = 40 * i, .Out = false});
             }
           },
       .QueueCommands =

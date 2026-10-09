@@ -746,7 +746,7 @@ TEST_CASE("Every component type the park schema registers is held by some checke
     const World &world = checked.Value;
     for (const ComponentType &type : world.schema().components()) {
       for (const EntityKey key : world.keys()) {
-        if (type.Has(world.Registry, world.findEntity(key))) {
+        if (world.holds(type, key)) {
           held.insert(type.Name);
           break;
         }

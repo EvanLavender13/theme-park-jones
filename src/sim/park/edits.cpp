@@ -85,8 +85,7 @@ std::vector<Line> linesOf(const World &world) {
 
 // The intent T the key holds, or null.
 template <typename T> const T *findIntent(const World &world, EntityKey key) {
-  const entt::entity entity = world.findEntity(key);
-  return entity == entt::null ? nullptr : world.Registry.try_get<T>(entity);
+  return world.tryGet<T>(key);
 }
 
 // Whether the kind is one of its enum's values.
@@ -1065,20 +1064,16 @@ public:
   void destroy(EntityKey key) { Target->destroyEntity(key); }
   EntityKey addPoint(const PathPointIntent &point) {
     const EntityKey key = Target->createEntity();
-    Target->Registry.emplace<PathPointIntent>(Target->findEntity(key), point);
+    Target->emplace<PathPointIntent>(key, point);
     return key;
   }
   EntityKey addSegment(const PathSegmentIntent &segment) {
     const EntityKey key = Target->createEntity();
-    Target->Registry.emplace<PathSegmentIntent>(Target->findEntity(key), segment);
+    Target->emplace<PathSegmentIntent>(key, segment);
     return key;
   }
-  PathPointIntent &point(EntityKey key) {
-    return Target->Registry.get<PathPointIntent>(Target->findEntity(key));
-  }
-  PathSegmentIntent &segment(EntityKey key) {
-    return Target->Registry.get<PathSegmentIntent>(Target->findEntity(key));
-  }
+  PathPointIntent &point(EntityKey key) { return Target->get<PathPointIntent>(key); }
+  PathSegmentIntent &segment(EntityKey key) { return Target->get<PathSegmentIntent>(key); }
 
 private:
   World *Target;
@@ -1701,8 +1696,7 @@ bool namesValid(const World &world, const PathLayout &before, const RestoreInten
   }
   std::ranges::sort(names);
   if (std::ranges::adjacent_find(names) != names.end() ||
-      std::ranges::any_of(
-          names, [&world](EntityKey key) { return world.findEntity(key) != entt::null; })) {
+      std::ranges::any_of(names, [&world](EntityKey key) { return world.isLive(key); })) {
     return false;
   }
   const auto pointLeft = [&](EntityKey key) {
@@ -1845,11 +1839,10 @@ bool isRestoreAccepted(const World &world, const RestoreIntent &command) {
 // Gives the box the stock: removes its ShopStockIntent for food, so a shop at food saves as one
 // never set, and holds the stock otherwise.
 void setStock(World &world, EntityKey box, ShopStock stock) {
-  const entt::entity entity = world.findEntity(box);
   if (stock == ShopStock::Food) {
-    world.Registry.remove<ShopStockIntent>(entity);
+    world.remove<ShopStockIntent>(box);
   } else {
-    world.Registry.emplace_or_replace<ShopStockIntent>(entity, ShopStockIntent{stock});
+    world.emplaceOrReplace<ShopStockIntent>(box, ShopStockIntent{stock});
   }
 }
 
@@ -1933,14 +1926,14 @@ void applyCommand(World &world, const AddBox &command) {
     return;
   }
   const EntityKey key = world.createEntity();
-  world.Registry.emplace<BoxIntent>(world.findEntity(key), BoxIntent{command.Kind, command.At});
+  world.emplace<BoxIntent>(key, BoxIntent{command.Kind, command.At});
 }
 
 void applyCommand(World &world, const MoveBox &command) {
   if (!isAccepted(world, command)) {
     return;
   }
-  world.Registry.get<BoxIntent>(world.findEntity(command.Box)).At = command.At;
+  world.get<BoxIntent>(command.Box).At = command.At;
 }
 
 void applyCommand(World &world, const DeleteSegment &command) {
@@ -2018,12 +2011,12 @@ void applyCommand(World &world, const RestoreIntent &command) {
   WorldStore store(world);
   applyRestore(store, command);
   for (const ParkBox &box : command.Set.Boxes) {
-    world.Registry.get<BoxIntent>(world.findEntity(box.Key)) = BoxIntent{box.Kind, box.At};
+    world.get<BoxIntent>(box.Key) = BoxIntent{box.Kind, box.At};
     setStock(world, box.Key, box.Stock);
   }
   for (const ParkBox &box : command.Add.Boxes) {
     const EntityKey key = world.createEntity();
-    world.Registry.emplace<BoxIntent>(world.findEntity(key), BoxIntent{box.Kind, box.At});
+    world.emplace<BoxIntent>(key, BoxIntent{box.Kind, box.At});
     setStock(world, key, box.Stock);
   }
 }

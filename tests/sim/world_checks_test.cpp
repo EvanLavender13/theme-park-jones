@@ -30,15 +30,14 @@ TEST_CASE("in debug builds, the walk refuses a world holding state it cannot cov
     SKIP("world checks run only in debug builds");
   }
   World world = buildWorld(makeSchema());
-  const entt::entity entity = world.findEntity(FIRST);
   // Only a NaN is refused, so an infinity is an ordinary double, and an unregistered type whose
   // storage is empty holds nothing the walk misses.
   componentOf<Probe>(world, FIRST).Level = std::numeric_limits<double>::infinity();
-  world.Registry.emplace<UnregisteredGadget>(entity);
-  world.Registry.remove<UnregisteredGadget>(entity);
+  world.emplace<UnregisteredGadget>(FIRST);
+  world.remove<UnregisteredGadget>(FIRST);
   REQUIRE_NOTHROW(hashWorld(world));
 
-  world.Registry.emplace<UnregisteredGadget>(entity, UnregisteredGadget{.Value = 1});
+  world.emplace<UnregisteredGadget>(FIRST, UnregisteredGadget{.Value = 1});
   REQUIRE_THROWS_AS(hashWorld(world), WorldInvariantError);
 }
 

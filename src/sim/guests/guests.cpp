@@ -534,7 +534,7 @@ void stepGuests(World &world) {
   std::vector<EntityKey> leaving;
   WalkLists lists;
   for (const EntityKey key : parkGuests(world)) {
-    Guest &guest = world.Registry.get<Guest>(world.findEntity(key));
+    Guest &guest = world.get<Guest>(key);
     if (!network.resolve(guest.At)) {
       leaving.push_back(key);
       continue;
@@ -655,7 +655,7 @@ void carryGuests(World &world) {
     guest.At = place;
   };
   for (const EntityKey key : parkGuests(world)) {
-    Guest &guest = world.Registry.get<Guest>(world.findEntity(key));
+    Guest &guest = world.get<Guest>(key);
     const std::optional<Place> carried = carryOver(guest.At, *before, after);
     const std::optional<uint32_t> carriedGroup =
         carried ? ground.groupOf(carried->Carrier) : std::nullopt;
@@ -686,7 +686,7 @@ void carryGuests(World &world) {
 std::vector<EntityKey> parkGuests(const World &world) {
   std::vector<EntityKey> keys;
   for (const EntityKey key : world.keys()) {
-    if (world.Registry.all_of<Guest>(world.findEntity(key))) {
+    if (world.has<Guest>(key)) {
       keys.push_back(key);
     }
   }
@@ -694,11 +694,7 @@ std::vector<EntityKey> parkGuests(const World &world) {
 }
 
 std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
-  const entt::entity entity = world.findEntity(guest);
-  if (entity == entt::null) {
-    return std::nullopt;
-  }
-  const Guest *state = world.Registry.try_get<Guest>(entity);
+  const Guest *state = world.tryGet<Guest>(guest);
   if (state == nullptr) {
     return std::nullopt;
   }
@@ -717,11 +713,7 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
 }
 
 std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, EntityKey guest) {
-  const entt::entity entity = world.findEntity(guest);
-  if (entity == entt::null) {
-    return std::nullopt;
-  }
-  const Guest *state = world.Registry.try_get<Guest>(entity);
+  const Guest *state = world.tryGet<Guest>(guest);
   if (state == nullptr) {
     return std::nullopt;
   }
@@ -753,7 +745,7 @@ EntityKey addGuest(World &world, const Place &place, uint64_t stayUntil) {
                 guestDraw(world, key, "guest-speed") * 2.0 * WALK_SPEED_SPREAD;
   guest.Share =
       0.5 * (guestDraw(world, key, "guest-share", 0) + guestDraw(world, key, "guest-share", 1));
-  world.Registry.emplace<Guest>(world.findEntity(key), guest);
+  world.emplace<Guest>(key, guest);
   return key;
 }
 

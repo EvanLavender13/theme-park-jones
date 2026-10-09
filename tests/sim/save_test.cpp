@@ -55,23 +55,24 @@ template <typename Visitor> void visitFields(Visitor &visitor, Route &route) {
 
 // A state process that takes several ticks: each probe's samples fill up to four, one per tick.
 void advanceProbes(World &world) {
-  world.Registry.view<Probe>().each([](Probe &probe) {
+  for (const EntityKey key : world.keysWith<Probe>()) {
+    Probe &probe = world.get<Probe>(key);
     probe.Level += 0.1;
     if (probe.Samples.size() < 4) {
       probe.Samples.push_back(probe.Level);
     }
-  });
+  }
 }
 
 // Each route derives an entity holding its number of points.
 void deriveSlots(World &world) {
   std::vector<std::pair<EntityKey, int64_t>> routes;
-  world.Registry.view<Route>().each([&](entt::entity entity, const Route &route) {
-    routes.emplace_back(world.keyOf(entity), static_cast<int64_t>(route.Points.size()));
-  });
+  for (const EntityKey key : world.keysWith<Route>()) {
+    routes.emplace_back(key, static_cast<int64_t>(world.get<Route>(key).Points.size()));
+  }
   for (const auto &[owner, points] : routes) {
     const EntityKey key = world.createDerivedEntity(owner, SLOT_PURPOSE, 0);
-    world.Registry.emplace_or_replace<Cached>(world.findEntity(key), Cached{.Total = points});
+    world.emplaceOrReplace<Cached>(key, Cached{.Total = points});
   }
 }
 
@@ -146,14 +147,14 @@ World buildFormWorld(std::shared_ptr<const WorldSchema> schema) {
     world.createEntity();
   }
   world.destroyEntity(EntityKey{5});
-  world.Registry.emplace<Probe>(world.findEntity(FIRST), firstProbe());
-  world.Registry.emplace<Tag>(world.findEntity(FIRST));
-  world.Registry.emplace<Probe>(world.findEntity(SECOND));
-  world.Registry.emplace<Tag>(world.findEntity(SECOND));
-  world.Registry.emplace<Cached>(world.findEntity(BARE), Cached{.Total = 8});
-  world.Registry.emplace<Route>(world.findEntity(ROUTED), fourthRoute());
+  world.emplace<Probe>(FIRST, firstProbe());
+  world.emplace<Tag>(FIRST);
+  world.emplace<Probe>(SECOND);
+  world.emplace<Tag>(SECOND);
+  world.emplace<Cached>(BARE, Cached{.Total = 8});
+  world.emplace<Route>(ROUTED, fourthRoute());
   world.createDerivedEntity(ROUTED, SLOT_PURPOSE, 0);
-  world.Registry.emplace<Probe>(world.findEntity(SLOT), slotProbe());
+  world.emplace<Probe>(SLOT, slotProbe());
   return world;
 }
 
@@ -164,16 +165,16 @@ World buildFormWorldReordered(std::shared_ptr<const WorldSchema> schema) {
   world.Tick = 3000;
   world.destroyEntity(world.createDerivedEntity(EntityKey{9}, SLOT_PURPOSE, 3));
   world.createDerivedEntity(ROUTED, SLOT_PURPOSE, 0);
-  world.Registry.emplace<Probe>(world.findEntity(SLOT), slotProbe());
+  world.emplace<Probe>(SLOT, slotProbe());
   for (int i = 0; i < 5; ++i) {
     world.createEntity();
   }
-  world.Registry.emplace<Route>(world.findEntity(ROUTED), fourthRoute());
-  world.Registry.emplace<Cached>(world.findEntity(BARE), Cached{.Total = 8});
-  world.Registry.emplace<Tag>(world.findEntity(SECOND));
-  world.Registry.emplace<Probe>(world.findEntity(SECOND));
-  world.Registry.emplace<Tag>(world.findEntity(FIRST));
-  world.Registry.emplace<Probe>(world.findEntity(FIRST), firstProbe());
+  world.emplace<Route>(ROUTED, fourthRoute());
+  world.emplace<Cached>(BARE, Cached{.Total = 8});
+  world.emplace<Tag>(SECOND);
+  world.emplace<Probe>(SECOND);
+  world.emplace<Tag>(FIRST);
+  world.emplace<Probe>(FIRST, firstProbe());
   world.destroyEntity(EntityKey{5});
   return world;
 }
@@ -246,15 +247,15 @@ World buildRandomWorld(std::shared_ptr<const WorldSchema> schema, uint64_t seed)
     world.createEntity();
   }
   for (uint64_t i = 3; i <= COUNT; ++i) {
-    const entt::entity entity = world.findEntity(EntityKey{i});
+    const EntityKey key{i};
     if (dice.below(3) == 0) {
-      world.Registry.emplace<Route>(entity, randomRoute(dice));
+      world.emplace<Route>(key, randomRoute(dice));
     }
     if (dice.coin()) {
-      world.Registry.emplace<Probe>(entity, randomProbe(dice));
+      world.emplace<Probe>(key, randomProbe(dice));
     }
     if (dice.coin()) {
-      world.Registry.emplace<Tag>(entity);
+      world.emplace<Tag>(key);
     }
   }
 
@@ -267,14 +268,14 @@ World buildRandomWorld(std::shared_ptr<const WorldSchema> schema, uint64_t seed)
   Route edgeRoute;
   edgeRoute.Low = std::numeric_limits<int64_t>::min();
   edgeRoute.High = std::numeric_limits<uint64_t>::max();
-  world.Registry.emplace<Probe>(world.findEntity(FIRST), edge);
-  world.Registry.emplace<Route>(world.findEntity(FIRST), edgeRoute);
+  world.emplace<Probe>(FIRST, edge);
+  world.emplace<Route>(FIRST, edgeRoute);
 
   world.destroyEntity(EntityKey{COUNT});
   resolveWorld(world);
   Probe slot = randomProbe(dice);
   slot.Samples.clear();
-  world.Registry.emplace<Probe>(world.findEntity(deriveKey(FIRST, SLOT_PURPOSE, 0)), slot);
+  world.emplace<Probe>(deriveKey(FIRST, SLOT_PURPOSE, 0), slot);
   stepWorld(world);
   stepWorld(world);
   return world;

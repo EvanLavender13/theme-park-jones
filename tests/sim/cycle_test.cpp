@@ -84,8 +84,8 @@ struct AddPlan {
 
 [[maybe_unused]] void applyCommand(World &world, const AddPlan &command) {
   const EntityKey key = world.createEntity();
-  world.Registry.emplace<Plan>(world.findEntity(key), Plan{.Size = command.Size});
-  world.Registry.emplace<Probe>(world.findEntity(key));
+  world.emplace<Plan>(key, Plan{.Size = command.Size});
+  world.emplace<Probe>(key);
 }
 
 struct ResizePlan {
@@ -98,23 +98,27 @@ struct ResizePlan {
 }
 
 void countUp(World &world) {
-  world.Registry.view<Probe>().each([](Probe &probe) { probe.Count += 1; });
+  for (const EntityKey key : world.keysWith<Probe>()) {
+    world.get<Probe>(key).Count += 1;
+  }
 }
 
 void publishCounts(World &world) {
-  world.Registry.view<Probe>().each(
-      [](Probe &probe) { probe.Small = static_cast<uint16_t>(probe.Count); });
+  for (const EntityKey key : world.keysWith<Probe>()) {
+    Probe &probe = world.get<Probe>(key);
+    probe.Small = static_cast<uint16_t>(probe.Count);
+  }
 }
 
 // Each plan derives an entity holding twice its size.
 void deriveTotals(World &world) {
   std::vector<std::pair<EntityKey, int64_t>> plans;
-  world.Registry.view<Plan>().each([&](entt::entity entity, const Plan &plan) {
-    plans.emplace_back(world.keyOf(entity), plan.Size);
-  });
+  for (const EntityKey key : world.keysWith<Plan>()) {
+    plans.emplace_back(key, world.get<Plan>(key).Size);
+  }
   for (const auto &[owner, size] : plans) {
     const EntityKey key = world.createDerivedEntity(owner, SLOT_PURPOSE, 0);
-    world.Registry.emplace_or_replace<Cached>(world.findEntity(key), Cached{.Total = 2 * size});
+    world.emplaceOrReplace<Cached>(key, Cached{.Total = 2 * size});
   }
 }
 
@@ -137,8 +141,8 @@ constexpr EntityKey FIRST{1};
 World buildPark(std::shared_ptr<const WorldSchema> schema) {
   World world(std::move(schema), 77);
   const EntityKey key = world.createEntity();
-  world.Registry.emplace<Probe>(world.findEntity(key));
-  world.Registry.emplace<Plan>(world.findEntity(key), Plan{.Size = 3});
+  world.emplace<Probe>(key);
+  world.emplace<Plan>(key, Plan{.Size = 3});
   return world;
 }
 
