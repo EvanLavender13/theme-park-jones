@@ -83,9 +83,10 @@ The foundation works without believable-guests, on synthetic guest visits. Check
 ## Medium
 
 - Food offer: an entry field this capability produces at each shop's guest anchor. believable-guests samples it to choose (decision 0019). legible-simulation samples it for the overlay and for attribution.
-  - Resolution publishes the offer from intent and route distance alone. A preview, or a shop that was just committed or moved, has a complete offer to sample at once.
+  - Resolution publishes the offer for each good a shop's stock setting names from intent and route distance alone, as for an empty shop. A preview, or a shop that was just committed or moved, has a complete offer to sample at once.
   - Stepping republishes the offer from the shop's state as the queue and stock change. The new offer is visible from the next tick. If both offers exist, a sample prefers the stepped one.
   - If a resolution changes a shop's resolved offer, for example because a supply route was removed, it clears the stepped offer. The very next tick sees the change (plans/shared-medium/first-field-and-flow/MILESTONE.md).
+  - If a shop is switched away from a good it still holds or awaits, resolution keeps that good's stepped offer instead of clearing it, so the preview and the commit both show the good being sold off.
 - Route distance: sampled from navigable-networks.
   - A shop samples it at its backstage anchor to find the nearest depot, to judge whether it is supplied, and to estimate lead time.
   - A depot samples it at its own backstage anchor, with the ordering shop as the source. It uses the sample to judge whether the shop is reachable and to set each shipment's delay.
@@ -127,6 +128,7 @@ It is useful on its own, because it can be run and observed with synthetic guest
 ## Milestones
 
 1. `supplied-food-shop`: the depot and the generic food shop, resolved from committed or candidate intent. It adds (s, S) orders and supplies over the backstage network, and meal service limited by the scarcest of demand, supply, and service rate. It also adds the food offer, unserved returns, the inspection record with its limiting factor, and the starved marking on the box. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value, shared-medium's first-field-and-flow, navigable-networks' paths-become-routes, and effortless-building's sketch-a-park.
+2. `served-needs`: food and drink as separate goods that shops order and serve by their stock setting, seats on benches and stalls in toilet blocks, and an offer for each need with an exact wait. Member of the day-at-the-park slice. Depends on: effortless-building's facilities-and-hours, navigable-networks' facility-doors, and supplied-food-shop.
 
 Later milestones come from the deepening candidates, once the slice has been played.
 
@@ -135,7 +137,6 @@ Later milestones come from the deepening candidates, once the slice has been pla
 - Staff as a capacity pool, drawn over network distance, in place of the fixed service rate (decision 0018).
 - Restocking standards the player sets, such as how full shops are kept, instead of fixed s and S (principle 9).
 - Deliveries into the park: depots are restocked from the entrance or a delivery point, instead of being unlimited.
-- More goods, such as drinks. A shop's identity comes from what it is supplied with (docs/design-notes.md).
 - Money: prices, costs, and payment as the result of an exchange.
 - Garbage as a flow from shops and guests into bins, and litter pressure as a field.
 - Capacity on backstage routes, so congested supply routes slow shipments down (shared-medium's edge capacity).
