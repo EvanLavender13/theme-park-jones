@@ -12,11 +12,11 @@ The app reads the world only through:
 - the views (views/SPEC.md)
 - the renderer's mesh builders (render/SPEC.md)
 
-It changes the world in only two ways. It queues edits for the next cycle, and it replaces the world when a park is opened or a new one started. The library tpj_app_core holds the components that need no window. The command line, below, is a contract with scripts/runtime-report.sh and with the captures used to check rendering.
+It changes the world in only three ways. It queues edits for the next cycle, it applies queued edits with commitCommands while the game is paused, and it replaces the world when a park is opened or a new one started. The library tpj_app_core holds the components that need no window. The command line, below, is a contract with scripts/runtime-report.sh and with the captures used to check rendering.
 
 ## Main loop
 
-The simulation advances in fixed ticks. Each frame steps as many ticks as the elapsed time covers, at most MAX_FRAME_TICKS. If the app stalls, it does not step a burst of ticks afterward. If a park's ticks cost more than real time, the park runs slower than real time at a steady frame rate. It does not fall further behind each frame.
+The simulation advances in fixed ticks. The player runs the park paused or at 1x, 2x, or 4x. Each frame steps as many ticks as its elapsed time times the speed covers, at most MAX_FRAME_TICKS times the speed. While paused, a frame steps no tick and no time is owed to the park, so unpausing steps no burst. A frame stops stepping once its ticks have taken MAX_STEP_SECONDS, always stepping at least one, and drops the rest, so a park whose ticks are slow at a high speed runs slower than the speed at a steady frame rate. The speed changes only how many ticks a frame steps, so the world at a given tick is the same at any speed. If the app stalls, it does not step a burst of ticks afterward. If a park's ticks cost more than real time, the park runs slower than real time at a steady frame rate. It does not fall further behind each frame.
 
 A frame gathers input, hands the pointer's buttons to the tool, steps the simulation, moves the camera, builds the tooling UI, and draws. What the player sees on screen is always built from the world the next click acts on.
 
@@ -24,15 +24,15 @@ If the main loop throws, for example when one of the simulation's world invarian
 
 ## The scene
 
-The park's walkways and shop marks are rebuilt whenever the park's intent changes or a park is opened. The guests are rebuilt whenever the world ticks. The scene always shows the current world. When a world first has something to show, the camera frames the whole park.
+The park's walkways and shop marks are rebuilt whenever the park's intent changes or a park is opened. The guests are rebuilt whenever the world ticks or the park's intent changes, as an edit applied while paused changes it. The scene always shows the current world. When a world first has something to show, the camera frames the whole park.
 
 ## Tools and the ghost
 
-The Tools panel selects the tool. The tools are Look, Guest path, Backstage path, Place shop, Place depot, Move box, Edit path, Remove point, and Delete (tools/SPEC.md). Look is the tool at start. While a path is being drawn, the panel says to click the last point again to finish, and Cancel path drops the drawn points. Clicks over a panel never reach the tool. When the tool commits an edit, the edit applies at the next tick.
+The Tools panel selects the tool. The tools are Look, Guest path, Backstage path, Place shop, Place depot, Move box, Edit path, Remove point, and Delete (tools/SPEC.md). Look is the tool at start. While a path is being drawn, the panel says to click the last point again to finish, and Cancel path drops the drawn points. Clicks over a panel never reach the tool. When the tool commits an edit, the edit applies at the next tick, or at once while paused.
 
-The Tools panel has Undo and Redo buttons, each disabled while there is nothing to undo or redo. Ctrl+Z undoes, and Ctrl+Y or Ctrl+Shift+Z redoes, unless a text field has the keyboard. While a path is being drawn or the button holds an edit, undo and redo drop it, as Cancel path does, and change nothing else. Otherwise they apply at the next tick, with no ghost (decision 0029), in a tick of their own, so an edit committed while one waits applies at the tick after. While an edit or another undo or redo waits for its tick, undo and redo do nothing.
+The Tools panel has Undo and Redo buttons, each disabled while there is nothing to undo or redo. Ctrl+Z undoes, and Ctrl+Y or Ctrl+Shift+Z redoes, unless a text field has the keyboard. While a path is being drawn or the button holds an edit, undo and redo drop it, as Cancel path does, and change nothing else. Otherwise they apply at the next tick, with no ghost (decision 0029), in a tick of their own, so an edit committed while one waits applies at the tick after. While paused, they apply at the next frame instead, alone. While an edit or another undo or redo waits for its tick, undo and redo do nothing.
 
-The ghost shows what the tool's edit would do. It shows the candidate park's walkways and starved marks, the box or path point the tool marks, and the Inspector's subject, highlighted. While Edit path or Remove point is chosen and nothing is held, it shows every path point's marker in POINT_MARK_COLOR. While Edit path is chosen and nothing is held, it also shows every corner's radius handle in HANDLE_COLOR and every edge handle in EDGE_HANDLE_COLOR and every taper handle in TAPER_HANDLE_COLOR, and highlights the handle or the segment's sides under the pointer. Before a path tool's first click, it shows where that click would start the path, and marks it when the click would join a point or segment. While a click would finish the drawn path, it marks the last stop with a finish mark. It comes from a preview of the edit. The preview is made again whenever the world ticks or the edit changes, so the ghost, the food overlay, and the food tooltip agree and update every tick.
+The ghost shows what the tool's edit would do. It shows the candidate park's walkways and starved marks, the box or path point the tool marks, and the Inspector's subject, highlighted. While Edit path or Remove point is chosen and nothing is held, it shows every path point's marker in POINT_MARK_COLOR. While Edit path is chosen and nothing is held, it also shows every corner's radius handle in HANDLE_COLOR and every edge handle in EDGE_HANDLE_COLOR and every taper handle in TAPER_HANDLE_COLOR, and highlights the handle or the segment's sides under the pointer. Before a path tool's first click, it shows where that click would start the path, and marks it when the click would join a point or segment. While a click would finish the drawn path, it marks the last stop with a finish mark. It comes from a preview of the edit. The preview is made again whenever the world ticks, the park's intent changes, or the edit changes, so the ghost, the food overlay, and the food tooltip agree, update every tick, and show an edit applied while paused at once.
 
 While the tool snaps, the guides of the snap in effect draw over the scene and behind the panels, each kind in its own color: a ring on a point, a line from a door, a solid line along a segment, a dashed ray from an anchor that runs on past the stop, and ticks at whole meters. The length of each segment measuredLengths gives shows at its middle, in meters to two decimals. A frame gives the tool the meters of ground a screen pixel spans at the pointer, averaged across and up the screen. Holding Ctrl turns snapping off while it is held, unless a text field has the keyboard.
 
@@ -62,7 +62,7 @@ Pitch, distance, and the focus stay within limits that keep the park in view. Mo
 
 The Debug panel shows the frame rate, the tick, and the camera. It lists each shop's stock, queue, orders, and what limits it. It also lists the guests and their mean hunger, how many are waiting, and how many meals have been eaten (legible/SPEC.md, Park summary). With no saved layout it starts at the window's top right, clear of the Tools panel. Panel positions persist in imgui.ini in the working directory.
 
-The Time panel shows the park's day and its time of day on a 24-hour clock in hours and minutes, such as `Day 1  09:00` (sim/SPEC.md, The clock). It follows every tick. With no saved layout it starts at the window's top center.
+The Time panel shows the park's day and its time of day on a 24-hour clock in hours and minutes, such as `Day 1  09:00` (sim/SPEC.md, The clock). It follows every tick. Below the clock, radio buttons Pause, 1x, 2x, and 4x show the speed and choose it. Space pauses, and pressed again runs the park at the speed it ran at before. 1, 2, and 3 choose 1x, 2x, and 4x and unpause. The keys do nothing while a text field has the keyboard. The app starts at 1x, and keeps its speed when a park is opened or a new one started. With no saved layout the panel starts at the window's top center.
 
 The Graph checkbox draws the networks' lines and nodes over the scene and behind the panels. The Food overlay checkbox shows food availability on the guest paving of the previewed park (views/SPEC.md). Its shape is built again only when the previewed park's path points or segments change. While the overlay is shown, hovering shaded paving shows the food value at the overlay place of the point under the cursor at the overlay's height (render/SPEC.md) and, for each shop that contributes, the terms that make up the value. Hovering anywhere else shows no food tooltip. If no supplied shop is reachable, the tooltip says so. While the preview places a shop, the tooltip also shows the hungry footfall at its door and its supply route, or says that it has no supply route.
 
@@ -75,6 +75,7 @@ The Inspector shows its subject's title and rows. For a guest, it also shows the
 - --frame-times, with a positive --frames, writes one line at exit. The line is `frame-times`, then the duration in nanoseconds of each frame from the second to the next to last, each after a single space. With N frames, the line holds N - 2 durations, and neither loading nor the first frame's one-off work is among them. scripts/runtime-report.sh times the app with it (bench/SPEC.md).
 - --graph and --overlay food check those boxes at start, so a capture shows them. food is the only overlay.
 - --park PATH starts from that park file instead of a new park.
+- --speed N starts the app paused when N is 0, and at 1x, 2x, or 4x when N is 1, 2, or 4.
 - --ticks N steps N cycles before the first frame.
 - --hash writes `tick <t> hash <h>` after the ticks. The tick and hash match the last line tpj_scenarios writes for the same file and tick count. It then exits with status 0 without opening a window.
 
@@ -82,6 +83,7 @@ The app prints the usage and exits with a nonzero status for any of these:
 
 - an unknown option
 - a missing or malformed value
+- a --speed value other than 0, 1, 2, or 4
 - --frame-times without a positive --frames
 - --hash with any option that needs a window
 

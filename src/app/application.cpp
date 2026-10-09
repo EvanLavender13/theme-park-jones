@@ -25,7 +25,8 @@ constexpr float PARK_SIZE_METERS = 256.0f;
 
 Application::Application(const Options &options, World start)
     : Window(Video), Gui(Window), Gpu(Window, Gui, PARK_SIZE_METERS), Session(std::move(start)),
-      Interactions(Session.generation()), Ui({options.ShowGraph, options.ShowFoodOverlay}),
+      Interactions(Session.generation()),
+      Ui({options.ShowGraph, options.ShowFoodOverlay}, GameSpeed(options.Speed)),
       Clock(SDL_GetPerformanceCounter(), SDL_GetPerformanceFrequency()), Dialogs(Window.get()),
       FrameLimit(options.FrameLimit), CapturePath(options.CapturePath),
       WriteFrameTimes(options.FrameTimes) {}
@@ -57,10 +58,11 @@ bool Application::runFrames() {
     if (input.Quit) {
       return true;
     }
+    Ui.speed().use(input.Speed);
     Session.useFileRequest(Dialogs.take(), Dialogs);
     Interactions.follow(Session.generation());
 
-    const FrameStep step = Clock.advance(SDL_GetPerformanceCounter());
+    const FrameStep step = Clock.advance(SDL_GetPerformanceCounter(), Ui.speed().multiplier());
     Frames.add(step.Nanoseconds);
 
     // The buttons act on the world and pointer the ghost on screen was built from, and a Look
@@ -72,10 +74,18 @@ bool Application::runFrames() {
           entityUnderCursor(Session.world(), readCursor(Window.get()), orbitCameraView(Camera)));
     }
 
-    // The simulation advances in fixed ticks regardless of frame rate, and queued edits apply at
-    // the next (principle 10).
+    // The simulation advances in fixed ticks regardless of frame rate, as many as the speed asks,
+    // and queued edits apply at the next, or at once while paused (principle 10).
+    // A frame stops stepping once its ticks have taken MAX_STEP_SECONDS, and drops the rest.
+    const uint64_t stepsStarted = SDL_GetPerformanceCounter();
     for (uint32_t tick = 0; tick < step.Ticks; ++tick) {
+      if (tick > 0 && !Clock.mayStep(stepsStarted, SDL_GetPerformanceCounter())) {
+        break;
+      }
       Session.step();
+    }
+    if (Ui.speed().paused()) {
+      Session.applyWithoutTick();
     }
     if (!uploadWorldMeshes(renderer, Session.world(),
                            Scene.syncWorld(Session.world(), Session.generation()), Camera)) {

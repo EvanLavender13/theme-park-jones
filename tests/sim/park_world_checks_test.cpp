@@ -642,9 +642,11 @@ TEST_CASE("The save of every checked world loads back, resolves equal to the wor
   }
 }
 
-// A preview is exact only if the candidate is the world its commit makes.
+// A preview is exact only if the candidate is the world its commit makes, whether a cycle commits
+// it or, while the game is paused, commitCommands does.
 TEST_CASE("Each chosen edit's candidate, made from warm.park as a cycle leaves it, equals the "
-          "world that queuing the edit for that cycle gives") {
+          "world that queuing the edit for that cycle gives and the world that committing it "
+          "without a cycle gives") {
   const World warm = openWarmPark();
   const World before = steppedOnce(warm);
   for (const ChosenEdit &chosen : chosenEdits(before)) {
@@ -654,6 +656,12 @@ TEST_CASE("Each chosen edit's candidate, made from warm.park as a cycle leaves i
     World committed = copyWorld(warm);
     stepWorld(committed, commands);
     CHECK(worldsEqual(candidate, committed));
+
+    CommandQueue pausedCommands = queueOf(chosen.Edit);
+    World committedPaused = copyWorld(before);
+    commitCommands(committedPaused, pausedCommands);
+    CHECK(worldsEqual(candidate, committedPaused));
+    CHECK(committedPaused.Tick == before.Tick);
   }
 }
 

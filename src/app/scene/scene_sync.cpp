@@ -19,6 +19,9 @@ WorldMeshes SceneSync::syncWorld(const World &world, uint64_t generation) {
   if (Intent != current) {
     Intent = std::move(current);
     meshes.Park = true;
+    // An edit applied while paused changes the world without a tick, and may move guests.
+    meshes.Guests = true;
+    Kept = {};
   }
   if (GuestTick != world.Tick) {
     GuestTick = world.Tick;

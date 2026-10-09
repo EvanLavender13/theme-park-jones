@@ -259,3 +259,8 @@ Expected: the build has no warnings, ctest reports 100% tests passed, and tidy r
 Files: none.
 
 Step 1: Stage only this feature's paths: src/sim/world.h, src/sim/cycle.cpp, src/sim/SPEC.md, tests/sim/park_world_checks_test.cpp, src/app/, src/legible/preview.h, src/legible/SPEC.md, src/tools/SPEC.md, src/tools/history.h, and plans/deterministic-simulation/park-clock/game-speed/. Commit them by pathspec with the commit-hygiene skill, subject `App: Pause and run the park at 1x, 2x, or 4x`. If the format hook rewraps a file after the commit, add it and amend the commit before merging. Merge into main as implementing-features says, and rebuild windows-release.
+
+## Deviations
+
+- Minor, found in Task 15: on full.park at 4x the park kept 4x, but frames took a median of 43 ms, with the slowest 5% from 73 ms, since each frame stepped about five 7 ms ticks. A frame now stops stepping once its ticks have taken MAX_STEP_SECONDS, a sixtieth of a second, always stepping at least one, and drops the rest (FrameClock::mayStep, called from runFrames). At 4x, full.park then ran at about 3.4x with a median frame of 28.4 ms, the slowest 5% from 31.0 ms, and the slowest 32.3 ms. At 1x the median frame was 4.4 ms, as before. src/app/SPEC.md's Main loop states the budget.
+- Minor, found in Task 17: tidy refused ToolingUi::build's ninth parameter. ToolingUi now holds the GameSpeed, as it holds the shown views, and the application reads it through ToolingUi::speed.

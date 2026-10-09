@@ -34,6 +34,22 @@ void addMouseInput(const SDL_Event &event, CameraInput &camera) {
   }
 }
 
+// What a key asks of the game's speed, or the action already asked when it asks nothing.
+SpeedAction speedAction(SDL_Keycode key, SpeedAction asked) {
+  switch (key) {
+  case SDLK_SPACE:
+    return SpeedAction::TogglePause;
+  case SDLK_1:
+    return SpeedAction::RunNormal;
+  case SDLK_2:
+    return SpeedAction::RunDouble;
+  case SDLK_3:
+    return SpeedAction::RunQuadruple;
+  default:
+    return asked;
+  }
+}
+
 } // namespace
 
 void mapEvent(const SDL_Event &event, bool mouseWanted, bool keyboardWanted, FrameInput &input) {
@@ -47,6 +63,8 @@ void mapEvent(const SDL_Event &event, bool mouseWanted, bool keyboardWanted, Fra
         input.History =
             (event.key.mod & SDL_KMOD_SHIFT) != 0 ? HistoryAction::Redo : HistoryAction::Undo;
       }
+    } else if (!keyboardWanted && !event.key.repeat) {
+      input.Speed = speedAction(event.key.key, input.Speed);
     }
   } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
     input.Buttons.Released = true;

@@ -1,6 +1,7 @@
 #ifndef TPJ_APP_UI_TOOLING_UI_H
 #define TPJ_APP_UI_TOOLING_UI_H
 
+#include "app/input/game_speed.h"
 #include "app/input/input_map.h"
 #include "app/input/interaction.h"
 #include "app/input/orbit_camera.h"
@@ -20,22 +21,23 @@ struct ShownViews {
   bool FoodOverlay = false;
 };
 
-// The frame's panels and tooltips, and which views over the scene the Debug panel's checkboxes
-// show.
+// The frame's panels and tooltips, which views over the scene the Debug panel's checkboxes show,
+// and the game's speed, which the Time panel's buttons and the frame's keys set.
 class ToolingUi {
 public:
-  explicit ToolingUi(ShownViews shown) : Shown(shown) {}
+  ToolingUi(ShownViews shown, GameSpeed speed) : Shown(shown), Speed(speed) {}
 
   [[nodiscard]] const ShownViews &shown() const { return Shown; }
+  [[nodiscard]] GameSpeed &speed() { return Speed; }
 
   // Builds the frame's ImGui frame and gives its draw data: the Debug, Time, and Tools panels,
   // which set the shown views from their checkboxes, select the tool the player chose, and start
-  // the park action they pressed. It undoes or redoes as the Tools panel's buttons or the frame's
-  // keys ask, unless the tool held or had drawn something, which it drops instead. It also builds
-  // the Inspector while the interaction has a subject, forgetting it when closed; the graph over
-  // the scene while it is shown; the snap's guides and the measured lengths; the food tooltip at
-  // the cursor while the overlay is, on the preview's candidate when it has one, over the overlay's
-  // shape; and a shop ghost's context.
+  // the park action they pressed, and the Time panel's speed buttons, which set the speed. It
+  // undoes or redoes as the Tools panel's buttons or the frame's keys ask, unless the tool held or
+  // had drawn something, which it drops instead. It also builds the Inspector while the interaction
+  // has a subject, forgetting it when closed; the graph over the scene while it is shown; the
+  // snap's guides and the measured lengths; the food tooltip at the cursor while the overlay is, on
+  // the preview's candidate when it has one, over the overlay's shape; and a shop ghost's context.
   [[nodiscard]] ImDrawData *build(SDL_Window *window, ParkDialogs &dialogs, ParkSession &session,
                                   const OrbitCamera &camera, Interaction &interaction,
                                   const Preview &preview, const OverlayShape &overlayShape,
@@ -43,6 +45,7 @@ public:
 
 private:
   ShownViews Shown;
+  GameSpeed Speed;
 };
 
 } // namespace tpj

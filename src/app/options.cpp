@@ -23,6 +23,7 @@ bool parseCount(const char *text, uint64_t &count) {
 std::optional<Options> parseOptions(int argc, const char *const *argv) {
   Options options;
   bool framesGiven = false;
+  bool speedGiven = false;
   bool valid = true;
   for (int i = 1; i < argc && valid; ++i) {
     const bool hasValue = i + 1 < argc;
@@ -35,6 +36,12 @@ std::optional<Options> parseOptions(int argc, const char *const *argv) {
       options.ParkPath = argv[++i];
     } else if (strcmp(argv[i], "--ticks") == 0 && hasValue) {
       valid = parseCount(argv[++i], options.Ticks);
+    } else if (strcmp(argv[i], "--speed") == 0 && hasValue) {
+      uint64_t speed = 0;
+      valid =
+          parseCount(argv[++i], speed) && (speed == 0 || speed == 1 || speed == 2 || speed == 4);
+      options.Speed = static_cast<uint32_t>(speed);
+      speedGiven = true;
     } else if (strcmp(argv[i], "--hash") == 0) {
       options.PrintHash = true;
     } else if (strcmp(argv[i], "--graph") == 0) {
@@ -49,15 +56,16 @@ std::optional<Options> parseOptions(int argc, const char *const *argv) {
       valid = false;
     }
   }
-  if (options.PrintHash && (framesGiven || options.CapturePath != nullptr || options.ShowGraph ||
-                            options.ShowFoodOverlay)) {
+  if (options.PrintHash && (framesGiven || speedGiven || options.CapturePath != nullptr ||
+                            options.ShowGraph || options.ShowFoodOverlay)) {
     valid = false;
   }
   if (options.FrameTimes && options.FrameLimit <= 0) {
     valid = false;
   }
   if (!valid) {
-    SDL_Log("Usage: %s [--park PATH] [--ticks N] [--hash] [--frames N] [--capture PATH] [--graph] "
+    SDL_Log("Usage: %s [--park PATH] [--ticks N] [--speed N] [--hash] [--frames N] [--capture "
+            "PATH] [--graph] "
             "[--overlay food] [--frame-times]",
             argv[0]);
     return std::nullopt;

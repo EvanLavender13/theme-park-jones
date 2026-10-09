@@ -3,6 +3,7 @@ add_library(tpj_app_core STATIC
     frame_clock.cpp
     frame_times.cpp
     input/cursor.cpp
+    input/game_speed.cpp
     input/input_map.cpp
     input/interaction.cpp
     input/orbit_camera.cpp

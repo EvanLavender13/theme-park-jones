@@ -43,10 +43,11 @@ struct EditHistory {
 // Empties both lists and takes the world's intent as the intent the history saw last.
 void clearHistory(EditHistory &history, const World &world);
 // Records what changed in the world's intent since the history last looked, as tools/SPEC.md's
-// History states. Call it after each cycle that applied commands.
+// History states. Call it after commands were applied, by a cycle or by commitCommands.
 void noteEdits(EditHistory &history, const World &world);
 // The command that reverses the last edit on the undo list, or on the redo list. None when that
-// list is empty or a command waits to be noted. Apply it alone in its cycle.
+// list is empty or a command waits to be noted. Apply it alone, in its cycle or by
+// commitCommands.
 std::optional<RestoreIntent> undoEdit(EditHistory &history);
 std::optional<RestoreIntent> redoEdit(EditHistory &history);
 // Whether undoEdit or redoEdit would give a command.

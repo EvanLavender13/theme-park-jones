@@ -21,11 +21,12 @@
 namespace tpj {
 namespace {
 
-// Builds the Debug, Time, and Tools panels, setting the shown views from their checkboxes,
+// Builds the Debug, Time, and Tools panels, setting the speed from the Time panel's buttons, the
+// shown views from their checkboxes,
 // selecting the tool the player chose, starting the park action they pressed, and undoing or
 // redoing as the panel or the keys ask, unless the tool drops a hold or a drawn path instead.
 void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &camera,
-                ShownViews &shown, Interaction &interaction, HistoryAction keys) {
+                ShownViews &shown, Interaction &interaction, GameSpeed &speed, HistoryAction keys) {
   const World &world = session.world();
   DebugStats stats;
   stats.SimTick = world.Tick;
@@ -33,7 +34,7 @@ void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &c
   stats.Distance = camera.Distance;
   stats.Park = summarizePark(world);
   drawDebugPanel(stats, shown.Graph, shown.FoodOverlay);
-  drawTimePanel(parkTime(world.Tick));
+  drawTimePanel(parkTime(world.Tick), speed);
   const ToolPanelChoice choice =
       drawToolPanel(interaction.tool().Kind, !interaction.tool().Drawn.empty(), session.canUndo(),
                     session.canRedo(), dialogs.dialogShowing());
@@ -62,7 +63,7 @@ ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, ParkSessi
   beginUiFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
-  drawPanels(dialogs, session, camera, Shown, interaction, keys);
+  drawPanels(dialogs, session, camera, Shown, interaction, Speed, keys);
   const World &world = session.world();
   if (const std::optional<InspectorSubject> &subject = interaction.subject();
       subject && !drawInspector(inspectSubject(world, *subject))) {
