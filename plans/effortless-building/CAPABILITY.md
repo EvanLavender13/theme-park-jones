@@ -68,10 +68,12 @@ This capability adds no fields or flows. It produces three things, and decision 
 Park intent holds:
 
 - path points, and segments between them by kind (guest, backstage);
-- boxes by kind (shop, depot), with position and facing;
+- boxes by kind (shop, depot, bench, toilet block), with position and facing;
+- each shop's stock setting: food, drink, or both;
+- the park's opening hours;
 - the entrance.
 
-Other capabilities derive from park intent. navigable-networks derives the networks and connections. plausible-operations derives shops and the depot. believable-guests uses the entrance as the place where guests arrive. Connections between boxes and paths are derived, and they aren't saved.
+Other capabilities derive from park intent. navigable-networks derives the networks and connections. plausible-operations derives shops and the depot, and reads each shop's stock setting. believable-guests uses the entrance as the place where guests arrive, and reads the opening hours. Connections between boxes and paths are derived, and they aren't saved.
 
 Tentative intent is the edit a ghost stands for. deterministic-simulation provides a candidate copy of the world, and the other capabilities resolve the edit there. legible-simulation samples the candidate's fields for preview context.
 
@@ -117,6 +119,7 @@ It is useful on its own. A park can be drawn, reshaped, saved, and captured befo
 
 1. `sketch-a-park`: the new-park template with its entrance, and guest and backstage paths drawn by clicking points. Paths are centripetal Catmull-Rom curves with endpoint snapping. The player places, moves, and deletes shop and depot boxes. Ghosts show the overlap check, and edits are commands applied between ticks. Paths and boxes render, parks save and load, and the app has the --park, --ticks, and --hash options. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value.
 2. `path-network`: paths become a network of shared points joined by straight segments, each with its own width, and each bend with its own corner radius. The player draws, joins, splits, and reshapes them with visible snaps that one key suppresses, and undoes and redoes every edit. Joined paths draw as one paved surface, and boxes are refused against that surface as drawn. Shops and depots placed beside a path face it. Member of the good-paths slice. Depends on: sketch-a-park, and shared-medium's carrier-widths.
+3. `facilities-and-hours`: benches and toilet blocks placed beside guest paths with the frontage snap, each shop's stock of food, drink, or both, and the park's opening hours, all as saved intent the player previews, applies, undoes, and redoes. Member of the day-at-the-park slice. Depends on: path-network, and deterministic-simulation's park-clock.
 
 Later milestones are drawn from the deepening candidates once the slice has been played.
 
