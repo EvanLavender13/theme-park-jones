@@ -64,7 +64,7 @@ This capability adds no fields or flows. It provides the registration, keys, and
 
 ## Dependencies
 
-- tpj_sim with EnTT, and the fixed-tick skeleton in src/sim: met.
+- tpj_sim and the fixed-tick skeleton in src/sim: met.
 - Both toolchains reachable from WSL (cmake.exe for Windows and the Linux GCC build), so one script can run both: met.
 - shared-medium (first-field-and-flow): its buffers register with the walk like any other state. Met.
 
@@ -106,7 +106,7 @@ Later milestones come from the deepening candidates, once the slices show where 
 - On x86-64 with SSE2, contraction off, and GCC on both builds, only the C runtime's transcendental functions still differ between builds. Porting musl's exp and log closes that gap.
 - Counter-based hashing, in the style of noise functions, gives keyed draws that need no stored state.
 - Factorio computes a CRC of its whole state every tick. It shows why the hash must cover everything and be checked every tick.
-- EnTT has no way to clone a registry, so copying goes through a registered walk.
+- EnTT couldn't clone a registry, so copying went through a registered walk. Decision 0039 later dropped EnTT, and copying still goes through the walk.
 - std::to_chars gives a canonical text encoding for doubles.
 
 The details are in RESEARCH.md.
