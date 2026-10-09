@@ -2,6 +2,7 @@
 
 #include <imgui.h>
 
+#include <stddef.h>
 #include <string_view>
 
 namespace tpj {
@@ -22,12 +23,18 @@ void drawDebugPanel(const DebugStats &stats, bool &showGraph, bool &showFoodOver
       ImGui::Separator();
     }
     for (const ShopLine &line : stats.Park.Shops) {
+      ImGui::Text("Shop %llu:", static_cast<unsigned long long>(line.Shop));
+      for (const Good good : GOODS) {
+        const std::string_view name = enumNames(good)[static_cast<size_t>(good)];
+        const GoodRecord &holding = line.Record.Goods[static_cast<size_t>(good)];
+        ImGui::SameLine();
+        ImGui::Text("%.*s %lld + %lld,", static_cast<int>(name.size()), name.data(),
+                    static_cast<long long>(holding.Stock), static_cast<long long>(holding.OnOrder));
+      }
       const std::string_view limit = limitingFactorName(line.Record.Limit);
-      ImGui::Text(
-          "Shop %llu: stock %lld, queue %lld, on order %lld, %.*s",
-          static_cast<unsigned long long>(line.Shop), static_cast<long long>(line.Record.Stock),
-          static_cast<long long>(line.Record.Queue), static_cast<long long>(line.Record.OnOrder),
-          static_cast<int>(limit.size()), limit.data());
+      ImGui::SameLine();
+      ImGui::Text("queue %lld, %.*s", static_cast<long long>(line.Record.Queue),
+                  static_cast<int>(limit.size()), limit.data());
     }
     ImGui::Separator();
     if (stats.Park.Guests == 0) {

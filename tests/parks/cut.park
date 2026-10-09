@@ -49,11 +49,26 @@ next-key 60
 [meals-ledger]
 10950212800986056559 packets=[{arrival=2207 from=22 to=30 handle=30 units=1 delay=90 returning=false}] stocks=[] created=18 consumed=[{cause=18178447431631752357 units=17}]
 
+[drink-orders-ledger]
+12663080230615486240 packets=[] stocks=[] created=0 consumed=[]
+
+[drink-supplies-ledger]
+13571596180258588924 packets=[] stocks=[] created=0 consumed=[]
+
+[drink-visits-ledger]
+13165361045825805991 packets=[] stocks=[] created=0 consumed=[]
+
+[drinks-ledger]
+14728062094526143130 packets=[] stocks=[] created=0 consumed=[]
+
 [shop-service]
 22 queue=[45 39 49 47 53 43 41 42 54] free-at=2207
 
 [food-offer-stepped]
 12622604716256766672 readable=[] pending=[]
+
+[drink-offer-stepped]
+13200854312701984269 readable=[] pending=[]
 
 [guest]
 24 at={carrier=19 distance=12.614440743554736} x=12.614440743554736 z=99.24867394369556 aim={carrier=19 distance=12.614440743554736} turn={carrier=20 from=22.360679774997898 to=22.360679774997898} forward=false activity=heading-to-shop hunger=1 hunger-rate=0.0005061130061392921 speed=1.0150710179845577 share=0.26726236427502986 stay-until=2023 target=22 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}

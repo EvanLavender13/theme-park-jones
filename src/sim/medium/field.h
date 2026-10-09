@@ -139,6 +139,14 @@ concept HasEdgeRule = FieldDefinition<F> && requires(const EdgeSample<typename F
   { F::sampleEdge(sample, out) } -> std::same_as<void>;
 };
 
+// A field whose owner may keep a source's stepped entries through a resolution that changes the
+// source's resolved entries:
+//   static bool keepStepped(const World &world, EntityKey source);
+template <typename F>
+concept HasKeepRule = FieldDefinition<F> && requires(const World &world, EntityKey source) {
+  { F::keepStepped(world, source) } -> std::same_as<bool>;
+};
+
 // A kept field: a scalar field whose owner reads a kept entry by its own rule, given the entry's
 // value and the ticks since it last changed:
 //   static double readKept(double value, uint64_t ticks);
@@ -233,7 +241,8 @@ template <FieldDefinition F> void swapSteppedEntries(World &world) {
 }
 
 // The field's finisher: after a resolution with a previous one to compare with, clears the
-// readable stepped entries of each source whose resolved entries changed, then drops the previous.
+// readable stepped entries of each source whose resolved entries changed, unless the field's owner
+// keeps them, then drops the previous.
 template <FieldDefinition F> void settleSteppedEntries(World &world) {
   using Slot = FieldSlot<typename F::Entry>;
   const EntityKey holder = fieldKey(F::Name);
@@ -242,8 +251,14 @@ template <FieldDefinition F> void settleSteppedEntries(World &world) {
     return;
   }
   auto &stepped = world.get<SteppedEntries<F>>(holder);
-  std::erase_if(stepped.Readable, [resolved](const Slot &slot) {
-    return entryWords(resolved->Previous, slot.Source) != entryWords(resolved->Slots, slot.Source);
+  std::erase_if(stepped.Readable, [&](const Slot &slot) {
+    if (entryWords(resolved->Previous, slot.Source) == entryWords(resolved->Slots, slot.Source)) {
+      return false;
+    }
+    if constexpr (HasKeepRule<F>) {
+      return !F::keepStepped(world, slot.Source);
+    }
+    return true;
   });
   resolved->HasPrevious = false;
   resolved->Previous.clear();

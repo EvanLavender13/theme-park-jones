@@ -79,6 +79,18 @@ next-key 126
 [meals-ledger]
 10950212800986056559 packets=[{arrival=4578 from=47 to=103 handle=103 units=1 delay=90 returning=false} {arrival=4579 from=48 to=99 handle=99 units=1 delay=90 returning=false} {arrival=4587 from=46 to=111 handle=111 units=1 delay=90 returning=false} {arrival=4599 from=49 to=90 handle=90 units=1 delay=90 returning=false} {arrival=4605 from=41 to=97 handle=97 units=1 delay=90 returning=false}] stocks=[] created=157 consumed=[{cause=18178447431631752357 units=152}]
 
+[drink-orders-ledger]
+12663080230615486240 packets=[] stocks=[] created=0 consumed=[]
+
+[drink-supplies-ledger]
+13571596180258588924 packets=[] stocks=[] created=0 consumed=[]
+
+[drink-visits-ledger]
+13165361045825805991 packets=[] stocks=[] created=0 consumed=[]
+
+[drinks-ledger]
+14728062094526143130 packets=[] stocks=[] created=0 consumed=[]
+
 [shop-service]
 40 queue=[] free-at=4361
 41 queue=[106 95] free-at=4605
@@ -94,6 +106,9 @@ next-key 126
 
 [food-offer-stepped]
 12622604716256766672 readable=[{source=40 entries=[{at={carrier=14162088239823738893 distance=0} value={relief=0.5 wait=116 supplied=true}}]} {source=41 entries=[{at={carrier=9996110190016484204 distance=0} value={relief=0.5 wait=255 supplied=true}}]} {source=42 entries=[{at={carrier=11955649162679721267 distance=0} value={relief=0.5 wait=0 supplied=true}}]} {source=43 entries=[{at={carrier=13879450545889808205 distance=0} value={relief=0.5 wait=0 supplied=true}}]} {source=44 entries=[{at={carrier=11887908215120131619 distance=0} value={relief=0.5 wait=0 supplied=true}}]} {source=45 entries=[{at={carrier=12736624636023262862 distance=0} value={relief=0.5 wait=0 supplied=true}}]} {source=46 entries=[{at={carrier=17950125692302144548 distance=0} value={relief=0.5 wait=591 supplied=true}}]} {source=47 entries=[{at={carrier=12385633362506750529 distance=0} value={relief=0.5 wait=138 supplied=true}}]} {source=48 entries=[{at={carrier=15246371478149256400 distance=0} value={relief=0.5 wait=139 supplied=true}}]} {source=49 entries=[{at={carrier=17951737378751905976 distance=0} value={relief=0.5 wait=69 supplied=true}}]} {source=50 entries=[{at={carrier=14385343142741796599 distance=0} value={relief=0.5 wait=0 supplied=true}}]}] pending=[]
+
+[drink-offer-stepped]
+13200854312701984269 readable=[] pending=[]
 
 [guest]
 52 at={carrier=4 distance=6.7482303013278795} x=-1.001972034609732 z=116.25176969867212 aim={carrier=17125955698113728469 distance=0.450093850677002} turn={carrier=0 from=0 to=0} forward=false activity=heading-home hunger=0.6586648703762562 hunger-rate=0.00041399426170726333 speed=1.230079491753145 share=0.6214726306971932 stay-until=2849 target=0 meal-relief=0.5 meals-eaten=4 last-meal={tick=2938 before=0.362244978993851 after=0}

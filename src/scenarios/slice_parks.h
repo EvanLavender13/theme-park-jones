@@ -16,6 +16,9 @@ inline constexpr uint64_t WARM_TICKS = 2200;
 // every guest that isn't waiting holds its guest presence entry.
 inline constexpr uint64_t MAIN_STREET_WARM_TICKS = 4530;
 
+// Cycles makeStockedPark steps at most before it gives up.
+inline constexpr uint64_t STOCKED_LIMIT_TICKS = 600;
+
 // The boxes-and-tubes slice's three park files, as saves.
 struct SliceParks {
   std::string Fed;
@@ -31,6 +34,12 @@ SliceParks makeSliceParks(std::string_view text, uint64_t warmTicks);
 // Loads the text with makeParkSchema, resolves it, steps it warmTicks cycles with no commands, and
 // gives its save. Throws LoadError as loadWorld does.
 std::string makeWarmPark(std::string_view text, uint64_t warmTicks);
+// Loads the text with makeParkSchema, adds a depot and a backstage path past both shops' backs,
+// resolves it, and steps it with no commands until a shop holds food, a shop holds drink, and
+// drink is in transit, and gives its save. Throws LoadError as loadWorld does, and
+// std::logic_error when the world refuses the depot or the path, or the condition doesn't hold
+// within STOCKED_LIMIT_TICKS cycles.
+std::string makeStockedPark(std::string_view text);
 
 } // namespace tpj
 

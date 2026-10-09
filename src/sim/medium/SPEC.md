@@ -58,7 +58,7 @@ A field has two layers:
 
 Each source publishes into a field at most once per resolution or per tick. If a publish comes outside the right stage, from the null source, or twice, it is refused and changes nothing.
 
-If a source has readable stepped entries, sampling reads them; otherwise it reads the source's resolved entries. When a command changes a source's resolved entries, its stepped entries are cleared, so the tick after a command sees every change the command made. Loading the save of a resolved world and resolving gives the world saved.
+If a source has readable stepped entries, sampling reads them; otherwise it reads the source's resolved entries. When a command changes a source's resolved entries, its stepped entries are cleared, so the tick after a command sees every change the command made. The owner may give the field a rule, keepStepped, that keeps a source's stepped entries through that change. If the rule keeps them, they stay as they were. Loading the save of a resolved world and resolving gives the world saved.
 
 sampleField gives a field's entries at a place on a network, each with its source, in ascending source order. At a node it gives each source's entries at that node, whatever carrier they name. Strictly inside an edge it gives the entries at exactly that place, or what the field's sampleEdge makes of the entries at and between the edge's ends. If a place doesn't resolve, sampling it gives nothing, which is a legitimate sample (principle 2). fieldValue sums a scalar field's entries at a place, giving 0.0 where it has none. sampleResolvedField samples the resolved layer alone. It is for resolvers, since stepped entries are state.
 
