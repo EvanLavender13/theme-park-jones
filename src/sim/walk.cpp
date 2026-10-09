@@ -46,33 +46,15 @@ std::string keyText(EntityKey key) { return std::to_string(static_cast<uint64_t>
 } // namespace
 
 void validateWorld(const World &world) {
-  for (auto &&[id, storage] : world.Registry.storage()) {
-    if (!storage.empty() && world.Schema->findComponent(storage.info().hash()) == nullptr) {
-      throw WorldInvariantError("component type " + std::string(storage.info().name()) +
-                                " is not registered with the world's schema");
-    }
-  }
-  for (auto &&[entity] : world.Registry.storage<entt::entity>()->each()) {
-    if (!world.KeyByEntity.contains(entity)) {
-      throw WorldInvariantError("an entity was created outside World::createEntity");
-    }
-  }
-  for (const auto &[key, record] : world.ByKey) {
-    if (!world.Registry.valid(record.Entity)) {
-      throw WorldInvariantError("entity " + keyText(key) +
-                                " was destroyed outside World::destroyEntity");
-    }
-  }
-  for (const ComponentType &type : world.Schema->components()) {
-    for (const auto &[key, record] : world.ByKey) {
-      if (!type.Has(world.Registry, record.Entity)) {
-        continue;
-      }
+  const std::vector<ComponentType> &types = world.Schema->components();
+  for (size_t index = 0; index < types.size(); ++index) {
+    const ComponentStore &store = *world.Stores[index];
+    for (const EntityKey key : store.keys()) {
       NanFinder finder;
-      type.Emit(world.Registry, record.Entity, finder);
+      store.emit(key, finder);
       if (finder.Field) {
         throw WorldInvariantError("NaN in field '" + *finder.Field + "' of component '" +
-                                  type.Name + "' on entity " + keyText(key));
+                                  types[index].Name + "' on entity " + keyText(key));
       }
     }
   }
@@ -95,21 +77,15 @@ void World::emitWords(WordSink &sink) const {
       sink.word(0);
     }
   }
-  for (const ComponentType &type : Schema->components()) {
-    sink.word(hashName(type.Name));
-    sink.word(static_cast<uint64_t>(type.Kind));
-    uint64_t count = 0;
-    for (const auto &entry : ByKey) {
-      if (type.Has(Registry, entry.second.Entity)) {
-        ++count;
-      }
-    }
-    sink.word(count);
-    for (const auto &[key, record] : ByKey) {
-      if (type.Has(Registry, record.Entity)) {
-        sink.word(static_cast<uint64_t>(key));
-        type.Emit(Registry, record.Entity, sink);
-      }
+  const std::vector<ComponentType> &types = Schema->components();
+  for (size_t index = 0; index < types.size(); ++index) {
+    sink.word(hashName(types[index].Name));
+    sink.word(static_cast<uint64_t>(types[index].Kind));
+    const ComponentStore &store = *Stores[index];
+    sink.word(store.size());
+    for (const EntityKey key : store.keys()) {
+      sink.word(static_cast<uint64_t>(key));
+      store.emit(key, sink);
     }
   }
 }
@@ -146,16 +122,9 @@ World copyWorld(const World &world) {
   copy.Tick = world.Tick;
   copy.NextKey = world.NextKey;
   copy.ResolvePending = world.ResolvePending;
-  for (const auto &[key, record] : world.ByKey) {
-    copy.addEntity(key);
-    copy.ByKey.at(key).Origin = record.Origin;
-  }
-  for (const ComponentType &type : world.Schema->components()) {
-    for (const auto &[key, record] : world.ByKey) {
-      if (type.Has(world.Registry, record.Entity)) {
-        type.Copy(world.Registry, record.Entity, copy.Registry, copy.ByKey.at(key).Entity);
-      }
-    }
+  copy.ByKey = world.ByKey;
+  for (size_t index = 0; index < world.Stores.size(); ++index) {
+    copy.Stores[index] = world.Stores[index]->clone();
   }
   return copy;
 }

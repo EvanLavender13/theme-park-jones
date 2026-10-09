@@ -7,7 +7,7 @@
 
 namespace tpj {
 
-// An entity's identity: stable across copies, saves, and loads, unlike EnTT's recycled handles.
+// An entity's identity: stable across copies, saves, and loads.
 // Components refer to other entities by key.
 enum class EntityKey : uint64_t {};
 

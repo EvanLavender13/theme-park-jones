@@ -1,20 +1,18 @@
 #ifndef TPJ_SIM_COMMAND_QUEUE_H
 #define TPJ_SIM_COMMAND_QUEUE_H
 
-#include <entt/core/type_info.hpp>
+#include "sim/type_id.h"
 
 #include <any>
-#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace tpj {
 
-// A command waiting for the next cycle, or for commitCommands, with its type's id and name.
+// A command waiting for the next cycle, or for commitCommands, with its type's id.
 struct QueuedCommand {
-  entt::id_type TypeId = 0;
-  std::string_view TypeName;
+  TypeId Id = nullptr;
   std::any Value;
 };
 
@@ -24,8 +22,7 @@ class CommandQueue {
 public:
   template <typename T> void push(T command) {
     static_assert(std::is_copy_constructible_v<T>, "a command must be copyable");
-    Commands.push_back(
-        QueuedCommand{entt::type_id<T>().hash(), entt::type_id<T>().name(), std::move(command)});
+    Commands.push_back(QueuedCommand{typeIdOf<T>(), std::move(command)});
   }
 
   [[nodiscard]] const std::vector<QueuedCommand> &commands() const { return Commands; }

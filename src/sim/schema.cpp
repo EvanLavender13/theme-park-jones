@@ -17,26 +17,28 @@ void WorldSchema::addComponentType(ComponentType type) {
     if (existing.Name == type.Name) {
       throw std::invalid_argument("component name '" + type.Name + "' is already registered");
     }
-    if (existing.TypeId == type.TypeId) {
+    if (existing.Id == type.Id) {
       throw std::invalid_argument("the type named '" + type.Name + "' is already registered as '" +
                                   existing.Name + "'");
     }
   }
+  IndexById.emplace(type.Id, Components.size());
   Components.push_back(std::move(type));
 }
 
-const ComponentType *WorldSchema::findComponent(entt::id_type typeId) const {
-  const auto found =
-      std::find_if(Components.begin(), Components.end(),
-                   [typeId](const ComponentType &type) { return type.TypeId == typeId; });
-  return found == Components.end() ? nullptr : &*found;
+std::optional<size_t> WorldSchema::indexOf(TypeId id) const {
+  const auto found = IndexById.find(id);
+  if (found == IndexById.end()) {
+    return std::nullopt;
+  }
+  return found->second;
 }
 
 bool WorldSchema::sameComponents(const WorldSchema &other) const {
   return std::equal(
       Components.begin(), Components.end(), other.Components.begin(), other.Components.end(),
       [](const ComponentType &left, const ComponentType &right) {
-        return left.Name == right.Name && left.Kind == right.Kind && left.TypeId == right.TypeId;
+        return left.Name == right.Name && left.Kind == right.Kind && left.Id == right.Id;
       });
 }
 
@@ -70,17 +72,15 @@ void WorldSchema::addResolver(std::string_view name, WorldFunction resolve,
 }
 
 void WorldSchema::addCommandType(CommandType type) {
-  if (findCommand(type.TypeId) != nullptr) {
-    throw std::invalid_argument("command type " + std::string(type.TypeName) +
-                                " is already registered");
+  if (findCommand(type.Id) != nullptr) {
+    throw std::invalid_argument("a command type is already registered");
   }
   Commands.push_back(type);
 }
 
-const CommandType *WorldSchema::findCommand(entt::id_type typeId) const {
-  const auto found =
-      std::find_if(Commands.begin(), Commands.end(),
-                   [typeId](const CommandType &type) { return type.TypeId == typeId; });
+const CommandType *WorldSchema::findCommand(TypeId id) const {
+  const auto found = std::find_if(Commands.begin(), Commands.end(),
+                                  [id](const CommandType &type) { return type.Id == id; });
   return found == Commands.end() ? nullptr : &*found;
 }
 

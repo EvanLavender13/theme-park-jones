@@ -57,7 +57,7 @@ The medium's state is part of the world as deterministic-simulation defines it. 
 
 The park files in tests/parks/ hold the medium's state, so the park world checks cover its copies, saves, and hashes. The cross-build check covers the medium through tpj_scenarios's synthetic scenario for fields and flows. Check the other properties by playing the game, as docs/testing.md says.
 
-A mechanical check fails the build when a file includes another module's private headers (principle 6, decision 0016). It passes on the tree, and it fails on a planted violation.
+A mechanical check fails the build when a file includes another module's private headers (principle 6, decision 0039). It passes on the tree, and it fails on a planted violation.
 
 ## Medium
 
@@ -105,7 +105,7 @@ The slice's medium map in plans/slices/boxes-and-tubes/SLICE.md names each of th
 ## Principles
 
 - Principle 3 is at risk when a new interaction bypasses the medium. Conservation is a property of the ledger: for each kind, units created equal units in transit, held, and consumed. Every interaction between capabilities must appear in a slice or capability medium map, and reviews check that.
-- Principle 6 is at risk when a module's private components are included elsewhere. The include check enforces it, and decision 0016 keeps private components out of public headers.
+- Principle 6 is at risk when a module's private components are included elsewhere. The include check enforces it, and decision 0039 keeps private components out of public headers.
 - Principle 10 is at risk from summation order and update order. Ordered entries and next-tick visibility address both. The park world checks show that two runs give the same state, and the cross-build check compares the builds players run.
 - Principle 8 depends on attribution being exact. The ordered-sum identity holds bit for bit.
 - Principle 2 is at risk when a source, endpoint, or network element is removed while the medium still refers to it. Empty samples are legitimate. first-field-and-flow settled what happens to units held by, or in transit to, a removed endpoint:
@@ -117,7 +117,7 @@ The slice's medium map in plans/slices/boxes-and-tubes/SLICE.md names each of th
 ## Dependencies
 
 - deterministic-simulation: the world as a copyable, hashable value, and the tick that the medium's buffers swap on: met (world-as-value, the first member of the boxes-and-tubes slice).
-- tpj_sim with EnTT (decisions 0016 and 0022): met.
+- tpj_sim (decisions 0022 and 0039): met.
 - navigable-networks: publishes the park's real networks. The foundation doesn't need it, because the foundation runs on synthetic networks.
 
 ## Foundation

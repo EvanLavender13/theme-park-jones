@@ -24,7 +24,7 @@ Headers must compile from their own include list. Forward-declare types when a p
 
 In a `.cpp` file, include the matching header first, then other project headers, then third-party headers, then system headers. Sort the includes within each group.
 
-If a header is in a directory named internal, it is private to that directory's parent, and only files under the parent may include it, from any depth. Declare a module's private components in such headers so that no other module can name them (principle 6, decision 0016). cmake/check_private_headers.cmake scans src and tests for includes that break this rule. It runs in ctest as "private header check passes on the tree".
+If a header is in a directory named internal, it is private to that directory's parent, and only files under the parent may include it, from any depth. Declare a module's private components in such headers so that no other module can name them (principle 6, decision 0039). cmake/check_private_headers.cmake scans src and tests for includes that break this rule. It runs in ctest as "private header check passes on the tree".
 
 Code is arranged in layers (decision 0027). The layers are declared in cmake/layers.txt, one layer per line, starting from the lowest. Each unit in a layer is a path under src, in one of three forms:
 

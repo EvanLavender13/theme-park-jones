@@ -4,7 +4,7 @@ This module holds park intent: what the player authored, from which the rest of 
 
 ## Boundary
 
-addParkIntent registers the intent types entrance, path-point, path-segment, box, shop-stock, and opening-hours. Their components are private to this module (decision 0016). addParkEdits registers the fifteen commands. makeParkSchema calls both after the medium's types.
+addParkIntent registers the intent types entrance, path-point, path-segment, box, shop-stock, and opening-hours. Their components are private to this module (decision 0039). addParkEdits registers the fifteen commands. makeParkSchema calls both after the medium's types.
 
 Other modules read intent only through parkEntrances, parkPathPoints, parkSegments, parkCorners, and parkBoxes, the paved surface through parkSurface, with or without walkways, its edges through parkEdges, and its tapers through parkTapers. Each returns every entity holding that kind of intent, in key order, as the public values ParkEntrance, ParkPathPoint, ParkSegment, ParkCorner, ParkBox, ParkEdge, and ParkTaper. Other modules read the opening hours through parkHours, which returns the public value OpeningHours. Other modules change intent only through commands.
 
