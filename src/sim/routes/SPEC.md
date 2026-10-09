@@ -25,6 +25,7 @@ Doors sit at the middle of an entity's front and back faces.
 - An entrance's front door serves the guest network.
 - A shop's front door serves the guest network, and its back door serves the backstage network.
 - A depot's front door serves the backstage network.
+- A bench and a toilet block have no doors.
 
 parkDoors gives the doors serving a kind: the entrances' first, then the boxes', each in key order of its entity. A ParkDoor has its entity, its face, its position, and the unit direction out of its face.
 

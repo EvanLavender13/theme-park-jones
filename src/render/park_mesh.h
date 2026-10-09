@@ -44,7 +44,19 @@ constexpr float pathLift(PathKind kind) { return kind == PathKind::Guest ? 0.04f
 inline constexpr float ENTRANCE_HEIGHT = 5.0f;
 inline constexpr Rgba ENTRANCE_COLOR{0.92f, 0.80f, 0.28f, 1.0f};
 
-constexpr float boxHeight(BoxKind kind) { return kind == BoxKind::Shop ? 4.0f : 6.0f; }
+constexpr float boxHeight(BoxKind kind) {
+  switch (kind) {
+  case BoxKind::Shop:
+    return 4.0f;
+  case BoxKind::Depot:
+    return 6.0f;
+  case BoxKind::Bench:
+    return 1.0f;
+  case BoxKind::ToiletBlock:
+    return 3.5f;
+  }
+  return 4.0f;
+}
 
 constexpr Rgba pathColor(PathKind kind) {
   return kind == PathKind::Guest ? Rgba{0.82f, 0.74f, 0.58f, 1.0f}
@@ -52,7 +64,17 @@ constexpr Rgba pathColor(PathKind kind) {
 }
 
 constexpr Rgba boxColor(BoxKind kind) {
-  return kind == BoxKind::Shop ? Rgba{0.84f, 0.42f, 0.30f, 1.0f} : Rgba{0.34f, 0.44f, 0.62f, 1.0f};
+  switch (kind) {
+  case BoxKind::Shop:
+    return {0.84f, 0.42f, 0.30f, 1.0f};
+  case BoxKind::Depot:
+    return {0.34f, 0.44f, 0.62f, 1.0f};
+  case BoxKind::Bench:
+    return {0.55f, 0.38f, 0.22f, 1.0f};
+  case BoxKind::ToiletBlock:
+    return {0.45f, 0.72f, 0.70f, 1.0f};
+  }
+  return {0.84f, 0.42f, 0.30f, 1.0f};
 }
 
 // The color a box's front face takes: red, green, and blue moved 0.4 of the way to 1.

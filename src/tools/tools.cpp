@@ -77,11 +77,21 @@ size_t segmentCount(const World &world, EntityKey point) {
 }
 
 bool isPlaceTool(ToolKind kind) {
-  return kind == ToolKind::PlaceShop || kind == ToolKind::PlaceDepot;
+  return kind == ToolKind::PlaceShop || kind == ToolKind::PlaceDepot ||
+         kind == ToolKind::PlaceBench || kind == ToolKind::PlaceToilet;
 }
 
 BoxKind placedKind(ToolKind kind) {
-  return kind == ToolKind::PlaceShop ? BoxKind::Shop : BoxKind::Depot;
+  switch (kind) {
+  case ToolKind::PlaceDepot:
+    return BoxKind::Depot;
+  case ToolKind::PlaceBench:
+    return BoxKind::Bench;
+  case ToolKind::PlaceToilet:
+    return BoxKind::ToiletBlock;
+  default:
+    return BoxKind::Shop;
+  }
 }
 
 bool isPathTool(ToolKind kind) {

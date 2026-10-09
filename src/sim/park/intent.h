@@ -36,9 +36,11 @@ constexpr std::array<std::string_view, 2> enumNames(PathKind /*value*/) {
   return {"guest", "backstage"};
 }
 
-enum class BoxKind : uint8_t { Shop, Depot };
+enum class BoxKind : uint8_t { Shop, Depot, Bench, ToiletBlock };
 
-constexpr std::array<std::string_view, 2> enumNames(BoxKind /*value*/) { return {"shop", "depot"}; }
+constexpr std::array<std::string_view, 4> enumNames(BoxKind /*value*/) {
+  return {"shop", "depot", "bench", "toilet-block"};
+}
 
 // A position and a facing, a direction on the ground held as given, not normalized.
 struct Pose {
@@ -69,8 +71,20 @@ inline constexpr double DEFAULT_EDGE_RADIUS = 0.0;
 // The taper length a new path point takes, in meters: a step.
 inline constexpr double DEFAULT_TAPER_LENGTH = 0.0;
 
+// A box's footprint by kind: a bench is street furniture, and a toilet block is about a shop's
+// size.
 constexpr FootprintSize boxSize(BoxKind kind) {
-  return kind == BoxKind::Shop ? FootprintSize{8.0, 6.0} : FootprintSize{12.0, 8.0};
+  switch (kind) {
+  case BoxKind::Shop:
+    return {8.0, 6.0};
+  case BoxKind::Depot:
+    return {12.0, 8.0};
+  case BoxKind::Bench:
+    return {2.0, 1.0};
+  case BoxKind::ToiletBlock:
+    return {8.0, 5.0};
+  }
+  return {8.0, 6.0};
 }
 
 inline constexpr FootprintSize ENTRANCE_SIZE{10.0, 3.0};

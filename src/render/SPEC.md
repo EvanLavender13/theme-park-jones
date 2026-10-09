@@ -38,7 +38,7 @@ Shaders are GLSL in shaders/. They are compiled to SPIR-V at build time and load
 
 ## The park
 
-buildParkMesh gives a world's park as the player sees it. Each entrance, path, and box is in its place, at its size and height. If a door has a connector, its walkway is drawn as part of the paved surface, joined to the segment it reaches (connectorWalkways). Guest paths, backstage paths, shops, depots, and the entrance each have their own opaque color. Paths draw as the paved surface parkSurface gives: each piece filled in its kind's color, and a strip EDGE_LINE_WIDTH wide along each edge line, on the paving's side, in a darker shade of that color, above the fills. Where an edge line turns sharply, its strip has no gap. Each starved shop has a mark floating over its roof, in a color unlike any other in the scene.
+buildParkMesh gives a world's park as the player sees it. Each entrance, path, and box is in its place, at its size and height. If a door has a connector, its walkway is drawn as part of the paved surface, joined to the segment it reaches (connectorWalkways). Guest paths, backstage paths, shops, depots, benches, toilet blocks, and the entrance each have their own opaque color. Paths draw as the paved surface parkSurface gives: each piece filled in its kind's color, and a strip EDGE_LINE_WIDTH wide along each edge line, on the paving's side, in a darker shade of that color, above the fills. Where an edge line turns sharply, its strip has no gap. Each starved shop has a mark floating over its roof, in a color unlike any other in the scene.
 
 meshBounds gives the smallest rectangle on the ground that holds a mesh's vertices, or none for an empty mesh.
 
