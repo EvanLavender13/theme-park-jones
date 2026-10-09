@@ -47,7 +47,9 @@ public:
   // After the frame's ticks: which of the park and guest meshes the world needs, remembering it as
   // drawn. For a generation other than the last one it saw, as at the first call, both, with the
   // camera framed, and the kept preview is emptied. Otherwise the park mesh when the world's intent
-  // differs from the last call's, and the guest mesh when its tick does.
+  // differs from the last call's, and the guest mesh when its intent or its tick does. When the
+  // intent differs, the kept preview is emptied, so an edit applied without a tick is previewed
+  // afresh.
   WorldMeshes syncWorld(const World &world, uint64_t generation);
   // After the pointer moves: keeps the preview of the edit as keepPreview does, returning whether
   // it was made again.

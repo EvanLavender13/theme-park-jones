@@ -111,6 +111,7 @@ private:
   friend void resolveWorld(World &world);
   friend void stepWorld(World &world, CommandQueue &commands);
   friend World makeCandidate(const World &world, const CommandQueue &commands);
+  friend void commitCommands(World &world, CommandQueue &commands);
   friend std::string saveWorld(const World &world);
   friend World loadWorld(std::shared_ptr<const WorldSchema> schema, std::string_view text);
 };
@@ -135,6 +136,11 @@ void stepWorld(World &world);
 // A copy of the world with the commands applied and resolved, not stepped. The world is unchanged.
 // Throws std::invalid_argument if a command's type is not registered.
 World makeCandidate(const World &world, const CommandQueue &commands);
+// Applies the queued commands in submission order and resolves, without stepping the systems,
+// advancing Tick, or running the swaps, as makeCandidate does to its copy. Empties the queue.
+// Changes nothing when the queue is empty and no resolution is pending. Throws
+// std::invalid_argument, changing nothing, if a queued command's type is not registered.
+void commitCommands(World &world, CommandQueue &commands);
 
 } // namespace tpj
 

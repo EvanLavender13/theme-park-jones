@@ -102,4 +102,17 @@ World makeCandidate(const World &world, const CommandQueue &commands) {
   return candidate;
 }
 
+void commitCommands(World &world, CommandQueue &commands) {
+  TPJ_PROFILE_ZONE();
+  requireRegistered(world, commands);
+  if (!commands.empty()) {
+    applyCommands(world, commands);
+    world.ResolvePending = true;
+    commands.clear();
+  }
+  if (world.ResolvePending) {
+    resolveWorld(world);
+  }
+}
+
 } // namespace tpj

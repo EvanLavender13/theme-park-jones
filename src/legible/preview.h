@@ -46,9 +46,9 @@ struct KeptPreview {
 };
 
 // Makes the kept preview again, as previewEdit gives it, when nothing is kept or the world's tick
-// or the edit differs from the kept one's, and returns whether it did. A world changes only as it
-// ticks, so the kept preview is previewEdit's for as long as it is kept for one world: empty it
-// when the world is replaced.
+// or the edit differs from the kept one's, and returns whether it did. The kept preview is
+// previewEdit's only while the world changes just by ticking: empty it when the world is
+// replaced, or changed without a tick, as edits applied while paused change it.
 bool keepPreview(KeptPreview &kept, const World &world, const std::optional<ParkEdit> &edit);
 
 // A shop ghost's context in the candidate of the edit on the world, or none when the edit neither

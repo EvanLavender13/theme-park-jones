@@ -48,6 +48,22 @@ void ParkSession::step() {
   }
 }
 
+void ParkSession::applyWithoutTick() {
+  if (Restore) {
+    CommandQueue alone;
+    queueEdit(alone, *Restore);
+    Restore.reset();
+    commitCommands(Current, alone);
+    noteEdits(History, Current);
+    return;
+  }
+  if (Commands.empty()) {
+    return;
+  }
+  commitCommands(Current, Commands);
+  noteEdits(History, Current);
+}
+
 void ParkSession::undo() {
   if (Commands.empty() && !Restore) {
     Restore = undoEdit(History);

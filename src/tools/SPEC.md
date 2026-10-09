@@ -1,6 +1,6 @@
 # tools
 
-The park's editing tools: what the player's pointer does to the park. A tool never changes the world. It reads intent through sim/park's public queries and geometry (sim/park/SPEC.md). It gives edits, as ParkEdit values, which the app queues for the next cycle. The library tpj_tools links only tpj_sim, so it runs without a window (principle 10).
+The park's editing tools: what the player's pointer does to the park. A tool never changes the world. It reads intent through sim/park's public queries and geometry (sim/park/SPEC.md). It gives edits, as ParkEdit values, which the app queues for the next cycle, or applies at once while the game is paused (app/SPEC.md). The library tpj_tools links only tpj_sim, so it runs without a window (principle 10).
 
 ## Boundary
 
@@ -75,8 +75,8 @@ Delete removes the box under the pointer. If there is no box, it removes the seg
 
 The history holds a list of edits to undo and a list of edits to redo. Each edit is the intent it changed: the path points, segments, and boxes it removed, those it added, and those it changed, before and after. The entrance never changes.
 
-clearHistory empties both lists and takes the world's intent as the intent the history saw last. noteEdits takes the world after a cycle that applied commands. It compares the world's intent with the intent the history saw last, then takes the world's intent as the intent it saw last. If nothing changed, it records nothing. Otherwise the change is one edit, even when several commands made it in one cycle. If the change came from an undo, the edit goes on the redo list. If it came from a redo, it goes on the undo list. Any other change goes on the undo list and empties the redo list.
+clearHistory empties both lists and takes the world's intent as the intent the history saw last. noteEdits takes the world after commands were applied, by a cycle or by commitCommands (sim/SPEC.md). It compares the world's intent with the intent the history saw last, then takes the world's intent as the intent it saw last. If nothing changed, it records nothing. Otherwise the change is one edit, even when several commands made it in one cycle. If the change came from an undo, the edit goes on the redo list. If it came from a redo, it goes on the undo list. Any other change goes on the undo list and empties the redo list.
 
 undoEdit takes the last edit off the undo list and gives the RestoreIntent that reverses it. The command removes what the edit added, sets what it changed back to how it was before, and adds back what it removed. redoEdit does the same for the last edit on the redo list, so the command reverses the undo. If there is no edit to take, each gives none. While a command that either gave hasn't been noted, both give none. If noteEdits then sees no change, as when the world refused the command, the edit goes back where it was. canUndo and canRedo give whether undoEdit and redoEdit would give a command.
 
-What an undo or redo adds back takes fresh keys. If its command applies alone in its cycle, noteEdits finds the key each restored record took. From then on, the history uses the new key wherever an edit names the old one.
+What an undo or redo adds back takes fresh keys. If its command applies alone, in its cycle or by commitCommands, noteEdits finds the key each restored record took. From then on, the history uses the new key wherever an edit names the old one.

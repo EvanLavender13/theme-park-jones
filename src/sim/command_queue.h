@@ -11,7 +11,7 @@
 
 namespace tpj {
 
-// A command waiting for the next cycle, with its type's id and name.
+// A command waiting for the next cycle, or for commitCommands, with its type's id and name.
 struct QueuedCommand {
   entt::id_type TypeId = 0;
   std::string_view TypeName;

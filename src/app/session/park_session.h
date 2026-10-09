@@ -53,6 +53,10 @@ public:
   // One cycle with the waiting undo or redo alone, when one waits, or else with the queued
   // commands, which it empties. Either way, the history then notes what the cycle changed.
   void step();
+  // While paused: applies the waiting undo or redo alone, when one waits, or else the queued
+  // commands, which it empties, with commitCommands and no cycle. The history then notes what
+  // changed. Does nothing when nothing waits or is queued.
+  void applyWithoutTick();
   // Asks for an undo, or a redo: the history's command waits to apply alone in the next cycle.
   // Nothing happens while a command is queued or waits, or when there is nothing to undo or redo.
   void undo();

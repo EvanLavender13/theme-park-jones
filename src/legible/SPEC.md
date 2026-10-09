@@ -42,7 +42,7 @@ Food availability is FOOD_AVAILABILITY, in food.h. Its sources are shops' food o
 
 A preview shows what a tentative edit would do before it is committed (decision 0025). Its candidate is exactly the world that committing the edit at the next cycle would give. A preview has a candidate only when the world accepts the edit. previewedWorld gives the candidate when there is one, and the world otherwise. Every explanation of the committed park works on the candidate the same way.
 
-keepPreview holds a preview between frames. It makes the preview again only when the world's tick or the edit has changed, and returns whether it did. If a caller replaces the world, the caller must empty the kept preview.
+keepPreview holds a preview between frames. It makes the preview again only when the world's tick or the edit has changed, and returns whether it did. If a caller replaces the world, or changes it without a tick, as edits applied while paused change it, the caller must empty the kept preview.
 
 A preview of adding or moving a shop also tells what the shop would find:
 

@@ -30,6 +30,8 @@ The world advances only through stepWorld, one fixed tick of SIM_TICK_SECONDS at
 
 stepWorld(world) is the same cycle with no commands.
 
+commitCommands(world, commands) applies the queued commands in submission order and resolves, without stepping the systems, advancing World::Tick, or running the swaps. It empties the queue. The world then equals the candidate makeCandidate would have made from it with those commands, so if a cycle has just left it, it equals the world that queuing the commands for that cycle would have given. If the queue is empty and no resolution is pending, nothing changes. If a queued command's type isn't registered, it throws std::invalid_argument and changes nothing. The app uses it to apply the player's edits while the game is paused.
+
 isStepping, isResolving, and isFinishing are each true exactly while their stage runs. If a function is meant for one stage, it can use them to refuse callers from any other stage.
 
 ## The clock
