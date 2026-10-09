@@ -2,7 +2,7 @@
 
 Slice: day-at-the-park
 
-Status: planned
+Status: complete
 
 ## Summary
 
