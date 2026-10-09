@@ -33,12 +33,6 @@ if(TPJ_TRACY)
         OPTIONS "TRACY_ENABLE ON" "TRACY_ON_DEMAND ON")
 endif()
 
-CPMAddPackage(
-    NAME EnTT
-    URL https://github.com/skypjack/entt/archive/refs/tags/v4.0.0.tar.gz
-    SYSTEM YES
-    EXCLUDE_FROM_ALL YES)
-
 add_subdirectory(src/core)
 add_subdirectory(src/sim)
 add_subdirectory(src/scenarios)

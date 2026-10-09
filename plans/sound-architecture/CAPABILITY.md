@@ -16,7 +16,7 @@ It owns three things:
 - the placement step that every plan passes;
 - restructuring the code that predates 0027, starting with src/app/main.cpp.
 
-Entity encapsulation (principle 6, decision 0016) stays with shared-medium. This capability owns the structure of the code around and between entities, not the rule between them.
+Entity encapsulation (principle 6, decision 0039) stays with shared-medium. This capability owns the structure of the code around and between entities, not the rule between them.
 
 This matters because it keeps the next feature as cheap to place and to check as the last one. Each concern has one obvious home, and a change reaches only a small part of the code. You can build and run a component through its header, without the rest of the program.
 

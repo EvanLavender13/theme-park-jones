@@ -1,12 +1,12 @@
 # sim
 
-The simulation: the park's state and the rules that change it. It holds a world of keyed entities. Their registered state can be copied, compared, hashed, saved, and replayed exactly (principles 1 and 10, decisions 0016, 0019, 0022, and 0025).
+The simulation: the park's state and the rules that change it. It holds a world of keyed entities. Their registered state can be copied, compared, hashed, saved, and replayed exactly (principles 1 and 10, decisions 0019, 0022, 0025, and 0039).
 
 ## Boundary
 
-The target tpj_sim links only tpj_core and EnTT. It never depends on rendering, windowing, or input (principle 10). The sim's tests link it alone, so a violation fails the build.
+The target tpj_sim links only tpj_core. It never depends on rendering, windowing, or input (principle 10). The sim's tests link it alone, so a violation fails the build.
 
-Modules inside the sim register their component types, systems, swap functions, resolvers, finishers, and commands with a WorldSchema. Each kind's internal components are private to its module, and only shared-medium components are public (decision 0016). Outside the sim, code reaches the world through these headers:
+Modules inside the sim register their component types, systems, swap functions, resolvers, finishers, and commands with a WorldSchema. Each kind's internal components are private to its module, and only shared-medium components are public (decision 0039). Outside the sim, code reaches the world through these headers:
 
 - sim/world.h
 - sim/entity_key.h
@@ -40,13 +40,15 @@ parkTime(tick) gives the park's time at a tick, a ParkTime: its Day, counted fro
 
 ## Entity keys
 
-Every entity has a stable EntityKey. When a component refers to another entity, it uses the entity's key, not its entt::entity, because EnTT recycles its identifiers. Keys from createEntity come from a counter the world holds, and they are never reused.
+Every entity has a stable EntityKey, and code names an entity only by its key. When a component refers to another entity, it holds the entity's key. Keys from createEntity come from a counter the world holds, and they are never reused.
 
 Resolvers create entities with createDerivedEntity. Its key is a pure function of an owner key, a purpose, and an index, and it never collides with a counter key. If an entity already holds the derived key, createDerivedEntity reuses that entity.
 
 Code reaches an entity's components through World, by key. get, tryGet, has, emplace, emplaceOrReplace, getOrEmplace, and remove each take the entity's key. If the key isn't live, tryGet gives nothing, has is false, and remove does nothing. isLive says whether a key names a live entity.
 
 keysWith<T>() lists the keys of the entities that hold T, in ascending order. If a system visits them in that order, it visits them in the same order in a copy and after a load.
+
+If code adds a component of a type the world's schema doesn't register, emplace, emplaceOrReplace, and getOrEmplace throw WorldInvariantError in every build, and the world doesn't change. No entity ever holds such a type. In debug builds, they also throw WorldInvariantError if the key isn't live.
 
 ## Schemas and the park
 
@@ -65,9 +67,9 @@ makeNewPark(seed) gives the new-park template (sim/park/SPEC.md) with that schem
 
 ## Copies, equality, and hashes
 
-copyWorld, worldsEqual, and hashWorld walk registered types in registration order and entities in key order, never in EnTT storage order. Two worlds are equal exactly when the walk sees the same values in both, with doubles compared by their bits. The hash is a 64-bit function of those values alone. The walk covers the seed, the tick, the key counter, every registered component, and whether resolution is pending.
+copyWorld, worldsEqual, and hashWorld walk registered types in registration order and entities in key order. Two worlds are equal exactly when the walk sees the same values in both, with doubles compared by their bits. The hash is a 64-bit function of those values alone. The walk covers the seed, the tick, the key counter, every registered component, and whether resolution is pending.
 
-In debug builds, if a world holds state the walk cannot cover, the walk refuses it with WorldInvariantError. Such state is an unregistered component, an entity with no key, or a NaN.
+In debug builds, if a registered component holds a NaN, the walk refuses the world with WorldInvariantError.
 
 ## Commands
 

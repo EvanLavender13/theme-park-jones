@@ -176,14 +176,18 @@ std::string saveWorld(const World &world) {
   writeNumber(text, world.NextKey);
   text += '\n';
 
-  const auto holdsSaved = [&world, &types](entt::entity entity) {
-    return std::any_of(types.begin(), types.end(), [&world, entity](const ComponentType &type) {
-      return type.Kind != DataKind::Derived && type.Has(world.Registry, entity);
-    });
+  const auto holdsSaved = [&world, &types](EntityKey key) {
+    for (size_t index = 0; index < types.size(); ++index) {
+      if (types[index].Kind != DataKind::Derived && world.Stores[index]->has(key)) {
+        return true;
+      }
+    }
+    return false;
   };
   bool headed = false;
-  for (const auto &[key, record] : world.ByKey) {
-    if (isDerivedKey(key) || holdsSaved(record.Entity)) {
+  for (const auto &entry : world.ByKey) {
+    const EntityKey key = entry.first;
+    if (isDerivedKey(key) || holdsSaved(key)) {
       continue;
     }
     if (!headed) {
@@ -194,21 +198,19 @@ std::string saveWorld(const World &world) {
     text += '\n';
   }
 
-  for (const ComponentType &type : types) {
-    if (type.Kind == DataKind::Derived) {
+  for (size_t index = 0; index < types.size(); ++index) {
+    if (types[index].Kind == DataKind::Derived) {
       continue;
     }
+    const ComponentStore &store = *world.Stores[index];
     headed = false;
-    for (const auto &[key, record] : world.ByKey) {
-      if (!type.Has(world.Registry, record.Entity)) {
-        continue;
-      }
+    for (const EntityKey key : store.keys()) {
       if (!headed) {
-        appendSectionHeader(text, type.Name);
+        appendSectionHeader(text, types[index].Name);
         headed = true;
       }
       writeNumber(text, static_cast<uint64_t>(key));
-      type.Write(world.Registry, record.Entity, text);
+      store.write(key, text);
       text += '\n';
     }
   }
@@ -263,12 +265,11 @@ World loadWorld(std::shared_ptr<const WorldSchema> schema, std::string_view text
       cursor.fail("key " + std::to_string(static_cast<uint64_t>(key)) +
                   " is listed in [entities], which holds entities with nothing saved");
     }
-    entt::entity entity = world.findEntity(key);
-    if (entity == entt::null) {
-      entity = world.addEntity(key);
+    if (!world.isLive(key)) {
+      world.addEntity(key);
     }
     if (type != nullptr) {
-      type->Read(cursor, world.Registry, entity);
+      world.Stores[*world.schema().indexOf(type->Id)]->read(cursor, key);
     }
     if (!cursor.atEnd()) {
       cursor.fail("unexpected text after the line's last field");

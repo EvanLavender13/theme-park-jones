@@ -43,6 +43,10 @@ World::World(std::shared_ptr<const WorldSchema> schema, uint64_t seed)
   if (!Schema) {
     throw std::invalid_argument("a world needs a schema");
   }
+  Stores.reserve(Schema->components().size());
+  for (const ComponentType &type : Schema->components()) {
+    Stores.push_back(type.MakeStore());
+  }
   if (WORLD_CHECKS && !isDefaultFloatEnvironment()) {
     throw WorldInvariantError(
         "the floating-point environment is not the default: round-to-nearest, "
@@ -50,12 +54,7 @@ World::World(std::shared_ptr<const WorldSchema> schema, uint64_t seed)
   }
 }
 
-entt::entity World::addEntity(EntityKey key) {
-  const entt::entity entity = Registry.create();
-  ByKey[key] = EntityRecord{entity, std::nullopt};
-  KeyByEntity[entity] = key;
-  return entity;
-}
+void World::addEntity(EntityKey key) { ByKey[key] = EntityRecord{std::nullopt}; }
 
 EntityKey World::createEntity() {
   if (WORLD_CHECKS && (Resolving || Finishing)) {
@@ -93,21 +92,11 @@ bool World::destroyEntity(EntityKey key) {
   if (found == ByKey.end()) {
     return false;
   }
-  const entt::entity entity = found->second.Entity;
-  KeyByEntity.erase(entity);
   ByKey.erase(found);
-  Registry.destroy(entity);
+  for (const std::unique_ptr<ComponentStore> &store : Stores) {
+    store->erase(key);
+  }
   return true;
-}
-
-entt::entity World::findEntity(EntityKey key) const {
-  const auto found = ByKey.find(key);
-  return found == ByKey.end() ? entt::null : found->second.Entity;
-}
-
-EntityKey World::keyOf(entt::entity entity) const {
-  const auto found = KeyByEntity.find(entity);
-  return found == KeyByEntity.end() ? NULL_KEY : found->second;
 }
 
 std::vector<EntityKey> World::keys() const {
@@ -122,8 +111,8 @@ std::vector<EntityKey> World::keys() const {
 bool World::isLive(EntityKey key) const { return ByKey.contains(key); }
 
 bool World::holds(const ComponentType &type, EntityKey key) const {
-  const entt::entity entity = findEntity(key);
-  return entity != entt::null && type.Has(Registry, entity);
+  const std::optional<size_t> index = Schema->indexOf(type.Id);
+  return index && Stores[*index]->has(key);
 }
 
 } // namespace tpj

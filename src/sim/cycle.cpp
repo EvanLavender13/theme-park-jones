@@ -12,16 +12,16 @@ namespace {
 // Throws before anything changes when a command's type is not registered with the world's schema.
 void requireRegistered(const World &world, const CommandQueue &commands) {
   for (const QueuedCommand &command : commands.commands()) {
-    if (world.schema().findCommand(command.TypeId) == nullptr) {
-      throw std::invalid_argument("command type " + std::string(command.TypeName) +
-                                  " is not registered with the world's schema");
+    if (world.schema().findCommand(command.Id) == nullptr) {
+      throw std::invalid_argument(
+          "a queued command's type is not registered with the world's schema");
     }
   }
 }
 
 void applyCommands(World &world, const CommandQueue &commands) {
   for (const QueuedCommand &command : commands.commands()) {
-    world.schema().findCommand(command.TypeId)->Apply(world, command.Value);
+    world.schema().findCommand(command.Id)->Apply(world, command.Value);
   }
 }
 

@@ -158,8 +158,8 @@ World buildFormWorld(std::shared_ptr<const WorldSchema> schema) {
   return world;
 }
 
-// The same world by other calls: EnTT's identifiers churned first, the derived entity made before
-// the counter entities, and components added in reverse.
+// The same world by other calls: an entity created and destroyed first, the derived entity made
+// before the counter entities, and components added in reverse.
 World buildFormWorldReordered(std::shared_ptr<const WorldSchema> schema) {
   World world(std::move(schema), 12345);
   world.Tick = 3000;

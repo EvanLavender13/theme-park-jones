@@ -2,12 +2,11 @@
 #define TPJ_SIM_WORLD_H
 
 #include "sim/command_queue.h"
+#include "sim/component_store.h"
 #include "sim/entity_key.h"
 #include "sim/schema.h"
+#include "sim/type_id.h"
 
-#include <entt/entity/registry.hpp>
-
-#include <algorithm>
 #include <map>
 #include <memory>
 #include <optional>
@@ -16,7 +15,6 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -32,9 +30,10 @@ constexpr bool WORLD_CHECKS = false;
 constexpr bool WORLD_CHECKS = true;
 #endif
 
-// A world the walk cannot cover fully: an unregistered component, an entity without a key, a NaN
-// in registered state, or two derived origins sharing a key. Also thrown when a world is created
-// under a floating-point environment that would change the simulation's arithmetic.
+// A world the walk cannot cover fully: a NaN in registered state, or two derived origins sharing a
+// key. Also thrown when a component of an unregistered type is added, when a component is added to
+// a key that isn't live in debug builds, and when a world is created under a floating-point
+// environment that would change the simulation's arithmetic.
 class WorldInvariantError : public std::logic_error {
 public:
   using std::logic_error::logic_error;
@@ -107,22 +106,23 @@ private:
     bool operator==(const DerivedOrigin &) const = default;
   };
   struct EntityRecord {
-    entt::entity Entity = entt::null;
     std::optional<DerivedOrigin> Origin;
   };
 
-  entt::entity addEntity(EntityKey key);
-  [[nodiscard]] entt::entity findEntity(EntityKey key) const;
-  [[nodiscard]] EntityKey keyOf(entt::entity entity) const;
+  void addEntity(EntityKey key);
+  // T's store, or nullptr when the schema doesn't register T.
+  template <typename T> TypedStore<T> *findStore();
+  template <typename T> const TypedStore<T> *findStore() const;
+  // T's store for adding a component to the key. Throws WorldInvariantError if the schema doesn't
+  // register T, or, in debug builds, if the key isn't live.
+  template <typename T> TypedStore<T> &storeToAdd(EntityKey key);
   void emitWords(WordSink &sink) const;
-
-  // Held by the walk, save, and cycle functions. Everything else reaches components by key.
-  entt::registry Registry;
 
   std::shared_ptr<const WorldSchema> Schema;
   uint64_t NextKey = 1;
   std::map<EntityKey, EntityRecord> ByKey;
-  std::unordered_map<entt::entity, EntityKey> KeyByEntity;
+  // One store per registered type, in registration order.
+  std::vector<std::unique_ptr<ComponentStore>> Stores;
   bool ResolvePending = true;
   // Set only while resolvers run, so that createEntity can refuse them in debug builds.
   bool Resolving = false;
@@ -143,60 +143,81 @@ private:
   friend World loadWorld(std::shared_ptr<const WorldSchema> schema, std::string_view text);
 };
 
-template <typename T> T &World::get(EntityKey key) { return Registry.get<T>(findEntity(key)); }
+template <typename T> TypedStore<T> *World::findStore() {
+  const std::optional<size_t> index = Schema->indexOf(typeIdOf<T>());
+  return index ? static_cast<TypedStore<T> *>(Stores[*index].get()) : nullptr;
+}
+
+template <typename T> const TypedStore<T> *World::findStore() const {
+  const std::optional<size_t> index = Schema->indexOf(typeIdOf<T>());
+  return index ? static_cast<const TypedStore<T> *>(Stores[*index].get()) : nullptr;
+}
+
+template <typename T> TypedStore<T> &World::storeToAdd(EntityKey key) {
+  TypedStore<T> *store = findStore<T>();
+  if (store == nullptr) {
+    throw WorldInvariantError("entity " + std::to_string(static_cast<uint64_t>(key)) +
+                              " was given a component of a type the world's schema doesn't "
+                              "register");
+  }
+  if (WORLD_CHECKS && !isLive(key)) {
+    throw WorldInvariantError("a component was added to key " +
+                              std::to_string(static_cast<uint64_t>(key)) + ", which isn't live");
+  }
+  return *store;
+}
+
+template <typename T> T &World::get(EntityKey key) { return findStore<T>()->Items.at(key); }
 
 template <typename T> const T &World::get(EntityKey key) const {
-  return Registry.get<T>(findEntity(key));
+  return findStore<T>()->Items.at(key);
 }
 
 template <typename T> T *World::tryGet(EntityKey key) {
-  const entt::entity entity = findEntity(key);
-  return entity == entt::null ? nullptr : Registry.try_get<T>(entity);
+  TypedStore<T> *store = findStore<T>();
+  if (store == nullptr) {
+    return nullptr;
+  }
+  const auto found = store->Items.find(key);
+  return found == store->Items.end() ? nullptr : &found->second;
 }
 
 template <typename T> const T *World::tryGet(EntityKey key) const {
-  const entt::entity entity = findEntity(key);
-  return entity == entt::null ? nullptr : Registry.try_get<T>(entity);
+  const TypedStore<T> *store = findStore<T>();
+  if (store == nullptr) {
+    return nullptr;
+  }
+  const auto found = store->Items.find(key);
+  return found == store->Items.end() ? nullptr : &found->second;
 }
 
 template <typename T> bool World::has(EntityKey key) const {
-  const entt::entity entity = findEntity(key);
-  return entity != entt::null && Registry.all_of<T>(entity);
+  const TypedStore<T> *store = findStore<T>();
+  return store != nullptr && store->Items.contains(key);
 }
 
 template <typename T, typename... Args> void World::emplace(EntityKey key, Args &&...args) {
-  Registry.emplace<T>(findEntity(key), std::forward<Args>(args)...);
+  storeToAdd<T>(key).Items.try_emplace(key, std::forward<Args>(args)...);
 }
 
 template <typename T> void World::emplaceOrReplace(EntityKey key, T value) {
-  Registry.emplace_or_replace<T>(findEntity(key), std::move(value));
+  storeToAdd<T>(key).Items.insert_or_assign(key, std::move(value));
 }
 
 template <typename T> T &World::getOrEmplace(EntityKey key) {
   static_assert(!std::is_empty_v<T>, "getOrEmplace needs a type that holds a value");
-  return Registry.get_or_emplace<T>(findEntity(key));
+  return storeToAdd<T>(key).Items.try_emplace(key).first->second;
 }
 
 template <typename T> void World::remove(EntityKey key) {
-  const entt::entity entity = findEntity(key);
-  if (entity != entt::null) {
-    Registry.remove<T>(entity);
+  if (TypedStore<T> *store = findStore<T>()) {
+    store->Items.erase(key);
   }
 }
 
 template <typename T> std::vector<EntityKey> World::keysWith() const {
-  std::vector<EntityKey> result;
-  // Read from T's storage rather than the key map, so a component left on an entity without a key
-  // still shows, as NULL_KEY.
-  if (const auto *storage = Registry.storage<T>()) {
-    result.reserve(storage->size());
-    // The base set iterates entities; the storage itself iterates components.
-    for (const entt::entity entity : static_cast<const entt::sparse_set &>(*storage)) {
-      result.push_back(keyOf(entity));
-    }
-  }
-  std::ranges::sort(result);
-  return result;
+  const TypedStore<T> *store = findStore<T>();
+  return store == nullptr ? std::vector<EntityKey>{} : store->keys();
 }
 
 // A world equal to this one, sharing its schema, and independent of it from then on.

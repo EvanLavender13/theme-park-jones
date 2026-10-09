@@ -1,5 +1,5 @@
 # Fails when a file under src or tests includes a header private to another part of the tree
-# (principle 6, decision 0016). A header in a directory named internal is private to that
+# (principle 6, decision 0039). A header in a directory named internal is private to that
 # directory's parent, and only files under the parent may include it.
 #
 # Usage: cmake -DROOT=<tree> -P check_private_headers.cmake

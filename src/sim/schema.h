@@ -1,17 +1,22 @@
 #ifndef TPJ_SIM_SCHEMA_H
 #define TPJ_SIM_SCHEMA_H
 
+#include "sim/component_store.h"
 #include "sim/entity_key.h"
 #include "sim/field_text.h"
-
-#include <entt/entity/registry.hpp>
+#include "sim/type_id.h"
 
 #include <any>
 #include <bit>
+#include <map>
+#include <memory>
+#include <optional>
+#include <stddef.h>
 #include <stdint.h>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -58,20 +63,14 @@ private:
 template <typename T>
 concept HasVisitFields = requires(FieldEmitter &emitter, T &value) { visitFields(emitter, value); };
 
-// A registered component type, handled opaquely through functions its owning module instantiates
+// A registered component type, handled opaquely through the store its owning module instantiates
 // (principle 6).
 struct ComponentType {
   std::string Name;
   DataKind Kind = DataKind::State;
-  entt::id_type TypeId = 0;
-  bool (*Has)(const entt::registry &registry, entt::entity entity) = nullptr;
-  void (*Copy)(const entt::registry &from, entt::entity source, entt::registry &to,
-               entt::entity target) = nullptr;
-  void (*Emit)(const entt::registry &registry, entt::entity entity, WordSink &sink) = nullptr;
-  // Writes the component's fields for its save line, each as a space and name=value.
-  void (*Write)(const entt::registry &registry, entt::entity entity, std::string &line) = nullptr;
-  // Reads what Write wrote and adds the component to the entity. Throws LoadError.
-  void (*Read)(TextCursor &cursor, entt::registry &registry, entt::entity entity) = nullptr;
+  TypeId Id = nullptr;
+  // A new, empty store for the type.
+  std::unique_ptr<ComponentStore> (*MakeStore)() = nullptr;
 };
 
 // A system, swap function, or resolver. It takes only the world, so it can hold no state outside
@@ -86,8 +85,7 @@ struct ResolverType {
 
 // A registered command type. Apply calls the owning module's applyCommand on a queued value.
 struct CommandType {
-  entt::id_type TypeId = 0;
-  std::string_view TypeName;
+  TypeId Id = nullptr;
   void (*Apply)(World &world, const std::any &command) = nullptr;
 };
 
@@ -117,7 +115,8 @@ public:
   template <typename T> void addCommand();
 
   [[nodiscard]] const std::vector<ComponentType> &components() const { return Components; }
-  [[nodiscard]] const ComponentType *findComponent(entt::id_type typeId) const;
+  // The type's position in components(), or nothing when it isn't registered.
+  [[nodiscard]] std::optional<size_t> indexOf(TypeId id) const;
   // True when both list the same names, kinds, and types in the same order.
   [[nodiscard]] bool sameComponents(const WorldSchema &other) const;
 
@@ -126,13 +125,14 @@ public:
   [[nodiscard]] const std::vector<ResolverType> &resolvers() const { return Resolvers; }
   [[nodiscard]] const std::vector<WorldFunction> &finishers() const { return Finishers; }
   [[nodiscard]] const std::vector<CommandType> &commands() const { return Commands; }
-  [[nodiscard]] const CommandType *findCommand(entt::id_type typeId) const;
+  [[nodiscard]] const CommandType *findCommand(TypeId id) const;
 
 private:
   void addComponentType(ComponentType type);
   void addCommandType(CommandType type);
 
   std::vector<ComponentType> Components;
+  std::unordered_map<TypeId, size_t> IndexById;
   std::vector<WorldFunction> Systems;
   std::vector<WorldFunction> Swaps;
   std::vector<ResolverType> Resolvers;
@@ -171,6 +171,52 @@ template <typename Field> void emitField(WordSink &sink, std::string_view name, 
   }
 }
 
+// The store addComponent makes for T: its components by key, in ascending key order.
+template <typename T> class TypedStore final : public ComponentStore {
+public:
+  [[nodiscard]] std::unique_ptr<ComponentStore> clone() const override {
+    auto copy = std::make_unique<TypedStore<T>>();
+    copy->Items = Items;
+    return copy;
+  }
+  [[nodiscard]] bool has(EntityKey key) const override { return Items.contains(key); }
+  [[nodiscard]] size_t size() const override { return Items.size(); }
+  [[nodiscard]] std::vector<EntityKey> keys() const override {
+    std::vector<EntityKey> result;
+    result.reserve(Items.size());
+    for (const auto &entry : Items) {
+      result.push_back(entry.first);
+    }
+    return result;
+  }
+  void erase(EntityKey key) override { Items.erase(key); }
+  void emit(EntityKey key, WordSink &sink) const override {
+    if constexpr (!std::is_empty_v<T>) {
+      // visitFields takes a mutable reference so that one function can also decode. Emitting only
+      // reads, and the stored component is not itself const.
+      FieldEmitter emitter(sink);
+      visitFields(emitter, const_cast<T &>(Items.at(key)));
+    }
+  }
+  void write(EntityKey key, std::string &line) const override {
+    if constexpr (!std::is_empty_v<T>) {
+      // As in emit, writing only reads, and the stored component is not itself const.
+      FieldWriter writer(line, true);
+      visitFields(writer, const_cast<T &>(Items.at(key)));
+    }
+  }
+  void read(TextCursor &cursor, EntityKey key) override {
+    T value{};
+    if constexpr (!std::is_empty_v<T>) {
+      FieldReader reader(cursor, true);
+      visitFields(reader, value);
+    }
+    Items.insert_or_assign(key, std::move(value));
+  }
+
+  std::map<EntityKey, T> Items;
+};
+
 template <typename T> void WorldSchema::addComponent(std::string_view name, DataKind kind) {
   static_assert(std::is_copy_constructible_v<T>, "a registered component must be copyable");
   static_assert(std::is_empty_v<T> || HasVisitFields<T>,
@@ -180,43 +226,9 @@ template <typename T> void WorldSchema::addComponent(std::string_view name, Data
   ComponentType type;
   type.Name = std::string(name);
   type.Kind = kind;
-  type.TypeId = entt::type_id<T>().hash();
-  type.Has = [](const entt::registry &registry, entt::entity entity) {
-    return registry.all_of<T>(entity);
-  };
-  type.Copy = [](const entt::registry &from, entt::entity source, entt::registry &to,
-                 entt::entity target) {
-    if constexpr (std::is_empty_v<T>) {
-      // EnTT stores no instance of an empty type, so there is nothing to copy.
-      to.emplace<T>(target);
-    } else {
-      to.emplace<T>(target, from.get<T>(source));
-    }
-  };
-  type.Emit = [](const entt::registry &registry, entt::entity entity, WordSink &sink) {
-    if constexpr (!std::is_empty_v<T>) {
-      // visitFields takes a mutable reference so that one function can also decode. Emitting only
-      // reads, and the stored component is not itself const.
-      FieldEmitter emitter(sink);
-      visitFields(emitter, const_cast<T &>(registry.get<T>(entity)));
-    }
-  };
-  type.Write = [](const entt::registry &registry, entt::entity entity, std::string &line) {
-    if constexpr (!std::is_empty_v<T>) {
-      // As in Emit, writing only reads, and the stored component is not itself const.
-      FieldWriter writer(line, true);
-      visitFields(writer, const_cast<T &>(registry.get<T>(entity)));
-    }
-  };
-  type.Read = [](TextCursor &cursor, entt::registry &registry, entt::entity entity) {
-    if constexpr (std::is_empty_v<T>) {
-      registry.emplace<T>(entity);
-    } else {
-      T value{};
-      FieldReader reader(cursor, true);
-      visitFields(reader, value);
-      registry.emplace<T>(entity, std::move(value));
-    }
+  type.Id = typeIdOf<T>();
+  type.MakeStore = []() -> std::unique_ptr<ComponentStore> {
+    return std::make_unique<TypedStore<T>>();
   };
   addComponentType(std::move(type));
 }
@@ -225,8 +237,7 @@ template <typename T> void WorldSchema::addCommand() {
   static_assert(std::is_copy_constructible_v<T>, "a command must be copyable");
   static_assert(HasApplyCommand<T>, "a command type needs an applyCommand function");
   CommandType type;
-  type.TypeId = entt::type_id<T>().hash();
-  type.TypeName = entt::type_id<T>().name();
+  type.Id = typeIdOf<T>();
   type.Apply = [](World &world, const std::any &command) {
     applyCommand(world, std::any_cast<const T &>(command));
   };
