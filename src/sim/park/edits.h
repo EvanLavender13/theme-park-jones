@@ -166,6 +166,14 @@ struct SetTaperLength {
   bool operator==(const SetTaperLength &) const = default;
 };
 
+// The shop's stock: what it sells.
+struct SetShopStock {
+  EntityKey Shop = NULL_KEY;
+  ShopStock Stock = ShopStock::Food;
+
+  bool operator==(const SetShopStock &) const = default;
+};
+
 // A path segment's intent as RestoreIntent puts it: a ParkSegment without its ground line.
 struct SegmentRecord {
   EntityKey Key = NULL_KEY;
@@ -203,14 +211,14 @@ struct RestoreIntent {
 };
 
 // Registers AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
-// RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, SetTaperLength, and RestoreIntent,
-// in that order.
+// RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, SetTaperLength, SetShopStock, and
+// RestoreIntent, in that order.
 void addParkEdits(WorldSchema &schema);
 
-// A tentative or committed edit to park intent: one of the thirteen commands.
+// A tentative or committed edit to park intent: one of the fourteen commands.
 using ParkEdit = std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint,
                               InsertPoint, RemovePoint, SetCornerRadius, SetSegmentWidth,
-                              SetEdgeRadius, SetTaperLength, RestoreIntent>;
+                              SetEdgeRadius, SetTaperLength, SetShopStock, RestoreIntent>;
 
 // The stop's ground position: a NewPoint's own, an OnPoint's point's, the place Along of the way
 // from an OnSegment's segment's From point to its To point, or the place an OnBend names on its
@@ -262,6 +270,7 @@ bool isAccepted(const World &world, const SetCornerRadius &command);
 bool isAccepted(const World &world, const SetSegmentWidth &command);
 bool isAccepted(const World &world, const SetEdgeRadius &command);
 bool isAccepted(const World &world, const SetTaperLength &command);
+bool isAccepted(const World &world, const SetShopStock &command);
 bool isAccepted(const World &world, const RestoreIntent &command);
 
 // Whether the command the edit holds would be applied to the world.
@@ -284,6 +293,7 @@ void applyCommand(World &world, const SetCornerRadius &command);
 void applyCommand(World &world, const SetSegmentWidth &command);
 void applyCommand(World &world, const SetEdgeRadius &command);
 void applyCommand(World &world, const SetTaperLength &command);
+void applyCommand(World &world, const SetShopStock &command);
 void applyCommand(World &world, const RestoreIntent &command);
 
 // Whether every solid and line has its geometry, stays in the park, and conflicts with no other.

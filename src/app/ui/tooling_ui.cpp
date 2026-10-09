@@ -65,9 +65,27 @@ ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, ParkSessi
   ImGui::NewFrame();
   drawPanels(dialogs, session, camera, Shown, interaction, Speed, keys);
   const World &world = session.world();
-  if (const std::optional<InspectorSubject> &subject = interaction.subject();
-      subject && !drawInspector(inspectSubject(world, *subject))) {
-    interaction.forgetSubject();
+  interaction.settleStock(world);
+  if (const std::optional<InspectorSubject> subject = interaction.subject()) {
+    std::optional<StockControls> stock;
+    if (subject->Kind == SubjectKind::Shop) {
+      for (const ParkBox &box : parkBoxes(world)) {
+        if (box.Key == subject->Key) {
+          stock = StockControls{box.Stock, interaction.stockChoice().value_or(box.Stock)};
+        }
+      }
+    }
+    const InspectorUse use = drawInspector(inspectSubject(world, *subject), stock);
+    if (!use.Open) {
+      interaction.forgetSubject();
+    } else {
+      if (use.Chosen) {
+        interaction.chooseStock(*use.Chosen);
+      }
+      if (use.Apply) {
+        interaction.applyStock(session.commands());
+      }
+    }
   }
   if (Shown.Graph) {
     drawGraphView(world, view);

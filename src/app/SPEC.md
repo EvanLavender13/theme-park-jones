@@ -38,6 +38,8 @@ While the tool snaps, the guides of the snap in effect draw over the scene and b
 
 While the tool is Look, clicking a guest or a shop opens the Inspector on it. If the click hits nothing, or an entity with nothing to inspect such as a depot or the entrance, the Inspector stays as it was.
 
+When the Inspector shows a shop, it has a Sells row of radio buttons, Food, Drink, and Both, with the shop's stock setting marked, and an Apply button. Choosing another setting marks it, and while the tool gives no edit of its own, the choice is the edit the ghost and the preview show, a SetShopStock. Apply commits it, and it applies at the next tick, or at once while paused. The choice stays marked until the shop has that setting, and Apply is disabled while the chosen setting is the shop's. Picking another subject, closing the Inspector, or replacing the world drops the choice.
+
 ## Park files
 
 The Tools panel has New park, Open park, and Save park. They do nothing while a dialog is open. Open and Save show the system's dialogs, filtered to .park files. The dialogs start in the parks folder beside the executable. The build links that folder to the repository's parks directory, so saved parks are not lost in a clean build.

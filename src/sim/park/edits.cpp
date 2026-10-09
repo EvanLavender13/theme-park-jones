@@ -1495,6 +1495,9 @@ std::optional<EditPlan> planOf(const World &world, const SetEdgeRadius &command)
 std::optional<EditPlan> planOf(const World &world, const SetTaperLength &command) {
   return planTaper(world, command);
 }
+std::optional<EditPlan> planOf(const World & /*world*/, const SetShopStock & /*command*/) {
+  return std::nullopt;
+}
 // RestoreIntent has no plan, and it shows no ghost.
 std::optional<EditPlan> planOf(const World & /*world*/, const RestoreIntent & /*command*/) {
   return std::nullopt;
@@ -1526,6 +1529,7 @@ void addParkEdits(WorldSchema &schema) {
   schema.addCommand<SetSegmentWidth>();
   schema.addCommand<SetEdgeRadius>();
   schema.addCommand<SetTaperLength>();
+  schema.addCommand<SetShopStock>();
   schema.addCommand<RestoreIntent>();
 }
 
@@ -1657,8 +1661,8 @@ bool isPointValid(const ParkPathPoint &point) {
 }
 
 bool isBoxValid(const ParkBox &box) {
-  return isKnown(box.Kind) && std::isfinite(box.At.X) && std::isfinite(box.At.Z) &&
-         std::isfinite(box.At.FacingX) && std::isfinite(box.At.FacingZ);
+  return isKnown(box.Kind) && isKnown(box.Stock) && std::isfinite(box.At.X) &&
+         std::isfinite(box.At.Z) && std::isfinite(box.At.FacingX) && std::isfinite(box.At.FacingZ);
 }
 
 // Whether the restore names what it acts on, as the spec's RestoreIntent acceptance lists, apart
@@ -1838,6 +1842,17 @@ bool isRestoreAccepted(const World &world, const RestoreIntent &command) {
   return true;
 }
 
+// Gives the box the stock: removes its ShopStockIntent for food, so a shop at food saves as one
+// never set, and holds the stock otherwise.
+void setStock(World &world, EntityKey box, ShopStock stock) {
+  const entt::entity entity = world.findEntity(box);
+  if (stock == ShopStock::Food) {
+    world.Registry.remove<ShopStockIntent>(entity);
+  } else {
+    world.Registry.emplace_or_replace<ShopStockIntent>(entity, ShopStockIntent{stock});
+  }
+}
+
 } // namespace
 
 bool isAccepted(const World &world, const AddPath &command) {
@@ -1895,6 +1910,11 @@ bool isAccepted(const World &world, const SetEdgeRadius &command) {
 
 bool isAccepted(const World &world, const SetTaperLength &command) {
   return acceptedPlan(world, planOf(world, command)).has_value();
+}
+
+bool isAccepted(const World &world, const SetShopStock &command) {
+  const BoxIntent *box = findIntent<BoxIntent>(world, command.Shop);
+  return box != nullptr && box->Kind == BoxKind::Shop && isKnown(command.Stock);
 }
 
 bool isAccepted(const World &world, const RestoreIntent &command) {
@@ -1985,6 +2005,12 @@ void applyCommand(World &world, const SetTaperLength &command) {
   }
 }
 
+void applyCommand(World &world, const SetShopStock &command) {
+  if (isAccepted(world, command)) {
+    setStock(world, command.Shop, command.Stock);
+  }
+}
+
 void applyCommand(World &world, const RestoreIntent &command) {
   if (!isRestoreAccepted(world, command)) {
     return;
@@ -1993,10 +2019,12 @@ void applyCommand(World &world, const RestoreIntent &command) {
   applyRestore(store, command);
   for (const ParkBox &box : command.Set.Boxes) {
     world.Registry.get<BoxIntent>(world.findEntity(box.Key)) = BoxIntent{box.Kind, box.At};
+    setStock(world, box.Key, box.Stock);
   }
   for (const ParkBox &box : command.Add.Boxes) {
     const EntityKey key = world.createEntity();
     world.Registry.emplace<BoxIntent>(world.findEntity(key), BoxIntent{box.Kind, box.At});
+    setStock(world, key, box.Stock);
   }
 }
 
