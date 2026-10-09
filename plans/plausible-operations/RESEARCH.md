@@ -75,3 +75,37 @@ Sources:
 - https://simcity.fandom.com/wiki/Zots: zots, including the no-job zot, as per-lot failure markers.
 - https://en.wikipedia.org/wiki/SimCity_4:_Rush_Hour: the route query tool.
 - https://kotaku.com/your-complete-guide-to-the-simcity-disaster-5991077: GlassBox's memoryless agents and the city size cap.
+
+## What does a real park do overnight?
+
+A large park runs a full second shift after closing. Disneyland has up to about 1,500 people working each night, and graveyard shifts run from about 11pm to 9am. The work falls into five groups.
+
+- Ride maintenance. Overnight, crews do safety and regulatory checks, fix the day's faults, and do preventive work so rides don't break down the next day. Each coaster also gets a daily inspection before opening, starting around 5:30 to 6:00. Crews walk or climb the track for debris that fell overnight, loose bolts (marked so movement shows), and weld cracks. They check restraints, wheels, brakes, and the lift chain. Then they run the train empty and ride it themselves to listen for faults. One coaster can take three to four hours. If they find a fault, the ride stays closed until it's fixed.
+- Cleaning and grounds. The whole park is pressure-washed every night. Night crews clean and restock restrooms, empty and bale the trash, clean parking lots and planters, and use scrubbers and vacuum trucks. Horticulture crews mow, prune, and replant.
+- Restocking and set changes. Trucks bring merchandise to the shops, and crews count inventory, touch up paint, and swap signs and seasonal decor. Deliveries and trash use backstage routes, and at Magic Kingdom they use tunnels under the park, so guests never see them.
+- Shows and security. Performers rehearse and parades are prepared. Security works the graveyard shift. Attractions are powered down to save energy, and work lights come on inside dark rides.
+- Animals. Disneyland keeps about 200 feral cats for rodent control. Staff spay and neuter them and feed them at five feeding stations, and they come out once guests leave. Raccoons raiding poorly secured bins are a documented problem at parks.
+
+Maintenance runs on three timescales. Nightly work and the daily inspection come first. Weekly, monthly, and annual checks come next, along with work due after a set number of ride cycles. Annual checks include X-ray or magnetic testing for hidden metal stress. The largest jobs wait for the off-season. Cedar Point's 43 mechanics rebuild more than 200 coaster cars during five closed months, and state licensing requires this every year. Hersheypark takes apart, inspects, repaints, and reassembles all of its 70+ rides in about three months. Water rides usually close for refurbishment in winter.
+
+What this suggests for the game:
+
+- The night is a fixed amount of time, and some work has to fit into it. If the daily inspection doesn't finish before opening, the ride opens late. Longer opening hours leave less night for upkeep, so the hours setting gets a real cost.
+- The three timescales map onto standards the player sets, such as "inspect every coaster daily", not onto individual work orders (principle 9).
+- The backstage routes the slice already has are the routes real parks use for night deliveries and trash.
+- A night consequence of daytime choices is real: overflowing or open bins draw raccoons and rodents.
+
+This research doesn't decide whether the game has a night layer. That is the user's call.
+
+Sources:
+
+- https://www.islands.com/2162084/disney-world-has-more-going-after-closing-time-realize/: overnight staff numbers, pressure washing, paint, decor, horticulture, rehearsals, power-down, and the cats.
+- https://www.coaster101.com/2024/01/31/coasters-101-daily-inspections/: what the daily coaster inspection checks, the empty and ridden test runs, its length, and the longer inspection cycles.
+- https://www.wcpo.com/news/local-news/before-the-thrills-kings-islands-coasters-get-layers-of-inspections-including-a-daily-walk-through: the daily track walk before opening.
+- https://stories.hersheypa.com/behind-the-scenes-of-hersheypark-winter-maintenance/: off-season rebuilds of every ride.
+- https://www.toledoblade.com/business/2013/12/07/Cedar-Point-still-stays-busy-in-winter.print: Cedar Point's winter car rebuilds and the licensing requirement.
+- https://jobs.sixflags.com/job/buena-park/night-services/42509/93469630944: night services duties, equipment, and shift hours.
+- https://jobs.disneycareers.com/job/orlando/custodial-3rd-shift-full-time-part-time-walt-disney-world/391/98353383632: overnight custodial equipment.
+- https://touringplans.com/blog/disney-what-is-backstage-disney-in-a-minute/: backstage areas and the utilidor tunnels.
+- https://mickeyvisit.com/disneyland-cats/: the cats' numbers, feeding stations, and care.
+- https://mouseplanet.com/varmint-troubles-and-other-news/1316: raccoons and park trash.

@@ -154,5 +154,6 @@ Later milestones come from the deepening candidates, once the slice has been pla
 - The (s, S) policy avoids double-ordering, because its inventory position counts orders in transit.
 - Little's law supports the wait estimate: the queue ahead divided by the service rate.
 - SimCity 4 assigns aggregate trips over a network, with cosmetic figures and a route query for tracing, and players loved its simulation. Its failures came from commute-only trips and greedy assignment, not from a lack of agents.
+- Real parks run a full night shift of maintenance, cleaning, restocking, and rehearsals. Daily ride inspections must finish before opening, and the biggest rebuilds wait for the off-season. Opening hours therefore compete with upkeep.
 
 The details are in RESEARCH.md.
