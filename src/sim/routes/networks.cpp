@@ -152,7 +152,7 @@ void addDoor(std::vector<ParkDoor> &doors, EntityKey entity, const Pose &pose, F
 }
 
 // The doors serving the kind: an entrance's front serves guests, a shop's front guests and its back
-// backstage, and a depot's front backstage.
+// backstage, and a depot's front backstage. A bench or a toilet block has no doors.
 std::vector<ParkDoor> doorsServing(const std::vector<ParkEntrance> &entrances,
                                    const std::vector<ParkBox> &boxes, PathKind kind) {
   std::vector<ParkDoor> doors;
@@ -165,7 +165,7 @@ std::vector<ParkDoor> doorsServing(const std::vector<ParkEntrance> &entrances,
     const bool shop = box.Kind == BoxKind::Shop;
     if (kind == PathKind::Guest && shop) {
       addDoor(doors, box.Key, box.At, boxSize(box.Kind), Face::Front);
-    } else if (kind == PathKind::Backstage) {
+    } else if (kind == PathKind::Backstage && (shop || box.Kind == BoxKind::Depot)) {
       addDoor(doors, box.Key, box.At, boxSize(box.Kind), shop ? Face::Back : Face::Front);
     }
   }

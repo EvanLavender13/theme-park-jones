@@ -28,7 +28,7 @@ The park's walkways and shop marks are rebuilt whenever the park's intent change
 
 ## Tools and the ghost
 
-The Tools panel selects the tool. The tools are Look, Guest path, Backstage path, Place shop, Place depot, Move box, Edit path, Remove point, and Delete (tools/SPEC.md). Look is the tool at start. While a path is being drawn, the panel says to click the last point again to finish, and Cancel path drops the drawn points. Clicks over a panel never reach the tool. When the tool commits an edit, the edit applies at the next tick, or at once while paused.
+The Tools panel selects the tool. The tools are Look, Guest path, Backstage path, Place shop, Place depot, Place bench, Place toilet, Move box, Edit path, Remove point, and Delete (tools/SPEC.md). Look is the tool at start. While a path is being drawn, the panel says to click the last point again to finish, and Cancel path drops the drawn points. Clicks over a panel never reach the tool. When the tool commits an edit, the edit applies at the next tick, or at once while paused.
 
 The Tools panel has Undo and Redo buttons, each disabled while there is nothing to undo or redo. Ctrl+Z undoes, and Ctrl+Y or Ctrl+Shift+Z redoes, unless a text field has the keyboard. While a path is being drawn or the button holds an edit, undo and redo drop it, as Cancel path does, and change nothing else. Otherwise they apply at the next tick, with no ghost (decision 0029), in a tick of their own, so an edit committed while one waits applies at the tick after. While paused, they apply at the next frame instead, alone. While an edit or another undo or redo waits for its tick, undo and redo do nothing.
 

@@ -16,7 +16,7 @@ The park is a square PARK_SIZE on a side, centered on the origin of the ground.
 
 - A path point has a ground position, a corner radius, and a taper length. The radius is for the corner the point makes when exactly two segments meet there. The taper length is for where the point is a taper (Paved surface).
 - A path segment has a kind, guest or backstage, its two path points, From and To, a width, and an edge radius at each end. Segments share a point where the player joined them, and where a path was drawn or moved across them. Routes joins segments only where they share a point (sim/routes/SPEC.md).
-- A box has a kind, shop or depot, and a pose.
+- A box has a kind, shop, depot, bench, or toilet block, and a pose.
 - An entrance has a pose.
 
 A Pose is a position and a facing on the ground, held as given. A default Pose is at the origin, facing -z.
@@ -28,7 +28,7 @@ The save lines hold:
 - a path segment's kind, from, to, width, from-edge-radius, and to-edge-radius, from and to being its points' keys;
 - a box's kind, x, z, facing-x, and facing-z.
 
-Kinds are saved by name: guest, backstage, shop, and depot.
+Kinds are saved by name: guest, backstage, shop, depot, bench, and toilet-block.
 
 ## Ground lines
 

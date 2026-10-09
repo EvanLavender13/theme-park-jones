@@ -1,0 +1,18 @@
+tpj-park 1
+seed 1
+tick 0
+next-key 7
+
+[entrance]
+1 x=0 z=126.5 facing-x=0 facing-z=-1
+
+[path-point]
+2 x=0 z=123 radius=0 taper=0
+3 x=0 z=103 radius=0 taper=0
+
+[path-segment]
+4 kind=guest from=2 to=3 width=3 from-edge-radius=0 to-edge-radius=0
+
+[box]
+5 kind=bench x=3 z=113 facing-x=-1 facing-z=0
+6 kind=toilet-block x=-5 z=113 facing-x=1 facing-z=0

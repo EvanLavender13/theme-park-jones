@@ -20,6 +20,8 @@ enum class ToolKind : uint8_t {
   BackstagePath,
   PlaceShop,
   PlaceDepot,
+  PlaceBench,
+  PlaceToilet,
   MoveBox,
   EditPath,
   RemovePoint,
@@ -44,8 +46,8 @@ inline constexpr double FRONTAGE_CORNER_TURN = std::numbers::pi / 6.0;
 // A fronting box that doesn't fit where it first fronts tries places this far apart along the
 // edge lines, in meters.
 inline constexpr double FRONTAGE_STEP = 0.25;
-// A fronting box that doesn't fit moves straight out by at most this, in meters, so its front
-// door stays within CONNECTION_REACH of the paving it fronts.
+// A fronting box that doesn't fit moves straight out by at most this, in meters, so the middle of
+// its front face stays within CONNECTION_REACH of the paving it fronts.
 inline constexpr double FRONTAGE_PUSH = CONNECTION_REACH - FRONTAGE_SETBACK;
 // A press or hover this near a path point picks it, in meters.
 inline constexpr double POINT_REACH = 2.0;
@@ -225,8 +227,8 @@ std::optional<EditHandle> handleAt(const World &world, ParkPoint point);
 // The segment with a ground line whose side lies nearest the point within SIDE_REACH. Ties go to
 // the lower key.
 std::optional<EntityKey> sideAt(const World &world, ParkPoint point);
-// The pose of a box of the kind that fronts the paving near the point, as tools/SPEC.md's Place
-// shop and Place depot state, or none when no paving of the kind its front door serves is near.
+// The pose of a box of the kind that fronts the paving near the point: backstage paving for a
+// depot, and guest paving for every other kind. None when no such paving is near.
 std::optional<Pose> frontagePose(const World &world, BoxKind kind, ParkPoint point);
 // Every path point's marker, in key order, then every corner's radius handle, in key order of its
 // point, then every edge handle, in the order parkEdges gives the edges, then every taper handle,
