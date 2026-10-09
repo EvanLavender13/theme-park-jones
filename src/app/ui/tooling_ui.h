@@ -35,9 +35,10 @@ public:
   // the park action they pressed, and the Time panel's speed buttons, which set the speed. It
   // undoes or redoes as the Tools panel's buttons or the frame's keys ask, unless the tool held or
   // had drawn something, which it drops instead. It also builds the Inspector while the interaction
-  // has a subject, forgetting it when closed; the graph over the scene while it is shown; the
-  // snap's guides and the measured lengths; the food tooltip at the cursor while the overlay is, on
-  // the preview's candidate when it has one, over the overlay's shape; and a shop ghost's context.
+  // has a subject, forgetting it when closed, whose stock controls set the interaction's chosen
+  // stock and apply it; the graph over the scene while it is shown; the snap's guides and the
+  // measured lengths; the food tooltip at the cursor while the overlay is, on the preview's
+  // candidate when it has one, over the overlay's shape; and a shop ghost's context.
   [[nodiscard]] ImDrawData *build(SDL_Window *window, ParkDialogs &dialogs, ParkSession &session,
                                   const OrbitCamera &camera, Interaction &interaction,
                                   const Preview &preview, const OverlayShape &overlayShape,

@@ -28,6 +28,7 @@ void addParkIntent(WorldSchema &schema) {
   schema.addComponent<PathPointIntent>("path-point", DataKind::Intent);
   schema.addComponent<PathSegmentIntent>("path-segment", DataKind::Intent);
   schema.addComponent<BoxIntent>("box", DataKind::Intent);
+  schema.addComponent<ShopStockIntent>("shop-stock", DataKind::Intent);
 }
 
 std::vector<ParkEntrance> parkEntrances(const World &world) {
@@ -47,8 +48,10 @@ std::vector<ParkSegment> parkSegments(const World &world) { return segmentsOf(la
 std::vector<ParkCorner> parkCorners(const World &world) { return cornersOf(layoutOf(world)); }
 
 std::vector<ParkBox> parkBoxes(const World &world) {
-  return collectIntent<BoxIntent>(
-      world, [](EntityKey key, const BoxIntent &box) { return ParkBox{key, box.Kind, box.At}; });
+  return collectIntent<BoxIntent>(world, [&world](EntityKey key, const BoxIntent &box) {
+    const ShopStockIntent *stock = world.Registry.try_get<ShopStockIntent>(world.findEntity(key));
+    return ParkBox{key, box.Kind, box.At, stock != nullptr ? stock->Stock : ShopStock::Food};
+  });
 }
 
 World makeNewPark(std::shared_ptr<const WorldSchema> schema, uint64_t seed) {

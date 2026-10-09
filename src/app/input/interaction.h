@@ -15,8 +15,9 @@
 
 namespace tpj {
 
-// The player's hold on the park: the tool, and the guest or shop the Inspector shows. It follows
-// the park session's generation, so a replaced world drops the tool's hold and the subject.
+// The player's hold on the park: the tool, the guest or shop the Inspector shows, and the stock
+// chosen for that shop and not yet applied. It follows the park session's generation, so a
+// replaced world drops the tool's hold, the subject, and the choice.
 class Interaction {
 public:
   // Starts with the tool at start and no subject, having seen the generation.
@@ -34,12 +35,24 @@ public:
   [[nodiscard]] bool picks(const PointerButtons &buttons) const;
   // Sets the subject from the entity under the cursor, as pickSubject does.
   void pick(const World &world, std::optional<EntityKey> entity);
-  void forgetSubject() { Subject.reset(); }
+  void forgetSubject();
+  // The stock chosen in the Inspector and not yet applied.
+  [[nodiscard]] const std::optional<ShopStock> &stockChoice() const { return StockChoice; }
+  // Chooses the stock for the Inspector's shop. It is applied only by applyStock.
+  void chooseStock(ShopStock stock) { StockChoice = stock; }
+  // Queues a SetShopStock of the subject to the chosen stock, when the subject is a shop and a
+  // stock is chosen. The choice stays until settleStock finds the shop has it.
+  void applyStock(CommandQueue &commands) const;
+  // Drops the chosen stock once the Inspector's shop has it, so the choice stays marked until its
+  // SetShopStock applies.
+  void settleStock(const World &world);
   void selectTool(ToolKind kind);
   // Drops what the tool holds or has drawn, as selecting it again does, and gives whether there was
   // anything: a held press or a drawn stop.
   bool dropHeld();
   void movePointer(const World &world, const PointerSample &pointer);
+  // The tool's edit, or else the Inspector's chosen stock as a SetShopStock while it differs from
+  // the shop's.
   [[nodiscard]] std::optional<ParkEdit> tentativeEdit(const World &world) const;
   [[nodiscard]] std::optional<EntityKey> highlighted(const World &world) const;
   // Where the tool's first click would start a path, as pathStart gives it.
@@ -59,6 +72,7 @@ private:
   uint64_t Generation;
   ToolState Tool;
   std::optional<InspectorSubject> Subject;
+  std::optional<ShopStock> StockChoice;
 };
 
 } // namespace tpj

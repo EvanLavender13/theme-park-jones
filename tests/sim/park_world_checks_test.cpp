@@ -510,6 +510,25 @@ ChosenEdit settingTaperAtGuestJunctionUnderGuests(const World &before) {
           set};
 }
 
+// The shop keeps its key, kind, and pose, and only its stock setting changes, while guests wait at
+// it and head to it, so the save holds a shop-stock line.
+ChosenEdit settingShopToDrinkUnderGuests(const World &before) {
+  const EntityKey shop = firstShop(before);
+  REQUIRE(shop != NULL_KEY);
+  REQUIRE(someGuest(before, GuestActivity::Waiting, shop));
+  REQUIRE(someGuest(before, GuestActivity::HeadingToShop, shop));
+  const SetShopStock set{shop, ShopStock::Drink};
+  REQUIRE(isAccepted(before, ParkEdit{set}));
+  // Without the setting held on the shop, this edit would leave the world as it was.
+  const World candidate = makeCandidate(before, queueOf(ParkEdit{set}));
+  const std::vector<ParkBox> boxes = parkBoxes(candidate);
+  const auto found =
+      std::ranges::find_if(boxes, [&](const ParkBox &box) { return box.Key == shop; });
+  REQUIRE(found != boxes.end());
+  REQUIRE(found->Stock == ShopStock::Drink);
+  return {"setting the shop, while guests wait at it and head to it, to sell drink", set};
+}
+
 // The world's segment with the key, requiring that there is one.
 ParkSegment segmentWithKey(const World &world, EntityKey key) {
   std::optional<ParkSegment> found;
@@ -581,6 +600,7 @@ std::vector<ChosenEdit> chosenEdits(const World &before) {
                                 narrowingSegmentUnderGuests(before),
                                 curvingJunctionEdgeUnderGuests(before),
                                 settingTaperAtGuestJunctionUnderGuests(before),
+                                settingShopToDrinkUnderGuests(before),
                                 restoringGuestSegmentUnderFreshKey(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);

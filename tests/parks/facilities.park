@@ -1,7 +1,7 @@
 tpj-park 1
 seed 1
 tick 0
-next-key 7
+next-key 9
 
 [entrance]
 1 x=0 z=126.5 facing-x=0 facing-z=-1
@@ -16,3 +16,9 @@ next-key 7
 [box]
 5 kind=bench x=3 z=113 facing-x=-1 facing-z=0
 6 kind=toilet-block x=-5 z=113 facing-x=1 facing-z=0
+7 kind=shop x=5.5 z=107.5 facing-x=-1 facing-z=0
+8 kind=shop x=-5.5 z=104.5 facing-x=1 facing-z=0
+
+[shop-stock]
+7 stock=drink
+8 stock=both

@@ -44,9 +44,35 @@ void drawChoices(const std::vector<ChoiceRow> &choices) {
   ImGui::EndTable();
 }
 
+// The Sells radio buttons and Apply, on one line.
+void drawStockControls(const StockControls &stock, InspectorUse &use) {
+  struct StockChoice {
+    const char *Label;
+    ShopStock Stock;
+  };
+  constexpr StockChoice CHOICES[] = {
+      {"Food", ShopStock::Food}, {"Drink", ShopStock::Drink}, {"Both", ShopStock::Both}};
+  ImGui::TextUnformatted("Sells");
+  for (const StockChoice &choice : CHOICES) {
+    ImGui::SameLine();
+    if (ImGui::RadioButton(choice.Label, stock.Chosen == choice.Stock) &&
+        stock.Chosen != choice.Stock) {
+      use.Chosen = choice.Stock;
+    }
+  }
+  ImGui::SameLine();
+  ImGui::BeginDisabled(stock.Chosen == stock.Current);
+  if (ImGui::Button("Apply")) {
+    use.Apply = true;
+  }
+  ImGui::EndDisabled();
+}
+
 } // namespace
 
-bool drawInspector(const Inspection &inspection) {
+InspectorUse drawInspector(const Inspection &inspection,
+                           const std::optional<StockControls> &stock) {
+  InspectorUse use;
   bool open = true;
   // At the bottom left, clear of the Tools panel above it and the Debug panel at the top right.
   ImGui::SetNextWindowPos(ImVec2(12.0f, ImGui::GetIO().DisplaySize.y - 12.0f),
@@ -57,13 +83,17 @@ bool drawInspector(const Inspection &inspection) {
       ImGui::TextUnformatted("No longer in the park");
     } else {
       drawRows(inspection.Rows);
+      if (stock) {
+        drawStockControls(*stock, use);
+      }
       if (!inspection.Choices.empty()) {
         drawChoices(inspection.Choices);
       }
     }
   }
   ImGui::End();
-  return open;
+  use.Open = open;
+  return use;
 }
 
 } // namespace tpj

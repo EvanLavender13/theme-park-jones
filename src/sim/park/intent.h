@@ -42,6 +42,13 @@ constexpr std::array<std::string_view, 4> enumNames(BoxKind /*value*/) {
   return {"shop", "depot", "bench", "toilet-block"};
 }
 
+// What a shop sells.
+enum class ShopStock : uint8_t { Food, Drink, Both };
+
+constexpr std::array<std::string_view, 3> enumNames(ShopStock /*value*/) {
+  return {"food", "drink", "both"};
+}
+
 // A position and a facing, a direction on the ground held as given, not normalized.
 struct Pose {
   double X = 0.0;
@@ -142,17 +149,19 @@ struct ParkSegment {
   bool operator==(const ParkSegment &) const = default;
 };
 
-// A box's intent, as other modules read it.
+// A box's intent, as other modules read it: its kind, its pose, and its stock, which only a shop's
+// sets.
 struct ParkBox {
   EntityKey Key = NULL_KEY;
   BoxKind Kind = BoxKind::Shop;
   Pose At;
+  ShopStock Stock = ShopStock::Food;
 
   bool operator==(const ParkBox &) const = default;
 };
 
-// Registers the private intent component types entrance, path-point, path-segment, and box, in
-// that order.
+// Registers the private intent component types entrance, path-point, path-segment, box, and
+// shop-stock, in that order.
 void addParkIntent(WorldSchema &schema);
 
 // Every entity holding that kind of intent, in ascending key order.

@@ -1,6 +1,19 @@
 #include "app/input/interaction.h"
 
 namespace tpj {
+namespace {
+
+// The stock of the shop box the key holds, or none when it holds no shop.
+std::optional<ShopStock> shopStockOf(const World &world, EntityKey key) {
+  for (const ParkBox &box : parkBoxes(world)) {
+    if (box.Key == key && box.Kind == BoxKind::Shop) {
+      return box.Stock;
+    }
+  }
+  return std::nullopt;
+}
+
+} // namespace
 
 void Interaction::follow(uint64_t generation) {
   if (generation == Generation) {
@@ -9,6 +22,7 @@ void Interaction::follow(uint64_t generation) {
   Generation = generation;
   tpj::selectTool(Tool, Tool.Kind);
   Subject.reset();
+  StockChoice.reset();
 }
 
 void Interaction::useButtons(const World &world, CommandQueue &commands,
@@ -28,7 +42,28 @@ bool Interaction::picks(const PointerButtons &buttons) const {
 }
 
 void Interaction::pick(const World &world, std::optional<EntityKey> entity) {
+  const std::optional<InspectorSubject> was = Subject;
   pickSubject(Subject, world, entity);
+  if (Subject != was) {
+    StockChoice.reset();
+  }
+}
+
+void Interaction::forgetSubject() {
+  Subject.reset();
+  StockChoice.reset();
+}
+
+void Interaction::applyStock(CommandQueue &commands) const {
+  if (Subject && Subject->Kind == SubjectKind::Shop && StockChoice) {
+    queueEdit(commands, SetShopStock{Subject->Key, *StockChoice});
+  }
+}
+
+void Interaction::settleStock(const World &world) {
+  if (Subject && StockChoice && shopStockOf(world, Subject->Key) == StockChoice) {
+    StockChoice.reset();
+  }
 }
 
 void Interaction::selectTool(ToolKind kind) { tpj::selectTool(Tool, kind); }
@@ -46,7 +81,16 @@ void Interaction::movePointer(const World &world, const PointerSample &pointer) 
 }
 
 std::optional<ParkEdit> Interaction::tentativeEdit(const World &world) const {
-  return tpj::tentativeEdit(Tool, world);
+  if (std::optional<ParkEdit> edit = tpj::tentativeEdit(Tool, world)) {
+    return edit;
+  }
+  if (Subject && Subject->Kind == SubjectKind::Shop && StockChoice) {
+    const std::optional<ShopStock> stock = shopStockOf(world, Subject->Key);
+    if (stock && *stock != *StockChoice) {
+      return SetShopStock{Subject->Key, *StockChoice};
+    }
+  }
+  return std::nullopt;
 }
 
 std::optional<EntityKey> Interaction::highlighted(const World &world) const {

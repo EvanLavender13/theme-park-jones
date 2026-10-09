@@ -64,6 +64,17 @@ template <typename Visitor> void visitFields(Visitor &visitor, BoxIntent &box) {
   visitor.field("facing-z", box.At.FacingZ);
 }
 
+// A shop's stock, held only when it is not food.
+struct ShopStockIntent {
+  ShopStock Stock = ShopStock::Food;
+
+  bool operator==(const ShopStockIntent &) const = default;
+};
+
+template <typename Visitor> void visitFields(Visitor &visitor, ShopStockIntent &stock) {
+  visitor.field("stock", stock.Stock);
+}
+
 // Where guests arrive and leave.
 struct EntranceIntent {
   Pose At;

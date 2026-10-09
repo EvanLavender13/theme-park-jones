@@ -25,7 +25,7 @@ The milestone adds no fields or flows. Everything it adds is park intent and ten
 - Each shop's stock setting: produced by `shop-stock`. plausible-operations' served-needs reads it.
 - The opening hours: produced by `opening-hours`. believable-guests' a-day-out reads them for arrivals and closing, and legible-simulation's explained-needs previews the arrival curve from a candidate with tentative hours.
 
-Each is read only through sim/park's public queries: parkBoxes, with the new kinds, the shop stock query, and the hours query, which give the defaults where nothing is set. Routes keeps its doors to shops, depots, and entrances, so a bench or toilet block gets no connector until facility-doors.
+Each is read only through sim/park's public queries: parkBoxes, with the new kinds and each box's stock, and the hours query, which give the defaults where nothing is set. Routes keeps its doors to shops, depots, and entrances, so a bench or toilet block gets no connector until facility-doors.
 
 ## Dependencies
 
