@@ -28,14 +28,14 @@ public:
 
   [[nodiscard]] const ShownViews &shown() const { return Shown; }
 
-  // Builds the frame's ImGui frame and gives its draw data: the Debug and Tools panels, which set
-  // the shown views from their checkboxes, select the tool the player chose, and start the park
-  // action they pressed. It undoes or redoes as the Tools panel's buttons or the frame's keys ask,
-  // unless the tool held or had drawn something, which it drops instead. It also builds the
-  // Inspector while the interaction has a subject, forgetting it when
-  // closed; the graph over the scene while it is shown; the snap's guides and the measured
-  // lengths; the food tooltip at the cursor while the overlay is, on the preview's candidate when
-  // it has one, over the overlay's shape; and a shop ghost's context.
+  // Builds the frame's ImGui frame and gives its draw data: the Debug, Time, and Tools panels,
+  // which set the shown views from their checkboxes, select the tool the player chose, and start
+  // the park action they pressed. It undoes or redoes as the Tools panel's buttons or the frame's
+  // keys ask, unless the tool held or had drawn something, which it drops instead. It also builds
+  // the Inspector while the interaction has a subject, forgetting it when closed; the graph over
+  // the scene while it is shown; the snap's guides and the measured lengths; the food tooltip at
+  // the cursor while the overlay is, on the preview's candidate when it has one, over the overlay's
+  // shape; and a shop ghost's context.
   [[nodiscard]] ImDrawData *build(SDL_Window *window, ParkDialogs &dialogs, ParkSession &session,
                                   const OrbitCamera &camera, Interaction &interaction,
                                   const Preview &preview, const OverlayShape &overlayShape,

@@ -7,6 +7,7 @@
 #include "app/ui/inspector_window.h"
 #include "app/ui/shop_context_tooltip.h"
 #include "app/ui/snap_guides.h"
+#include "app/ui/time_panel.h"
 #include "app/ui/tool_panel.h"
 #include "legible/inspect.h"
 #include "legible/park_summary.h"
@@ -20,9 +21,9 @@
 namespace tpj {
 namespace {
 
-// Builds the Debug and Tools panels, setting the shown views from their checkboxes, selecting the
-// tool the player chose, starting the park action they pressed, and undoing or redoing as the
-// panel or the keys ask, unless the tool drops a hold or a drawn path instead.
+// Builds the Debug, Time, and Tools panels, setting the shown views from their checkboxes,
+// selecting the tool the player chose, starting the park action they pressed, and undoing or
+// redoing as the panel or the keys ask, unless the tool drops a hold or a drawn path instead.
 void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &camera,
                 ShownViews &shown, Interaction &interaction, HistoryAction keys) {
   const World &world = session.world();
@@ -32,6 +33,7 @@ void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &c
   stats.Distance = camera.Distance;
   stats.Park = summarizePark(world);
   drawDebugPanel(stats, shown.Graph, shown.FoodOverlay);
+  drawTimePanel(parkTime(world.Tick));
   const ToolPanelChoice choice =
       drawToolPanel(interaction.tool().Kind, !interaction.tool().Drawn.empty(), session.canUndo(),
                     session.canRedo(), dialogs.dialogShowing());

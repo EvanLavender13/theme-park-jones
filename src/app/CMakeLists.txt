@@ -28,6 +28,7 @@ add_executable(tpj_app
     ui/inspector_window.cpp
     ui/shop_context_tooltip.cpp
     ui/snap_guides.cpp
+    ui/time_panel.cpp
     ui/tool_panel.cpp
     ui/tooling_ui.cpp)
 set_target_properties(tpj_app PROPERTIES OUTPUT_NAME ThemeParkJones)
