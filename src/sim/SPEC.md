@@ -14,6 +14,7 @@ Modules inside the sim register their component types, systems, swap functions, 
 - sim/save.h
 - sim/draw.h
 - sim/sim_math.h
+- sim/clock.h
 - the park's schema in sim/park_schema.h
 
 ## The tick cycle
@@ -30,6 +31,10 @@ The world advances only through stepWorld, one fixed tick of SIM_TICK_SECONDS at
 stepWorld(world) is the same cycle with no commands.
 
 isStepping, isResolving, and isFinishing are each true exactly while their stage runs. If a function is meant for one stage, it can use them to refuse callers from any other stage.
+
+## The clock
+
+parkTime(tick) gives the park's time at a tick, a ParkTime: its Day, counted from 1, and its Second of that day, from 0 to 86399. Tick 0 is 9:00 on day 1. Each tick adds GAME_SECONDS_PER_TICK to the clock, so a day is DAY_TICKS ticks, and a new day starts at midnight. A park's time is parkTime of its World::Tick. The clock is computed in whole numbers from the tick alone, so it is the same on every build, and it adds nothing to a world's state or save.
 
 ## Entity keys
 
