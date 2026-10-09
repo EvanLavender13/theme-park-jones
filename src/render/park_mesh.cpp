@@ -388,22 +388,22 @@ void appendSides(ParkMesh &mesh, const World &world, EntityKey segment, Rgba col
 }
 
 void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
-                   Rgba color) {
-  appendWalkway(mesh, kind, points, std::nullopt, color);
+                   double width, Rgba color) {
+  appendWalkway(mesh, kind, points, width, std::nullopt, color);
 }
 
 void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
-                   std::optional<ParkPoint> faceNormal, Rgba color) {
+                   double width, std::optional<ParkPoint> faceNormal, Rgba color) {
   if (points.size() < 2) {
     return;
   }
   const auto first = mesh.Vertices.size();
-  appendRibbon(mesh, points, pathWidth(kind), pathLift(kind), color);
+  appendRibbon(mesh, points, width, pathLift(kind), color);
   if (faceNormal) {
-    startFlush(mesh, first, points, 0.5 * pathWidth(kind), *faceNormal);
+    startFlush(mesh, first, points, 0.5 * width, *faceNormal);
   }
-  appendJoint(mesh, points.back(), unitStep(points[points.size() - 2], points.back()),
-              0.5 * pathWidth(kind), pathLift(kind), color);
+  appendJoint(mesh, points.back(), unitStep(points[points.size() - 2], points.back()), 0.5 * width,
+              pathLift(kind), color);
 }
 
 std::vector<Walkway> parkWalkways(const World &world) {
@@ -426,7 +426,7 @@ void appendWalkways(ParkMesh &mesh, const World &world, float alpha) {
       const std::vector<CarrierPoint> points{
           {.X = walkway.Door.X, .Z = walkway.Door.Z, .Distance = 0.0},
           {.X = walkway.Meets.X, .Z = walkway.Meets.Z, .Distance = length}};
-      appendWalkway(mesh, kind, points, walkway.Out, color);
+      appendWalkway(mesh, kind, points, walkway.Width, walkway.Out, color);
     }
   }
 }

@@ -12,7 +12,7 @@ addRoutes registers the derived type PreviousNetwork, the resolver path-networks
 
 Each resolution derives one network for each PathKind from intent alone, so saves never hold networks (principle 1). parkNetwork returns a kind's network. Before the world's first resolution, it returns an empty network.
 
-A kind's network has a carrier for each segment of that kind whose ground line is not empty, keyed by the segment's key, following its ground line, and with the segment's width. It also has a carrier for each connector, with its kind's path width (pathWidth, sim/park/SPEC.md). Every edge is a stretch of a segment or a connector, measured along it (principle 4). Paths of different kinds never share a node, even where they cross.
+A kind's network has a carrier for each segment of that kind whose ground line is not empty, keyed by the segment's key, following its ground line, and with the segment's width. It also has a carrier for each connector, as wide as its kind's path (pathWidth, sim/park/SPEC.md), or as its door's face if that is narrower. Every edge is a stretch of a segment or a connector, measured along it (principle 4). Paths of different kinds never share a node, even where they cross.
 
 Carriers join only at path points and at connectors' ends. Every carrier whose segment ends at a point stops there, and all of them share one node. Segments of one kind that cross, touch, or overlap without sharing a point don't join. At a rounded corner, the node lies at the middle of the arc, where the two segments' ground lines meet.
 
@@ -25,9 +25,9 @@ Doors sit at the middle of an entity's front and back faces.
 - An entrance's front door serves the guest network.
 - A shop's front door serves the guest network, and its back door serves the backstage network.
 - A depot's front door serves the backstage network.
-- A bench and a toilet block have no doors.
+- A bench's and a toilet block's front doors serve the guest network.
 
-parkDoors gives the doors serving a kind: the entrances' first, then the boxes', each in key order of its entity. A ParkDoor has its entity, its face, its position, and the unit direction out of its face.
+parkDoors gives the doors serving a kind: the entrances' first, then the boxes', each in key order of its entity. A ParkDoor has its entity, its face, its position, the unit direction out of its face, and the width of its face.
 
 A door's distance from a segment is how far it stands from the segment's paving, as parkSurface draws it without walkways. A segment's paving is the pieces it owns and the pieces of the points it ends at. A door on that paving is at distance 0. If a segment of the kind a door serves lies within CONNECTION_REACH of it, the door gets a connector to the nearest such segment. If several lie equally near, within JUNCTION_TOLERANCE, the one whose ground line lies nearest the door wins, then the lower key. A connector is a short carrier keyed connectorKey(entity, face). It runs from the door straight out of the door's face to where that line first meets paving of its kind, and on from there to the nearest point on that segment's ground line, and stops that segment's carrier there at a node. Its length counts both parts. If that line meets no paving of its kind within CONNECTION_REACH, if the door already stands on paving, or if the nearest point on the ground line from the door lies straight out of its face, the connector runs straight from the door to the nearest point on the ground line from the door. If no segment of its kind is within reach, a door has no connector, and nothing else about its entity changes (principle 2). If a door is flush against a segment's edge, it still gets a connector. If it lies on the nearest segment's ground line, within JUNCTION_TOLERANCE, which only a hand-written save allows, it has no connector.
 

@@ -154,16 +154,16 @@ void appendPathStart(ParkMesh &mesh, PathKind kind, ParkPoint at, bool joins);
 // A round joint beyond a ribbon's end is a half disc of this many segments.
 inline constexpr uint32_t JOINT_SEGMENTS = 16;
 
-// Adds a connector's walkway: the ribbon along the points, pathWidth(kind) wide at pathLift(kind),
-// in the color, and a round half disc of half that width beyond the last point. The points are each
+// Adds a connector's walkway: the ribbon along the points, width wide at pathLift(kind), in the
+// color, and a round half disc of half that width beyond the last point. The points are each
 // distinct from the next, as a connector's are. Nothing for fewer than two.
 void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
-                   Rgba color);
+                   double width, Rgba color);
 // The same walkway, starting flush with the face whose unit normal is given: its first two
 // vertices slide along the walkway onto the face's line. It starts square without a normal, or
 // where sliding would fold the ribbon.
 void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint> &points,
-                   std::optional<ParkPoint> faceNormal, Rgba color);
+                   double width, std::optional<ParkPoint> faceNormal, Rgba color);
 
 // Adds a walkway for each connector of the world's guest network and then its backstage network,
 // in the kind's path color with the alpha given. A connector is a carrier whose first stop's node

@@ -39,13 +39,14 @@ constexpr EntityKey connectorKey(EntityKey entity, Face face) {
   return deriveKey(entity, CONNECTOR_PURPOSE, static_cast<uint64_t>(face));
 }
 
-// A door: its entity, the face it is on, the middle of that face, and the unit direction out of
-// the face.
+// A door: its entity, the face it is on, the middle of that face, the unit direction out of the
+// face, and the face's width.
 struct ParkDoor {
   EntityKey Entity = NULL_KEY;
   Face Side = Face::Front;
   ParkPoint At;
   ParkPoint Out;
+  double Width = 0.0;
 
   bool operator==(const ParkDoor &) const = default;
 };
