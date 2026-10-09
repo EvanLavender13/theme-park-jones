@@ -1,5 +1,6 @@
 #include "sim/park/edits.h"
 
+#include "sim/clock.h"
 #include "sim/medium/network.h"
 #include "sim/park/geometry.h"
 #include "sim/park/internal/components.h"
@@ -1498,6 +1499,9 @@ std::optional<EditPlan> planOf(const World &world, const SetTaperLength &command
 std::optional<EditPlan> planOf(const World & /*world*/, const SetShopStock & /*command*/) {
   return std::nullopt;
 }
+std::optional<EditPlan> planOf(const World & /*world*/, const SetOpeningHours & /*command*/) {
+  return std::nullopt;
+}
 // RestoreIntent has no plan, and it shows no ghost.
 std::optional<EditPlan> planOf(const World & /*world*/, const RestoreIntent & /*command*/) {
   return std::nullopt;
@@ -1530,6 +1534,7 @@ void addParkEdits(WorldSchema &schema) {
   schema.addCommand<SetEdgeRadius>();
   schema.addCommand<SetTaperLength>();
   schema.addCommand<SetShopStock>();
+  schema.addCommand<SetOpeningHours>();
   schema.addCommand<RestoreIntent>();
 }
 
@@ -1665,10 +1670,19 @@ bool isBoxValid(const ParkBox &box) {
          std::isfinite(box.At.Z) && std::isfinite(box.At.FacingX) && std::isfinite(box.At.FacingZ);
 }
 
+bool isTimeOfDay(uint64_t second) { return second < DAY_SECONDS; }
+
+bool areHoursValid(const OpeningHours &hours) {
+  return isTimeOfDay(hours.Opening) && isTimeOfDay(hours.Closing);
+}
+
 // Whether the restore names what it acts on, as the spec's RestoreIntent acceptance lists, apart
 // from physical validity. Before is the world's layout.
 bool namesValid(const World &world, const PathLayout &before, const RestoreIntent &command) {
   const auto removed = [&command](EntityKey key) { return isListed(command.Remove, key); };
+  if (command.Add.Hours || (command.Set.Hours && !areHoursValid(*command.Set.Hours))) {
+    return false;
+  }
   if (!std::ranges::all_of(command.Remove, [&world](EntityKey key) {
         return findIntent<PathPointIntent>(world, key) != nullptr ||
                findIntent<PathSegmentIntent>(world, key) != nullptr ||
@@ -1853,6 +1867,29 @@ void setStock(World &world, EntityKey box, ShopStock stock) {
   }
 }
 
+// Gives the park the hours: destroys the entity holding them for DEFAULT_HOURS, so a park at the
+// default saves as one never set, and otherwise sets them on that entity, creating it if none holds
+// them.
+void setHours(World &world, const OpeningHours &hours) {
+  std::optional<EntityKey> holder;
+  for (const EntityKey key : world.keys()) {
+    if (findIntent<OpeningHoursIntent>(world, key) != nullptr) {
+      holder = key;
+      break;
+    }
+  }
+  if (hours == DEFAULT_HOURS) {
+    if (holder) {
+      world.destroyEntity(*holder);
+    }
+  } else if (holder) {
+    world.Registry.get<OpeningHoursIntent>(world.findEntity(*holder)).Hours = hours;
+  } else {
+    const EntityKey key = world.createEntity();
+    world.Registry.emplace<OpeningHoursIntent>(world.findEntity(key), OpeningHoursIntent{hours});
+  }
+}
+
 } // namespace
 
 bool isAccepted(const World &world, const AddPath &command) {
@@ -1915,6 +1952,10 @@ bool isAccepted(const World &world, const SetTaperLength &command) {
 bool isAccepted(const World &world, const SetShopStock &command) {
   const BoxIntent *box = findIntent<BoxIntent>(world, command.Shop);
   return box != nullptr && box->Kind == BoxKind::Shop && isKnown(command.Stock);
+}
+
+bool isAccepted(const World & /*world*/, const SetOpeningHours &command) {
+  return areHoursValid(command.Hours);
 }
 
 bool isAccepted(const World &world, const RestoreIntent &command) {
@@ -2011,6 +2052,12 @@ void applyCommand(World &world, const SetShopStock &command) {
   }
 }
 
+void applyCommand(World &world, const SetOpeningHours &command) {
+  if (isAccepted(world, command)) {
+    setHours(world, command.Hours);
+  }
+}
+
 void applyCommand(World &world, const RestoreIntent &command) {
   if (!isRestoreAccepted(world, command)) {
     return;
@@ -2025,6 +2072,10 @@ void applyCommand(World &world, const RestoreIntent &command) {
     const EntityKey key = world.createEntity();
     world.Registry.emplace<BoxIntent>(world.findEntity(key), BoxIntent{box.Kind, box.At});
     setStock(world, key, box.Stock);
+  }
+  // Last, so the records added above take the keys the history expects.
+  if (command.Set.Hours) {
+    setHours(world, *command.Set.Hours);
   }
 }
 

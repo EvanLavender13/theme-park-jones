@@ -4,6 +4,7 @@
 #include "app/ui/debug_panel.h"
 #include "app/ui/food_tooltip.h"
 #include "app/ui/graph_view.h"
+#include "app/ui/hours_panel.h"
 #include "app/ui/inspector_window.h"
 #include "app/ui/shop_context_tooltip.h"
 #include "app/ui/snap_guides.h"
@@ -21,10 +22,11 @@
 namespace tpj {
 namespace {
 
-// Builds the Debug, Time, and Tools panels, setting the speed from the Time panel's buttons, the
-// shown views from their checkboxes,
-// selecting the tool the player chose, starting the park action they pressed, and undoing or
-// redoing as the panel or the keys ask, unless the tool drops a hold or a drawn path instead.
+// Builds the Debug, Time, Hours, and Tools panels, setting the speed from the Time panel's buttons,
+// the interaction's chosen hours from the Hours panel and applying them, the shown views from their
+// checkboxes, selecting the tool the player chose, starting the park action they pressed, and
+// undoing or redoing as the panel or the keys ask, unless the tool drops a hold or a drawn path
+// instead.
 void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &camera,
                 ShownViews &shown, Interaction &interaction, GameSpeed &speed, HistoryAction keys) {
   const World &world = session.world();
@@ -35,6 +37,16 @@ void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &c
   stats.Park = summarizePark(world);
   drawDebugPanel(stats, shown.Graph, shown.FoodOverlay);
   drawTimePanel(parkTime(world.Tick), speed);
+  interaction.settleHours(world);
+  const OpeningHours hours = parkHours(world);
+  const HoursUse hoursUse =
+      drawHoursPanel(HoursControls{hours, interaction.hoursChoice().value_or(hours)});
+  if (hoursUse.Chosen) {
+    interaction.chooseHours(*hoursUse.Chosen);
+  }
+  if (hoursUse.Apply) {
+    interaction.applyHours(session.commands());
+  }
   const ToolPanelChoice choice =
       drawToolPanel(interaction.tool().Kind, !interaction.tool().Drawn.empty(), session.canUndo(),
                     session.canRedo(), dialogs.dialogShowing());

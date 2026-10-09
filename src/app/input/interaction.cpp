@@ -23,6 +23,7 @@ void Interaction::follow(uint64_t generation) {
   tpj::selectTool(Tool, Tool.Kind);
   Subject.reset();
   StockChoice.reset();
+  HoursChoice.reset();
 }
 
 void Interaction::useButtons(const World &world, CommandQueue &commands,
@@ -66,6 +67,18 @@ void Interaction::settleStock(const World &world) {
   }
 }
 
+void Interaction::applyHours(CommandQueue &commands) const {
+  if (HoursChoice) {
+    queueEdit(commands, SetOpeningHours{*HoursChoice});
+  }
+}
+
+void Interaction::settleHours(const World &world) {
+  if (HoursChoice == parkHours(world)) {
+    HoursChoice.reset();
+  }
+}
+
 void Interaction::selectTool(ToolKind kind) { tpj::selectTool(Tool, kind); }
 
 bool Interaction::dropHeld() {
@@ -89,6 +102,9 @@ std::optional<ParkEdit> Interaction::tentativeEdit(const World &world) const {
     if (stock && *stock != *StockChoice) {
       return SetShopStock{Subject->Key, *StockChoice};
     }
+  }
+  if (HoursChoice && *HoursChoice != parkHours(world)) {
+    return SetOpeningHours{*HoursChoice};
   }
   return std::nullopt;
 }
