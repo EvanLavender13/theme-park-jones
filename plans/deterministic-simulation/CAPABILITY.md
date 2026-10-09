@@ -19,7 +19,7 @@ This capability matters because it makes the simulation trustworthy:
 - Every bug reproduces from a save.
 - A preview's candidate copy behaves exactly like the committed park (principle 8).
 
-Later milestones add replays, save migration, faster stepping, and sharper diagnosis of divergence. The capability never finishes.
+Later milestones add the park clock and game speeds, replays, save migration, faster stepping, and sharper diagnosis of divergence. The capability never finishes.
 
 ## Foundation criteria
 
@@ -51,6 +51,8 @@ This capability adds no fields or flows. It provides the registration, keys, and
   4. If intent changed, run the resolvers in their declared dependency order.
 - All simulation code can use stable entity keys and keyed random draws. The first consumer is believable-guests' seeded softmax (decision 0019).
 - Candidate copies serve legible-simulation's previews, through the resolution rules of decision 0025.
+- The clock gives the day number and time of day as a pure function of World::Tick. believable-guests, stylized-presentation, legible-simulation, and the app read it, and nothing feeds back into it.
+- Applying queued commands without stepping lets the app commit edits while the game is paused. It applies and resolves them as a candidate does, to the world itself.
 - effortless-building owns the park file as a player document. It owns the save and load commands, and intent as what the player authored. This capability's walk is the file's encoding.
 
 ## Principles
@@ -84,8 +86,9 @@ It is useful on its own. The determinism and round-trip properties are proven on
 ## Milestones
 
 1. `world-as-value`: the tick cycle, with registered systems and resolvers, and a queue of intent commands applied between the swap and resolution. It adds stable entity keys and the registered state walk, with intent, state, and derived classes, and with copy, equality, and hash. It adds canonical text save and load, and keyed random draws with uniform and weighted-pick distributions. It ports musl's exp and log, and adds the undefined-symbol check and the cross-build script with its pre-push trigger. The milestone was tested on synthetic component types and scenarios. Member of the boxes-and-tubes slice. Depends on: none.
+2. `park-clock`: the day number and time of day as a pure function of the tick, a Time panel, and game speeds of pause, 1x, 2x, and 4x, with edits applying while paused. Member of the day-at-the-park slice. Depends on: world-as-value.
 
-Later milestones come from the deepening candidates, once the slice shows where determinism is hardest to keep.
+Later milestones come from the deepening candidates, once the slices show where determinism is hardest to keep, or from what a slice needs of the tick cycle, as park-clock does.
 
 ## Deepening candidates
 
