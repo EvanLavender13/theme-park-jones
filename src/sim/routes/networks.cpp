@@ -134,7 +134,8 @@ private:
 
 // Adds the door at the midpoint of the face of the pose's footprint for the size: the first two
 // corners for the front, the last two for the back. It faces out along the footprint's forward
-// direction for the front and against it for the back. Nothing when the pose has no footprint.
+// direction for the front and against it for the back. The door is as wide as the size. Nothing
+// when the pose has no footprint.
 void addDoor(std::vector<ParkDoor> &doors, EntityKey entity, const Pose &pose, FootprintSize size,
              Face face) {
   const std::optional<Footprint> footprint = footprintOf(pose, size);
@@ -148,11 +149,12 @@ void addDoor(std::vector<ParkDoor> &doors, EntityKey entity, const Pose &pose, F
   doors.push_back({.Entity = entity,
                    .Side = face,
                    .At = {(a.X + b.X) / 2.0, (a.Z + b.Z) / 2.0},
-                   .Out = {footprint->Forward.X * out, footprint->Forward.Z * out}});
+                   .Out = {footprint->Forward.X * out, footprint->Forward.Z * out},
+                   .Width = size.Width});
 }
 
-// The doors serving the kind: an entrance's front serves guests, a shop's front guests and its back
-// backstage, and a depot's front backstage. A bench or a toilet block has no doors.
+// The doors serving the kind: an entrance's front, a shop's, a bench's, and a toilet block's front
+// serve guests, and a shop's back and a depot's front serve backstage.
 std::vector<ParkDoor> doorsServing(const std::vector<ParkEntrance> &entrances,
                                    const std::vector<ParkBox> &boxes, PathKind kind) {
   std::vector<ParkDoor> doors;
@@ -163,7 +165,8 @@ std::vector<ParkDoor> doorsServing(const std::vector<ParkEntrance> &entrances,
   }
   for (const ParkBox &box : boxes) {
     const bool shop = box.Kind == BoxKind::Shop;
-    if (kind == PathKind::Guest && shop) {
+    const bool facility = box.Kind == BoxKind::Bench || box.Kind == BoxKind::ToiletBlock;
+    if (kind == PathKind::Guest && (shop || facility)) {
       addDoor(doors, box.Key, box.At, boxSize(box.Kind), Face::Front);
     } else if (kind == PathKind::Backstage && (shop || box.Kind == BoxKind::Depot)) {
       addDoor(doors, box.Key, box.At, boxSize(box.Kind), shop ? Face::Back : Face::Front);
@@ -363,13 +366,14 @@ std::pair<std::vector<CarrierPoint>, double> connectorRoute(const Network &lines
   return {points, on->Distance};
 }
 
-// The connectors of the doors, each the given width. A door connects to the path carrier whose
-// paving lies nearest, when that paving lies within reach. A carrier's paving is the pieces its
-// segment owns and those of the points it ends at. Of carriers whose paving lies equally near, the
-// one whose line lies nearest wins, then the lower key.
+// The connectors of the doors, each as wide as the kind's path or its door, whichever is narrower.
+// A door connects to the path carrier whose paving lies nearest, when that paving lies within
+// reach. A carrier's paving is the pieces its segment owns and those of the points it ends at. Of
+// carriers whose paving lies equally near, the one whose line lies nearest wins, then the lower
+// key.
 std::vector<Connection> findConnections(const PathCarriers &paths,
                                         const std::vector<SurfacePiece> &pieces, PathKind kind,
-                                        const std::vector<ParkDoor> &doors, double width) {
+                                        const std::vector<ParkDoor> &doors) {
   const std::vector<Carrier> &carriers = paths.Carriers;
   std::vector<Connection> connections;
   if (carriers.empty()) {
@@ -397,11 +401,13 @@ std::vector<Connection> findConnections(const PathCarriers &paths,
     }
     const auto path = std::ranges::lower_bound(carriers, meeting->At.Carrier, {}, &Carrier::Key);
     auto [points, pathDistance] = connectorRoute(lines, pieces, kind, door, *meeting);
-    connections.push_back(
-        {.Connector = {.Key = key, .Width = width, .Points = std::move(points), .Stops = {}},
-         .Entity = door.Entity,
-         .Path = static_cast<size_t>(path - carriers.begin()),
-         .PathDistance = pathDistance});
+    connections.push_back({.Connector = {.Key = key,
+                                         .Width = std::min(pathWidth(kind), door.Width),
+                                         .Points = std::move(points),
+                                         .Stops = {}},
+                           .Entity = door.Entity,
+                           .Path = static_cast<size_t>(path - carriers.begin()),
+                           .PathDistance = pathDistance});
   }
   return connections;
 }
@@ -465,8 +471,7 @@ Network deriveNetwork(const std::vector<ParkSegment> &segments,
   PathCarriers paths = pathCarriers(segments, kind);
   std::vector<Meeting> meetings = pointMeetings(paths);
   // Each connector meets its path at its connection.
-  std::vector<Connection> connections =
-      findConnections(paths, pieces, kind, doors, pathWidth(kind));
+  std::vector<Connection> connections = findConnections(paths, pieces, kind, doors);
   std::vector<Carrier> carriers = std::move(paths.Carriers);
   const size_t pathCount = carriers.size();
   for (Connection &connection : connections) {

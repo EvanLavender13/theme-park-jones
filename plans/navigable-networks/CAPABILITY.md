@@ -25,6 +25,7 @@ Each kind of box connects to a network from the face that serves that network ki
 
 - a shop's front connects to a guest path, and its back connects to a backstage path;
 - a depot's front connects to a backstage path;
+- a bench's front and a toilet block's front connect to a guest path;
 - the entrance connects to a guest path.
 
 The connector is a derived edge, and its length counts in routes. Its end node is anchored to the box's entity. If no path of the right kind is within reach, the box has no connection on that network, and that is a legitimate state (principle 2).

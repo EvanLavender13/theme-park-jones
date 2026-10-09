@@ -65,7 +65,7 @@ struct FootprintSize {
   double Depth = 0.0;
 };
 
-// The width a new segment of the kind takes, in meters, and the width routes gives the kind's
+// The width a new segment of the kind takes, in meters, and the widest routes makes the kind's
 // connectors.
 constexpr double pathWidth(PathKind kind) { return kind == PathKind::Guest ? 3.0 : 2.0; }
 
