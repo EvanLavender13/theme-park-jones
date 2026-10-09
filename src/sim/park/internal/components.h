@@ -75,6 +75,18 @@ template <typename Visitor> void visitFields(Visitor &visitor, ShopStockIntent &
   visitor.field("stock", stock.Stock);
 }
 
+// The park's opening hours, held by one entity only when they are not DEFAULT_HOURS.
+struct OpeningHoursIntent {
+  OpeningHours Hours;
+
+  bool operator==(const OpeningHoursIntent &) const = default;
+};
+
+template <typename Visitor> void visitFields(Visitor &visitor, OpeningHoursIntent &hours) {
+  visitor.field("opening", hours.Hours.Opening);
+  visitor.field("closing", hours.Hours.Closing);
+}
+
 // Where guests arrive and leave.
 struct EntranceIntent {
   Pose At;

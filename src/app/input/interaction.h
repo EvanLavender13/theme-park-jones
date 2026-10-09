@@ -15,9 +15,9 @@
 
 namespace tpj {
 
-// The player's hold on the park: the tool, the guest or shop the Inspector shows, and the stock
-// chosen for that shop and not yet applied. It follows the park session's generation, so a
-// replaced world drops the tool's hold, the subject, and the choice.
+// The player's hold on the park: the tool, the guest or shop the Inspector shows, the stock chosen
+// for that shop, and the hours chosen in the Hours panel, both not yet applied. It follows the park
+// session's generation, so a replaced world drops the tool's hold, the subject, and both choices.
 class Interaction {
 public:
   // Starts with the tool at start and no subject, having seen the generation.
@@ -46,13 +46,24 @@ public:
   // Drops the chosen stock once the Inspector's shop has it, so the choice stays marked until its
   // SetShopStock applies.
   void settleStock(const World &world);
+  // The hours chosen in the Hours panel and not yet applied.
+  [[nodiscard]] const std::optional<OpeningHours> &hoursChoice() const { return HoursChoice; }
+  // Chooses the park's hours. They are applied only by applyHours.
+  void chooseHours(OpeningHours hours) { HoursChoice = hours; }
+  // Queues a SetOpeningHours of the chosen hours, when hours are chosen. The choice stays until
+  // settleHours finds the park has them.
+  void applyHours(CommandQueue &commands) const;
+  // Drops the chosen hours once the park has them, so the choice stays shown until its
+  // SetOpeningHours applies.
+  void settleHours(const World &world);
   void selectTool(ToolKind kind);
   // Drops what the tool holds or has drawn, as selecting it again does, and gives whether there was
   // anything: a held press or a drawn stop.
   bool dropHeld();
   void movePointer(const World &world, const PointerSample &pointer);
   // The tool's edit, or else the Inspector's chosen stock as a SetShopStock while it differs from
-  // the shop's.
+  // the shop's, or else the Hours panel's chosen hours as a SetOpeningHours while they differ from
+  // the park's.
   [[nodiscard]] std::optional<ParkEdit> tentativeEdit(const World &world) const;
   [[nodiscard]] std::optional<EntityKey> highlighted(const World &world) const;
   // Where the tool's first click would start a path, as pathStart gives it.
@@ -73,6 +84,7 @@ private:
   ToolState Tool;
   std::optional<InspectorSubject> Subject;
   std::optional<ShopStock> StockChoice;
+  std::optional<OpeningHours> HoursChoice;
 };
 
 } // namespace tpj

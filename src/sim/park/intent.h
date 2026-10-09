@@ -160,8 +160,21 @@ struct ParkBox {
   bool operator==(const ParkBox &) const = default;
 };
 
-// Registers the private intent component types entrance, path-point, path-segment, box, and
-// shop-stock, in that order.
+// The park's opening hours: the second of the day it opens and the second it closes, each less
+// than DAY_SECONDS. If closing is at or before opening, the hours run past midnight, and if the
+// two are equal, the park is open all day.
+struct OpeningHours {
+  uint64_t Opening = 9ULL * 3600;
+  uint64_t Closing = 21ULL * 3600;
+
+  bool operator==(const OpeningHours &) const = default;
+};
+
+// The hours of a park with none set: 9:00 to 21:00.
+inline constexpr OpeningHours DEFAULT_HOURS{};
+
+// Registers the private intent component types entrance, path-point, path-segment, box,
+// shop-stock, and opening-hours, in that order.
 void addParkIntent(WorldSchema &schema);
 
 // Every entity holding that kind of intent, in ascending key order.
@@ -171,6 +184,9 @@ std::vector<ParkSegment> parkSegments(const World &world);
 // Every corner, in ascending key order of its point.
 std::vector<ParkCorner> parkCorners(const World &world);
 std::vector<ParkBox> parkBoxes(const World &world);
+
+// The park's opening hours, or DEFAULT_HOURS when none are set.
+OpeningHours parkHours(const World &world);
 
 // The new-park template with the schema and the seed, resolution pending: an entrance on the
 // park's edge facing in, and a guest path of one segment running into the park from in front of

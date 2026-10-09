@@ -9,7 +9,7 @@
 namespace tpj {
 namespace {
 
-// The world's path points, segments, and boxes, each in key order.
+// The world's path points, segments, and boxes, each in key order, and its opening hours.
 IntentRecords recordsOf(const World &world) {
   IntentRecords records;
   records.Points = parkPathPoints(world);
@@ -18,6 +18,7 @@ IntentRecords recordsOf(const World &world) {
                                              segment.Width, segment.FromEdge, segment.ToEdge});
   }
   records.Boxes = parkBoxes(world);
+  records.Hours = parkHours(world);
   return records;
 }
 
@@ -52,11 +53,16 @@ IntentChange changeBetween(const IntentRecords &was, const IntentRecords &is) {
           change.Before.Segments, change.After.Segments);
   compare(was.Boxes, is.Boxes, change.Removed.Boxes, change.Added.Boxes, change.Before.Boxes,
           change.After.Boxes);
+  if (was.Hours != is.Hours) {
+    change.Before.Hours = was.Hours;
+    change.After.Hours = is.Hours;
+  }
   return change;
 }
 
 bool isEmpty(const IntentRecords &records) {
-  return records.Points.empty() && records.Segments.empty() && records.Boxes.empty();
+  return records.Points.empty() && records.Segments.empty() && records.Boxes.empty() &&
+         !records.Hours;
 }
 
 bool isEmpty(const IntentChange &change) {
@@ -114,6 +120,7 @@ RestoreIntent reversal(const EditHistory &history, const IntentChange &change) {
     command.Add.Segments.push_back(segmentNow(segment));
   }
   command.Add.Boxes = change.Removed.Boxes;
+  command.Set.Hours = change.Before.Hours;
   return command;
 }
 

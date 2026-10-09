@@ -30,9 +30,10 @@ public:
   [[nodiscard]] const ShownViews &shown() const { return Shown; }
   [[nodiscard]] GameSpeed &speed() { return Speed; }
 
-  // Builds the frame's ImGui frame and gives its draw data: the Debug, Time, and Tools panels,
-  // which set the shown views from their checkboxes, select the tool the player chose, and start
-  // the park action they pressed, and the Time panel's speed buttons, which set the speed. It
+  // Builds the frame's ImGui frame and gives its draw data: the Debug, Time, Hours, and Tools
+  // panels, which set the shown views from their checkboxes, select the tool the player chose, and
+  // start the park action they pressed, and the Time panel's speed buttons, which set the speed.
+  // The Hours panel's buttons set the interaction's chosen hours, and its Apply applies them. It
   // undoes or redoes as the Tools panel's buttons or the frame's keys ask, unless the tool held or
   // had drawn something, which it drops instead. It also builds the Inspector while the interaction
   // has a subject, forgetting it when closed, whose stock controls set the interaction's chosen

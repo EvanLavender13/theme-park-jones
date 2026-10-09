@@ -73,7 +73,7 @@ Delete removes the box under the pointer. If there is no box, it removes the seg
 
 ## History
 
-The history holds a list of edits to undo and a list of edits to redo. Each edit is the intent it changed: the path points, segments, and boxes it removed, those it added, and those it changed, before and after. A box's record holds its kind, pose, and stock setting. The entrance never changes.
+The history holds a list of edits to undo and a list of edits to redo. Each edit is the intent it changed: the path points, segments, and boxes it removed, those it added, and those it changed, before and after. A box's record holds its kind, pose, and stock setting. When an edit changes the opening hours, it also holds them before and after, and its reversal sets them back. The entrance never changes.
 
 clearHistory empties both lists and takes the world's intent as the intent the history saw last. noteEdits takes the world after commands were applied, by a cycle or by commitCommands (sim/SPEC.md). It compares the world's intent with the intent the history saw last, then takes the world's intent as the intent it saw last. If nothing changed, it records nothing. Otherwise the change is one edit, even when several commands made it in one cycle. If the change came from an undo, the edit goes on the redo list. If it came from a redo, it goes on the undo list. Any other change goes on the undo list and empties the redo list.
 

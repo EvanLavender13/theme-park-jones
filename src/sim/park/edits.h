@@ -174,6 +174,13 @@ struct SetShopStock {
   bool operator==(const SetShopStock &) const = default;
 };
 
+// The park's opening hours.
+struct SetOpeningHours {
+  OpeningHours Hours;
+
+  bool operator==(const SetOpeningHours &) const = default;
+};
+
 // A path segment's intent as RestoreIntent puts it: a ParkSegment without its ground line.
 struct SegmentRecord {
   EntityKey Key = NULL_KEY;
@@ -188,11 +195,12 @@ struct SegmentRecord {
 };
 
 // Path points, segments, and boxes, each list in ascending key order unless its user says
-// otherwise.
+// otherwise, and the park's opening hours, when the records hold them.
 struct IntentRecords {
   std::vector<ParkPathPoint> Points;
   std::vector<SegmentRecord> Segments;
   std::vector<ParkBox> Boxes;
+  std::optional<OpeningHours> Hours;
 
   bool operator==(const IntentRecords &) const = default;
 };
@@ -201,7 +209,7 @@ struct IntentRecords {
 // go. Each record in Set replaces the values of the one holding its key. Each record in Add is
 // added with a key from the counter, in the order listed, points first, then segments, then boxes.
 // Add's keys are names only: a segment that names one as From or To ends at the point added under
-// it.
+// it. When Set holds hours, they become the park's hours, set after the adds. Add holds none.
 struct RestoreIntent {
   std::vector<EntityKey> Remove;
   IntentRecords Set;
@@ -211,14 +219,15 @@ struct RestoreIntent {
 };
 
 // Registers AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
-// RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, SetTaperLength, SetShopStock, and
-// RestoreIntent, in that order.
+// RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, SetTaperLength, SetShopStock,
+// SetOpeningHours, and RestoreIntent, in that order.
 void addParkEdits(WorldSchema &schema);
 
-// A tentative or committed edit to park intent: one of the fourteen commands.
-using ParkEdit = std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint,
-                              InsertPoint, RemovePoint, SetCornerRadius, SetSegmentWidth,
-                              SetEdgeRadius, SetTaperLength, SetShopStock, RestoreIntent>;
+// A tentative or committed edit to park intent: one of the fifteen commands.
+using ParkEdit =
+    std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
+                 RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, SetTaperLength,
+                 SetShopStock, SetOpeningHours, RestoreIntent>;
 
 // The stop's ground position: a NewPoint's own, an OnPoint's point's, the place Along of the way
 // from an OnSegment's segment's From point to its To point, or the place an OnBend names on its
@@ -271,6 +280,7 @@ bool isAccepted(const World &world, const SetSegmentWidth &command);
 bool isAccepted(const World &world, const SetEdgeRadius &command);
 bool isAccepted(const World &world, const SetTaperLength &command);
 bool isAccepted(const World &world, const SetShopStock &command);
+bool isAccepted(const World &world, const SetOpeningHours &command);
 bool isAccepted(const World &world, const RestoreIntent &command);
 
 // Whether the command the edit holds would be applied to the world.
@@ -294,6 +304,7 @@ void applyCommand(World &world, const SetSegmentWidth &command);
 void applyCommand(World &world, const SetEdgeRadius &command);
 void applyCommand(World &world, const SetTaperLength &command);
 void applyCommand(World &world, const SetShopStock &command);
+void applyCommand(World &world, const SetOpeningHours &command);
 void applyCommand(World &world, const RestoreIntent &command);
 
 // Whether every solid and line has its geometry, stays in the park, and conflicts with no other.

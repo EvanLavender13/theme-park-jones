@@ -2,7 +2,7 @@
 
 Slice: day-at-the-park
 
-Status: planned
+Status: complete
 
 ## Summary
 
@@ -14,7 +14,7 @@ The player gets the park's first policies and its first facilities beyond shops.
 2. Until facility-doors, a bench or toilet block has no doors, so it joins no network, publishes nothing, and changes nothing guests or shops do. Every existing park simulates as before. (`tpj_scenarios --compare` on output from before and after each feature, and review)
 3. When the Inspector shows a shop, it has radio buttons Food, Drink, and Both for the shop's stock, with the shop's setting marked. Choosing another makes it a tentative edit, which the preview resolves on a candidate as any edit, and Apply commits it with a SetShopStock command. A shop with no setting stocks food only, so every existing park keeps its shops' behavior. Undo and redo restore a stock change. A shop's setting is part of its record in the history and in RestoreIntent, so undoing a stocked shop's deletion brings it back with its setting. (play, and the park world checks)
 4. The Hours panel shows the opening and closing times in 15-minute steps, with controls to change each. A changed time is a tentative edit, previewed on a candidate, and Apply commits it with a SetOpeningHours command. The panel keeps the closing time after the opening time. The command accepts any two times of day, refusing only a time outside the day, as SetSegmentWidth refuses a width that isn't a number. If the closing time is at or before the opening time, the hours run past midnight, and if the two are equal, the park is open all day. A park with no hours set has the default hours, 9:00 to 21:00. Undo and redo restore an hours change. (play, and the park world checks)
-5. Opening hours and stock settings are saved park intent. Every park file saved before this milestone loads, reads as the defaults, and saves again to its own text, with no new section. tests/parks/facilities.park holds a bench, a toilet block, a shop set to drink, a shop set to both, and hours other than the default, so the park world checks cover the new intent, and each new edit is among the world checks' chosen edits. (ctest, and a scratch check that loads and resolves each park file saved before the milestone and compares its save with the file)
+5. Opening hours and stock settings are saved park intent. Every park file saved before this milestone loads, reads as the defaults, and saves again to its own text, with no new section. tests/parks/facilities.park holds a bench, a toilet block, a shop set to drink, a shop set to both, and hours other than the default, so the park world checks cover the new intent, and each new edit is among the world checks' chosen edits. (ctest, and a scratch check that loads each park file saved before the milestone, compares its save with the file, and resolves it to find the default hours and stock settings and no new section)
 6. The park, routes, tools, legible, app, and render specs describe the new kinds, the stock setting, the hours, their commands, and their controls. (review)
 
 ## Medium
@@ -50,6 +50,7 @@ Unordered pool this milestone draws later features from.
 - Hours that differ by day, such as late openings on chosen days. Gated on: a calendar with weekdays.
 - Benches and toilet blocks in sizes, such as a long bench or a large toilet block, with seats and stalls to match. Gated on: served-needs' seats and stalls.
 - Setting the stock of several shops at once, such as every shop on a street. Gated on: selecting several boxes.
+- Setting hours past midnight or all day from the Hours panel. SetOpeningHours already accepts them.
 
 ## Open questions
 

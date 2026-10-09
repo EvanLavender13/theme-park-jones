@@ -66,12 +66,14 @@ public:
   [[nodiscard]] const OverlayShape &overlayShape() const { return Shape; }
 
 private:
-  // The intent a park mesh was built from.
+  // The intent a park mesh was built from, and the opening hours, so a change of them while paused
+  // also empties the kept preview.
   struct DrawnIntent {
     std::vector<ParkEntrance> Entrances;
     std::vector<ParkPathPoint> Points;
     std::vector<ParkSegment> Segments;
     std::vector<ParkBox> Boxes;
+    OpeningHours Hours;
 
     bool operator==(const DrawnIntent &) const = default;
   };

@@ -1,0 +1,32 @@
+tpj-park 1
+seed 1
+tick 0
+next-key 21
+
+[entrance]
+1 x=0 z=126.5 facing-x=0 facing-z=-1
+
+[path-point]
+2 x=0 z=123 radius=3 taper=0
+3 x=0 z=100 radius=3 taper=0
+4 x=-20 z=80 radius=3 taper=0
+5 x=-20 z=50 radius=3 taper=0
+6 x=10 z=30 radius=3 taper=0
+7 x=75 z=-20 radius=3 taper=0
+8 x=75 z=10 radius=3 taper=0
+9 x=45 z=25 radius=3 taper=0
+
+[path-segment]
+10 kind=guest from=2 to=3 width=3 from-edge-radius=0 to-edge-radius=0
+11 kind=guest from=3 to=4 width=3 from-edge-radius=0 to-edge-radius=0
+12 kind=guest from=4 to=5 width=3 from-edge-radius=0 to-edge-radius=0
+13 kind=guest from=5 to=6 width=3 from-edge-radius=0 to-edge-radius=0
+14 kind=backstage from=7 to=8 width=2 from-edge-radius=0 to-edge-radius=0
+15 kind=backstage from=8 to=9 width=2 from-edge-radius=0 to-edge-radius=0
+
+[box]
+16 kind=shop x=-35 z=60 facing-x=1 facing-z=0
+17 kind=shop x=25 z=40 facing-x=-1 facing-z=0
+18 kind=depot x=75 z=-30 facing-x=0 facing-z=1
+19 kind=shop x=-41.22407531738281 z=-45.47117614746094 facing-x=4.990734100341797 facing-z=16.119277954101562
+20 kind=shop x=15.539056777954102 z=-3.03131103515625 facing-x=-22.215723037719727 facing-z=-17.521835327148438
