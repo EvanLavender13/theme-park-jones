@@ -508,32 +508,24 @@ void resolvePathNetworks(World &world) {
         deriveNetwork(segments, surface.Pieces, doorsServing(entrances, boxes, kind), kind);
     const EntityKey key =
         world.createDerivedEntity(NULL_KEY, NETWORK_PURPOSE, static_cast<uint64_t>(kind));
-    const entt::entity entity = world.findEntity(key);
-    if (Network *held = world.Registry.try_get<Network>(entity)) {
-      world.Registry.emplace_or_replace<PreviousNetwork>(entity, PreviousNetwork{std::move(*held)});
+    if (Network *held = world.tryGet<Network>(key)) {
+      world.emplaceOrReplace<PreviousNetwork>(key, PreviousNetwork{std::move(*held)});
     }
-    world.Registry.emplace_or_replace<Network>(entity, std::move(network));
+    world.emplaceOrReplace<Network>(key, std::move(network));
   }
 }
 
 // Removes both kinds' previous networks, so no resolution ends holding one.
 void dropPreviousNetworks(World &world) {
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
-    const entt::entity entity = world.findEntity(networkKey(kind));
-    if (entity != entt::null) {
-      world.Registry.remove<PreviousNetwork>(entity);
-    }
+    world.remove<PreviousNetwork>(networkKey(kind));
   }
 }
 
 } // namespace
 
 const Network *previousNetwork(const World &world, PathKind kind) {
-  const entt::entity entity = world.findEntity(networkKey(kind));
-  if (entity == entt::null) {
-    return nullptr;
-  }
-  const PreviousNetwork *previous = world.Registry.try_get<PreviousNetwork>(entity);
+  const PreviousNetwork *previous = world.tryGet<PreviousNetwork>(networkKey(kind));
   return previous != nullptr ? &previous->Held : nullptr;
 }
 
@@ -607,11 +599,7 @@ std::vector<Walkway> connectorWalkways(const World &world, PathKind kind) {
 
 const Network &parkNetwork(const World &world, PathKind kind) {
   static const Network EMPTY;
-  const entt::entity entity = world.findEntity(networkKey(kind));
-  if (entity == entt::null) {
-    return EMPTY;
-  }
-  const Network *network = world.Registry.try_get<Network>(entity);
+  const Network *network = world.tryGet<Network>(networkKey(kind));
   return network != nullptr ? *network : EMPTY;
 }
 

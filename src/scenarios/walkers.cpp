@@ -42,7 +42,7 @@ constexpr std::array<double, 3> STEPS = {-0.5, 0.0, 0.5};
 // energy, then its energy relaxes toward a drawn rest.
 void stepWalkers(World &world) {
   for (const EntityKey key : world.keys()) {
-    auto *walker = world.Registry.try_get<Walker>(world.findEntity(key));
+    auto *walker = world.tryGet<Walker>(key);
     if (walker == nullptr) {
       continue;
     }
@@ -68,7 +68,7 @@ void stepWalkers(World &world) {
 void turnOverWalkers(World &world) {
   std::vector<EntityKey> retiring;
   for (const EntityKey key : world.keys()) {
-    const auto *walker = world.Registry.try_get<Walker>(world.findEntity(key));
+    const auto *walker = world.tryGet<Walker>(key);
     if (walker != nullptr && walker->Age >= LIFETIME) {
       retiring.push_back(key);
     }
@@ -79,8 +79,7 @@ void turnOverWalkers(World &world) {
   if (world.Tick % SPAWN_INTERVAL == 0) {
     const double place = 16.0 * drawUniform(drawKey(world, NULL_KEY, SPAWN_PURPOSE, 0));
     const EntityKey key = world.createEntity();
-    world.Registry.emplace<Walker>(world.findEntity(key),
-                                   Walker{.Position = place, .Energy = 1.0, .Age = 0});
+    world.emplace<Walker>(key, Walker{.Position = place, .Energy = 1.0, .Age = 0});
   }
 }
 
@@ -101,9 +100,8 @@ Scenario walkersScenario() {
           [](World &world) {
             for (int i = 0; i < START_WALKERS; ++i) {
               const EntityKey key = world.createEntity();
-              world.Registry.emplace<Walker>(
-                  world.findEntity(key),
-                  Walker{.Position = 0.5 * i, .Energy = 1.0 + 0.125 * i, .Age = 0});
+              world.emplace<Walker>(
+                  key, Walker{.Position = 0.5 * i, .Energy = 1.0 + 0.125 * i, .Age = 0});
             }
           },
       .QueueCommands = nullptr,

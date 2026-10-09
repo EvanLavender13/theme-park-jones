@@ -14,7 +14,7 @@ namespace {
 template <typename T, typename ToValue> auto collectIntent(const World &world, ToValue toValue) {
   std::vector<decltype(toValue(EntityKey{}, std::declval<const T &>()))> result;
   for (const EntityKey key : world.keys()) {
-    if (const T *intent = world.Registry.try_get<T>(world.findEntity(key)); intent != nullptr) {
+    if (const T *intent = world.tryGet<T>(key); intent != nullptr) {
       result.push_back(toValue(key, *intent));
     }
   }
@@ -50,7 +50,7 @@ std::vector<ParkCorner> parkCorners(const World &world) { return cornersOf(layou
 
 std::vector<ParkBox> parkBoxes(const World &world) {
   return collectIntent<BoxIntent>(world, [&world](EntityKey key, const BoxIntent &box) {
-    const ShopStockIntent *stock = world.Registry.try_get<ShopStockIntent>(world.findEntity(key));
+    const ShopStockIntent *stock = world.tryGet<ShopStockIntent>(key);
     return ParkBox{key, box.Kind, box.At, stock != nullptr ? stock->Stock : ShopStock::Food};
   });
 }
@@ -65,17 +65,15 @@ World makeNewPark(std::shared_ptr<const WorldSchema> schema, uint64_t seed) {
   World world(std::move(schema), seed);
   // The entrance's back lies on the edge at z = 128, and it faces into the park.
   const EntityKey entrance = world.createEntity();
-  world.Registry.emplace<EntranceIntent>(world.findEntity(entrance),
-                                         EntranceIntent{Pose{0.0, 126.5, 0.0, -1.0}});
+  world.emplace<EntranceIntent>(entrance, EntranceIntent{Pose{0.0, 126.5, 0.0, -1.0}});
   // A guest path of one segment from 2 m in front of the entrance, 20 m into the park.
   const EntityKey near = world.createEntity();
-  world.Registry.emplace<PathPointIntent>(world.findEntity(near), PathPointIntent{{0.0, 123.0}});
+  world.emplace<PathPointIntent>(near, PathPointIntent{{0.0, 123.0}});
   const EntityKey far = world.createEntity();
-  world.Registry.emplace<PathPointIntent>(world.findEntity(far), PathPointIntent{{0.0, 103.0}});
+  world.emplace<PathPointIntent>(far, PathPointIntent{{0.0, 103.0}});
   const EntityKey segment = world.createEntity();
-  world.Registry.emplace<PathSegmentIntent>(
-      world.findEntity(segment),
-      PathSegmentIntent{PathKind::Guest, near, far, pathWidth(PathKind::Guest)});
+  world.emplace<PathSegmentIntent>(
+      segment, PathSegmentIntent{PathKind::Guest, near, far, pathWidth(PathKind::Guest)});
   return world;
 }
 

@@ -7,6 +7,7 @@
 
 #include <entt/entity/registry.hpp>
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <optional>
@@ -14,7 +15,9 @@
 #include <stdint.h>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace tpj {
@@ -51,8 +54,6 @@ public:
 
   uint64_t Tick = 0;
   uint64_t Seed = 0;
-  // Create and destroy entities through the functions below, never directly on the registry.
-  entt::registry Registry;
 
   [[nodiscard]] const WorldSchema &schema() const { return *Schema; }
   [[nodiscard]] uint64_t nextKey() const { return NextKey; }
@@ -72,10 +73,31 @@ public:
   EntityKey createDerivedEntity(EntityKey owner, uint64_t purpose, uint64_t index);
   // Removes the entity and its components. False, with no change, when the key is not live.
   bool destroyEntity(EntityKey key);
-  [[nodiscard]] entt::entity findEntity(EntityKey key) const;
-  [[nodiscard]] EntityKey keyOf(entt::entity entity) const;
   // Live keys, ascending.
   [[nodiscard]] std::vector<EntityKey> keys() const;
+  // True when an entity holds this key.
+  [[nodiscard]] bool isLive(EntityKey key) const;
+
+  // The entity must be live and hold T.
+  template <typename T> T &get(EntityKey key);
+  template <typename T> const T &get(EntityKey key) const;
+  // Nothing when the key isn't live or its entity doesn't hold T.
+  template <typename T> T *tryGet(EntityKey key);
+  template <typename T> const T *tryGet(EntityKey key) const;
+  // False when the key isn't live.
+  template <typename T> [[nodiscard]] bool has(EntityKey key) const;
+  // The entity must be live and not hold T.
+  template <typename T, typename... Args> void emplace(EntityKey key, Args &&...args);
+  // The entity must be live.
+  template <typename T> void emplaceOrReplace(EntityKey key, T value);
+  // The entity must be live. T must not be an empty type.
+  template <typename T> T &getOrEmplace(EntityKey key);
+  // Removes T if the entity holds it. Nothing happens when the key isn't live.
+  template <typename T> void remove(EntityKey key);
+  // Keys of the entities that hold T, ascending.
+  template <typename T> [[nodiscard]] std::vector<EntityKey> keysWith() const;
+  // True when the entity is live and holds the registered type.
+  [[nodiscard]] bool holds(const ComponentType &type, EntityKey key) const;
 
 private:
   struct DerivedOrigin {
@@ -90,7 +112,12 @@ private:
   };
 
   entt::entity addEntity(EntityKey key);
+  [[nodiscard]] entt::entity findEntity(EntityKey key) const;
+  [[nodiscard]] EntityKey keyOf(entt::entity entity) const;
   void emitWords(WordSink &sink) const;
+
+  // Held by the walk, save, and cycle functions. Everything else reaches components by key.
+  entt::registry Registry;
 
   std::shared_ptr<const WorldSchema> Schema;
   uint64_t NextKey = 1;
@@ -115,6 +142,62 @@ private:
   friend std::string saveWorld(const World &world);
   friend World loadWorld(std::shared_ptr<const WorldSchema> schema, std::string_view text);
 };
+
+template <typename T> T &World::get(EntityKey key) { return Registry.get<T>(findEntity(key)); }
+
+template <typename T> const T &World::get(EntityKey key) const {
+  return Registry.get<T>(findEntity(key));
+}
+
+template <typename T> T *World::tryGet(EntityKey key) {
+  const entt::entity entity = findEntity(key);
+  return entity == entt::null ? nullptr : Registry.try_get<T>(entity);
+}
+
+template <typename T> const T *World::tryGet(EntityKey key) const {
+  const entt::entity entity = findEntity(key);
+  return entity == entt::null ? nullptr : Registry.try_get<T>(entity);
+}
+
+template <typename T> bool World::has(EntityKey key) const {
+  const entt::entity entity = findEntity(key);
+  return entity != entt::null && Registry.all_of<T>(entity);
+}
+
+template <typename T, typename... Args> void World::emplace(EntityKey key, Args &&...args) {
+  Registry.emplace<T>(findEntity(key), std::forward<Args>(args)...);
+}
+
+template <typename T> void World::emplaceOrReplace(EntityKey key, T value) {
+  Registry.emplace_or_replace<T>(findEntity(key), std::move(value));
+}
+
+template <typename T> T &World::getOrEmplace(EntityKey key) {
+  static_assert(!std::is_empty_v<T>, "getOrEmplace needs a type that holds a value");
+  return Registry.get_or_emplace<T>(findEntity(key));
+}
+
+template <typename T> void World::remove(EntityKey key) {
+  const entt::entity entity = findEntity(key);
+  if (entity != entt::null) {
+    Registry.remove<T>(entity);
+  }
+}
+
+template <typename T> std::vector<EntityKey> World::keysWith() const {
+  std::vector<EntityKey> result;
+  // Read from T's storage rather than the key map, so a component left on an entity without a key
+  // still shows, as NULL_KEY.
+  if (const auto *storage = Registry.storage<T>()) {
+    result.reserve(storage->size());
+    // The base set iterates entities; the storage itself iterates components.
+    for (const entt::entity entity : static_cast<const entt::sparse_set &>(*storage)) {
+      result.push_back(keyOf(entity));
+    }
+  }
+  std::ranges::sort(result);
+  return result;
+}
 
 // A world equal to this one, sharing its schema, and independent of it from then on.
 World copyWorld(const World &world);

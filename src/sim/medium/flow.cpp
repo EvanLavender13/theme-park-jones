@@ -13,9 +13,7 @@ namespace tpj {
 
 namespace {
 
-bool isLive(const World &world, EntityKey key) {
-  return key != NULL_KEY && world.findEntity(key) != entt::null;
-}
+bool isLive(const World &world, EntityKey key) { return key != NULL_KEY && world.isLive(key); }
 
 std::string keyText(EntityKey key) { return std::to_string(static_cast<uint64_t>(key)); }
 

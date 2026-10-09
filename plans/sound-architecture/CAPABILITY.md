@@ -97,6 +97,8 @@ The app restructure follows, under those rules. It tries the rules on the code t
 
    The Debug panel's park numbers come from a park summary in legible. Platform resources get single owners, and the logic that needs no window is tested through its headers. Depends on: milestone 1.
 
+3. `keyed-storage`: EnTT dropped, and the world stores its components itself, keyed by EntityKey and iterated in key order (decision 0039). Code reaches components only through World. The simulation doesn't change. Depends on: 0039 accepted.
+
 ## Deepening candidates
 
 - Audit render/renderer.cpp for concerns that deserve their own components. At 608 lines, it is the next largest file. Gated on: an audit showing it holds more than one.

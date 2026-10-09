@@ -213,21 +213,18 @@ std::vector<uint64_t> entryWords(const std::vector<FieldSlot<Entry>> &slots, Ent
 // and creates the entity that holds both layers, with an empty stepped layer if it has none.
 template <FieldDefinition F> void emptyResolvedEntries(World &world) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, FIELD_PURPOSE, hashName(F::Name));
-  const entt::entity entity = world.findEntity(key);
   ResolvedEntries<F> next;
-  if (auto *resolved = world.Registry.try_get<ResolvedEntries<F>>(entity)) {
+  if (auto *resolved = world.tryGet<ResolvedEntries<F>>(key)) {
     next.HasPrevious = true;
     next.Previous = std::move(resolved->Slots);
   }
-  world.Registry.emplace_or_replace<ResolvedEntries<F>>(entity, std::move(next));
-  static_cast<void>(world.Registry.get_or_emplace<SteppedEntries<F>>(entity));
+  world.emplaceOrReplace<ResolvedEntries<F>>(key, std::move(next));
+  static_cast<void>(world.getOrEmplace<SteppedEntries<F>>(key));
 }
 
 // The field's swap: makes the entries published during the tick readable, replacing the last.
 template <FieldDefinition F> void swapSteppedEntries(World &world) {
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  auto *stepped =
-      entity == entt::null ? nullptr : world.Registry.try_get<SteppedEntries<F>>(entity);
+  auto *stepped = world.tryGet<SteppedEntries<F>>(fieldKey(F::Name));
   if (stepped == nullptr) {
     return;
   }
@@ -239,13 +236,12 @@ template <FieldDefinition F> void swapSteppedEntries(World &world) {
 // readable stepped entries of each source whose resolved entries changed, then drops the previous.
 template <FieldDefinition F> void settleSteppedEntries(World &world) {
   using Slot = FieldSlot<typename F::Entry>;
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  auto *resolved =
-      entity == entt::null ? nullptr : world.Registry.try_get<ResolvedEntries<F>>(entity);
+  const EntityKey holder = fieldKey(F::Name);
+  auto *resolved = world.tryGet<ResolvedEntries<F>>(holder);
   if (resolved == nullptr || !resolved->HasPrevious) {
     return;
   }
-  auto &stepped = world.Registry.get<SteppedEntries<F>>(entity);
+  auto &stepped = world.get<SteppedEntries<F>>(holder);
   std::erase_if(stepped.Readable, [resolved](const Slot &slot) {
     return entryWords(resolved->Previous, slot.Source) != entryWords(resolved->Slots, slot.Source);
   });
@@ -279,9 +275,7 @@ void publishResolved(World &world, EntityKey source,
   if (!world.isResolving()) {
     throw std::logic_error("field " + name + " takes resolved entries only from resolvers");
   }
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  auto *resolved =
-      entity == entt::null ? nullptr : world.Registry.try_get<ResolvedEntries<F>>(entity);
+  auto *resolved = world.tryGet<ResolvedEntries<F>>(fieldKey(F::Name));
   if (resolved == nullptr) {
     throw std::logic_error("field " + name +
                            " holds no resolved entries; register it before its publishers");
@@ -310,9 +304,7 @@ void publishStepped(World &world, EntityKey source,
   if (!world.isStepping()) {
     throw std::logic_error("field " + name + " takes stepped entries only from systems");
   }
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  auto *stepped =
-      entity == entt::null ? nullptr : world.Registry.try_get<SteppedEntries<F>>(entity);
+  auto *stepped = world.tryGet<SteppedEntries<F>>(fieldKey(F::Name));
   if (stepped == nullptr) {
     throw std::logic_error("field " + name + " holds no stepped entries; resolve the world first");
   }
@@ -522,11 +514,11 @@ void sampleSlotsAt(const Network &network, std::span<const Place> places,
 // otherwise its resolved one.
 template <FieldDefinition F>
 std::vector<const FieldSlot<typename F::Entry> *> layeredSlots(const World &world,
-                                                               entt::entity entity) {
+                                                               EntityKey holder) {
   using Slot = FieldSlot<typename F::Entry>;
   const std::vector<Slot> none;
-  const auto *resolved = world.Registry.try_get<ResolvedEntries<F>>(entity);
-  const auto *stepped = world.Registry.try_get<SteppedEntries<F>>(entity);
+  const auto *resolved = world.tryGet<ResolvedEntries<F>>(holder);
+  const auto *stepped = world.tryGet<SteppedEntries<F>>(holder);
   const std::vector<Slot> &fromResolved = resolved != nullptr ? resolved->Slots : none;
   const std::vector<Slot> &fromStepped = stepped != nullptr ? stepped->Readable : none;
   std::vector<const Slot *> slots;
@@ -552,8 +544,8 @@ std::vector<const FieldSlot<typename F::Entry> *> layeredSlots(const World &worl
 template <FieldDefinition F>
 const FieldSlot<typename F::Entry> *sourceSlot(const World &world, EntityKey source) {
   using Slot = FieldSlot<typename F::Entry>;
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  if (entity == entt::null) {
+  const EntityKey holder = fieldKey(F::Name);
+  if (!world.isLive(holder)) {
     return nullptr;
   }
   // Both lists keep their slots in ascending source order.
@@ -561,12 +553,12 @@ const FieldSlot<typename F::Entry> *sourceSlot(const World &world, EntityKey sou
     const auto at = std::ranges::lower_bound(slots, source, {}, &Slot::Source);
     return at != slots.end() && at->Source == source ? &*at : nullptr;
   };
-  if (const auto *stepped = world.Registry.try_get<SteppedEntries<F>>(entity)) {
+  if (const auto *stepped = world.tryGet<SteppedEntries<F>>(holder)) {
     if (const Slot *slot = find(stepped->Readable)) {
       return slot;
     }
   }
-  const auto *resolved = world.Registry.try_get<ResolvedEntries<F>>(entity);
+  const auto *resolved = world.tryGet<ResolvedEntries<F>>(holder);
   return resolved != nullptr ? find(resolved->Slots) : nullptr;
 }
 
@@ -620,11 +612,11 @@ std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world, con
   if constexpr (KeptFieldDefinition<F>) {
     return sampleKeptField<F>(world, network, place);
   } else {
-    const entt::entity entity = world.findEntity(fieldKey(F::Name));
-    if (entity == entt::null) {
+    const EntityKey holder = fieldKey(F::Name);
+    if (!world.isLive(holder)) {
       return {};
     }
-    return sampleSlots<F>(network, place, layeredSlots<F>(world, entity));
+    return sampleSlots<F>(network, place, layeredSlots<F>(world, holder));
   }
 }
 
@@ -641,10 +633,10 @@ void sampleFieldAtPlaces(const World &world, const Network &network, std::span<c
   if constexpr (KeptFieldDefinition<F>) {
     sampleKeptFieldAt<F>(world, network, places, visit);
   } else {
-    const entt::entity entity = world.findEntity(fieldKey(F::Name));
+    const EntityKey holder = fieldKey(F::Name);
     const std::vector<const FieldSlot<Entry> *> slots =
-        entity == entt::null ? std::vector<const FieldSlot<Entry> *>{}
-                             : layeredSlots<F>(world, entity);
+        !world.isLive(holder) ? std::vector<const FieldSlot<Entry> *>{}
+                              : layeredSlots<F>(world, holder);
     sampleFieldSlotsAt<F>(network, places, slots, visit);
   }
 }
@@ -681,9 +673,7 @@ std::optional<typename F::Entry> sourceEntryAtNode(const World &world, const Net
 template <FieldDefinition F>
 std::vector<SampledEntry<typename F::Entry>>
 sampleResolvedField(const World &world, const Network &network, const Place &place) {
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  const auto *resolved =
-      entity == entt::null ? nullptr : world.Registry.try_get<ResolvedEntries<F>>(entity);
+  const auto *resolved = world.tryGet<ResolvedEntries<F>>(fieldKey(F::Name));
   if (resolved == nullptr) {
     return {};
   }

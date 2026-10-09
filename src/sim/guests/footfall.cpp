@@ -83,7 +83,7 @@ void stepFootfall(World &world) {
   // In ascending key order, then grouped by stretch with that order kept within each.
   std::vector<GuestOnStretch> onStretches;
   for (const EntityKey key : parkGuests(world)) {
-    const Guest &guest = world.Registry.get<Guest>(world.findEntity(key));
+    const Guest &guest = world.get<Guest>(key);
     if (const std::optional<size_t> stretch = stretchOf(network, guest.At)) {
       onStretches.push_back({.Stretch = *stretch, .Hunger = guest.Hunger});
     }

@@ -101,13 +101,11 @@ concept HasNodeRule = KeptFieldDefinition<F> && requires(const NodeSample &sampl
 
 // The field's kept entries, or null when the world holds none.
 template <KeptFieldDefinition F> const KeptEntries<F> *findKeptEntries(const World &world) {
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  return entity == entt::null ? nullptr : world.Registry.try_get<KeptEntries<F>>(entity);
+  return world.tryGet<KeptEntries<F>>(fieldKey(F::Name));
 }
 
 template <KeptFieldDefinition F> KeptEntries<F> *findKeptEntries(World &world) {
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  return entity == entt::null ? nullptr : world.Registry.try_get<KeptEntries<F>>(entity);
+  return world.tryGet<KeptEntries<F>>(fieldKey(F::Name));
 }
 
 // The source's slot among slots in ascending source order, or null.
@@ -125,7 +123,7 @@ template <KeptFieldDefinition F> double readKeptEntry(const KeptEntry &entry, ui
 // The field's resolver: creates the field's entity holding empty kept entries when it holds none.
 template <KeptFieldDefinition F> void emptyKeptEntries(World &world) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, FIELD_PURPOSE, hashName(F::Name));
-  static_cast<void>(world.Registry.get_or_emplace<KeptEntries<F>>(world.findEntity(key)));
+  static_cast<void>(world.getOrEmplace<KeptEntries<F>>(key));
 }
 
 // The field's swap: applies the tick's changes in the order made, then empties them.

@@ -91,20 +91,18 @@ template <typename Entry> struct GroundSample {
 
 // The field's entries, or null when the world holds none.
 template <GroundFieldDefinition F> const GroundEntries<F> *findGroundEntries(const World &world) {
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  return entity == entt::null ? nullptr : world.Registry.try_get<GroundEntries<F>>(entity);
+  return world.tryGet<GroundEntries<F>>(fieldKey(F::Name));
 }
 
 template <GroundFieldDefinition F> GroundEntries<F> *findGroundEntries(World &world) {
-  const entt::entity entity = world.findEntity(fieldKey(F::Name));
-  return entity == entt::null ? nullptr : world.Registry.try_get<GroundEntries<F>>(entity);
+  return world.tryGet<GroundEntries<F>>(fieldKey(F::Name));
 }
 
 // The field's resolver: creates the field's entity holding empty entries when it holds none, and
 // leaves entries it holds as they are.
 template <GroundFieldDefinition F> void emptyGroundEntries(World &world) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, FIELD_PURPOSE, hashName(F::Name));
-  static_cast<void>(world.Registry.get_or_emplace<GroundEntries<F>>(world.findEntity(key)));
+  static_cast<void>(world.getOrEmplace<GroundEntries<F>>(key));
 }
 
 // The field's swap: makes the tick's changes readable, and removes dropped entries and those of
@@ -120,7 +118,7 @@ template <GroundFieldDefinition F> void swapGroundEntries(World &world) {
     entries->Changing = false;
   }
   std::erase_if(entries->Readable, [&world](const GroundEntry<typename F::Entry> &entry) {
-    return entry.Dropped || world.findEntity(entry.Key) == entt::null;
+    return entry.Dropped || !world.isLive(entry.Key);
   });
   entries->CellsCurrent = false;
 }
@@ -243,7 +241,7 @@ void sampleGroundField(const World &world, GroundPoint point, double radius,
   const auto take = [&](const GroundEntry<Entry> &entry) {
     const double dx = entry.At.X - point.X;
     const double dz = entry.At.Z - point.Z;
-    if (dx * dx + dz * dz <= radius * radius && world.findEntity(entry.Key) != entt::null) {
+    if (dx * dx + dz * dz <= radius * radius && world.isLive(entry.Key)) {
       sampled.push_back({entry.Key, entry.At, entry.Value});
     }
   };

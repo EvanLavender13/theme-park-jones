@@ -45,7 +45,7 @@ constexpr double LONGEST_WALK = 60.0;
 void stepGuests(World &world) {
   std::vector<EntityKey> leaving;
   for (const EntityKey key : world.keys()) {
-    const auto *guest = world.Registry.try_get<SyntheticGuest>(world.findEntity(key));
+    const auto *guest = world.tryGet<SyntheticGuest>(key);
     if (guest == nullptr) {
       continue;
     }
@@ -76,8 +76,7 @@ void stepGuests(World &world) {
   const EntityKey key = world.createEntity();
   const double patience =
       LEAST_PATIENCE + (EXTRA_PATIENCE * drawUniform(drawKey(world, key, GUEST_PURPOSE, 0)));
-  world.Registry.emplace<SyntheticGuest>(
-      world.findEntity(key), SyntheticGuest{world.Tick + static_cast<uint64_t>(patience)});
+  world.emplace<SyntheticGuest>(key, SyntheticGuest{world.Tick + static_cast<uint64_t>(patience)});
   if (shops.empty()) {
     return;
   }

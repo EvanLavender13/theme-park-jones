@@ -50,8 +50,7 @@ struct PlaceBeacon {
 
 void applyCommand(World &world, const PlaceBeacon &command) {
   const EntityKey key = world.createEntity();
-  world.Registry.emplace<Beacon>(world.findEntity(key),
-                                 Beacon{.X = command.X, .Strength = command.Strength});
+  world.emplace<Beacon>(key, Beacon{.X = command.X, .Strength = command.Strength});
 }
 
 constexpr uint64_t GLOW_PURPOSE = hashName("beacon-glow");
@@ -59,7 +58,7 @@ constexpr uint64_t GLOW_PURPOSE = hashName("beacon-glow");
 // Gives each beacon one glow per unit of strength, fading with the glow's index.
 void resolveGlows(World &world) {
   for (const EntityKey key : world.keys()) {
-    const auto *found = world.Registry.try_get<Beacon>(world.findEntity(key));
+    const auto *found = world.tryGet<Beacon>(key);
     if (found == nullptr) {
       continue;
     }
@@ -67,9 +66,8 @@ void resolveGlows(World &world) {
     const Beacon beacon = *found;
     for (uint32_t i = 0; i < beacon.Strength; ++i) {
       const EntityKey glow = world.createDerivedEntity(key, GLOW_PURPOSE, i);
-      world.Registry.emplace_or_replace<Glow>(
-          world.findEntity(glow),
-          Glow{.Level = std::sqrt(beacon.X * beacon.X + 1.0) / static_cast<double>(i + 1)});
+      world.emplaceOrReplace<Glow>(
+          glow, Glow{.Level = std::sqrt(beacon.X * beacon.X + 1.0) / static_cast<double>(i + 1)});
     }
   }
 }
@@ -80,12 +78,11 @@ void tallyGlows(World &world) {
   uint64_t count = 0;
   Tally *tally = nullptr;
   for (const EntityKey key : world.keys()) {
-    const entt::entity entity = world.findEntity(key);
-    if (const auto *glow = world.Registry.try_get<Glow>(entity)) {
+    if (const auto *glow = world.tryGet<Glow>(key)) {
       sum += glow->Level * SIM_TICK_SECONDS;
       ++count;
     }
-    if (auto *found = world.Registry.try_get<Tally>(entity)) {
+    if (auto *found = world.tryGet<Tally>(key)) {
       tally = found;
     }
   }
@@ -114,10 +111,9 @@ Scenario beaconsScenario() {
       .Populate =
           [](World &world) {
             const EntityKey tally = world.createEntity();
-            world.Registry.emplace<Tally>(world.findEntity(tally));
+            world.emplace<Tally>(tally);
             const EntityKey beacon = world.createEntity();
-            world.Registry.emplace<Beacon>(world.findEntity(beacon),
-                                           Beacon{.X = 1.5, .Strength = 2});
+            world.emplace<Beacon>(beacon, Beacon{.X = 1.5, .Strength = 2});
           },
       .QueueCommands =
           [](const World &world, CommandQueue &commands) {

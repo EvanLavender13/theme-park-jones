@@ -143,8 +143,7 @@ void ledgerSwap(const World &world, Ledger &ledger);
 
 // The kind's ledger, or null when the world holds none.
 template <FlowDefinition K> const Ledger *ledgerOf(const World &world) {
-  const entt::entity entity = world.findEntity(flowKey(K::Name));
-  return entity == entt::null ? nullptr : world.Registry.try_get<FlowLedger<K>>(entity);
+  return world.tryGet<FlowLedger<K>>(flowKey(K::Name));
 }
 
 // The kind's ledger for an operation. Throws std::logic_error when the world is not stepping or
@@ -154,8 +153,7 @@ template <FlowDefinition K> Ledger &steppingLedger(World &world) {
   if (!world.isStepping()) {
     throw std::logic_error("flow " + name + " takes operations only from systems");
   }
-  const entt::entity entity = world.findEntity(flowKey(K::Name));
-  auto *ledger = entity == entt::null ? nullptr : world.Registry.try_get<FlowLedger<K>>(entity);
+  auto *ledger = world.tryGet<FlowLedger<K>>(flowKey(K::Name));
   if (ledger == nullptr) {
     throw std::logic_error("flow " + name + " has no ledger; register it and resolve the world");
   }
@@ -165,13 +163,12 @@ template <FlowDefinition K> Ledger &steppingLedger(World &world) {
 // The kind's resolver: creates the entity holding its ledger, with an empty ledger if it has none.
 template <FlowDefinition K> void ensureLedger(World &world) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, FLOW_PURPOSE, hashName(K::Name));
-  static_cast<void>(world.Registry.get_or_emplace<FlowLedger<K>>(world.findEntity(key)));
+  static_cast<void>(world.getOrEmplace<FlowLedger<K>>(key));
 }
 
 // The kind's swap: delivers, returns, and settles, as ledgerSwap does.
 template <FlowDefinition K> void swapLedger(World &world) {
-  const entt::entity entity = world.findEntity(flowKey(K::Name));
-  auto *ledger = entity == entt::null ? nullptr : world.Registry.try_get<FlowLedger<K>>(entity);
+  auto *ledger = world.tryGet<FlowLedger<K>>(flowKey(K::Name));
   if (ledger != nullptr) {
     ledgerSwap(world, *ledger);
   }

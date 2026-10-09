@@ -315,8 +315,8 @@ void resolveGuestGround(World &world) {
   }
 
   const EntityKey key = world.createDerivedEntity(NULL_KEY, GROUND_PURPOSE, 0);
-  world.Registry.emplace_or_replace<GuestGround>(
-      world.findEntity(key), GuestGround(std::move(walls), std::move(pieces), std::move(carriers)));
+  world.emplaceOrReplace<GuestGround>(
+      key, GuestGround(std::move(walls), std::move(pieces), std::move(carriers)));
 }
 
 } // namespace
@@ -501,11 +501,7 @@ std::optional<GroundSpot> GuestGround::nearestFit(GroundPoint point) const {
 
 const GuestGround &guestGround(const World &world) {
   static const GuestGround EMPTY;
-  const entt::entity entity = world.findEntity(deriveKey(NULL_KEY, GROUND_PURPOSE, 0));
-  if (entity == entt::null) {
-    return EMPTY;
-  }
-  const GuestGround *ground = world.Registry.try_get<GuestGround>(entity);
+  const GuestGround *ground = world.tryGet<GuestGround>(deriveKey(NULL_KEY, GROUND_PURPOSE, 0));
   return ground != nullptr ? *ground : EMPTY;
 }
 

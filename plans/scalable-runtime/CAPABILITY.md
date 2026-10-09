@@ -114,6 +114,8 @@ Unordered pool this capability draws later milestones from.
 - Resolution across cores: derive each source's route distance in parallel, with results identical to deriving them one after another. Gated on: the report showing resolution, and with it candidates, costly on a park with plazas.
 - Instanced guests: draw every guest from one shared mesh with a small per-guest instance buffer, instead of rebuilding and re-uploading a mesh of all guests every tick. Gated on: the report showing the guest mesh and its upload as a real share of the app's frame after indexed-sampling, or guests being drawn as models instead of simple shapes.
 - Ground field lookup by bucket: a ground field's by-cell lookup is rebuilt after each swap by sorting every entry, about 160 µs a tick for guest presence on the full park. Group entries into their cells in one pass instead.
+- Faster component store: replace keyed-storage's first store with one that keeps key order but iterates densely, such as a key-sorted array with a key-to-index map, or a B-tree (decision 0039). Gated on: keyed-storage merged, and the report showing component lookup or iteration as a real share of a tick.
+- Guests found by type: parkGuests walks every live key and checks each one for a guest, twice a tick and again in each resolution. Iterate the guest store in key order instead. Gated on: keyed-storage merged.
 
 ## Open questions
 
