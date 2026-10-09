@@ -24,7 +24,7 @@ registeredScenarios lists the synthetic scenarios. Each is named and seeded, and
 - derived entities
 - the medium's fields, ground fields, and flows
 - random park edits, with the guests and shops they affect
-- a food shop whose supply is cut and restored
+- shops selling food and drink, whose supply is cut and restored
 
 This way, if any part of the simulation's arithmetic or ordering could differ between builds, it shows up in the compared output.
 
@@ -36,13 +36,14 @@ tpj_scenarios --compare left right exits with status 0 when the two outputs hold
 
 ## Slice parks
 
-tpj_scenarios --slice-parks fed warm cut main-street warm-main-street makes the boxes-and-tubes slice's parks from fed, and the good-paths slice's warm park from main-street:
+tpj_scenarios --slice-parks fed warm cut main-street warm-main-street facilities stocked makes the boxes-and-tubes slice's parks from fed, the good-paths slice's warm park from main-street, and the day-at-the-park slice's stocked park from facilities:
 
 - warm is the park after WARM_TICKS cycles, which is long enough for a guest to be waiting at the shop and a shipment to be in transit.
 - cut is warm one cycle later with its backstage paths deleted, so the shop's supply is gone from the first tick.
-- warm-main-street is main-street after MAIN_STREET_WARM_TICKS cycles, long enough that guests arrive and leave about equally often, so they fill the park in every activity. main-street is read and never written.
+- warm-main-street is main-street after MAIN_STREET_WARM_TICKS cycles, long enough that guests arrive and leave about equally often, so they fill the park in every activity. main-street and facilities are read and never written.
+- stocked is facilities with a depot and a backstage path added, stepped until a shop holds food, a shop holds drink, and drink is still on its way. If that doesn't happen within STOCKED_LIMIT_TICKS cycles, it fails.
 
-tests/parks/fed.park, warm.park, cut.park, and warm-main-street.park are its output. If the simulation's rules change, running it again remakes the parks under the new rules. It writes no file when it fails.
+tests/parks/fed.park, warm.park, cut.park, warm-main-street.park, and stocked.park are its output. If the simulation's rules change, running it again remakes the parks under the new rules. It writes no file when it fails.
 
 ## The full park
 

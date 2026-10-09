@@ -339,8 +339,8 @@ Each check starts from a fresh load and prints its line only if it passes, and o
 - `drink wait exact behind food`: a food visit to B, and a drink visit to B arriving the next cycle while the food guest is served.
 - `drink wait exact from shipment`: one drink visit to D in the first cycle, while D's drink is still in transit.
 - `sell-off ok`: makeCandidate switches B to food. The candidate's drink offer at B equals the world's, and is supplied. A cycle commits the switch, and B still offers drink. Then 30 drink visits go to B, one every 50 cycles. B makes no drink order after the switch. B serves 24 drinks, and 6 visits come back without one. Once all are back, B has no drink offer.
-- `conserved`: in every cycle of every check, each of the eight kinds has units created equal to units in transit plus units held by every entity plus units consumed.
 - `deleted shop returned every visit`: three food and three drink visits reach B in one cycle, and the next cycle deletes B. Every guest gets its visit back, and every one queued at the deletion comes back without a serving.
+- `conserved`: in every cycle of every check, each of the eight kinds has units created equal to units in transit plus units held by every entity, counting a just-deleted entity's stock, which the ledger passes on at the next swap, plus units consumed.
 - the record: it prints shopRecord for B and D at load.
 
 Step 2: Build and run it.

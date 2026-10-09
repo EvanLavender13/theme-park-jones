@@ -59,7 +59,7 @@ inspectSubject reads the subject's record afresh at each call, so if an inspecto
 - its activity, hunger, target shop, time left in its stay, meals eaten, and last meal
 - a table of every option the guest would weigh if it chose now, with each term of its score and its probability (principle 8)
 
-For a shop it shows stock, queue, units on order, what limits it, and whether it is starved.
+For a shop it shows its stock and units on order of each good, its queue, what limits it, and whether it is starved.
 
 ## Park summary
 

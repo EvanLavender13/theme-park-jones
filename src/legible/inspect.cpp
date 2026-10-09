@@ -72,12 +72,26 @@ std::vector<ChoiceRow> choiceRows(const std::vector<ChoiceOption> &options) {
   return rows;
 }
 
+// The name with its first letter capitalized.
+std::string capitalized(std::string name) {
+  if (!name.empty() && name[0] >= 'a' && name[0] <= 'z') {
+    name[0] = static_cast<char>(name[0] - 'a' + 'A');
+  }
+  return name;
+}
+
 std::vector<InspectorRow> shopRows(const ShopRecord &record) {
-  return {{"Stock", std::format("{}", record.Stock)},
-          {"Queue", std::format("{}", record.Queue)},
-          {"On order", std::format("{}", record.OnOrder)},
-          {"Limit", std::string(limitingFactorName(record.Limit))},
-          {"Starved", record.Starved ? "yes" : "no"}};
+  std::vector<InspectorRow> rows;
+  for (const Good good : GOODS) {
+    const std::string name = capitalized(displayName(good));
+    const GoodRecord &holding = record.Goods[static_cast<size_t>(good)];
+    rows.push_back({name + " stock", std::format("{}", holding.Stock)});
+    rows.push_back({name + " on order", std::format("{}", holding.OnOrder)});
+  }
+  rows.push_back({"Queue", std::format("{}", record.Queue)});
+  rows.push_back({"Limit", std::string(limitingFactorName(record.Limit))});
+  rows.push_back({"Starved", record.Starved ? "yes" : "no"});
+  return rows;
 }
 
 } // namespace
