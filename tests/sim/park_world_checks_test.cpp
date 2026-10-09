@@ -529,6 +529,21 @@ ChosenEdit settingShopToDrinkUnderGuests(const World &before) {
   return {"setting the shop, while guests wait at it and head to it, to sell drink", set};
 }
 
+// The park's hours change from the default while guests are in the park, so the save holds an
+// opening-hours line and nothing else in the world changes.
+ChosenEdit settingOpeningHoursUnderGuests(const World &before) {
+  REQUIRE_FALSE(parkGuests(before).empty());
+  // 10:00 to 22:00.
+  const OpeningHours hours{36000, 79200};
+  REQUIRE(parkHours(before) != hours);
+  const SetOpeningHours set{hours};
+  REQUIRE(isAccepted(before, ParkEdit{set}));
+  // Without the hours held by the park, this edit would leave the world as it was.
+  const World candidate = makeCandidate(before, queueOf(ParkEdit{set}));
+  REQUIRE(parkHours(candidate) == hours);
+  return {"setting the park's opening hours to 10:00 to 22:00 while guests are in the park", set};
+}
+
 // The world's segment with the key, requiring that there is one.
 ParkSegment segmentWithKey(const World &world, EntityKey key) {
   std::optional<ParkSegment> found;
@@ -601,6 +616,7 @@ std::vector<ChosenEdit> chosenEdits(const World &before) {
                                 curvingJunctionEdgeUnderGuests(before),
                                 settingTaperAtGuestJunctionUnderGuests(before),
                                 settingShopToDrinkUnderGuests(before),
+                                settingOpeningHoursUnderGuests(before),
                                 restoringGuestSegmentUnderFreshKey(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);

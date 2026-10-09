@@ -50,6 +50,7 @@ Unordered pool this milestone draws later features from.
 - Hours that differ by day, such as late openings on chosen days. Gated on: a calendar with weekdays.
 - Benches and toilet blocks in sizes, such as a long bench or a large toilet block, with seats and stalls to match. Gated on: served-needs' seats and stalls.
 - Setting the stock of several shops at once, such as every shop on a street. Gated on: selecting several boxes.
+- Setting hours past midnight or all day from the Hours panel. SetOpeningHours already accepts them.
 
 ## Open questions
 

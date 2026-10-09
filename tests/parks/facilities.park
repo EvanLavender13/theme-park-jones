@@ -1,7 +1,7 @@
 tpj-park 1
 seed 1
 tick 0
-next-key 9
+next-key 10
 
 [entrance]
 1 x=0 z=126.5 facing-x=0 facing-z=-1
@@ -22,3 +22,6 @@ next-key 9
 [shop-stock]
 7 stock=drink
 8 stock=both
+
+[opening-hours]
+9 opening=36000 closing=79200
