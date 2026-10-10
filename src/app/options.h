@@ -1,6 +1,8 @@
 #ifndef TPJ_APP_OPTIONS_H
 #define TPJ_APP_OPTIONS_H
 
+#include "sim/guests/guests.h"
+
 #include <optional>
 #include <stdint.h>
 
@@ -20,8 +22,8 @@ struct Options {
   bool PrintHash = false;
   // Check the Debug panel's Graph checkbox at start.
   bool ShowGraph = false;
-  // Check the Debug panel's Food overlay checkbox at start.
-  bool ShowFoodOverlay = false;
+  // The need whose overlay --overlay shows at start, if it was given.
+  std::optional<GuestNeed> Overlay;
   // Write each frame's cost after the last frame.
   bool FrameTimes = false;
   // The speed to start at: 0 for paused at 1x, or 1, 2, or 4.
@@ -33,13 +35,15 @@ struct Options {
 // Reads the command line, argv[0] being the program's name. --park PATH starts from a park file,
 // --ticks N steps it N ticks before the first frame, --speed N starts at speed N, and --hash prints
 // the state hash after them and exits. --frames N exits after N frames. --graph starts with the
-// graph view on, and --overlay food with the food overlay on. --light-hour H starts with the Light
-// panel's preview at H:00. --frame-times writes each frame's cost after the last frame.
+// graph view on, and --overlay food, drink, rest, or toilet with that need's overlay shown.
+// --light-hour H starts with the Light panel's preview at H:00. --frame-times writes each frame's
+// cost after the last frame.
 // --capture PATH writes the last frame to PATH as a BMP and implies a limit of 3 frames when
 // --frames gives none that is positive. None, after logging the usage, for an unknown option, an
 // option missing its value, a --ticks value that is not a decimal count, a --speed value other
-// than 0, 1, 2, or 4, an --overlay value other than food, a --light-hour value that is not a whole
-// hour from 0 to 23, --frame-times without a positive --frames, or --hash with --frames,
+// than 0, 1, 2, or 4, an --overlay value other than food, drink, rest, or toilet, a --light-hour
+// value that is not a whole hour from 0 to 23, --frame-times without a positive --frames, or --hash
+// with --frames,
 // --capture, --graph, --overlay, --light-hour, or --speed.
 std::optional<Options> parseOptions(int argc, const char *const *argv);
 

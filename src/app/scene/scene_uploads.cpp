@@ -1,6 +1,6 @@
 #include "app/scene/scene_uploads.h"
 
-#include "legible/food.h"
+#include "legible/needs.h"
 #include "render/guest_mesh.h"
 #include "render/park_mesh.h"
 #include "views/availability_overlay.h"
@@ -82,9 +82,9 @@ bool uploadPreviewMeshes(Renderer &renderer, const World &world, const Preview &
       (shapeChanged && !setOverlayShape(renderer, shape))) {
     return false;
   }
-  return !look.FoodOverlay ||
+  return !look.Overlay ||
          setOverlayShades(renderer, availabilityShades(previewedWorld(world, preview), shape,
-                                                       FOOD_AVAILABILITY));
+                                                       needAvailability(*look.Overlay)));
 }
 
 } // namespace tpj

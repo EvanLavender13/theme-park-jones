@@ -15,19 +15,20 @@ It makes candidate worlds only with makeCandidate (decision 0025). It takes a wo
 
 The app calls:
 
-- food.h for foodAvailability
+- availability.h for availabilityAt
+- needs.h for needAvailability and needAvailabilityName
 - preview.h for keepPreview and previewedWorld
 - inspect.h for pickSubject and inspectSubject
 
-views calls availability.h for availabilityValues and availabilityBends. The app and tpj_bench read FOOD_AVAILABILITY from food.h.
+views calls availability.h for availabilityValues and availabilityBends. The app and tpj_bench read each need's availability from needs.h.
 
 ## Availability
 
 An availability at a place is how well one need is served by the sources a guest standing there can reach. It is the sum, over the supplied sources the guest can reach, of each source's relief discounted by the time it would take to be served there, walking and waiting (decision 0020).
 
-An AvailabilityDefinition in availability.h says which need. It gives the offer its sources publish, the curve that discounts a relief by time, and Half, the value an overlay of it shades halfway up its ramp. Adding an availability for another need, such as thirst, takes a new definition and no new code.
+An AvailabilityDefinition in availability.h says which need. It gives the offer its sources publish, the curve that discounts a relief by time, and Half, the value an overlay of it shades halfway up its ramp. Every need of a guest has one.
 
-availabilityAt(world, definition, place) gives the value and each source's contribution: its relief, route distance, wait, effective time, and term. The terms add up to the value exactly, so the value is attributed to its sources (principle 8). Sources' offers are found the same way guests find them.
+availabilityAt(world, definition, place) gives the value and each source's contribution: its relief, route distance, wait and effective time in game minutes, and term. The terms add up to the value exactly, so the value is attributed to its sources (principle 8). Sources' offers are found the same way guests find them.
 
 availabilityValues(world, definition, places) gives the value at each of many places in one call. Each value is exactly what availabilityAt gives at that place, so a shade and the tooltip over it agree. It finds each source's offer once per call, however many of the places reach the source. It keeps nothing after it returns.
 
@@ -35,7 +36,7 @@ availabilityBends(world, definition) gives the places along each guest segment's
 
 Distance is measured along the paths, so if a source is across a fence, its distance is the length of its route (principle 4). Every reachable supplied source contributes, however far. Its term only falls as its effective time grows (principle 5). If a place can reach no supplied source, or is not on the guest network, its value is 0.
 
-Food availability is FOOD_AVAILABILITY, in food.h. Its sources are shops' food offers. Its Half is a meal's relief with no walk and no wait, so a color means the same availability in every park. foodAvailability(world, place) gives it at a place.
+needAvailability(need) gives a need's availability, in needs.h. Food's sources are shops' food offers, drink's are shops' drink offers, rest's are benches' offers, and the toilet's are toilet blocks' offers. Every need is discounted by the same curve, because guests weigh a walk and a wait the same whatever they go for. The curve halves a relief for about every 20 game minutes and reaches nothing at about two hours. Each need's Half is the relief of one serving with no walk and no wait, so a color means the same availability in every park.
 
 ## Previews
 

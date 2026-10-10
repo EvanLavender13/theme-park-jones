@@ -27,7 +27,7 @@ constexpr float PARK_SIZE_METERS = 256.0f;
 Application::Application(const Options &options, World start)
     : Window(Video), Gui(Window), Gpu(Window, Gui, PARK_SIZE_METERS), Session(std::move(start)),
       Interactions(Session.generation()),
-      Ui({options.ShowGraph, options.ShowFoodOverlay}, GameSpeed(options.Speed),
+      Ui({options.ShowGraph, options.Overlay}, GameSpeed(options.Speed),
          LightPreview{options.LightHour.has_value(), options.LightHour.value_or(0) * 3600}),
       Clock(SDL_GetPerformanceCounter(), SDL_GetPerformanceFrequency()), Dialogs(Window.get()),
       FrameLimit(options.FrameLimit), CapturePath(options.CapturePath),
@@ -104,25 +104,25 @@ bool Application::runFrames() {
     // tooltips show one candidate, and frames between ticks rebuild nothing.
     const bool remade =
         Scene.syncPreview(Session.world(), Interactions.tentativeEdit(Session.world()));
-    // Kept current before the panels, for the food tooltip, and again after them, so a change of
-    // the checkbox shows in this frame.
+    // Kept current before the panels, for the need tooltip, and again after them, so a change of
+    // the Overlay row shows in this frame.
     bool shapeChanged = Scene.syncOverlayShape(previewedWorld(Session.world(), Scene.preview()),
-                                               Ui.shown().FoodOverlay);
+                                               Ui.shown().Overlay.has_value());
 
     ImDrawData *drawData = Ui.build(Window.get(), Dialogs, Session, Camera, Interactions,
                                     Scene.preview(), Scene.overlayShape(), input.History);
     shapeChanged = Scene.syncOverlayShape(previewedWorld(Session.world(), Scene.preview()),
-                                          Ui.shown().FoodOverlay) ||
+                                          Ui.shown().Overlay.has_value()) ||
                    shapeChanged;
 
     const bool lastFrame = FrameLimit > 0 && frame >= FrameLimit;
     // While the Light panel previews a time, it lights the frame in place of the clock.
     const LightPreview &preview = Ui.lightPreview();
     const DayLight light = preview.On ? dayLightAt(preview.Second) : dayLightOf(Session.world());
-    // The meshes are updated after the panels, so a change of the checkbox shows in this frame.
+    // The meshes are updated after the panels, so a change of the Overlay row shows in this frame.
     const PreviewLook look{Interactions.highlighted(Session.world()),
                            Interactions.subject(),
-                           Ui.shown().FoodOverlay,
+                           Ui.shown().Overlay,
                            Interactions.pathStart(Session.world()),
                            Interactions.pathFinish(Session.world()),
                            Interactions.editHandles(Session.world()),

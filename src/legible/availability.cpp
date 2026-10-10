@@ -18,10 +18,15 @@
 namespace tpj {
 namespace {
 
-// The curve at a time in seconds: its first point's Y at or before its first X, its last point's
-// at or beyond its last X, and its last point's for a NaN.
-double discount(std::span<const CurvePoint> curve, double seconds) {
-  const double t = std::clamp(seconds, curve.front().X, curve.back().X);
+// An offer's wait, in game minutes.
+double waitMinutes(uint64_t ticks) {
+  return static_cast<double>(ticks) * static_cast<double>(GAME_SECONDS_PER_TICK) / 60.0;
+}
+
+// The curve at a time in game minutes: its first point's Y at or before its first X, its last
+// point's at or beyond its last X, and its last point's for a NaN.
+double discount(std::span<const CurvePoint> curve, double minutes) {
+  const double t = std::clamp(minutes, curve.front().X, curve.back().X);
   for (size_t i = 1; i < curve.size(); ++i) {
     const CurvePoint &a = curve[i - 1];
     const CurvePoint &b = curve[i];
@@ -58,10 +63,10 @@ std::optional<OfferEntry> suppliedOffer(const World &world,
 AvailabilityContribution contributionOf(const AvailabilityDefinition &definition, EntityKey source,
                                         const RouteEntry &route, const OfferEntry &offer) {
   AvailabilityContribution contribution;
-  contribution.Shop = source;
+  contribution.Source = source;
   contribution.Relief = offer.Relief;
   contribution.Distance = route.Distance;
-  contribution.Wait = static_cast<double>(offer.Wait) * SIM_TICK_SECONDS;
+  contribution.Wait = waitMinutes(offer.Wait);
   contribution.Time = contribution.Distance / REFERENCE_SPEED + contribution.Wait;
   contribution.Term = contribution.Relief * discount(definition.Curve, contribution.Time);
   return contribution;
@@ -136,9 +141,9 @@ int stretchesOf(std::optional<double> start, std::optional<double> end, double l
 
 // Adds to bends, as places on the carrier from the edge's start, each place strictly inside the
 // edge where the source's route turns from one end to the other or its effective time reaches a
-// point of the curve.
+// point of the curve, with the source's wait in game minutes.
 void addBends(EntityKey carrier, double from, double length, std::optional<double> start,
-              std::optional<double> end, double waitSeconds, std::span<const CurvePoint> curve,
+              std::optional<double> end, double wait, std::span<const CurvePoint> curve,
               std::vector<Place> &bends) {
   std::array<Stretch, 2> stretches;
   const int count = stretchesOf(start, end, length, stretches);
@@ -146,7 +151,7 @@ void addBends(EntityKey carrier, double from, double length, std::optional<doubl
     bends.push_back({carrier, from + stretches[0].End});
   }
   for (const CurvePoint &point : curve) {
-    const double distance = (point.X - waitSeconds) * REFERENCE_SPEED;
+    const double distance = (point.X - wait) * REFERENCE_SPEED;
     for (int i = 0; i < count; ++i) {
       const Stretch &stretch = stretches[static_cast<size_t>(i)];
       const double along = stretch.Start + (distance - stretch.At) * stretch.Slope;
@@ -239,8 +244,8 @@ void addEdgeBends(const Edge &edge, std::span<const StopEntry> atStart,
       end = atEnd[b++].Distance;
     }
     if (const std::optional<OfferEntry> offer = offers.of(source)) {
-      addBends(edge.Carrier, edge.From, edge.Length, start, end,
-               static_cast<double>(offer->Wait) * SIM_TICK_SECONDS, definition.Curve, bends);
+      addBends(edge.Carrier, edge.From, edge.Length, start, end, waitMinutes(offer->Wait),
+               definition.Curve, bends);
     }
   }
 }

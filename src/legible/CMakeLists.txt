@@ -2,7 +2,7 @@
 # link the simulation alone, so tests compute them without a window (principle 10).
 add_library(tpj_legible STATIC
     availability.cpp
-    food.cpp
+    needs.cpp
     inspect.cpp
     preview.cpp)
 target_include_directories(tpj_legible PUBLIC ${CMAKE_SOURCE_DIR}/src)

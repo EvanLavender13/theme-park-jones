@@ -24,7 +24,7 @@ add_executable(tpj_app
     scene/scene_uploads.cpp
     session/park_dialogs.cpp
     ui/debug_panel.cpp
-    ui/food_tooltip.cpp
+    ui/need_tooltip.cpp
     ui/graph_view.cpp
     ui/hours_panel.cpp
     ui/inspector_window.cpp

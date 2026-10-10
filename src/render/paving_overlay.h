@@ -18,15 +18,13 @@ namespace tpj {
 // The shading lies this far above the ground: over the guest paving and under its edge lines,
 // which lie EDGE_LIFT above it.
 inline constexpr float OVERLAY_HEIGHT = pathLift(PathKind::Guest) + 0.0025f;
-// Viridis at quarters of its range, from dark purple to yellow: perceptually uniform and
-// colorblind-safe.
+// Viridis at quarters of its range, from dark purple, which 0, the worst value, takes, to yellow:
+// perceptually uniform and colorblind-safe.
 inline constexpr std::array<Rgba, 5> OVERLAY_RAMP{{{0.267f, 0.004f, 0.329f, 1.0f},
                                                    {0.231f, 0.322f, 0.545f, 1.0f},
                                                    {0.129f, 0.565f, 0.549f, 1.0f},
                                                    {0.365f, 0.784f, 0.388f, 1.0f},
                                                    {0.992f, 0.906f, 0.145f, 1.0f}}};
-// No value at all, in a near white that neither the ramp nor either kind of paving gives.
-inline constexpr Rgba OVERLAY_ZERO_COLOR{0.96f, 0.96f, 0.96f, 1.0f};
 
 // A vertex of the overlay's pieces: where it lies, and the index of its piece in the shape.
 struct OverlayVertex {
