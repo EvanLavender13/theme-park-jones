@@ -500,6 +500,24 @@ next-key 2455
 [drink-offer-stepped]
 13200854312701984269 readable=[] pending=[]
 
+[rest-visits-ledger]
+14970986777255639189 packets=[] stocks=[] created=0 consumed=[]
+
+[rests-ledger]
+11905221482445396353 packets=[] stocks=[] created=0 consumed=[]
+
+[toilet-visits-ledger]
+16408065207052359706 packets=[] stocks=[] created=0 consumed=[]
+
+[toilet-uses-ledger]
+10989479341532649621 packets=[] stocks=[] created=0 consumed=[]
+
+[rest-offer-stepped]
+13155209037867564218 readable=[] pending=[]
+
+[toilet-offer-stepped]
+16819719754544225480 readable=[] pending=[]
+
 [guest]
 425 at={carrier=187 distance=2.988337058846457} x=9.682390610959324 z=-7.011662941153543 aim={carrier=187 distance=12.953067631264663} turn={carrier=0 from=0 to=0} forward=true activity=heading-to-shop hunger=1 hunger-rate=0.0006073489002095252 speed=1.0582213780292153 share=0.14889977594552972 stay-until=37800 target=413 meal-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
 426 at={carrier=324 distance=1.4239915183033247} x=-98.57600848169668 z=69.3708131834779 aim={carrier=325 distance=1.3738542713615374} turn={carrier=324 from=10 to=10} forward=true activity=heading-to-shop hunger=0.7811359461207235 hunger-rate=0.0006958810547542846 speed=1.5189772582669756 share=0.7360753549545775 stay-until=37800 target=416 meal-relief=0.5 meals-eaten=1 last-meal={tick=1395 before=1 after=0.5}

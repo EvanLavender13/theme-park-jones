@@ -3,6 +3,8 @@
 #include "sim/medium/field.h"
 #include "sim/medium/flow.h"
 #include "sim/medium/network.h"
+#include "sim/operations/facilities.h"
+#include "sim/operations/internal/offer_entries.h"
 #include "sim/operations/internal/shop_service.h"
 #include "sim/park/intent.h"
 #include "sim/routes/networks.h"
@@ -438,17 +440,6 @@ uint64_t deliveryDelay(const World &world, const DepotRoute &route, EntityKey sh
   return shipmentDelay(routeLengthBy(world, route.Depot, shop, layers).value_or(route.Distance));
 }
 
-// The shop's entries: the offer at each node anchored to it on the guest network.
-std::vector<PlacedEntry<OfferEntry>> offerEntries(const World &world, EntityKey shop,
-                                                  const OfferEntry &offer) {
-  const Network &network = parkNetwork(world, PathKind::Guest);
-  std::vector<PlacedEntry<OfferEntry>> entries;
-  for (const uint32_t node : network.anchoredNodes(shop)) {
-    entries.push_back({network.nodePlace(node), offer});
-  }
-  return entries;
-}
-
 // Publishes the offer of the good of each shop box that sells it, as for a shop that has not
 // stepped: with nothing queued, held, or shipped, its first guest waits for the order it places in
 // its first cycle.
@@ -627,6 +618,16 @@ void stepDepots(World &world) {
 
 } // namespace
 
+std::vector<PlacedEntry<OfferEntry>> offerEntries(const World &world, EntityKey source,
+                                                  const OfferEntry &offer) {
+  const Network &network = parkNetwork(world, PathKind::Guest);
+  std::vector<PlacedEntry<OfferEntry>> entries;
+  for (const uint32_t node : network.anchoredNodes(source)) {
+    entries.push_back({network.nodePlace(node), offer});
+  }
+  return entries;
+}
+
 std::optional<double> supplyRouteLength(const World &world, EntityKey at, EntityKey source) {
   return routeLengthBy(world, at, source, Layers::Both);
 }
@@ -743,6 +744,7 @@ void addOperations(WorldSchema &schema) {
                      {"path-networks", "route-distance", "drink-offer-field"});
   schema.addSystem(&stepShops);
   schema.addSystem(&stepDepots);
+  addFacilities(schema);
 }
 
 } // namespace tpj

@@ -13,6 +13,7 @@ add_library(tpj_sim STATIC
     medium/network.cpp
     musl_exp.cpp
     musl_log.cpp
+    operations/facilities.cpp
     operations/operations.cpp
     park/curves.cpp
     park/edits.cpp

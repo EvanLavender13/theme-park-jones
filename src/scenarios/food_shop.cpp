@@ -5,6 +5,7 @@
 #include "sim/guests/guests.h"
 #include "sim/medium/flow.h"
 #include "sim/mix.h"
+#include "sim/operations/facilities.h"
 #include "sim/operations/operations.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
@@ -38,14 +39,50 @@ constexpr double SPAWN_CHANCE = 1.0 / 45.0;
 // more.
 constexpr double LEAST_PATIENCE = 100.0;
 constexpr double EXTRA_PATIENCE = 1500.0;
-// A visit takes 1 to 1 + LONGEST_WALK ticks to reach its shop.
+// A visit takes 1 to 1 + LONGEST_WALK ticks to reach its box.
 constexpr double LONGEST_WALK = 60.0;
-// The cause a guest consumes a drink with.
+// The causes a guest consumes a drink, a rest, and a toilet use with.
 constexpr std::string_view DRUNK_CAUSE = "drunk";
+constexpr std::string_view RESTED_CAUSE = "rested";
+constexpr std::string_view USED_CAUSE = "used";
 
-// Guests whose visit has come back consume it, with any meal or drink, and leave, and guests out of
-// patience leave without it. Then a guest may appear and send a visit to a drawn shop, for food or
-// drink, whichever the shop sells, drawn when it sells both.
+// The guest consumes every unit of the kind it holds, with the cause.
+template <typename K> void consumeHeld(World &world, EntityKey guest, std::string_view cause) {
+  const int64_t units = unitsHeld<K>(world, guest, guest);
+  if (units > 0) {
+    consumeUnits<K>(world, guest, guest, units, cause);
+  }
+}
+
+// The guest sends one visit to the box, arriving after the walk: to a bench for rest, to a toilet
+// block for the toilet, and to a shop for food or drink, whichever it sells, drawn when it sells
+// both.
+void sendVisit(World &world, EntityKey key, const ParkBox &target, uint32_t walk) {
+  if (target.Kind == BoxKind::Bench) {
+    createUnits<RestVisits>(world, key, key, 1);
+    sendUnits<RestVisits>(world, key, target.Key, key, 1, walk);
+    return;
+  }
+  if (target.Kind == BoxKind::ToiletBlock) {
+    createUnits<ToiletVisits>(world, key, key, 1);
+    sendUnits<ToiletVisits>(world, key, target.Key, key, 1, walk);
+    return;
+  }
+  const bool forFood =
+      sells(target.Stock, Good::Food) && (!sells(target.Stock, Good::Drink) ||
+                                          drawUniform(drawKey(world, key, GUEST_PURPOSE, 3)) < 0.5);
+  if (forFood) {
+    createUnits<GuestVisits>(world, key, key, 1);
+    sendUnits<GuestVisits>(world, key, target.Key, key, 1, walk);
+  } else {
+    createUnits<DrinkVisits>(world, key, key, 1);
+    sendUnits<DrinkVisits>(world, key, target.Key, key, 1, walk);
+  }
+}
+
+// Guests whose visit has come back consume it, with any serving, and leave, and guests out of
+// patience leave without it. Then a guest may appear and send a visit to a drawn shop, bench, or
+// toilet block.
 void stepGuests(World &world) {
   std::vector<EntityKey> leaving;
   for (const EntityKey key : world.keys()) {
@@ -55,21 +92,17 @@ void stepGuests(World &world) {
     }
     const int64_t visits = unitsHeld<GuestVisits>(world, key, key);
     const int64_t drinkVisits = unitsHeld<DrinkVisits>(world, key, key);
-    if (visits > 0 || drinkVisits > 0) {
-      if (visits > 0) {
-        consumeUnits<GuestVisits>(world, key, key, visits, FINISHED_CAUSE);
-      }
-      if (drinkVisits > 0) {
-        consumeUnits<DrinkVisits>(world, key, key, drinkVisits, FINISHED_CAUSE);
-      }
-      const int64_t meals = unitsHeld<Meals>(world, key, key);
-      if (meals > 0) {
-        consumeUnits<Meals>(world, key, key, meals, EATEN_CAUSE);
-      }
-      const int64_t drinks = unitsHeld<Drinks>(world, key, key);
-      if (drinks > 0) {
-        consumeUnits<Drinks>(world, key, key, drinks, DRUNK_CAUSE);
-      }
+    const int64_t restVisits = unitsHeld<RestVisits>(world, key, key);
+    const int64_t toiletVisits = unitsHeld<ToiletVisits>(world, key, key);
+    if (visits > 0 || drinkVisits > 0 || restVisits > 0 || toiletVisits > 0) {
+      consumeHeld<GuestVisits>(world, key, FINISHED_CAUSE);
+      consumeHeld<DrinkVisits>(world, key, FINISHED_CAUSE);
+      consumeHeld<RestVisits>(world, key, FINISHED_CAUSE);
+      consumeHeld<ToiletVisits>(world, key, FINISHED_CAUSE);
+      consumeHeld<Meals>(world, key, EATEN_CAUSE);
+      consumeHeld<Drinks>(world, key, DRUNK_CAUSE);
+      consumeHeld<Rests>(world, key, RESTED_CAUSE);
+      consumeHeld<ToiletUses>(world, key, USED_CAUSE);
       leaving.push_back(key);
     } else if (world.Tick >= guest->LeavesAt) {
       leaving.push_back(key);
@@ -81,34 +114,24 @@ void stepGuests(World &world) {
   if (drawUniform(drawKey(world, NULL_KEY, SPAWN_PURPOSE, 0)) >= SPAWN_CHANCE) {
     return;
   }
-  std::vector<ParkBox> shops;
+  std::vector<ParkBox> visited;
   for (const ParkBox &box : parkBoxes(world)) {
-    if (box.Kind == BoxKind::Shop) {
-      shops.push_back(box);
+    if (box.Kind != BoxKind::Depot) {
+      visited.push_back(box);
     }
   }
   const EntityKey key = world.createEntity();
   const double patience =
       LEAST_PATIENCE + (EXTRA_PATIENCE * drawUniform(drawKey(world, key, GUEST_PURPOSE, 0)));
   world.emplace<SyntheticGuest>(key, SyntheticGuest{world.Tick + static_cast<uint64_t>(patience)});
-  if (shops.empty()) {
+  if (visited.empty()) {
     return;
   }
   const auto pick = static_cast<size_t>(drawUniform(drawKey(world, key, GUEST_PURPOSE, 1)) *
-                                        static_cast<double>(shops.size()));
+                                        static_cast<double>(visited.size()));
   const auto walk = static_cast<uint32_t>(
       1.0 + (LONGEST_WALK * drawUniform(drawKey(world, key, GUEST_PURPOSE, 2))));
-  const ParkBox &shop = shops[pick];
-  const bool forFood =
-      sells(shop.Stock, Good::Food) &&
-      (!sells(shop.Stock, Good::Drink) || drawUniform(drawKey(world, key, GUEST_PURPOSE, 3)) < 0.5);
-  if (forFood) {
-    createUnits<GuestVisits>(world, key, key, 1);
-    sendUnits<GuestVisits>(world, key, shop.Key, key, 1, walk);
-  } else {
-    createUnits<DrinkVisits>(world, key, key, 1);
-    sendUnits<DrinkVisits>(world, key, shop.Key, key, 1, walk);
-  }
+  sendVisit(world, key, visited[pick], walk);
 }
 
 // The backstage segment is deleted CUT_TICK ticks into every CUT_PERIOD and drawn again at the
@@ -121,13 +144,17 @@ AddPath supplyPath() {
   return AddPath{PathKind::Backstage, {NewPoint{{12.0, 122.0}}, NewPoint{{12.0, 87.0}}}};
 }
 
-// routes.park's shop, depot, and backstage segment, and a shop far from any backstage segment.
-// The first shop sells food and drink.
+// routes.park's shop, depot, and backstage segment, a shop far from any backstage segment, and a
+// bench and a toilet block beside it. The first shop sells food and drink. The bench's footprint,
+// x -41 to -39 and z 44.5 to 45.5, and the toilet block's, x -64 to -56 and z 57.5 to 62.5, clear
+// the second shop's, x -44 to -36 and z 57 to 63.
 void populateFoodShop(World &world) {
   applyCommand(world, AddBox{BoxKind::Shop, Pose{6.5, 115.0, -1.0, 0.0}});
   applyCommand(world, SetShopStock{parkBoxes(world).front().Key, ShopStock::Both});
   applyCommand(world, AddBox{BoxKind::Depot, Pose{12.0, 80.0, 0.0, 1.0}});
   applyCommand(world, AddBox{BoxKind::Shop, Pose{-40.0, 60.0, 0.0, 1.0}});
+  applyCommand(world, AddBox{BoxKind::Bench, Pose{-40.0, 45.0, 0.0, 1.0}});
+  applyCommand(world, AddBox{BoxKind::ToiletBlock, Pose{-60.0, 60.0, 0.0, 1.0}});
   applyCommand(world, supplyPath());
 }
 

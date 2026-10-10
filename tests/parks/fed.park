@@ -70,6 +70,24 @@ next-key 24
 [drink-offer-stepped]
 13200854312701984269 readable=[] pending=[]
 
+[rest-visits-ledger]
+14970986777255639189 packets=[] stocks=[] created=0 consumed=[]
+
+[rests-ledger]
+11905221482445396353 packets=[] stocks=[] created=0 consumed=[]
+
+[toilet-visits-ledger]
+16408065207052359706 packets=[] stocks=[] created=0 consumed=[]
+
+[toilet-uses-ledger]
+10989479341532649621 packets=[] stocks=[] created=0 consumed=[]
+
+[rest-offer-stepped]
+13155209037867564218 readable=[] pending=[]
+
+[toilet-offer-stepped]
+16819719754544225480 readable=[] pending=[]
+
 [guest-presence-ground]
 12974152610777186460 readable=[] next=[] changing=false
 
