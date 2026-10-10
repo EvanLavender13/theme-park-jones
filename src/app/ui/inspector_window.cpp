@@ -8,8 +8,8 @@
 namespace tpj {
 namespace {
 
-void drawRows(const std::vector<InspectorRow> &rows) {
-  if (!ImGui::BeginTable("rows", 2, ImGuiTableFlags_SizingFixedFit)) {
+void drawRows(const char *id, const std::vector<InspectorRow> &rows) {
+  if (!ImGui::BeginTable(id, 2, ImGuiTableFlags_SizingFixedFit)) {
     return;
   }
   for (const InspectorRow &row : rows) {
@@ -83,12 +83,16 @@ InspectorUse drawInspector(const Inspection &inspection,
     if (inspection.Gone) {
       ImGui::TextUnformatted("No longer in the park");
     } else {
-      drawRows(inspection.Rows);
+      drawRows("rows", inspection.Rows);
       if (stock) {
         drawStockControls(*stock, use);
       }
       if (!inspection.Choices.empty()) {
         drawChoices(inspection.Choices);
+      }
+      if (!inspection.HomeTerms.empty()) {
+        ImGui::TextUnformatted("Going home");
+        drawRows("home-terms", inspection.HomeTerms);
       }
     }
   }

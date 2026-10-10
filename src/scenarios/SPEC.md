@@ -40,7 +40,7 @@ tpj_scenarios --slice-parks fed warm cut main-street warm-main-street facilities
 
 - warm is the park after WARM_TICKS cycles, which is long enough for a guest to be waiting at the shop and a shipment to be in transit.
 - cut is warm one cycle later with its backstage paths deleted, so the shop's supply is gone from the first tick.
-- warm-main-street is main-street after MAIN_STREET_WARM_TICKS cycles, long enough that guests arrive and leave about equally often, so they fill the park in every activity. main-street and facilities are read and never written.
+- warm-main-street is main-street after MAIN_STREET_WARM_TICKS cycles, long enough that guests fill the park in every activity, some of them heading home. main-street and facilities are read and never written.
 - stocked is facilities with a depot and a backstage path added, stepped until a shop holds food, a shop holds drink, and drink is still on its way. If that doesn't happen within STOCKED_LIMIT_TICKS cycles, it fails.
 
 tests/parks/fed.park, warm.park, cut.park, warm-main-street.park, and stocked.park are its output. If the simulation's rules change, running it again remakes the parks under the new rules. It writes no file when it fails.

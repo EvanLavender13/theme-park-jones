@@ -6,7 +6,7 @@ This module holds park intent: what the player authored, from which the rest of 
 
 addParkIntent registers the intent types entrance, path-point, path-segment, box, shop-stock, and opening-hours. Their components are private to this module (decision 0039). addParkEdits registers the fifteen commands. makeParkSchema calls both after the medium's types.
 
-Other modules read intent only through parkEntrances, parkPathPoints, parkSegments, parkCorners, and parkBoxes, the paved surface through parkSurface, with or without walkways, its edges through parkEdges, and its tapers through parkTapers. Each returns every entity holding that kind of intent, in key order, as the public values ParkEntrance, ParkPathPoint, ParkSegment, ParkCorner, ParkBox, ParkEdge, and ParkTaper. Other modules read the opening hours through parkHours, which returns the public value OpeningHours. Other modules change intent only through commands.
+Other modules read intent only through parkEntrances, parkPathPoints, parkSegments, parkCorners, and parkBoxes, the paved surface through parkSurface, with or without walkways, its edges through parkEdges, and its tapers through parkTapers. Each returns every entity holding that kind of intent, in key order, as the public values ParkEntrance, ParkPathPoint, ParkSegment, ParkCorner, ParkBox, ParkEdge, and ParkTaper. Other modules read the opening hours through parkHours, which returns the public value OpeningHours, and ask whether hours are open at a second of the day through isOpenAt. Other modules change intent only through commands.
 
 segmentLine, cornerRadiusFor, arcOf, bendPlace, bendAlong, edgeRadiusFor, stopPosition, stopPositions, pathCrossings, editedSegments, editedSurface, pieceDistance, walkwayPiece, footprintOf, and the sizes pathWidth, MIN_SEGMENT_LENGTH, ARC_TOLERANCE, DEFAULT_CORNER_RADIUS, DEFAULT_EDGE_RADIUS, which is 0, DEFAULT_TAPER_LENGTH, which is 0, DEFAULT_HOURS, which is 9:00 to 21:00, boxSize, ENTRANCE_SIZE, and PARK_SIZE are public, so that the renderer, the tools, and routes measure the same shapes this module validates.
 
@@ -19,7 +19,7 @@ The park is a square PARK_SIZE on a side, centered on the origin of the ground.
 - A box has a kind, shop, depot, bench, or toilet block, and a pose.
 - A shop has a stock setting: food, drink, or both, which says what it sells. A shop with no stock setting stocks food. parkBoxes gives each box's stock setting, food unless one is set.
 - An entrance has a pose.
-- The park has opening hours: the second of the day it opens and the second it closes, each less than DAY_SECONDS. If the closing time is at or before the opening time, the hours run past midnight, and if the two are equal, the park is open all day. A park with no hours set has DEFAULT_HOURS, 9:00 to 21:00. parkHours gives the park's hours.
+- The park has opening hours: the second of the day it opens and the second it closes, each less than DAY_SECONDS. If the closing time is at or before the opening time, the hours run past midnight, and if the two are equal, the park is open all day. A park with no hours set has DEFAULT_HOURS, 9:00 to 21:00. parkHours gives the park's hours. isOpenAt(hours, second) says whether a park with the hours is open at that second of the day: from the opening second up to but not including the closing second, past midnight when the hours run past it, and at every second when the park is open all day.
 
 A Pose is a position and a facing on the ground, held as given. A default Pose is at the origin, facing -z.
 

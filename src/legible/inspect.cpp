@@ -1,5 +1,6 @@
 #include "legible/inspect.h"
 
+#include "sim/clock.h"
 #include "sim/guests/guests.h"
 #include "sim/operations/operations.h"
 #include "sim/park/intent.h"
@@ -50,12 +51,17 @@ std::vector<InspectorRow> guestRows(const World &world, const GuestRecord &recor
   rows.push_back({"Thirst", twoDecimals(record.Thirst)});
   rows.push_back({"Tiredness", twoDecimals(record.Tiredness)});
   rows.push_back({"Bladder", twoDecimals(record.Bladder)});
-  rows.push_back({"Target", record.Target == NULL_KEY ? "none"
-                                                      : boxText(world, record.Target) + " for " +
-                                                            displayName(record.TargetNeed)});
-  rows.push_back({"Stay", record.StayUntil > world.Tick
-                              ? seconds(record.StayUntil - world.Tick) + " s left"
-                              : "over"});
+  const ParkTime arrived = parkTime(record.Arrived);
+  rows.push_back({"Arrived", std::format("day {}, {}:{:02}", arrived.Day, arrived.Second / 3600,
+                                         (arrived.Second % 3600) / 60)});
+  if (record.Target != NULL_KEY) {
+    rows.push_back(
+        {"Target", boxText(world, record.Target) + " for " + displayName(record.TargetNeed)});
+  } else if (record.Activity == GuestActivity::HeadingHome) {
+    rows.push_back({"Target", "home for " + displayName(record.Reason)});
+  } else {
+    rows.push_back({"Target", "none"});
+  }
   rows.push_back({"Meals eaten", std::format("{}", record.MealsEaten)});
   if (const std::optional<GuestMeal> &meal = record.LastMeal) {
     rows.push_back({"Last meal", std::format("{} s ago, hunger {:.2f} to {:.2f}",
@@ -67,7 +73,8 @@ std::vector<InspectorRow> guestRows(const World &world, const GuestRecord &recor
   return rows;
 }
 
-// Each option the guest would weigh now, its facility, need, and terms only for an offer.
+// Each option the guest would weigh now: an offer's facility, need, and terms, and heading home's
+// reason and commitment.
 std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOption> &options) {
   std::vector<ChoiceRow> rows;
   for (const ChoiceOption &option : options) {
@@ -81,6 +88,10 @@ std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOp
       row.Commitment = twoDecimals(option.Commitment);
     } else {
       row.Option = displayName(option.Kind);
+      if (option.Kind == ChoiceKind::HeadHome) {
+        row.Need = displayName(option.Reason);
+        row.Commitment = twoDecimals(option.Commitment);
+      }
     }
     row.Score = twoDecimals(option.Score);
     row.Probability = twoDecimals(option.Probability);
@@ -95,6 +106,21 @@ std::string capitalized(std::string name) {
     name[0] = static_cast<char>(name[0] - 'a' + 'A');
   }
   return name;
+}
+
+// Heading home's base and each reason's term, or nothing when heading home is not an option.
+std::vector<InspectorRow> homeTerms(const std::vector<ChoiceOption> &options) {
+  std::vector<InspectorRow> rows;
+  const auto home = std::ranges::find(options, ChoiceKind::HeadHome, &ChoiceOption::Kind);
+  if (home == options.end()) {
+    return rows;
+  }
+  rows.push_back({"Base", twoDecimals(home->Base)});
+  for (const HomeReason reason : HOME_REASONS) {
+    rows.push_back({capitalized(displayName(reason)),
+                    twoDecimals(home->Reasons[static_cast<size_t>(reason)])});
+  }
+  return rows;
 }
 
 std::vector<InspectorRow> shopRows(const ShopRecord &record) {
@@ -144,6 +170,7 @@ Inspection inspectSubject(const World &world, const InspectorSubject &subject) {
       if (const std::optional<std::vector<ChoiceOption>> options =
               guestOptions(world, subject.Key)) {
         inspection.Choices = choiceRows(world, *options);
+        inspection.HomeTerms = homeTerms(*options);
       }
     }
     return inspection;

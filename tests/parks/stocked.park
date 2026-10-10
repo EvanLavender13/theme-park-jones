@@ -88,14 +88,11 @@ next-key 22
 [toilet-offer-stepped]
 16819719754544225480 readable=[{source=6 entries=[{at={carrier=15177331698885887711 distance=0} value={relief=1 wait=0 supplied=true}}]}] pending=[]
 
-[guest]
-18 at={carrier=4 distance=7.213914031082538} x=0.8401629584935877 z=115.78608596891746 aim={carrier=9982319822281211652 distance=1.3633830083512315} turn={carrier=9982319822281211652 from=2.5 to=0} forward=true activity=wandering hunger=0.18743671560420738 hunger-rate=0.0005195636014355818 thirst=0.49226681822922447 thirst-rate=0.0006423632941427073 tiredness=0.08942892811331055 tiredness-rate=0.00965941077269184 bladder=0.0936264129611397 speed=1.3226025333929514 share=0.4106131641688226 stay-until=2742 target=0 target-need=hunger serving-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-19 at={carrier=4 distance=4.731666793576082} x=0.28643470683202926 z=118.26833320642392 aim={carrier=4 distance=14.686766901623685} turn={carrier=4 from=10 to=15.5} forward=true activity=wandering hunger=0.2230807923714662 hunger-rate=0.0005738114593360512 thirst=0.32581845208224297 thirst-rate=0.0007597174765642911 tiredness=0.0644682848009605 tiredness-rate=0.009567885361370362 bladder=0.132969306245906 speed=1.3475973502200476 share=0.5559511776516458 stay-until=2468 target=0 target-need=hunger serving-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-20 at={carrier=4 distance=1.7987283378542713} x=0.04890974875436839 z=121.20127166214573 aim={carrier=4 distance=11.75651907695162} turn={carrier=4 from=10 to=10} forward=true activity=heading-to-facility hunger=0.14158542438765326 hunger-rate=0.0004883306587281058 thirst=0.10885399935688876 thirst-rate=0.0006320686569096426 tiredness=0.032501824667419354 tiredness-rate=0.008555257367392606 bladder=0.04473821821852382 speed=1.2663489934386667 share=0.1471273777760797 stay-until=2152 target=8 target-need=thirst serving-relief=0.5 meals-eaten=0 last-meal={tick=0 before=0 after=0}
-21 at={carrier=17125955698113728469 distance=1.5994327181522863} x=0.01726548699976018 z=123.40056728184771 aim={carrier=4 distance=9.546117835845266} turn={carrier=0 from=0 to=0} forward=true activity=wandering hunger=0.08674793082834126 hunger-rate=0.00044526293954032134 thirst=0.24839553665318345 thirst-rate=0.0006549793009539436 tiredness=0.014186855784690056 tiredness-rate=0.008869411856697628 bladder=0.18611707965254268 speed=1.599526103185442 share=0.11097422605058149 stay-until=2134 target=0 target-need=hunger serving-relief=0 meals-eaten=0 last-meal={tick=0 before=0 after=0}
+[departure-tally]
+11521130776157876789 hunger=0 thirst=0 tiredness=0 toilet=0 closing=4
 
 [guest-presence-ground]
-12974152610777186460 readable=[{key=18 x=0.8401629584935877 z=115.78608596891746 value={x=0.1521291644568401 z=-1.3138242571434944} changed=269 dropped=false} {key=19 x=0.28643470683202926 z=118.26833320642392 value={x=0.04022872999168425 z=-1.346996758571919} changed=269 dropped=false} {key=20 x=0.04890974875436839 z=121.20127166214573 value={x=0.01342526833239599 z=-1.2662778270795627} changed=269 dropped=false} {key=21 x=0.01726548699976018 z=123.40056728184771 value={x=0.015960792629106033 z=-1.5994464692106192} changed=269 dropped=false}] next=[] changing=false
+12974152610777186460 readable=[] next=[] changing=false
 
 [hungry-footfall-kept]
-11741940842860801778 slots=[{source=11741940842860801778 entries=[{at={carrier=17125955698113728469 distance=1} value=0.0440187412044637 tick=270} {at={carrier=4 distance=5} value=0.13865294889147187 tick=270}]}] pending=[]
+11741940842860801778 slots=[{source=11741940842860801778 entries=[{at={carrier=17125955698113728469 distance=1} value=0.0009600790093927599 tick=240}]}] pending=[]
