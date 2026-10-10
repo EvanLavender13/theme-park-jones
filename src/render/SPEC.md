@@ -61,7 +61,7 @@ appendHandle adds a radius, edge, or taper handle as a flat disc of RADIUS_HANDL
 
 ## Guests
 
-buildGuestMesh draws each guest that has a position as an upright box where it stands. The box is shaded from blue when the guest is sated to pink when it is hungry. appendGuestEntity adds one guest's box, where buildGuestMesh draws it, in a given color. It adds nothing when the guest has no position.
+buildGuestMesh draws each guest that has a position as an upright box where it stands. The box is shaded from blue when every need of the guest is at 0 to pink when its most pressing need is at 1. appendGuestEntity adds one guest's box, where buildGuestMesh draws it, in a given color. It adds nothing when the guest has no position.
 
 ## Paving overlay
 

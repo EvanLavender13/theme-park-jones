@@ -18,13 +18,25 @@ namespace tpj {
 class World;
 class WorldSchema;
 
-// What a guest is doing: wandering the paths, heading to a shop, waiting there for its visit to
-// come back, or heading home.
-enum class GuestActivity : uint8_t { Wandering, HeadingToShop, Waiting, HeadingHome };
+// What a guest is doing: wandering the paths, heading to a shop, bench, or toilet block, waiting
+// there for its visit to come back, or heading home.
+enum class GuestActivity : uint8_t { Wandering, HeadingToFacility, Waiting, HeadingHome };
 
 constexpr std::array<std::string_view, 4> enumNames(GuestActivity /*value*/) {
-  return {"wandering", "heading-to-shop", "waiting", "heading-home"};
+  return {"wandering", "heading-to-facility", "waiting", "heading-home"};
 }
+
+// A need a guest has, which one kind of offer answers: hunger by meals, thirst by drinks,
+// tiredness by rests, and the bladder by toilet uses.
+enum class GuestNeed : uint8_t { Hunger, Thirst, Tiredness, Bladder };
+
+constexpr std::array<std::string_view, 4> enumNames(GuestNeed /*value*/) {
+  return {"hunger", "thirst", "tiredness", "bladder"};
+}
+
+// Every need, in the order a guest scores a facility's offers.
+inline constexpr std::array<GuestNeed, 4> NEEDS{GuestNeed::Hunger, GuestNeed::Thirst,
+                                                GuestNeed::Tiredness, GuestNeed::Bladder};
 
 // What a choice's option does: go to a shop for its offer, carry on wandering, or head home.
 enum class ChoiceKind : uint8_t { Offer, CarryOn, HeadHome };
@@ -33,11 +45,12 @@ constexpr std::array<std::string_view, 3> enumNames(ChoiceKind /*value*/) {
   return {"offer", "carry-on", "head-home"};
 }
 
-// One option of a choice: its kind, the shop for an offer, its terms, its score, and the
-// probability the softmax gave it. Carrying on and heading home have no terms.
+// One option of a choice: its kind, the facility and need for an offer, its terms, its score, and
+// the probability the softmax gave it. Carrying on and heading home have no terms.
 struct ChoiceOption {
   ChoiceKind Kind = ChoiceKind::CarryOn;
-  EntityKey Shop = NULL_KEY;
+  EntityKey Facility = NULL_KEY;
+  GuestNeed Need = GuestNeed::Hunger;
   double Relief = 0.0;
   double Distance = 0.0;
   double Wait = 0.0;
@@ -70,16 +83,20 @@ struct CurvePoint {
 };
 
 // What a guest publishes about itself for display and tests (decision 0025): what it is doing,
-// its place on the guest network, the ground position it stands on, how hungry it is, the tick its
-// stay ends, the shop it is heading to or waiting at, and the meals it has eaten and the last of
-// them. Nothing in the park reads it.
+// its place on the guest network, the ground position it stands on, its four needs, the tick its
+// stay ends, the facility it is heading to or waiting at and the need it goes there for, and the
+// meals it has eaten and the last of them. Nothing in the park reads it.
 struct GuestRecord {
   GuestActivity Activity = GuestActivity::Wandering;
   Place At;
   std::optional<GroundPoint> Position;
   double Hunger = 0.0;
+  double Thirst = 0.0;
+  double Tiredness = 0.0;
+  double Bladder = 0.0;
   uint64_t StayUntil = 0;
   EntityKey Target = NULL_KEY;
+  GuestNeed TargetNeed = GuestNeed::Hunger;
   uint64_t MealsEaten = 0;
   std::optional<GuestMeal> LastMeal;
 
@@ -96,6 +113,21 @@ inline constexpr double HUNGER_RATE_MIN = 1.0 / 2700.0;
 inline constexpr double HUNGER_RATE_MAX = 1.0 / 1350.0;
 // A guest arrives with a hunger drawn from 0 up to this.
 inline constexpr double STARTING_HUNGER_MAX = 0.4;
+// A guest's thirst rises by a rate per tick drawn from these, so from 0 to 1 in 33 to 67 game
+// minutes.
+inline constexpr double THIRST_RATE_MIN = 1.0 / 2000.0;
+inline constexpr double THIRST_RATE_MAX = 1.0 / 1000.0;
+// A guest arrives with a thirst drawn from 0 up to this.
+inline constexpr double STARTING_THIRST_MAX = 0.4;
+// A guest's tiredness rises by a rate per meter walked drawn from these, so from 0 to 1 in 100
+// to 150 m. It arrives with none.
+inline constexpr double TIREDNESS_RATE_MIN = 1.0 / 150.0;
+inline constexpr double TIREDNESS_RATE_MAX = 1.0 / 100.0;
+// A guest arrives with a bladder drawn from 0 up to this.
+inline constexpr double STARTING_BLADDER_MAX = 0.2;
+// How much each meal and each drink a guest takes fills its bladder.
+inline constexpr double BLADDER_PER_MEAL = 0.2;
+inline constexpr double BLADDER_PER_DRINK = 0.35;
 // The mean speed guests walk at, in meters per second.
 inline constexpr double WALK_SPEED = 1.3;
 // A guest's speed is drawn uniformly from WALK_SPEED less this up to WALK_SPEED plus this.
@@ -118,8 +150,8 @@ inline constexpr double SIDESTEP_SPEED = 0.6;
 inline constexpr double AIM_LOOKAHEAD = 10.0;
 // Meters before a node, along its route, at which a guest makes its choice for it.
 inline constexpr double TURN_LOOKAHEAD = 10.0;
-// How much an offer's relief matters at each hunger.
-inline constexpr std::array<CurvePoint, 4> HUNGER_CURVE{
+// How much an offer's relief matters at each level of the need it answers.
+inline constexpr std::array<CurvePoint, 4> NEED_CURVE{
     {{0.0, 0.0}, {0.3, 0.1}, {0.7, 0.8}, {1.0, 1.0}}};
 // An offer's terms: relief per unit of curve times relief, per meter of route, per second of
 // wait, and for the guest's current target.
@@ -134,9 +166,12 @@ inline constexpr double HEAD_HOME_SCORE = 10.0;
 inline constexpr double CHOICE_TEMPERATURE = 0.25;
 // Ticks a visit takes from the guest at a shop's anchor to the shop.
 inline constexpr uint32_t VISIT_DELAY = 1;
-// The causes a guest consumes its returned visit and its meal with.
+// The causes a guest consumes its returned visit and each serving with.
 inline constexpr std::string_view FINISHED_CAUSE = "finished";
 inline constexpr std::string_view EATEN_CAUSE = "eaten";
+inline constexpr std::string_view DRUNK_CAUSE = "drunk";
+inline constexpr std::string_view RESTED_CAUSE = "rested";
+inline constexpr std::string_view USED_CAUSE = "used";
 
 // The keys of every guest, ascending.
 std::vector<EntityKey> parkGuests(const World &world);
@@ -150,8 +185,8 @@ std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, Entity
 // rate drawn on its key, and gives its key. Throws std::invalid_argument, changing nothing, when
 // the place does not resolve on the guest network.
 EntityKey addGuest(World &world, const Place &place, uint64_t stayUntil);
-// The hunger curve's value at the hunger, clamped to [0, 1].
-double hungerCurve(double hunger);
+// The need curve's value at the level, clamped to [0, 1].
+double needCurve(double level);
 // Sets each option's softmax probability from the scores and returns the index the draw picks.
 // Throws std::invalid_argument for no options or a score that is not finite.
 size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options);

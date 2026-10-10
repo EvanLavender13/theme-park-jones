@@ -2,6 +2,7 @@
 
 #include "sim/guests/guests.h"
 #include "sim/operations/operations.h"
+#include "sim/park/intent.h"
 
 #include <algorithm>
 #include <format>
@@ -32,11 +33,26 @@ template <typename Enum> std::string displayName(Enum value) {
   return name;
 }
 
+// The box's kind and key, such as "bench 5", or "box <key>" when no box has the key.
+std::string boxText(const World &world, EntityKey key) {
+  for (const ParkBox &box : parkBoxes(world)) {
+    if (box.Key == key) {
+      return displayName(box.Kind) + " " + keyText(key);
+    }
+  }
+  return "box " + keyText(key);
+}
+
 std::vector<InspectorRow> guestRows(const World &world, const GuestRecord &record) {
   std::vector<InspectorRow> rows;
   rows.push_back({"Activity", displayName(record.Activity)});
   rows.push_back({"Hunger", twoDecimals(record.Hunger)});
-  rows.push_back({"Target", record.Target == NULL_KEY ? "none" : "shop " + keyText(record.Target)});
+  rows.push_back({"Thirst", twoDecimals(record.Thirst)});
+  rows.push_back({"Tiredness", twoDecimals(record.Tiredness)});
+  rows.push_back({"Bladder", twoDecimals(record.Bladder)});
+  rows.push_back({"Target", record.Target == NULL_KEY ? "none"
+                                                      : boxText(world, record.Target) + " for " +
+                                                            displayName(record.TargetNeed)});
   rows.push_back({"Stay", record.StayUntil > world.Tick
                               ? seconds(record.StayUntil - world.Tick) + " s left"
                               : "over"});
@@ -51,13 +67,14 @@ std::vector<InspectorRow> guestRows(const World &world, const GuestRecord &recor
   return rows;
 }
 
-// Each option the guest would weigh now, its terms only for an offer.
-std::vector<ChoiceRow> choiceRows(const std::vector<ChoiceOption> &options) {
+// Each option the guest would weigh now, its facility, need, and terms only for an offer.
+std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOption> &options) {
   std::vector<ChoiceRow> rows;
   for (const ChoiceOption &option : options) {
     ChoiceRow row;
     if (option.Kind == ChoiceKind::Offer) {
-      row.Option = "shop " + keyText(option.Shop);
+      row.Option = boxText(world, option.Facility);
+      row.Need = displayName(option.Need);
       row.Relief = twoDecimals(option.Relief);
       row.Distance = twoDecimals(option.Distance);
       row.Wait = twoDecimals(option.Wait);
@@ -126,7 +143,7 @@ Inspection inspectSubject(const World &world, const InspectorSubject &subject) {
       inspection.Rows = guestRows(world, *record);
       if (const std::optional<std::vector<ChoiceOption>> options =
               guestOptions(world, subject.Key)) {
-        inspection.Choices = choiceRows(*options);
+        inspection.Choices = choiceRows(world, *options);
       }
     }
     return inspection;

@@ -11,6 +11,7 @@
 #include "sim/medium/ground_field.h"
 #include "sim/medium/network.h"
 #include "sim/mix.h"
+#include "sim/operations/facilities.h"
 #include "sim/operations/operations.h"
 #include "sim/park/intent.h"
 #include "sim/routes/networks.h"
@@ -24,7 +25,9 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <stddef.h>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -63,20 +66,94 @@ const RouteEntry *homeEntry(const RouteSample &routes, const std::vector<EntityK
   return nearest;
 }
 
-// The source's offer when it says meals are supplied: its first food-offer entry at the place of
-// its lowest anchored node, or none. With an entry in route distance at the guest's place, the
-// offer is reachable.
-std::optional<OfferEntry> suppliedOffer(const World &world, const Network &network,
-                                        EntityKey source) {
+// The kinds each need uses: the offer field that answers it, the visits a guest sends for it, the
+// servings that come back, the cause a guest consumes a serving with, and how much each serving
+// fills the bladder.
+template <GuestNeed N> struct NeedKinds;
+
+template <> struct NeedKinds<GuestNeed::Hunger> {
+  using Offer = FoodOffer;
+  using Visits = GuestVisits;
+  using Servings = Meals;
+  static constexpr std::string_view Cause = EATEN_CAUSE;
+  static constexpr double BladderFill = BLADDER_PER_MEAL;
+};
+
+template <> struct NeedKinds<GuestNeed::Thirst> {
+  using Offer = DrinkOffer;
+  using Visits = DrinkVisits;
+  using Servings = Drinks;
+  static constexpr std::string_view Cause = DRUNK_CAUSE;
+  static constexpr double BladderFill = BLADDER_PER_DRINK;
+};
+
+template <> struct NeedKinds<GuestNeed::Tiredness> {
+  using Offer = RestOffer;
+  using Visits = RestVisits;
+  using Servings = Rests;
+  static constexpr std::string_view Cause = RESTED_CAUSE;
+  static constexpr double BladderFill = 0.0;
+};
+
+template <> struct NeedKinds<GuestNeed::Bladder> {
+  using Offer = ToiletOffer;
+  using Visits = ToiletVisits;
+  using Servings = ToiletUses;
+  static constexpr std::string_view Cause = USED_CAUSE;
+  static constexpr double BladderFill = 0.0;
+};
+
+template <typename Action, size_t... At>
+void forEachNeedAt(Action &action, std::index_sequence<At...> /*at*/) {
+  (action.template operator()<NEEDS[At]>(), ...);
+}
+
+// Calls the action's operator()<N>() for each need N of NEEDS, in order.
+template <typename Action> void forEachNeed(Action &&action) {
+  forEachNeedAt(action, std::make_index_sequence<NEEDS.size()>{});
+}
+
+// The guest's level of the need.
+template <typename G> auto &needLevel(G &guest, GuestNeed need) {
+  switch (need) {
+  case GuestNeed::Thirst:
+    return guest.Thirst;
+  case GuestNeed::Tiredness:
+    return guest.Tiredness;
+  case GuestNeed::Bladder:
+    return guest.Bladder;
+  case GuestNeed::Hunger:
+    break;
+  }
+  return guest.Hunger;
+}
+
+// The source's entry in the offer field at the node when it says the source can serve, or none.
+template <typename Offer>
+std::optional<OfferEntry> offerAt(const World &world, const Network &network, uint32_t node,
+                                  EntityKey source) {
+  const std::optional<OfferEntry> offer = sourceEntryAtNode<Offer>(world, network, node, source);
+  if (!offer || !offer->Supplied) {
+    return std::nullopt;
+  }
+  return offer;
+}
+
+// The source's offer for the need when it says it can serve: its first entry in the need's offer
+// field at its lowest anchored node, or none. With an entry in route distance at the guest's place,
+// the offer is reachable.
+std::optional<OfferEntry> needOffer(const World &world, const Network &network, EntityKey source,
+                                    GuestNeed need) {
   const std::optional<uint32_t> anchor = network.firstAnchoredNode(source);
   if (!anchor) {
     return std::nullopt;
   }
-  const std::optional<OfferEntry> offer =
-      sourceEntryAtNode<FoodOffer>(world, network, *anchor, source);
-  if (!offer || !offer->Supplied) {
-    return std::nullopt;
-  }
+  std::optional<OfferEntry> offer;
+  forEachNeed([&]<GuestNeed N>() {
+    if (N == need) {
+      offer = offerAt<typename NeedKinds<N>::Offer>(world, network, *anchor, source);
+    }
+  });
   return offer;
 }
 
@@ -133,7 +210,7 @@ RouteStep pickTurn(const World &world, EntityKey key, const Network &network, ui
 }
 
 // The options a guest weighs where it stands, scored as a choice scores them, and each offer's
-// relief by option index, for the meal it would give.
+// relief by option index, for the serving it would give.
 struct ScoredOptions {
   std::vector<ChoiceOption> Options;
   std::vector<double> Reliefs;
@@ -142,22 +219,30 @@ struct ScoredOptions {
 ScoredOptions scoreOptions(const World &world, const Guest &guest, const Network &network,
                            const RouteSample &routes, const std::vector<EntityKey> &entrances) {
   ScoredOptions scored;
-  const double curve = hungerCurve(guest.Hunger);
   for (const SampledEntry<RouteEntry> &entry : routes) {
-    const std::optional<OfferEntry> offer = suppliedOffer(world, network, entry.Source);
-    if (!offer) {
+    const std::optional<uint32_t> anchor = network.firstAnchoredNode(entry.Source);
+    if (!anchor) {
       continue;
     }
-    ChoiceOption option;
-    option.Kind = ChoiceKind::Offer;
-    option.Shop = entry.Source;
-    option.Relief = RELIEF_WEIGHT * curve * offer->Relief;
-    option.Distance = DISTANCE_WEIGHT * entry.Value.Distance;
-    option.Wait = WAIT_WEIGHT * (static_cast<double>(offer->Wait) * SIM_TICK_SECONDS);
-    option.Commitment = entry.Source == guest.Target ? COMMITMENT_BONUS : 0.0;
-    option.Score = option.Relief + option.Distance + option.Wait + option.Commitment;
-    scored.Options.push_back(option);
-    scored.Reliefs.push_back(offer->Relief);
+    forEachNeed([&]<GuestNeed N>() {
+      const std::optional<OfferEntry> offer =
+          offerAt<typename NeedKinds<N>::Offer>(world, network, *anchor, entry.Source);
+      if (!offer) {
+        return;
+      }
+      ChoiceOption option;
+      option.Kind = ChoiceKind::Offer;
+      option.Facility = entry.Source;
+      option.Need = N;
+      option.Relief = RELIEF_WEIGHT * needCurve(needLevel(guest, N)) * offer->Relief;
+      option.Distance = DISTANCE_WEIGHT * entry.Value.Distance;
+      option.Wait = WAIT_WEIGHT * (static_cast<double>(offer->Wait) * SIM_TICK_SECONDS);
+      option.Commitment =
+          entry.Source == guest.Target && N == guest.TargetNeed ? COMMITMENT_BONUS : 0.0;
+      option.Score = option.Relief + option.Distance + option.Wait + option.Commitment;
+      scored.Options.push_back(option);
+      scored.Reliefs.push_back(offer->Relief);
+    });
   }
   ChoiceOption carryOn;
   carryOn.Kind = ChoiceKind::CarryOn;
@@ -210,9 +295,10 @@ void choose(const World &world, EntityKey key, Guest &guest, const Network &netw
   const ChoiceOption &option = scored.Options[picked];
   guest.Target = NULL_KEY;
   if (option.Kind == ChoiceKind::Offer) {
-    guest.Activity = GuestActivity::HeadingToShop;
-    guest.Target = option.Shop;
-    guest.MealRelief = scored.Reliefs[picked];
+    guest.Activity = GuestActivity::HeadingToFacility;
+    guest.Target = option.Facility;
+    guest.TargetNeed = option.Need;
+    guest.ServingRelief = scored.Reliefs[picked];
   } else if (option.Kind == ChoiceKind::HeadHome) {
     guest.Activity = GuestActivity::HeadingHome;
   } else {
@@ -220,11 +306,16 @@ void choose(const World &world, EntityKey key, Guest &guest, const Network &netw
   }
 }
 
-// Sends the guest's visit to the shop: one unit created under its own key, arriving after
-// VISIT_DELAY.
-void sendVisit(World &world, EntityKey key, EntityKey shop) {
-  createUnits<GuestVisits>(world, key, key, 1);
-  sendUnits<GuestVisits>(world, key, shop, key, 1, VISIT_DELAY);
+// Sends the guest's visit for the need to the facility: one unit of the need's visits created under
+// its own key, arriving after VISIT_DELAY.
+void sendVisit(World &world, EntityKey key, EntityKey facility, GuestNeed need) {
+  forEachNeed([&]<GuestNeed N>() {
+    if (N == need) {
+      using Visits = typename NeedKinds<N>::Visits;
+      createUnits<Visits>(world, key, key, 1);
+      sendUnits<Visits>(world, key, facility, key, 1, VISIT_DELAY);
+    }
+  });
 }
 
 // Where the guest's heading takes it from its place: its target shop's route entry or the least
@@ -240,9 +331,9 @@ struct Heading {
 Heading headingOf(const World &world, Guest &guest, const Network &network,
                   const std::vector<EntityKey> &entrances) {
   Heading heading;
-  if (guest.Activity == GuestActivity::HeadingToShop) {
+  if (guest.Activity == GuestActivity::HeadingToFacility) {
     heading.Target = routeEntryAt(world, PathKind::Guest, network, guest.At, guest.Target);
-    if (!heading.Target || !suppliedOffer(world, network, guest.Target)) {
+    if (!heading.Target || !needOffer(world, network, guest.Target, guest.TargetNeed)) {
       guest.Activity = GuestActivity::Wandering;
       guest.Target = NULL_KEY;
       heading.Target.reset();
@@ -421,7 +512,7 @@ bool walk(World &world, EntityKey key, Guest &guest, const Network &network,
     const Heading heading = headingOf(world, guest, network, entrances);
     progress.MustChoose = progress.MustChoose || heading.Dropped;
     if (heading.Target && heading.Target->Next.Carrier == NULL_KEY) {
-      sendVisit(world, key, guest.Target);
+      sendVisit(world, key, guest.Target, guest.TargetNeed);
       guest.Activity = GuestActivity::Waiting;
       return true;
     }
@@ -499,22 +590,44 @@ void admitGuests(World &world, const Network &network) {
   }
 }
 
-// A waiting guest's visit has come back when it holds it: it finishes the visit, eats any meal
-// that came with it, and stops waiting. It forgets any choice it made at the shop's door, so it
-// chooses again there. Returns whether it is still waiting.
-bool awaitVisit(World &world, EntityKey key, Guest &guest) {
-  const int64_t visits = unitsHeld<GuestVisits>(world, key, key);
+// Takes back the guest's visit for the need when it holds it: it finishes the visit, and takes any
+// serving that came with it, which lowers the need by the offer's relief and fills the bladder by
+// the need's fill. A meal is also counted and recorded. Returns whether the visit was back.
+template <GuestNeed N> bool takeVisit(World &world, EntityKey key, Guest &guest) {
+  using Kinds = NeedKinds<N>;
+  const int64_t visits = unitsHeld<typename Kinds::Visits>(world, key, key);
   if (visits == 0) {
-    return true;
+    return false;
   }
-  consumeUnits<GuestVisits>(world, key, key, visits, FINISHED_CAUSE);
-  const int64_t meals = unitsHeld<Meals>(world, key, key);
-  if (meals > 0) {
-    consumeUnits<Meals>(world, key, key, meals, EATEN_CAUSE);
-    const double before = guest.Hunger;
-    guest.Hunger = std::max(0.0, before - guest.MealRelief);
-    ++guest.MealsEaten;
-    guest.LastMeal = {world.Tick, before, guest.Hunger};
+  consumeUnits<typename Kinds::Visits>(world, key, key, visits, FINISHED_CAUSE);
+  const int64_t servings = unitsHeld<typename Kinds::Servings>(world, key, key);
+  if (servings > 0) {
+    consumeUnits<typename Kinds::Servings>(world, key, key, servings, Kinds::Cause);
+    double &level = needLevel(guest, N);
+    const double before = level;
+    level = std::max(0.0, before - guest.ServingRelief);
+    guest.Bladder =
+        std::min(1.0, guest.Bladder + (Kinds::BladderFill * static_cast<double>(servings)));
+    if constexpr (N == GuestNeed::Hunger) {
+      ++guest.MealsEaten;
+      guest.LastMeal = {world.Tick, before, level};
+    }
+  }
+  return true;
+}
+
+// A waiting guest's visit has come back when it holds the visit for the need it went for: it takes
+// the visit and any serving, and stops waiting. It forgets any choice it made at the facility's
+// door, so it chooses again there. Returns whether it is still waiting.
+bool awaitVisit(World &world, EntityKey key, Guest &guest) {
+  bool back = false;
+  forEachNeed([&]<GuestNeed N>() {
+    if (N == guest.TargetNeed) {
+      back = takeVisit<N>(world, key, guest);
+    }
+  });
+  if (!back) {
+    return true;
   }
   guest.Activity = GuestActivity::Wandering;
   guest.Target = NULL_KEY;
@@ -522,11 +635,20 @@ bool awaitVisit(World &world, EntityKey key, Guest &guest) {
   return false;
 }
 
+// Tires the guest by its rate for each meter between where it stood and where it stands.
+void tire(Guest &guest, GroundPoint stood) {
+  const double x = guest.Ground.X - stood.X;
+  const double z = guest.Ground.Z - stood.Z;
+  guest.Tiredness =
+      std::min(1.0, guest.Tiredness + (guest.TirednessRate * std::sqrt((x * x) + (z * z))));
+}
+
 // Each guest, in ascending key order, leaves when its place does not resolve, which carrying
-// leaves only when the guest network has no carrier, and otherwise gets hungrier, and unless it is
-// still waiting for its visit to come back, walks. A guest that walks sets its entry in guest
-// presence, where it stands and how it moved, and one that starts waiting drops it. Guests that
-// leave drop their entries and go after all have stepped, and then the entrances admit new ones.
+// leaves only when the guest network has no carrier, and otherwise gets hungrier and thirstier, and
+// unless it is still waiting for its visit to come back, walks and tires with the ground it walks.
+// A guest that walks sets its entry in guest presence, where it stands and how it moved, and one
+// that starts waiting drops it. Guests that leave drop their entries and go after all have stepped,
+// and then the entrances admit new ones.
 void stepGuests(World &world) {
   const Network &network = parkNetwork(world, PathKind::Guest);
   const GuestGround &ground = guestGround(world);
@@ -540,13 +662,17 @@ void stepGuests(World &world) {
       continue;
     }
     guest.Hunger = std::min(1.0, guest.Hunger + guest.HungerRate);
+    guest.Thirst = std::min(1.0, guest.Thirst + guest.ThirstRate);
     if (guest.Activity == GuestActivity::Waiting && awaitVisit(world, key, guest)) {
       continue;
     }
     const GroundPoint stood = guest.Ground;
     if (!walk(world, key, guest, network, ground, entrances, lists)) {
       leaving.push_back(key);
-    } else if (guest.Activity == GuestActivity::Waiting) {
+      continue;
+    }
+    tire(guest, stood);
+    if (guest.Activity == GuestActivity::Waiting) {
       dropGroundEntry<GuestPresence>(world, key);
     } else {
       setGroundEntry<GuestPresence>(world, key, guest.Ground,
@@ -703,8 +829,12 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
   record.At = state->At;
   record.Position = state->Ground;
   record.Hunger = state->Hunger;
+  record.Thirst = state->Thirst;
+  record.Tiredness = state->Tiredness;
+  record.Bladder = state->Bladder;
   record.StayUntil = state->StayUntil;
   record.Target = state->Target;
+  record.TargetNeed = state->TargetNeed;
   record.MealsEaten = state->MealsEaten;
   if (state->MealsEaten > 0) {
     record.LastMeal = state->LastMeal;
@@ -741,6 +871,12 @@ EntityKey addGuest(World &world, const Place &place, uint64_t stayUntil) {
   guest.HungerRate = HUNGER_RATE_MIN + guestDraw(world, key, "guest-hunger-rate") *
                                            (HUNGER_RATE_MAX - HUNGER_RATE_MIN);
   guest.Hunger = guestDraw(world, key, "guest-starting-hunger") * STARTING_HUNGER_MAX;
+  guest.ThirstRate = THIRST_RATE_MIN + guestDraw(world, key, "guest-thirst-rate") *
+                                           (THIRST_RATE_MAX - THIRST_RATE_MIN);
+  guest.Thirst = guestDraw(world, key, "guest-starting-thirst") * STARTING_THIRST_MAX;
+  guest.TirednessRate = TIREDNESS_RATE_MIN + guestDraw(world, key, "guest-tiredness-rate") *
+                                                 (TIREDNESS_RATE_MAX - TIREDNESS_RATE_MIN);
+  guest.Bladder = guestDraw(world, key, "guest-starting-bladder") * STARTING_BLADDER_MAX;
   guest.Speed = WALK_SPEED - WALK_SPEED_SPREAD +
                 guestDraw(world, key, "guest-speed") * 2.0 * WALK_SPEED_SPREAD;
   guest.Share =
@@ -749,11 +885,11 @@ EntityKey addGuest(World &world, const Place &place, uint64_t stayUntil) {
   return key;
 }
 
-double hungerCurve(double hunger) {
-  const double h = std::clamp(hunger, HUNGER_CURVE.front().X, HUNGER_CURVE.back().X);
-  for (size_t i = 1; i < HUNGER_CURVE.size(); ++i) {
-    const CurvePoint &a = HUNGER_CURVE[i - 1];
-    const CurvePoint &b = HUNGER_CURVE[i];
+double needCurve(double level) {
+  const double h = std::clamp(level, NEED_CURVE.front().X, NEED_CURVE.back().X);
+  for (size_t i = 1; i < NEED_CURVE.size(); ++i) {
+    const CurvePoint &a = NEED_CURVE[i - 1];
+    const CurvePoint &b = NEED_CURVE[i];
     if (h == a.X) {
       return a.Y;
     }
@@ -761,7 +897,7 @@ double hungerCurve(double hunger) {
       return a.Y + (h - a.X) * (b.Y - a.Y) / (b.X - a.X);
     }
   }
-  return HUNGER_CURVE.back().Y;
+  return NEED_CURVE.back().Y;
 }
 
 size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options) {
