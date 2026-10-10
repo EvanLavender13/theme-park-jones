@@ -2,6 +2,7 @@
 
 #include "sim/clock.h"
 #include "sim/guests/guests.h"
+#include "sim/operations/facilities.h"
 #include "sim/operations/operations.h"
 #include "sim/park/intent.h"
 
@@ -73,39 +74,66 @@ std::vector<InspectorRow> guestRows(const World &world, const GuestRecord &recor
   return rows;
 }
 
-// Each option the guest would weigh now: an offer's facility, need, and terms, and heading home's
-// reason and commitment.
-std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOption> &options) {
-  std::vector<ChoiceRow> rows;
-  for (const ChoiceOption &option : options) {
-    ChoiceRow row;
-    if (option.Kind == ChoiceKind::Offer) {
-      row.Option = boxText(world, option.Facility);
-      row.Need = displayName(option.Need);
-      row.Relief = twoDecimals(option.Relief);
-      row.Distance = twoDecimals(option.Distance);
-      row.Wait = twoDecimals(option.Wait);
-      row.Commitment = twoDecimals(option.Commitment);
-    } else {
-      row.Option = displayName(option.Kind);
-      if (option.Kind == ChoiceKind::HeadHome) {
-        row.Need = displayName(option.Reason);
-        row.Commitment = twoDecimals(option.Commitment);
-      }
-    }
-    row.Score = twoDecimals(option.Score);
-    row.Probability = twoDecimals(option.Probability);
-    rows.push_back(std::move(row));
-  }
-  return rows;
-}
-
 // The name with its first letter capitalized.
 std::string capitalized(std::string name) {
   if (!name.empty() && name[0] >= 'a' && name[0] <= 'z') {
     name[0] = static_cast<char>(name[0] - 'a' + 'A');
   }
   return name;
+}
+
+// The guest's choices as six rows: each need's best offer and the chance of any offer of it, then
+// carrying on and heading home.
+std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOption> &options) {
+  std::vector<ChoiceRow> rows;
+  for (const GuestNeed need : NEEDS) {
+    // HomeReason lists the needs in NEEDS order, so its names give "toilet" for the bladder.
+    ChoiceRow row;
+    row.Choice = capitalized(displayName(static_cast<HomeReason>(need)));
+    const ChoiceOption *best = nullptr;
+    double probability = 0.0;
+    for (const ChoiceOption &option : options) {
+      if (option.Kind == ChoiceKind::Offer && option.Need == need) {
+        probability += option.Probability;
+        if (best == nullptr || option.Score > best->Score) {
+          best = &option;
+        }
+      }
+    }
+    if (best == nullptr) {
+      row.Target = "no offer";
+    } else {
+      row.Target = boxText(world, best->Facility);
+      row.Relief = twoDecimals(best->Relief);
+      row.Distance = twoDecimals(best->Distance);
+      row.Wait = twoDecimals(best->Wait);
+      row.Commitment = twoDecimals(best->Commitment);
+      row.Score = twoDecimals(best->Score);
+      row.Probability = twoDecimals(probability);
+    }
+    rows.push_back(std::move(row));
+  }
+  ChoiceRow carryOn;
+  carryOn.Choice = capitalized(displayName(ChoiceKind::CarryOn));
+  const auto carry = std::ranges::find(options, ChoiceKind::CarryOn, &ChoiceOption::Kind);
+  if (carry != options.end()) {
+    carryOn.Score = twoDecimals(carry->Score);
+    carryOn.Probability = twoDecimals(carry->Probability);
+  }
+  rows.push_back(std::move(carryOn));
+  ChoiceRow headHome;
+  headHome.Choice = capitalized(displayName(ChoiceKind::HeadHome));
+  const auto home = std::ranges::find(options, ChoiceKind::HeadHome, &ChoiceOption::Kind);
+  if (home != options.end()) {
+    headHome.Target = "home for " + displayName(home->Reason);
+    headHome.Commitment = twoDecimals(home->Commitment);
+    headHome.Score = twoDecimals(home->Score);
+    headHome.Probability = twoDecimals(home->Probability);
+  } else {
+    headHome.Target = "no route home";
+  }
+  rows.push_back(std::move(headHome));
+  return rows;
 }
 
 // Heading home's base and each reason's term, or nothing when heading home is not an option.
@@ -137,6 +165,12 @@ std::vector<InspectorRow> shopRows(const ShopRecord &record) {
   return rows;
 }
 
+std::vector<InspectorRow> facilityRows(const FacilityRecord &record) {
+  return {{"Places", std::format("{}", record.Places)},
+          {"Taken", std::format("{}", record.Taken)},
+          {"Queue", std::format("{}", record.Queue)}};
+}
+
 } // namespace
 
 std::optional<InspectorSubject> inspectorSubject(const World &world, EntityKey key) {
@@ -145,6 +179,16 @@ std::optional<InspectorSubject> inspectorSubject(const World &world, EntityKey k
   }
   if (shopRecord(world, key)) {
     return InspectorSubject{key, SubjectKind::Shop};
+  }
+  if (facilityRecord(world, key)) {
+    for (const ParkBox &box : parkBoxes(world)) {
+      if (box.Key == key && box.Kind == BoxKind::Bench) {
+        return InspectorSubject{key, SubjectKind::Bench};
+      }
+      if (box.Key == key && box.Kind == BoxKind::ToiletBlock) {
+        return InspectorSubject{key, SubjectKind::ToiletBlock};
+      }
+    }
   }
   return std::nullopt;
 }
@@ -172,6 +216,16 @@ Inspection inspectSubject(const World &world, const InspectorSubject &subject) {
         inspection.Choices = choiceRows(world, *options);
         inspection.HomeTerms = homeTerms(*options);
       }
+    }
+    return inspection;
+  }
+  if (subject.Kind == SubjectKind::Bench || subject.Kind == SubjectKind::ToiletBlock) {
+    const BoxKind kind = subject.Kind == SubjectKind::Bench ? BoxKind::Bench : BoxKind::ToiletBlock;
+    inspection.Title = capitalized(displayName(kind)) + " " + keyText(subject.Key);
+    const std::optional<FacilityRecord> record = facilityRecord(world, subject.Key);
+    inspection.Gone = !record;
+    if (record) {
+      inspection.Rows = facilityRows(*record);
     }
     return inspection;
   }

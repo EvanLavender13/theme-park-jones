@@ -23,7 +23,7 @@ struct InspectorUse {
 };
 
 // Draws the Inspector window: the inspection's title, then that its entity is gone or its rows,
-// and the options a guest would weigh now as a table, one to a row. With stock controls, and while
+// and a guest's choices as a table, one to a row. With stock controls, and while
 // the entity is there, it also draws a Sells row of radio buttons, Food, Drink, and Both, with
 // Chosen marked, and an Apply button, disabled while Chosen is Current. Call between
 // ImGui::NewFrame and ImGui::Render.
