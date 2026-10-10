@@ -1,6 +1,6 @@
 # operations
 
-This module holds operations: the shops and depots that keep the park running behind what the player sees (principle 7). It is part of tpj_sim and follows its contract (src/sim/SPEC.md). Shops and depots meet only through the medium: the flow ledger and route distance. Neither reads the other's state (principles 3 and 6).
+This module holds operations: the shops, depots, benches, and toilet blocks that keep the park running behind what the player sees (principle 7). It is part of tpj_sim and follows its contract (src/sim/SPEC.md). Shops and depots meet only through the medium: the flow ledger and route distance. Neither reads the other's state (principles 3 and 6).
 
 ## Boundary
 
@@ -11,9 +11,16 @@ addOperations registers:
 - the fields food-offer and drink-offer and the resolvers that publish them;
 - the systems that step shops and then depots.
 
+addOperations then calls addFacilities, which registers:
+
+- the flow kinds rest-visits, rests, toilet-visits, and toilet-uses;
+- a facility's service state;
+- the fields rest-offer and toilet-offer and the resolvers that publish them;
+- the system that steps benches and toilet blocks, after the depots.
+
 It needs the routes module's registrations before it, and addPark calls it after addRoutes.
 
-Shops and depots read the backstage route distance field, the guest network's anchors, parkBoxes, and their own ledger stocks. Every shop box of parkBoxes is a shop, and every depot box is a depot. A shop sells the goods its stock setting names (park/SPEC.md).
+Shops, depots, and facilities read the backstage route distance field, the guest network's anchors, parkBoxes, and their own ledger stocks. Every shop box of parkBoxes is a shop, and every depot box is a depot. Every bench box is a bench, and every toilet block box is a toilet block. Benches and toilet blocks are facilities. A shop sells the goods its stock setting names (park/SPEC.md).
 
 Other modules call operations.h for:
 
@@ -22,6 +29,8 @@ Other modules call operations.h for:
 - nearestDepot;
 - shopRecord and limitingFactorName;
 - the consumption causes.
+
+Other modules call facilities.h for the RestVisits and Rests flow kinds, through which guests visit benches and receive rests, ToiletVisits and ToiletUses, for toilet blocks, the RestOffer and ToiletOffer fields, and facilityRecord.
 
 ## Goods
 
@@ -70,3 +79,15 @@ The limiting factor is NoSupplyRoute for a starved shop. Otherwise it is:
 - ServiceRate when it holds enough of each good for everyone queued for it.
 
 limitingFactorName returns each factor's display name.
+
+## Benches and toilet blocks
+
+A bench has BENCH_SEATS seats and a toilet block has TOILET_STALLS stalls. Its seats or stalls are its places. A facility needs no supplies.
+
+A facility takes the guests who visit it in the order their visits arrived. Whenever one of its places is free, it gives the place to the guest at the front of its queue. A guest keeps its place for SITTING_TIME on a bench and TOILET_TIME in a toilet block. Then its visit comes back with a rest or a toilet use, and the place is free from that tick. Guests beyond the places wait at the door in arrival order, and none is turned away. Guests visit a bench through rest-visits and get rests, and visit a toilet block through toilet-visits and get toilet uses.
+
+When a facility is deleted, the guests waiting at its door get their visits back with no serving. The guests in its places still get theirs with a serving. If a visit or serving is sent to a guest who has left, it is consumed as abandoned. Every unit is accounted for, so a facility's servings created always equal the guests it has seated.
+
+Each bench publishes its offer in the entry field rest-offer, and each toilet block in toilet-offer. It publishes one OfferEntry at its guest anchor, holding REST_RELIEF or TOILET_RELIEF, the ticks the next guest to arrive would wait for a place, and that it has places. The wait is exact if no other visit arrives. If a facility is newly placed, or is in a candidate, it offers a wait of 0 at once, before it has stepped. If a facility has no guest connection, it publishes nothing.
+
+facilityRecord(world, key) returns a facility's inspection record for display (decision 0025). The record holds its places, how many of them are taken, and how many guests wait at its door. It is computed from the facility's state, not stored, so it adds nothing to a save. For a key that is not a bench or toilet block box, it returns none.

@@ -55,9 +55,9 @@ struct Drinks {
   static constexpr std::string_view Name = "drinks";
 };
 
-// A shop's offer of a good: the need a serving relieves, on a scale from 0 to 1, the ticks the next
-// guest to arrive for the good waits to be taken, and whether the shop has the good. A starved
-// shop's offer is OfferEntry{}, which says none.
+// An offer of a need: the need a serving relieves, on a scale from 0 to 1, the ticks the next guest
+// to arrive waits to be taken, and whether the offerer can serve it. A starved shop's offer is
+// OfferEntry{}, which says none.
 struct OfferEntry {
   double Relief = 0.0;
   uint64_t Wait = 0;
@@ -177,7 +177,8 @@ std::optional<ShopRecord> shopRecord(const World &world, EntityKey shop);
 std::string_view limitingFactorName(LimitingFactor factor);
 // Registers the flow kinds supply-orders, supplies, guest-visits, meals, drink-orders,
 // drink-supplies, drink-visits, and drinks, the shop-service state, the food-offer and drink-offer
-// fields and their resolvers, then the systems that step shops and then depots.
+// fields and their resolvers, then the systems that step shops and then depots, and last calls
+// addFacilities.
 // The routes module's registrations must come first.
 void addOperations(WorldSchema &schema);
 
