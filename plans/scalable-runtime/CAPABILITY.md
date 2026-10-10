@@ -116,6 +116,7 @@ Unordered pool this capability draws later milestones from.
 - Ground field lookup by bucket: a ground field's by-cell lookup is rebuilt after each swap by sorting every entry, about 160 µs a tick for guest presence on the full park. Group entries into their cells in one pass instead.
 - Faster component store: replace keyed-storage's first store with one that keeps key order but iterates densely, such as a key-sorted array with a key-to-index map, or a B-tree (decision 0039). Gated on: keyed-storage merged, and the report showing component lookup or iteration as a real share of a tick.
 - Guests found by type: parkGuests walks every live key and checks each one for a guest, twice a tick and again in each resolution. Iterate the guest store in key order instead. Gated on: keyed-storage merged.
+- full.park holds its crowd through hours of play: its 30 counters serve about 600 meals and drinks a game hour, well below what its 2,000 guests want, so thirst sends them home within a few game hours. Give it enough counters for its guests. Gated on: a run long enough to show it, such as play or a longer runtime report.
 
 ## Open questions
 

@@ -1,7 +1,7 @@
 tpj-park 1
 seed 1
 tick 270
-next-key 22
+next-key 18
 
 [entrance]
 1 x=0 z=126.5 facing-x=0 facing-z=-1
@@ -89,10 +89,10 @@ next-key 22
 16819719754544225480 readable=[{source=6 entries=[{at={carrier=15177331698885887711 distance=0} value={relief=1 wait=0 supplied=true}}]}] pending=[]
 
 [departure-tally]
-11521130776157876789 hunger=0 thirst=0 tiredness=0 toilet=0 closing=4
+11521130776157876789 hunger=0 thirst=0 tiredness=0 toilet=0 closing=0
 
 [guest-presence-ground]
 12974152610777186460 readable=[] next=[] changing=false
 
 [hungry-footfall-kept]
-11741940842860801778 slots=[{source=11741940842860801778 entries=[{at={carrier=17125955698113728469 distance=1} value=0.0009600790093927599 tick=240}]}] pending=[]
+11741940842860801778 slots=[] pending=[]

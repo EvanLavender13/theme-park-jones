@@ -131,8 +131,10 @@ struct GuestRecord {
   bool operator==(const GuestRecord &) const = default;
 };
 
-// Ticks between arrivals at each entrance.
-inline constexpr uint64_t ARRIVAL_INTERVAL = 60;
+// The arrival curve: guests per game hour at each entrance, at fractions of the opening hours
+// that have passed. A few come at opening, the most from 0.15 to 0.3, and none from 0.75.
+inline constexpr std::array<CurvePoint, 6> ARRIVAL_CURVE{
+    {{0.0, 5.0}, {0.15, 15.0}, {0.3, 15.0}, {0.5, 6.0}, {0.75, 0.0}, {1.0, 0.0}}};
 // A guest's hunger rises by a rate per tick drawn from these, so from 0 to 1 in 4 to 6 game hours.
 inline constexpr double HUNGER_RATE_MIN = 1.0 / 10800.0;
 inline constexpr double HUNGER_RATE_MAX = 1.0 / 7200.0;
@@ -214,6 +216,12 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest);
 std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, EntityKey guest);
 // The park's departure tally, or 0 for every reason before the park is first resolved.
 DepartureTally departureTally(const World &world);
+// The rate, in guests per game hour, at which each entrance connected to the guest network admits
+// guests at the second of the day, below DAY_SECONDS, under the park's opening hours:
+// ARRIVAL_CURVE at the fraction of the hours passed since opening, or 0 while the park is closed.
+// If the park is open all day, the fraction runs over the whole day from the opening time. Reads
+// only the hours, and draws nothing.
+double arrivalCurve(const World &world, uint64_t second);
 // Creates a guest standing at the place, arriving at the world's tick, with its needs, rates,
 // speed, and share drawn on its key, and gives its key. Throws std::invalid_argument, changing
 // nothing, when the place does not resolve on the guest network.

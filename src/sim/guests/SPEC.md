@@ -19,11 +19,13 @@ A guest reads the park only through the medium and intent:
 
 A guest visits facilities, which are shops, benches, and toilet blocks, and receives servings through those flows. No other module reads a guest's state.
 
-Other modules call guests.h (parkGuests, addGuest, guestRecord, guestOptions, and departureTally) and footfall.h (the HungryFootfall field).
+Other modules call guests.h (parkGuests, addGuest, guestRecord, guestOptions, departureTally, and arrivalCurve) and footfall.h (the HungryFootfall field).
 
 ## Arriving and leaving
 
-Guests arrive at regular intervals at each entrance connected to the guest network, one per entrance at a time. If an entrance has no connection, it admits no one, and that is a legitimate state (principle 2). A guest leaves the park when it walks out of an entrance heading home. It also leaves when no guest paving is left for it to stand on. A guest that leaves drops its entry in guest presence.
+Guests arrive at random at each entrance connected to the guest network, at the rate the arrival curve gives for the time of day. In each tick, each such entrance admits at most one guest, by a draw keyed on the entrance and the tick, so the same world and seed always admit the same guests (principle 8). If an entrance has no connection, it admits no one, and that is a legitimate state (principle 2). A guest leaves the park when it walks out of an entrance heading home. It also leaves when no guest paving is left for it to stand on. A guest that leaves drops its entry in guest presence.
+
+arrivalCurve(world, second) gives the arrival curve: the mean number of guests each connected entrance admits per game hour at that second of the day. It follows the park's opening hours. A few guests arrive at opening, the most come in the first third of the hours, fewer follow, and none arrive over the last part of the hours or while the park is closed. If the park is open all day, the curve runs over the whole day from the opening time. It depends only on the opening hours, so on a candidate with other hours it gives the curve those hours would admit guests by (decision 0025). It changes nothing and draws nothing.
 
 addGuest(world, place) is the only way a guest comes into being. Arrivals use it, and so does code outside the module, such as park generators, which can't name any guest component (principle 6). It returns the new guest's key. If the place is not on the guest network, addGuest refuses it. A new guest stands at the place's ground position and records the tick it arrived. A new guest's hunger, thirst, and bladder, the rates its hunger, thirst, and tiredness rise at, its speed, and its share of the width are drawn, so guests differ from one another. Its tiredness starts at 0. The same world and seed always give the same guests (principle 8).
 

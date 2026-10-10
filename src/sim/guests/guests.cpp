@@ -48,6 +48,26 @@ constexpr double AIM_SETTLED = 0.01;
 
 // The purpose the departure tally's entity is derived with.
 constexpr uint64_t DEPARTURES_PURPOSE = hashName("departure-tally");
+// The purpose an entrance's arrival draw is keyed with.
+constexpr uint64_t ARRIVAL_PURPOSE = hashName("guest-arrival");
+// The game seconds in a game hour.
+constexpr double HOUR_SECONDS = 3600.0;
+
+// The authored curve's value at x, clamped to its first and last X, linear between its points.
+double curveAt(std::span<const CurvePoint> curve, double x) {
+  const double h = std::clamp(x, curve.front().X, curve.back().X);
+  for (size_t i = 1; i < curve.size(); ++i) {
+    const CurvePoint &a = curve[i - 1];
+    const CurvePoint &b = curve[i];
+    if (h == a.X) {
+      return a.Y;
+    }
+    if (h < b.X) {
+      return a.Y + (h - a.X) * (b.Y - a.Y) / (b.X - a.X);
+    }
+  }
+  return curve.back().Y;
+}
 
 // The keys of the entrances, ascending.
 std::vector<EntityKey> entranceKeys(const World &world) {
@@ -643,18 +663,22 @@ double guestDraw(const World &world, EntityKey guest, const char *purpose, uint6
   return drawUniform(drawKey(world, guest, hashName(purpose), index));
 }
 
-// Each entrance with a guest connector admits a guest at the end of every ARRIVAL_INTERVAL
-// ticks, through addGuest.
+// Each entrance with a guest connector admits a guest through addGuest when its draw for the tick
+// falls below the chance of an arrival in a tick at arrivalCurve's rate.
 void admitGuests(World &world, const Network &network) {
-  if ((world.Tick + 1) % ARRIVAL_INTERVAL != 0) {
+  const double rate = arrivalCurve(world, parkTime(world.Tick).Second);
+  if (rate <= 0.0) {
     return;
   }
+  const double chance = rate * static_cast<double>(GAME_SECONDS_PER_TICK) / HOUR_SECONDS;
   for (const ParkEntrance &entrance : parkEntrances(world)) {
     const std::vector<uint32_t> anchored = network.anchoredNodes(entrance.Key);
     if (anchored.empty()) {
       continue;
     }
-    addGuest(world, network.nodePlace(anchored.front()));
+    if (drawUniform(drawKey(world, entrance.Key, ARRIVAL_PURPOSE, 0)) < chance) {
+      addGuest(world, network.nodePlace(anchored.front()));
+    }
   }
 }
 
@@ -976,20 +1000,7 @@ EntityKey addGuest(World &world, const Place &place) {
   return key;
 }
 
-double needCurve(double level) {
-  const double h = std::clamp(level, NEED_CURVE.front().X, NEED_CURVE.back().X);
-  for (size_t i = 1; i < NEED_CURVE.size(); ++i) {
-    const CurvePoint &a = NEED_CURVE[i - 1];
-    const CurvePoint &b = NEED_CURVE[i];
-    if (h == a.X) {
-      return a.Y;
-    }
-    if (h < b.X) {
-      return a.Y + (h - a.X) * (b.Y - a.Y) / (b.X - a.X);
-    }
-  }
-  return NEED_CURVE.back().Y;
-}
+double needCurve(double level) { return curveAt(NEED_CURVE, level); }
 
 DepartureTally departureTally(const World &world) {
   const std::vector<EntityKey> keys = world.keysWith<Departures>();
@@ -997,6 +1008,18 @@ DepartureTally departureTally(const World &world) {
     return DepartureTally{};
   }
   return DepartureTally{world.get<Departures>(keys.front()).ByReason};
+}
+
+double arrivalCurve(const World &world, uint64_t second) {
+  const OpeningHours hours = parkHours(world);
+  if (!isOpenAt(hours, second)) {
+    return 0.0;
+  }
+  const uint64_t span = hours.Opening == hours.Closing
+                            ? DAY_SECONDS
+                            : (hours.Closing + DAY_SECONDS - hours.Opening) % DAY_SECONDS;
+  const uint64_t passed = (second + DAY_SECONDS - hours.Opening) % DAY_SECONDS;
+  return curveAt(ARRIVAL_CURVE, static_cast<double>(passed) / static_cast<double>(span));
 }
 
 size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options) {
