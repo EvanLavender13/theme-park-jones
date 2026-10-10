@@ -2,7 +2,7 @@
 
 Slice: day-at-the-park
 
-Status: planned
+Status: complete
 
 ## Summary
 
@@ -88,7 +88,7 @@ Unordered pool this milestone draws later features from.
 
 ## Open questions
 
-- Whether the tuning values give a day that reads well: guests stay for hours when served, a park with no toilet loses them early, and the park empties well before midnight. Resolved in day-parks by watching day.park through a day and adjusting.
+None. Whether the tuning values give a day that reads well was resolved in day-parks: the user watched day.park through a day and kept them.
 
 ## Research notes
 
