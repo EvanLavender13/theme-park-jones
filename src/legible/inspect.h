@@ -31,7 +31,8 @@ struct InspectorRow {
 };
 
 // One option a guest would weigh now, as text: the option, the need an offer answers, its terms,
-// score, and probability. Carrying on and heading home have no need and empty terms.
+// score, and probability. Carrying on has no need and empty terms. Heading home shows its reason as
+// its need, and only its commitment among the terms.
 struct ChoiceRow {
   std::string Option;
   std::string Need;
@@ -45,13 +46,14 @@ struct ChoiceRow {
   bool operator==(const ChoiceRow &) const = default;
 };
 
-// What an inspector shows: its title, whether its entity is gone, its lines, and the options a
-// guest would weigh now.
+// What an inspector shows: its title, whether its entity is gone, its lines, the options a guest
+// would weigh now, and heading home's base and reason terms when heading home is an option.
 struct Inspection {
   std::string Title;
   bool Gone = false;
   std::vector<InspectorRow> Rows;
   std::vector<ChoiceRow> Choices;
+  std::vector<InspectorRow> HomeTerms;
 
   bool operator==(const Inspection &) const = default;
 };

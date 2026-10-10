@@ -11,9 +11,9 @@ namespace tpj {
 // cutting its backstage segment strands a waiting guest and a shipment in transit.
 inline constexpr uint64_t WARM_TICKS = 2200;
 // The warm-up tests/parks/warm-main-street.park takes from main-street.park: 151 s of game time,
-// long enough that guests arrive and leave about equally often, so they fill the park in every
-// activity. It isn't a multiple of ARRIVAL_INTERVAL, so no guest arrives on the last cycle, and
-// every guest that isn't waiting holds its guest presence entry.
+// long enough that guests fill the park in every activity, some of them heading home. It isn't a
+// multiple of ARRIVAL_INTERVAL, so no guest arrives on the last cycle, and every guest that isn't
+// waiting holds its guest presence entry.
 inline constexpr uint64_t MAIN_STREET_WARM_TICKS = 4530;
 
 // Cycles makeStockedPark steps at most before it gives up.

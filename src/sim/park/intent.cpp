@@ -1,5 +1,6 @@
 #include "sim/park/intent.h"
 
+#include "sim/clock.h"
 #include "sim/park/internal/components.h"
 #include "sim/park/internal/layout.h"
 
@@ -59,6 +60,14 @@ OpeningHours parkHours(const World &world) {
   const std::vector<OpeningHours> held = collectIntent<OpeningHoursIntent>(
       world, [](EntityKey /*key*/, const OpeningHoursIntent &hours) { return hours.Hours; });
   return held.empty() ? DEFAULT_HOURS : held.front();
+}
+
+bool isOpenAt(const OpeningHours &hours, uint64_t second) {
+  if (hours.Opening == hours.Closing) {
+    return true;
+  }
+  return (second + DAY_SECONDS - hours.Opening) % DAY_SECONDS <
+         (hours.Closing + DAY_SECONDS - hours.Opening) % DAY_SECONDS;
 }
 
 World makeNewPark(std::shared_ptr<const WorldSchema> schema, uint64_t seed) {

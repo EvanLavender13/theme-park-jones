@@ -38,6 +38,19 @@ constexpr std::array<std::string_view, 4> enumNames(GuestNeed /*value*/) {
 inline constexpr std::array<GuestNeed, 4> NEEDS{GuestNeed::Hunger, GuestNeed::Thirst,
                                                 GuestNeed::Tiredness, GuestNeed::Bladder};
 
+// Why a guest heads home: one of its needs, or closing time. The needs come in NEEDS order, with
+// the bladder as the toilet.
+enum class HomeReason : uint8_t { Hunger, Thirst, Tiredness, Toilet, Closing };
+
+constexpr std::array<std::string_view, 5> enumNames(HomeReason /*value*/) {
+  return {"hunger", "thirst", "tiredness", "toilet", "closing"};
+}
+
+// Every reason, in the order heading home adds their terms.
+inline constexpr std::array<HomeReason, 5> HOME_REASONS{HomeReason::Hunger, HomeReason::Thirst,
+                                                        HomeReason::Tiredness, HomeReason::Toilet,
+                                                        HomeReason::Closing};
+
 // What a choice's option does: go to a shop for its offer, carry on wandering, or head home.
 enum class ChoiceKind : uint8_t { Offer, CarryOn, HeadHome };
 
@@ -46,7 +59,9 @@ constexpr std::array<std::string_view, 3> enumNames(ChoiceKind /*value*/) {
 }
 
 // One option of a choice: its kind, the facility and need for an offer, its terms, its score, and
-// the probability the softmax gave it. Carrying on and heading home have no terms.
+// the probability the softmax gave it. An offer's terms are Relief, Distance, Wait, and
+// Commitment. Heading home's are Base, Reasons, and Commitment, and its reason is the first
+// largest of Reasons. Carrying on has no terms.
 struct ChoiceOption {
   ChoiceKind Kind = ChoiceKind::CarryOn;
   EntityKey Facility = NULL_KEY;
@@ -55,6 +70,9 @@ struct ChoiceOption {
   double Distance = 0.0;
   double Wait = 0.0;
   double Commitment = 0.0;
+  double Base = 0.0;
+  std::array<double, HOME_REASONS.size()> Reasons{};
+  HomeReason Reason = HomeReason::Hunger;
   double Score = 0.0;
   double Probability = 0.0;
 
@@ -76,6 +94,14 @@ template <typename Visitor> void visitFields(Visitor &visitor, GuestMeal &meal) 
   visitor.field("after", meal.After);
 }
 
+// How many guests have walked out of an entrance since the park last opened, by the reason they
+// left, in HOME_REASONS order.
+struct DepartureTally {
+  std::array<uint64_t, HOME_REASONS.size()> ByReason{};
+
+  bool operator==(const DepartureTally &) const = default;
+};
+
 // A point of an authored curve (decision 0020).
 struct CurvePoint {
   double X = 0.0;
@@ -83,9 +109,10 @@ struct CurvePoint {
 };
 
 // What a guest publishes about itself for display and tests (decision 0025): what it is doing,
-// its place on the guest network, the ground position it stands on, its four needs, the tick its
-// stay ends, the facility it is heading to or waiting at and the need it goes there for, and the
-// meals it has eaten and the last of them. Nothing in the park reads it.
+// its place on the guest network, the ground position it stands on, its four needs, the tick it
+// arrived, the facility it is heading to or waiting at and the need it goes there for, the reason
+// it last recorded for heading home, and the meals it has eaten and the last of them. Nothing in
+// the park reads it.
 struct GuestRecord {
   GuestActivity Activity = GuestActivity::Wandering;
   Place At;
@@ -94,9 +121,10 @@ struct GuestRecord {
   double Thirst = 0.0;
   double Tiredness = 0.0;
   double Bladder = 0.0;
-  uint64_t StayUntil = 0;
+  uint64_t Arrived = 0;
   EntityKey Target = NULL_KEY;
   GuestNeed TargetNeed = GuestNeed::Hunger;
+  HomeReason Reason = HomeReason::Hunger;
   uint64_t MealsEaten = 0;
   std::optional<GuestMeal> LastMeal;
 
@@ -105,24 +133,21 @@ struct GuestRecord {
 
 // Ticks between arrivals at each entrance.
 inline constexpr uint64_t ARRIVAL_INTERVAL = 60;
-// A guest's stay, in ticks, is drawn from STAY_MIN up to STAY_MAX.
-inline constexpr uint64_t STAY_MIN = 1800;
-inline constexpr uint64_t STAY_MAX = 3600;
-// A guest's hunger rises by a rate per tick drawn from these, so from 0 to 1 in 45 to 90 s.
-inline constexpr double HUNGER_RATE_MIN = 1.0 / 2700.0;
-inline constexpr double HUNGER_RATE_MAX = 1.0 / 1350.0;
+// A guest's hunger rises by a rate per tick drawn from these, so from 0 to 1 in 4 to 6 game hours.
+inline constexpr double HUNGER_RATE_MIN = 1.0 / 10800.0;
+inline constexpr double HUNGER_RATE_MAX = 1.0 / 7200.0;
 // A guest arrives with a hunger drawn from 0 up to this.
 inline constexpr double STARTING_HUNGER_MAX = 0.4;
-// A guest's thirst rises by a rate per tick drawn from these, so from 0 to 1 in 33 to 67 game
-// minutes.
-inline constexpr double THIRST_RATE_MIN = 1.0 / 2000.0;
-inline constexpr double THIRST_RATE_MAX = 1.0 / 1000.0;
+// A guest's thirst rises by a rate per tick drawn from these, so from 0 to 1 in 3 to 4.5 game
+// hours.
+inline constexpr double THIRST_RATE_MIN = 1.0 / 8100.0;
+inline constexpr double THIRST_RATE_MAX = 1.0 / 5400.0;
 // A guest arrives with a thirst drawn from 0 up to this.
 inline constexpr double STARTING_THIRST_MAX = 0.4;
-// A guest's tiredness rises by a rate per meter walked drawn from these, so from 0 to 1 in 100
-// to 150 m. It arrives with none.
-inline constexpr double TIREDNESS_RATE_MIN = 1.0 / 150.0;
-inline constexpr double TIREDNESS_RATE_MAX = 1.0 / 100.0;
+// A guest's tiredness rises by a rate per meter walked drawn from these, so from 0 to 1 in 400
+// to 600 m. It arrives with none.
+inline constexpr double TIREDNESS_RATE_MIN = 1.0 / 600.0;
+inline constexpr double TIREDNESS_RATE_MAX = 1.0 / 400.0;
 // A guest arrives with a bladder drawn from 0 up to this.
 inline constexpr double STARTING_BLADDER_MAX = 0.2;
 // How much each meal and each drink a guest takes fills its bladder.
@@ -159,9 +184,15 @@ inline constexpr double RELIEF_WEIGHT = 4.0;
 inline constexpr double DISTANCE_WEIGHT = -0.01;
 inline constexpr double WAIT_WEIGHT = -0.02;
 inline constexpr double COMMITMENT_BONUS = 0.3;
-// The scores of carrying on and of heading home once the stay is over.
+// The score of carrying on.
 inline constexpr double CARRY_ON_SCORE = 0.5;
-inline constexpr double HEAD_HOME_SCORE = 10.0;
+// Heading home's base, and its weight per unit of each need's curve.
+inline constexpr double HOME_BASE = -2.0;
+inline constexpr double HOME_NEED_WEIGHT = 1.5;
+// The game seconds before closing over which heading home's closing term rises.
+inline constexpr uint64_t CLOSING_LEAD = 3600;
+// Heading home's closing term from closing until the park opens.
+inline constexpr double CLOSING_SCORE = 10.0;
 // The softmax temperature: lower picks the best option more surely.
 inline constexpr double CHOICE_TEMPERATURE = 0.25;
 // Ticks a visit takes from the guest at a shop's anchor to the shop.
@@ -181,10 +212,12 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest);
 // probability, or none when the key holds no guest or its place does not resolve on the guest
 // network. Draws nothing and changes nothing; it costs one choice, so call it for one guest.
 std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, EntityKey guest);
-// Creates a guest standing at the place, whose stay ends at the tick, with its hunger and hunger
-// rate drawn on its key, and gives its key. Throws std::invalid_argument, changing nothing, when
-// the place does not resolve on the guest network.
-EntityKey addGuest(World &world, const Place &place, uint64_t stayUntil);
+// The park's departure tally, or 0 for every reason before the park is first resolved.
+DepartureTally departureTally(const World &world);
+// Creates a guest standing at the place, arriving at the world's tick, with its needs, rates,
+// speed, and share drawn on its key, and gives its key. Throws std::invalid_argument, changing
+// nothing, when the place does not resolve on the guest network.
+EntityKey addGuest(World &world, const Place &place);
 // The need curve's value at the level, clamped to [0, 1].
 double needCurve(double level);
 // Sets each option's softmax probability from the scores and returns the index the draw picks.

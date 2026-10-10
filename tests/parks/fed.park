@@ -88,6 +88,9 @@ next-key 24
 [toilet-offer-stepped]
 16819719754544225480 readable=[] pending=[]
 
+[departure-tally]
+11521130776157876789 hunger=0 thirst=0 tiredness=0 toilet=0 closing=0
+
 [guest-presence-ground]
 12974152610777186460 readable=[] next=[] changing=false
 

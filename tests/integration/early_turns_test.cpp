@@ -1,5 +1,5 @@
 // Shaping points on a checked-in park: inserting a point into a straight guest segment ahead of a
-// wandering guest whose stay is over leaves it wandering as it walks through the new point. If the
+// wandering guest in a closed park leaves it wandering as it walks through the new point. If the
 // guest chose there, it would head home. The test compares the park with the same park after the
 // insert, so it doesn't depend on how far before a node a guest makes its choice.
 
@@ -61,7 +61,7 @@ std::optional<ParkPathPoint> pointWithKey(const World &world, EntityKey key) {
   return std::nullopt;
 }
 
-TEST_CASE("A point inserted ahead of a wandering guest whose stay is over leaves it wandering") {
+TEST_CASE("A point inserted ahead of a wandering guest in a closed park leaves it wandering") {
   World unchanged = openPark(parkFile("new.park"));
 
   // new.park's guest path runs along x = 0 from in front of the entrance to z = 103. The new path
@@ -90,8 +90,14 @@ TEST_CASE("A point inserted ahead of a wandering guest whose stay is over leaves
   const ParkSegment segment = added.value_or(ParkSegment{});
   REQUIRE_FALSE(segment.Line.empty());
 
+  // new.park stands at 9:00, and the test steps far less than three game hours, so the park is
+  // closed throughout and its clock never passes the closing time.
+  const SetOpeningHours closed{OpeningHours{12ULL * 3600, 20ULL * 3600}};
+  REQUIRE(isAccepted(unchanged, closed));
+  applyCommand(unchanged, closed);
+
   const Place middle{segment.Key, segment.Line.back().Distance / 2.0};
-  const EntityKey guest = addGuest(unchanged, middle, 0);
+  const EntityKey guest = addGuest(unchanged, middle);
 
   // Step until the guest has moved along the segment, to learn which way it walks.
   const double startZ = positionOf(unchanged, guest).Z;
@@ -102,7 +108,7 @@ TEST_CASE("A point inserted ahead of a wandering guest whose stay is over leaves
   }
   const double guestZ = positionOf(unchanged, guest).Z;
   const double way = guestZ > startZ ? 1.0 : -1.0;
-  // Its stay is over, so the guest would be heading home if it had chosen.
+  // The park is closed, so the guest would be heading home if it had chosen.
   REQUIRE(recordOf(unchanged, guest).Activity == GuestActivity::Wandering);
 
   World changed = copyWorld(unchanged);

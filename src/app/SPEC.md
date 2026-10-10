@@ -70,7 +70,7 @@ The Hours panel shows the park's opening hours on a 24-hour clock, as Opens and 
 
 The Graph checkbox draws the networks' lines and nodes over the scene and behind the panels. The Food overlay checkbox shows food availability on the guest paving of the previewed park (views/SPEC.md). Its shape is built again only when the previewed park's path points or segments change. While the overlay is shown, hovering shaded paving shows the food value at the overlay place of the point under the cursor at the overlay's height (render/SPEC.md) and, for each shop that contributes, the terms that make up the value. Hovering anywhere else shows no food tooltip. If no supplied shop is reachable, the tooltip says so. While the preview places a shop, the tooltip also shows the hungry footfall at its door and its supply route, or says that it has no supply route.
 
-The Inspector shows its subject's title and rows. For a guest, it also shows the options the guest is choosing between, with their chances (legible/SPEC.md, Inspectors). It says when the subject has left the park. It updates every tick, stays open when the tool changes, and closes with its close button. With no saved layout it starts at the window's bottom left.
+The Inspector shows its subject's title and rows. For a guest, it also shows the options the guest is choosing between, with their chances, and heading home's terms (legible/SPEC.md, Inspectors). It says when the subject has left the park. It updates every tick, stays open when the tool changes, and closes with its close button. With no saved layout it starts at the window's bottom left.
 
 ## Command line
 

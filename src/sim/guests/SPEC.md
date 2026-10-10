@@ -4,7 +4,7 @@ This module holds the park's visitors. It serves the believable-guests capabilit
 
 ## Boundary
 
-addGuests registers the guest state, guest presence, the ground guests walk on and the resolver that derives it, the systems that step guests and their footfall, and the finishers that carry both across a resolution. addPark calls it after addOperations, so guests step after shops and depots.
+addGuests registers the guest state, guest presence, the ground guests walk on and the resolver that derives it, the departure tally and the resolver that creates it, the systems that step guests and their footfall, and the finishers that carry both across a resolution. addPark calls it after addOperations, so guests step after shops and depots.
 
 A guest reads the park only through the medium and intent:
 
@@ -12,19 +12,20 @@ A guest reads the park only through the medium and intent:
 - guest route distance;
 - the need offer fields food-offer, drink-offer, rest-offer, and toilet-offer;
 - its own stocks of each need's visits and servings: guest-visits and meals, drink-visits and drinks, rest-visits and rests, and toilet-visits and toilet-uses;
-- parkEntrances (decision 0025);
+- parkEntrances, and the opening hours through parkHours and isOpenAt (decision 0025);
+- the park's clock, parkTime;
 - the guest paving, from parkSurface with the guest walkways, walkwayPiece, parkSegments, and keyedWalkways (decision 0025);
 - guest presence, which only guests publish and sample.
 
 A guest visits facilities, which are shops, benches, and toilet blocks, and receives servings through those flows. No other module reads a guest's state.
 
-Other modules call guests.h (parkGuests, addGuest, guestRecord, and guestOptions) and footfall.h (the HungryFootfall field).
+Other modules call guests.h (parkGuests, addGuest, guestRecord, guestOptions, and departureTally) and footfall.h (the HungryFootfall field).
 
 ## Arriving and leaving
 
-Guests arrive at regular intervals at each entrance connected to the guest network, one per entrance at a time. Each guest stays for a drawn length of time. If an entrance has no connection, it admits no one, and that is a legitimate state (principle 2). A guest leaves the park when it walks back to an entrance after its stay. It also leaves when no guest paving is left for it to stand on. A guest that leaves drops its entry in guest presence.
+Guests arrive at regular intervals at each entrance connected to the guest network, one per entrance at a time. If an entrance has no connection, it admits no one, and that is a legitimate state (principle 2). A guest leaves the park when it walks out of an entrance heading home. It also leaves when no guest paving is left for it to stand on. A guest that leaves drops its entry in guest presence.
 
-addGuest(world, place, stayUntil) is the only way a guest comes into being. Arrivals use it, and so does code outside the module, such as park generators, which can't name any guest component (principle 6). It returns the new guest's key. If the place is not on the guest network, addGuest refuses it. A new guest stands at the place's ground position. A new guest's hunger, thirst, and bladder, the rates its hunger, thirst, and tiredness rise at, its speed, and its share of the width are drawn, so guests differ from one another. Its tiredness starts at 0. The same world and seed always give the same guests (principle 8).
+addGuest(world, place) is the only way a guest comes into being. Arrivals use it, and so does code outside the module, such as park generators, which can't name any guest component (principle 6). It returns the new guest's key. If the place is not on the guest network, addGuest refuses it. A new guest stands at the place's ground position and records the tick it arrived. A new guest's hunger, thirst, and bladder, the rates its hunger, thirst, and tiredness rise at, its speed, and its share of the width are drawn, so guests differ from one another. Its tiredness starts at 0. The same world and seed always give the same guests (principle 8).
 
 ## Needs
 
@@ -38,13 +39,32 @@ A guest chooses what to do by scoring its options and picking one at random, wei
 
 - each offer it can reach: one for each need a facility offers, so a shop that sells both goods gives two;
 - carrying on as it is;
-- heading home, once its stay is over and an entrance is reachable.
+- heading home, whenever an entrance is reachable.
 
-An offer scores higher the greater the need it answers. It scores lower the farther away it is and the longer its wait. If the guest is already heading to a facility, that facility's offer for the same need scores a little higher, so guests don't flip between facilities. If one option scores higher than another, it is never less likely to be picked. If two options score the same, they are equally likely. Once a stay is over, heading home outweighs any offer.
+An offer scores higher the greater the need it answers. It scores lower the farther away it is and the longer its wait. If the guest is already heading to a facility, that facility's offer for the same need scores a little higher, so guests don't flip between facilities. If one option scores higher than another, it is never less likely to be picked. If two options score the same, they are equally likely. While the park is closed, heading home outweighs every other option.
 
 A guest finds offers only through route distance and the four need offer fields. If it can't walk to a facility, or the facility's entry in a need's field doesn't say it can serve, that need's offer there is never an option. An entrance is never an option for any need.
 
-A guest makes its choice for each node of its route a little before it gets there: when its place comes within TURN_LOOKAHEAD of the node along its route, or when it stands on the node. It chooses once for each node it comes to. It makes no choice for a shaping point, a node with exactly two edges and no anchor, which only bends a path, so the number of points the player draws doesn't change how guests choose. A guest heading to a facility or home makes no choice for the node it is heading to. A guest also chooses as soon as its target becomes unreachable or stops offering the need it heads there for, and when its visit comes back.
+A guest makes its choice for each node of its route a little before it gets there: when its place comes within TURN_LOOKAHEAD of the node along its route, or when it stands on the node. It chooses once for each node it comes to. It makes no choice for a shaping point, a node with exactly two edges and no anchor, which only bends a path, so the number of points the player draws doesn't change how guests choose. A guest heading to a facility or home makes no choice for the node it is heading to. A guest also chooses as soon as its target becomes unreachable or stops offering the need it heads there for, when its visit comes back, and when the park closes (Going home).
+
+## Going home
+
+Heading home's score is the sum of a base, five reason terms, and a commitment term, added in this order:
+
+- the base, HOME_BASE, which is below 0, so a guest whose needs are met rarely heads home before closing;
+- hunger, thirst, tiredness, and the toilet: each is HOME_NEED_WEIGHT times the need curve at its need's level, the bladder's for the toilet;
+- closing: 0 until CLOSING_LEAD game seconds before the park closes, then rising linearly to CLOSING_SCORE at closing, and CLOSING_SCORE while the park is closed. If the park is open all day, it is always 0;
+- commitment: COMMITMENT_BONUS while the guest is heading home, and otherwise 0.
+
+For each need, an offer answering it has a larger relief term than the need's term in heading home, so a guest prefers a facility close by to heading home for one need. When several needs are high at once, their terms add up, and heading home can win even with facilities in reach. If nothing in reach answers a need, its term keeps growing as the need does.
+
+Each time a guest picks heading home, it records the pick's reason: the largest of its five reason terms, or, when several are largest, the first of them in the order hunger, thirst, tiredness, toilet, closing. When the guest walks out of an entrance, the reason it last recorded is the reason it left.
+
+When the clock passes the closing time, every guest that is walking chooses in that tick. A guest heading home keeps making its choice for each node of its route, so it can still turn aside to a facility it needs on the way. Whether the park is open is judged by its current hours, through isOpenAt.
+
+## Departures
+
+departureTally(world) gives the departure tally: how many guests have walked out of an entrance since the clock last passed the opening time, by the reason they left. When the clock passes the opening time, the tally starts again from 0. If the park is open all day, it never does. A guest that leaves because no guest paving is left isn't counted. The tally is saved state on an entity of its own, which resolving the park creates when it is missing. Before the park is first resolved, departureTally gives 0 for every reason.
 
 ## Walking
 
@@ -83,8 +103,8 @@ Across an edit:
 
 ## Inspection
 
-guestRecord(world, key) returns a guest's inspection record for display (decision 0025). The record holds its activity, its place, the ground position it stands on, its four needs, stay, target and the need it heads there for, meals eaten, and last meal.
+guestRecord(world, key) returns a guest's inspection record for display (decision 0025). The record holds its activity, its place, the ground position it stands on, its four needs, the tick it arrived, its target and the need it heads there for, the reason it last recorded for heading home, meals eaten, and last meal.
 
-guestOptions(world, key) returns the options the guest would weigh if it chose now. Each option has its kind, the facility and need of an offer, its terms (Relief, Distance, Wait, Commitment), its Score, and its Probability. The Score is exactly the sum of the terms.
+guestOptions(world, key) returns the options the guest would weigh if it chose now. Each option has its kind, the facility and need of an offer, its terms, heading home's reason, its Score, and its Probability. An offer's terms are Relief, Distance, Wait, and Commitment, added in that order. Heading home's are Base, a term in Reasons for each of HOME_REASONS, and Commitment, added as Going home gives. Every other term is 0. The Score is exactly the sum of the terms.
 
 Neither function changes the world or draws, and neither adds to a save. guestOptions costs as much as one choice, so call it for a guest being inspected, not for every guest in a frame.

@@ -134,9 +134,8 @@ void refuseStarvedShops(const World &world) {
   }
 }
 
-// Adds the guests, each at a keyed draw along the guest network, edges weighed by their length,
-// staying until the tick given.
-void placeGuests(World &world, uint64_t stayUntil) {
+// Adds the guests, each at a keyed draw along the guest network, edges weighed by their length.
+void placeGuests(World &world) {
   const std::vector<NetworkEdge> edges = parkNetwork(world, PathKind::Guest).edges();
   std::vector<double> lengths;
   lengths.reserve(edges.size());
@@ -147,9 +146,8 @@ void placeGuests(World &world, uint64_t stayUntil) {
     const NetworkEdge &edge =
         edges[drawPick(drawKey(world, NULL_KEY, hashName("full-park-edge"), i), lengths)];
     const double along = drawUniform(drawKey(world, NULL_KEY, hashName("full-park-along"), i));
-    addGuest(world,
-             Place{edge.Carrier, edge.FromDistance + along * (edge.ToDistance - edge.FromDistance)},
-             stayUntil);
+    addGuest(world, Place{edge.Carrier,
+                          edge.FromDistance + along * (edge.ToDistance - edge.FromDistance)});
   }
 }
 
@@ -161,7 +159,7 @@ World makeFullPark(uint64_t warmTicks) {
   stockShops(world);
   resolveWorld(world);
   refuseStarvedShops(world);
-  placeGuests(world, warmTicks + FULL_PARK_STAY);
+  placeGuests(world);
   for (uint64_t tick = 0; tick < warmTicks; ++tick) {
     stepWorld(world);
   }

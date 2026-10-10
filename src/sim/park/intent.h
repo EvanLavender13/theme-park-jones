@@ -187,6 +187,10 @@ std::vector<ParkBox> parkBoxes(const World &world);
 
 // The park's opening hours, or DEFAULT_HOURS when none are set.
 OpeningHours parkHours(const World &world);
+// Whether a park with the hours is open at the second of the day: from Opening up to but not
+// including Closing, past midnight when Closing is at or before Opening, and always when the two
+// are equal.
+bool isOpenAt(const OpeningHours &hours, uint64_t second);
 
 // The new-park template with the schema and the seed, resolution pending: an entrance on the
 // park's edge facing in, and a guest path of one segment running into the park from in front of

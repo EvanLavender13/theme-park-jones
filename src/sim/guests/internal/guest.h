@@ -16,9 +16,9 @@ namespace tpj {
 // chosen), whether it walks toward higher distances along its place's carrier, what it is doing,
 // how hungry it is and how fast that rises, how thirsty it is and how fast that rises, how tired it
 // is and how fast that rises with each meter walked, how full its bladder is, how fast it walks in
-// meters per second, its share of the width on its side, the tick its stay ends, the facility it
-// is heading to or waiting at and the need it goes there for, the relief of the offer it last
-// picked, and the meals it has eaten and the last of them.
+// meters per second, its share of the width on its side, the tick it arrived, the facility it is
+// heading to or waiting at and the need it goes there for, the relief of the offer it last picked,
+// the reason it last recorded for heading home, and the meals it has eaten and the last of them.
 struct Guest {
   Place At;
   GroundPoint Ground;
@@ -35,10 +35,11 @@ struct Guest {
   double Bladder = 0.0;
   double Speed = WALK_SPEED;
   double Share = 0.5;
-  uint64_t StayUntil = 0;
+  uint64_t Arrived = 0;
   EntityKey Target = NULL_KEY;
   GuestNeed TargetNeed = GuestNeed::Hunger;
   double ServingRelief = 0.0;
+  HomeReason Reason = HomeReason::Hunger;
   uint64_t MealsEaten = 0;
   GuestMeal LastMeal;
 };
@@ -60,10 +61,11 @@ template <typename Visitor> void visitFields(Visitor &visitor, Guest &guest) {
   visitor.field("bladder", guest.Bladder);
   visitor.field("speed", guest.Speed);
   visitor.field("share", guest.Share);
-  visitor.field("stay-until", guest.StayUntil);
+  visitor.field("arrived", guest.Arrived);
   visitor.field("target", guest.Target);
   visitor.field("target-need", guest.TargetNeed);
   visitor.field("serving-relief", guest.ServingRelief);
+  visitor.field("home-reason", guest.Reason);
   visitor.field("meals-eaten", guest.MealsEaten);
   visitor.field("last-meal", guest.LastMeal);
 }
