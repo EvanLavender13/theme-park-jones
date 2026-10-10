@@ -65,7 +65,7 @@ No feature adds a test (docs/testing.md). The slice's closing adds the integrati
 
 ## Tuning values
 
-These are starting values, adjusted in day-parks by watching day.park through a day. One game hour is 1800 ticks.
+These are starting values, adjusted in day-parks by watching day.park through a day. four-needs keeps hunger's rate and scales thirst and tiredness to today's stays of 1 to 2 game hours. going-home sets these values when stays become game hours. One game hour is 1800 ticks.
 
 - Hunger rate: drawn so hunger goes from 0 to 1 in 4 to 6 game hours. Starting hunger: drawn up to 0.4.
 - Thirst rate: drawn so thirst goes from 0 to 1 in 3 to 4.5 game hours. Starting thirst: drawn up to 0.4.

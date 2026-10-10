@@ -139,7 +139,7 @@ bool someGuest(const World &world, GuestActivity activity, EntityKey target) {
 std::vector<EntityKey> guestSegmentsUnderGuestsHeadingToShop(const World &world) {
   std::vector<EntityKey> keys;
   for (const GuestRecord &record : guestsOf(world)) {
-    if (record.Activity != GuestActivity::HeadingToShop) {
+    if (record.Activity != GuestActivity::HeadingToFacility) {
       continue;
     }
     for (const ParkSegment &segment : parkSegments(world)) {
@@ -274,7 +274,7 @@ ChosenEdit deletingShop(const World &before) {
   const EntityKey shop = firstShop(before);
   REQUIRE(shop != NULL_KEY);
   REQUIRE(someGuest(before, GuestActivity::Waiting, shop));
-  REQUIRE(someGuest(before, GuestActivity::HeadingToShop, shop));
+  REQUIRE(someGuest(before, GuestActivity::HeadingToFacility, shop));
   const FlowAddressed supplies = addressedTo<Supplies>(before, shop);
   REQUIRE_FALSE(supplies.Packets.empty());
   REQUIRE_FALSE(supplies.Stocks.empty());
@@ -519,7 +519,7 @@ ChosenEdit settingShopToDrinkUnderGuests(const World &before) {
   const EntityKey shop = firstShop(before);
   REQUIRE(shop != NULL_KEY);
   REQUIRE(someGuest(before, GuestActivity::Waiting, shop));
-  REQUIRE(someGuest(before, GuestActivity::HeadingToShop, shop));
+  REQUIRE(someGuest(before, GuestActivity::HeadingToFacility, shop));
   const SetShopStock set{shop, ShopStock::Drink};
   REQUIRE(isAccepted(before, ParkEdit{set}));
   // Without the setting held on the shop, this edit would leave the world as it was.

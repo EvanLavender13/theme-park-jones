@@ -30,10 +30,11 @@ struct InspectorRow {
   bool operator==(const InspectorRow &) const = default;
 };
 
-// One option a guest would weigh now, as text: the option, its terms, score, and probability.
-// Carrying on and heading home have empty terms.
+// One option a guest would weigh now, as text: the option, the need an offer answers, its terms,
+// score, and probability. Carrying on and heading home have no need and empty terms.
 struct ChoiceRow {
   std::string Option;
+  std::string Need;
   std::string Relief;
   std::string Distance;
   std::string Wait;

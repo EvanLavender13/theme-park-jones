@@ -55,7 +55,7 @@ An inspector explains one guest or shop from what it publishes about itself (dec
 
 inspectSubject reads the subject's record afresh at each call, so if an inspector is shown every frame, it follows every tick. It says when the subject is gone. For a guest it shows:
 
-- its activity, hunger, target shop, time left in its stay, meals eaten, and last meal
-- a table of every option the guest would weigh if it chose now, with each term of its score and its probability (principle 8)
+- its activity, its four needs, its target and the need it heads there for, time left in its stay, meals eaten, and last meal
+- a table of every option the guest would weigh if it chose now, with each offer's facility and need, each term of its score, and its probability (principle 8)
 
 For a shop it shows its stock and units on order of each good, its queue, what limits it, and whether it is starved.

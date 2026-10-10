@@ -235,7 +235,7 @@ Step 5: In drawChoices, make the table 8 columns, with the headings "Option", "N
 
 Step 6: Build the app.
 
-Run: `cmake.exe --build --preset windows-debug --target ThemeParkJones 2>&1 | grep -c "warning:\|error:"`
+Run: `cmake.exe --build --preset windows-debug --target tpj_app 2>&1 | grep -c "warning:\|error:"`
 Expected: `0`
 
 ### Task 12: Shade guests by their most pressing need
@@ -250,7 +250,7 @@ Step 2: In buildGuestMesh, color each guest by the greatest of the record's Hung
 
 Step 3: Build the app.
 
-Run: `cmake.exe --build --preset windows-debug --target ThemeParkJones 2>&1 | grep -c "warning:\|error:"`
+Run: `cmake.exe --build --preset windows-debug --target tpj_app 2>&1 | grep -c "warning:\|error:"`
 Expected: `0`
 
 ### Task 13: Remake the parks and check the food-only ones simulate as before
