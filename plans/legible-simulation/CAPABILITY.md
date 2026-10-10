@@ -24,7 +24,7 @@ Each shop's term is its attributed contribution. At every sampled place, the ter
 
 A library computes availability and its attribution. It reads the simulation's fields and has no rendering, so integration tests can use it headless. It doesn't write to the world, and it isn't part of the simulation's state, hash, or saves.
 
-The food-availability overlay shades the paving of guest paths across its whole width. Each spot of a path's paving takes the value at the place on that path's line nearest the spot. Junction paving takes it from the nearest of its paths, and where paving of unjoined paths overlaps, the nearest line's value shows. The ground beside paths, door walkways, and backstage paths are not shaded. The color ramp is perceptually uniform and colorblind-safe. Zero is clearly distinct from the rest of the ramp and from unshaded paving. The app's --overlay food option turns the overlay on from the start, for scripted captures.
+The food-availability overlay shades the paving of guest paths across its whole width. Each spot of a path's paving takes the value at the place on that path's line nearest the spot. Junction paving takes it from the nearest of its paths, and where paving of unjoined paths overlaps, the nearest line's value shows. The ground beside paths, door walkways, and backstage paths are not shaded. The color ramp is perceptually uniform and colorblind-safe. Zero is the ramp's worst color, and every color of the ramp is clearly distinct from unshaded paving. The app's --overlay food option turns the overlay on from the start, for scripted captures.
 
 When the player hovers over a shaded spot, the game lists each contributing shop with:
 
@@ -114,7 +114,7 @@ It is useful for development too. Every other capability's behavior becomes obse
 
 1. `explained-food`: the food-availability library with exact attribution, and the food overlay with hover attribution and the --overlay option. Previews of placements and deletions run on candidate worlds rebuilt each tick, and a shop ghost shows its context. Guests and shops get inspectors. Member of the boxes-and-tubes slice. Depends on: every other member milestone of the slice.
 2. `wide-overlay`: the food overlay shades the guest paving itself, across every width, with the hover over the shaded paving. Member of the good-paths slice. Depends on: navigable-networks' wide-routes.
-3. `explained-needs`: an overlay for each of the guests' four needs, faded by one curve in game minutes that never reaches 0, with hover attribution and previews; bench and toilet block inspectors and a guest choice table of one row per need; the departures panel and the Hours panel's arrival curve. Member of the day-at-the-park slice. Depends on: every other member milestone of the slice.
+3. `explained-needs`: an overlay for each of the guests' four needs, faded by one curve in game minutes, with nothing shown as the ramp's worst color, with hover attribution and previews; bench and toilet block inspectors and a guest choice table of one row per need; the departures panel and the Hours panel's arrival curve. Member of the day-at-the-park slice. Depends on: every other member milestone of the slice.
 
 Later milestones are drawn from the deepening candidates once the slice has been played.
 

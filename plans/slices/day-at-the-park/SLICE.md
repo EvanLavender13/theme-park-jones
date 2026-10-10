@@ -18,7 +18,7 @@ Every facility publishes an offer for each need it answers, stating the relief i
 
 Going home is one of those scored options (decision 0019), and it replaces the fixed stay. Its score rises with the guest's tiredness, with the discomfort of needs the guest hasn't met, and as closing time nears. After closing, going home outscores everything else. If the park serves a guest well, the guest stays for hours. If it can't find a toilet, it goes home early. The guest's choice records the head-home terms, and when the guest picks going home, the largest term is its reason for leaving.
 
-The player opens the departures panel. It shows today's departures by reason: tired, closing time, hunger, thirst, or the toilet. Many guests left for the toilet, and only one toilet block serves the whole park. The player switches the overlay to toilets and sees the far end of the park shaded only faintly. Hovering lists the one block's contribution. They click a guest who is heading home, and the inspector shows its needs and the head-home terms that decided it.
+The player opens the departures panel. It shows today's departures by reason: tired, closing time, hunger, thirst, or the toilet. Many guests left for the toilet, and only one toilet block serves the whole park. The player switches the overlay to toilets and sees the far end of the park in the ramp's worst color. Hovering lists the one block's contribution. They click a guest who is heading home, and the inspector shows its needs and the head-home terms that decided it.
 
 The player places a second toilet block at the far end. Before they commit it, the overlay previews the coverage it adds. Later, with the food overlay on, they switch the drink shop to stock both. Before they confirm, the overlay previews the food coverage the shop would add. Once they confirm, the shop starts ordering food beside its drinks. If a shop is switched away from a good, it sells off what it holds of that good and orders no more.
 
@@ -30,7 +30,7 @@ At 21:00 the gate stops admitting guests. The guests still inside walk home, and
 
 Four park files are checked in under tests/parks:
 
-- day.park holds an entrance, a guest path, a food shop, a drink shop, a bench, a toilet block, a depot, and a backstage path. The two shops stand at opposite ends of the guest path. explained-needs sets each need overlay's discount curve in game time, so each shop's overlay is brightest at its own end and faint at the other's. Its hours are 9:00 to 21:00. It starts at 9:00 with no guests.
+- day.park holds an entrance, a guest path, a food shop, a drink shop, a bench, a toilet block, a depot, and a backstage path. The two shops stand at opposite ends of the guest path. explained-needs sets each need overlay's discount curve in game time, so each shop's overlay is best at its own end and worst at the other's. Its hours are 9:00 to 21:00. It starts at 9:00 with no guests.
 - no-toilet.park is day.park without the toilet block.
 - noon.park is day.park run to 12:00, with guests in the park.
 - evening.park is day.park run to shortly before 21:00, so the cross-build check's run of it crosses closing.
@@ -47,7 +47,7 @@ a-day-out adds three edits of noon.park to the world checks' chosen edits, so ea
 4. A capture of noon.park shows the park in daylight, with guests on the paving and at the facilities' doors. (scripted capture: stylized-presentation, believable-guests)
 5. A capture of day.park at 23:00 shows the empty park at night, with every box and path still distinguishable from the ground. (scripted capture: stylized-presentation, believable-guests)
 6. A capture of noon.park with the toilet overlay on shows the guest paving shaded around the toilet block. (scripted capture: legible-simulation)
-7. A capture of noon.park with the drink overlay on shows the guest paving shaded brightest around the drink shop and faintest around the food shop. (scripted capture: legible-simulation)
+7. A capture of noon.park with the drink overlay on shows the guest paving shaded in the ramp's best colors around the drink shop and its worst around the food shop. (scripted capture: legible-simulation)
 8. In the running app, no guest arrives while the park is closed, every guest admitted has left before the next opening, and guests arrive again after it. (manual)
 9. In the running app, if the player switches a shop away from drink, the shop places no more drink orders. Its drink offer ends once it has served the drink it held and the drink already on its way, and it serves no drink after that. (manual)
 10. In the running app, hovering a need's overlay lists each facility's contribution, and the contributions match the value shown, to the precision shown. (manual)
