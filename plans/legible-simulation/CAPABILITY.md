@@ -126,6 +126,7 @@ Later milestones are drawn from the deepening candidates once the slice has been
 - Flows made visible: supplies drawn as carts and guest visits drawn as queues, derived from the ledger for presentation (decision 0018).
 - The player-facing form of overlays, previews, and explanations. Gated on: the player-facing UI question.
 - Previews that simulate ahead in time. They are out of scope for the slice. Gated on: candidate copies being cheap enough to step.
+- A park statistics panel, designed to grow with the park's needs and services, with a fixed layout that doesn't resize as values change. It replaces the Debug panel's per-shop lines and its guest hunger and meals line, which were removed because they grew without bound and named only food.
 - Availability estimated from what guests experience, instead of computed from every route and queue. The game would record the walk and wait that guests actually took to reach a meal. It would keep each record at the place the guest started, the way it keeps hungry footfall. The overlay would then be a realistic, statistical picture instead of an all-knowing one.
 
 ## Open questions
