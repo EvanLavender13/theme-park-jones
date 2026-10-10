@@ -57,4 +57,4 @@ scripts/runtime-report.sh --compare BEFORE AFTER prints the comparison of two re
 
 ## Stress parks
 
-tests/parks/stress/ holds the parks that only the runtime report reads. Each is named for what it holds. winding-path.park is a single guest path about 3 km long with one shop. full.park is the full park: 2,000 guests, 30 shops, and 4 km of guest path, a minute into play.
+tests/parks/stress/ holds the parks that only the runtime report reads. Each is named for what it holds. winding-path.park is a single guest path about 3 km long with one shop. full.park is the full park: 2,000 guests, 30 shops selling food, drink, or both, 15 toilet blocks, 45 benches, and 4 km of guest path, a minute into play.
