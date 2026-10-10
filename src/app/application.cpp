@@ -5,6 +5,7 @@
 #include "app/scene/scene_uploads.h"
 #include "core/profile.h"
 #include "legible/preview.h"
+#include "render/day_light.h"
 #include "render/renderer.h"
 
 #include <SDL3/SDL.h>
@@ -126,7 +127,8 @@ bool Application::runFrames() {
     if (((lookChanged || shapeChanged) &&
          !uploadPreviewMeshes(renderer, Session.world(), Scene.preview(), look,
                               Scene.overlayShape(), shapeChanged)) ||
-        !drawFrame(renderer, view, drawData, lastFrame ? CapturePath : nullptr)) {
+        !drawFrame(renderer, view, dayLightOf(Session.world()), drawData,
+                   lastFrame ? CapturePath : nullptr)) {
       return false;
     }
     TPJ_PROFILE_FRAME();

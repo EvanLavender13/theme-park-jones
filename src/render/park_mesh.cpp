@@ -426,7 +426,12 @@ void appendWalkways(ParkMesh &mesh, const World &world, float alpha) {
       const std::vector<CarrierPoint> points{
           {.X = walkway.Door.X, .Z = walkway.Door.Z, .Distance = 0.0},
           {.X = walkway.Meets.X, .Z = walkway.Meets.Z, .Distance = length}};
+      const size_t first = mesh.Vertices.size();
       appendWalkway(mesh, kind, points, walkway.Width, walkway.Out, color);
+      // Lifted as ghost segments are, so the strip never flickers against the paving it meets.
+      for (size_t i = first; i < mesh.Vertices.size(); ++i) {
+        mesh.Vertices[i].Position[1] += GHOST_LIFT;
+      }
     }
   }
 }
@@ -570,60 +575,63 @@ PavedSurface reshapedBy(const World &world, const ParkEdit &edit,
 
 } // namespace
 
-ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
-                        const std::optional<World> &candidate) {
-  ParkMesh mesh;
+GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
+                         const std::optional<World> &candidate) {
+  GhostMesh ghost;
   const bool accepted = isAccepted(world, edit);
+  // What the edit adds or changes previews the park, lit as it is, unless the world refuses it and
+  // it shows in the invalid tint.
+  ParkMesh &shape = accepted ? ghost.Lit : ghost.Tints;
   if (const auto *add = std::get_if<AddBox>(&edit)) {
-    appendBox(mesh, add->At, boxSize(add->Kind), boxHeight(add->Kind),
+    appendBox(shape, add->At, boxSize(add->Kind), boxHeight(add->Kind),
               ghostColor(accepted, boxColor(add->Kind)));
   } else if (const auto *move = std::get_if<MoveBox>(&edit)) {
     for (const ParkBox &box : parkBoxes(world)) {
       if (box.Key == move->Box) {
-        appendBox(mesh, move->At, boxSize(box.Kind), boxHeight(box.Kind),
+        appendBox(shape, move->At, boxSize(box.Kind), boxHeight(box.Kind),
                   ghostColor(accepted, boxColor(box.Kind)));
       }
     }
   }
   if (const auto *del = std::get_if<DeleteSegment>(&edit)) {
     // A segment's deletion shows only what goes, and the segments whose line it reshapes.
-    appendEntity(mesh, world, del->Segment, accepted ? DELETE_TINT : INVALID_TINT);
-    appendSurface(mesh, reshapedBy(world, edit, candidate), GHOST_LIFT,
+    appendEntity(ghost.Tints, world, del->Segment, accepted ? DELETE_TINT : INVALID_TINT);
+    appendSurface(shape, reshapedBy(world, edit, candidate), GHOST_LIFT,
                   [accepted](PathKind kind) { return ghostColor(accepted, pathColor(kind)); });
     if (candidate) {
-      appendWalkways(mesh, *candidate, GHOST_ALPHA);
-      appendStarvedMarks(mesh, *candidate, GHOST_ALPHA);
+      appendWalkways(ghost.Lit, *candidate, GHOST_ALPHA);
+      appendStarvedMarks(ghost.Lit, *candidate, GHOST_ALPHA);
     }
-    return mesh;
+    return ghost;
   }
   if (accepted) {
-    appendDeleted(mesh, world, edit);
+    appendDeleted(ghost.Tints, world, edit);
   }
   PavedSurface surface = editedSurface(world, edit);
   if (const auto *path = std::get_if<AddPath>(&edit); path != nullptr && surface.Pieces.empty()) {
-    appendStraightPath(mesh, world, *path, ghostColor(accepted, pathColor(path->Kind)));
+    appendStraightPath(shape, world, *path, ghostColor(accepted, pathColor(path->Kind)));
   }
   if (candidate && !surface.Pieces.empty()) {
     surface = ownedWithWalkways(*candidate, ownersOf(surface));
   }
-  appendSurface(mesh, surface, GHOST_LIFT,
+  appendSurface(shape, surface, GHOST_LIFT,
                 [accepted](PathKind kind) { return ghostColor(accepted, pathColor(kind)); });
   // A narrower ghost lies inside the path it narrows, in the same color, so its new sides are
   // marked.
   if (std::holds_alternative<SetSegmentWidth>(edit)) {
     for (const ParkSegment &segment : editedSegments(world, edit)) {
-      appendSides(mesh, segment, JOIN_MARK_COLOR);
+      appendSides(ghost.Marks, segment, JOIN_MARK_COLOR);
     }
   }
-  appendJoinMarks(mesh, world, edit);
+  appendJoinMarks(ghost.Marks, world, edit);
   if (candidate) {
-    appendWalkways(mesh, *candidate, GHOST_ALPHA);
-    appendStarvedMarks(mesh, *candidate, GHOST_ALPHA);
+    appendWalkways(ghost.Lit, *candidate, GHOST_ALPHA);
+    appendStarvedMarks(ghost.Lit, *candidate, GHOST_ALPHA);
   }
-  return mesh;
+  return ghost;
 }
 
-ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit) {
+GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit) {
   std::optional<World> candidate;
   if (isAccepted(world, edit)) {
     CommandQueue queue;

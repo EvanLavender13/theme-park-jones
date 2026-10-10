@@ -1,6 +1,7 @@
 #ifndef TPJ_RENDER_RENDERER_H
 #define TPJ_RENDER_RENDERER_H
 
+#include "render/day_light.h"
 #include "render/math.h"
 #include "render/park_mesh.h"
 #include "render/paving_overlay.h"
@@ -11,6 +12,7 @@ struct ImDrawData;
 struct SDL_GPUBuffer;
 struct SDL_GPUDevice;
 struct SDL_GPUGraphicsPipeline;
+struct SDL_GPUSampler;
 struct SDL_GPUTexture;
 struct SDL_Window;
 
@@ -24,8 +26,9 @@ struct CameraView {
   float FarZ = 2000.0f;
 };
 
-// The scene renders into an offscreen color target that is then blitted to the swapchain,
-// which lets any frame be read back for captures.
+// The scene renders in linear light into a float target, which is tonemapped into an offscreen
+// color target. The overlay, ghosts, and UI draw over that, and it is then blitted to the
+// swapchain, which lets any frame be read back for captures.
 struct Renderer {
   SDL_Window *Window = nullptr;
   SDL_GPUDevice *Device = nullptr;
@@ -44,6 +47,13 @@ struct Renderer {
   SDL_GPUBuffer *GhostVertices = nullptr;
   SDL_GPUBuffer *GhostIndices = nullptr;
   uint32_t GhostIndexCount = 0;
+  SDL_GPUGraphicsPipeline *MarksPipeline = nullptr;
+  SDL_GPUBuffer *TintVertices = nullptr;
+  SDL_GPUBuffer *TintIndices = nullptr;
+  SDL_GPUBuffer *MarkVertices = nullptr;
+  SDL_GPUBuffer *MarkIndices = nullptr;
+  uint32_t TintIndexCount = 0;
+  uint32_t MarkIndexCount = 0;
   SDL_GPUGraphicsPipeline *OverlayPipeline = nullptr;
   SDL_GPUBuffer *OverlayVertices = nullptr;
   SDL_GPUBuffer *OverlayIndices = nullptr;
@@ -51,6 +61,9 @@ struct Renderer {
   SDL_GPUBuffer *OverlayShape = nullptr;
   SDL_GPUBuffer *OverlayShades = nullptr;
   float OverlayHalf = 1.0f;
+  SDL_GPUGraphicsPipeline *TonemapPipeline = nullptr;
+  SDL_GPUSampler *SceneSampler = nullptr;
+  SDL_GPUTexture *SceneTarget = nullptr;
   SDL_GPUTexture *ColorTarget = nullptr;
   SDL_GPUTexture *DepthTarget = nullptr;
   int DepthFormat = 0;
@@ -77,9 +90,10 @@ bool setOverlayShape(Renderer &renderer, const OverlayShape &shape);
 // must be the shades of the shape last set. Returns false and logs through SDL on failure.
 bool setOverlayShades(Renderer &renderer, const OverlayShades &shades);
 
-// Uploads the translucent mesh of ghosts and highlights drawn from now on, replacing the one
-// before. An empty mesh draws nothing. Returns false and logs through SDL on failure.
-bool setGhostMesh(Renderer &renderer, const ParkMesh &mesh);
+// Uploads the translucent ghost drawn from now on, its tints, the park it previews, and its marks,
+// replacing the one before. An empty part draws nothing. Returns false and logs through SDL on
+// failure.
+bool setGhostMesh(Renderer &renderer, const GhostMesh &ghost);
 // Uploads the guests' mesh drawn from now on, replacing the one before. An empty mesh draws
 // nothing. Returns false and logs through SDL on failure.
 bool setGuestMesh(Renderer &renderer, const ParkMesh &mesh);
@@ -87,9 +101,9 @@ bool setGuestMesh(Renderer &renderer, const ParkMesh &mesh);
 // Starts the GPU backend's part of an ImGui frame. Call before ImGui::NewFrame.
 void beginUiFrame();
 
-// Draws one frame: the scene, then `ui` over it when non-null. When `capturePath` is non-null
-// the frame, including the UI, is also written there as a BMP.
-bool drawFrame(Renderer &renderer, const CameraView &camera, ImDrawData *ui,
+// Draws one frame: the scene lit by `light`, then `ui` over it when non-null. When `capturePath` is
+// non-null the frame, including the UI, is also written there as a BMP.
+bool drawFrame(Renderer &renderer, const CameraView &camera, const DayLight &light, ImDrawData *ui,
                const char *capturePath);
 
 } // namespace tpj

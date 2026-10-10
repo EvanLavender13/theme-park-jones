@@ -1,4 +1,8 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "light.glsl"
+#include "tonemap.glsl"
 
 // Colors each pixel of the paving overlay's pieces by the value at its overlay place: the nearest
 // place on its piece's lines, unless a piece of another owner that holds the pixel has a nearer
@@ -18,14 +22,12 @@ layout(std430, set = 2, binding = 0) readonly buffer Shape {
 layout(std430, set = 2, binding = 1) readonly buffer Shades {
     uint shades[];
 };
-layout(std140, set = 3, binding = 0) uniform Ramp {
+layout(std140, set = 3, binding = 1) uniform Ramp {
     vec4 colors[5];
     vec4 zero;
     vec4 middle;
 } ramp;
 
-const vec3 SKY = vec3(0.62, 0.76, 0.90);
-const vec3 SUN_DIRECTION = vec3(0.4, 1.0, 0.3);
 // The words of one piece: eight corner coordinates, the corner count, and the first and count of
 // its lines and of its overlaps.
 const uint PIECE_WORDS = 13u;
@@ -152,8 +154,8 @@ void main() {
             discard;
         }
     }
-    float light = 0.55 + 0.45 * max(normalize(SUN_DIRECTION).y, 0.0);
-    vec3 color = rampColor(valueAt(line, along)) * light;
-    color = mix(color, SKY, smoothstep(250.0, 700.0, inViewDistance));
+    // The ramp's own colors at every hour, faded with distance to the sky as it shows on screen.
+    vec3 sky = displayed(light.sky.rgb, light.settings.y);
+    vec3 color = mix(rampColor(valueAt(line, along)), sky, smoothstep(250.0, 700.0, inViewDistance));
     outColor = vec4(color, 1.0);
 }

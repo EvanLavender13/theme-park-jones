@@ -199,15 +199,24 @@ ParkMesh buildParkMesh(const World &world);
 // as a flat disc of JOIN_MARK_RADIUS at JOIN_MARK_LIFT. Nothing when the key holds none of these.
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
 
+// A ghost in three parts, drawn in order. Tints and Marks keep their colors at every hour, and Lit
+// is lit as the park is, so the park it previews looks as the park will.
+struct GhostMesh {
+  ParkMesh Tints;
+  ParkMesh Lit;
+  ParkMesh Marks;
+};
+
 // The ghost of an edit on a world: the box it adds or moves, and the paved surface it adds or
-// changes, drawn as buildParkMesh draws paving GHOST_LIFT higher, translucent in its kind's color
-// when accepted and INVALID_TINT when not; what an accepted deletion removes, in DELETE_TINT; and
-// its join marks; followed by the candidate's walkways and starved marks when a candidate is given.
-ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit,
-                        const std::optional<World> &candidate);
+// changes, drawn as buildParkMesh draws paving GHOST_LIFT higher, in Lit translucent in its kind's
+// color when accepted, and in Tints in INVALID_TINT when not; what an accepted deletion removes, in
+// Tints in DELETE_TINT; its join marks, in Marks; and the candidate's walkways and starved marks,
+// in Lit, when a candidate is given.
+GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
+                         const std::optional<World> &candidate);
 // The same ghost with the candidate makeCandidate gives for the edit when it is accepted, and none
 // when it is not.
-ParkMesh buildGhostMesh(const World &world, const ParkEdit &edit);
+GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit);
 
 // A rectangle on the ground.
 struct GroundBounds {
