@@ -62,7 +62,7 @@ Pitch, distance, and the focus stay within limits that keep the park in view. Mo
 
 ## Tooling UI
 
-The Debug panel shows the frame rate, the tick, the camera, and the Graph and Food overlay checkboxes. With no saved layout it starts at the window's top right, clear of the Tools panel. Panel positions persist in imgui.ini in the working directory.
+The Debug panel shows the frame rate, the tick, the number of guests in the park, the camera, and the Graph and Food overlay checkboxes. With no saved layout it starts at the window's top right, clear of the Tools panel. Panel positions persist in imgui.ini in the working directory.
 
 The Time panel shows the park's day and its time of day on a 24-hour clock in hours and minutes, such as `Day 1  09:00` (sim/SPEC.md, The clock). It follows every tick. Below the clock, radio buttons Pause, 1x, 2x, and 4x show the speed and choose it. Space pauses, and pressed again runs the park at the speed it ran at before. 1, 2, and 3 choose 1x, 2x, and 4x and unpause. The keys do nothing while a text field has the keyboard. The app starts at 1x, and keeps its speed when a park is opened or a new one started. With no saved layout the panel starts at the window's top center.
 

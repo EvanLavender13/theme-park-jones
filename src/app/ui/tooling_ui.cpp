@@ -12,6 +12,7 @@
 #include "app/ui/tool_panel.h"
 #include "legible/inspect.h"
 #include "render/renderer.h"
+#include "sim/guests/guests.h"
 
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
@@ -31,6 +32,7 @@ void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &c
   const World &world = session.world();
   DebugStats stats;
   stats.SimTick = world.Tick;
+  stats.Guests = parkGuests(world).size();
   stats.Focus = camera.Focus;
   stats.Distance = camera.Distance;
   drawDebugPanel(stats, shown.Graph, shown.FoodOverlay);
