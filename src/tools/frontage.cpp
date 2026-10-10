@@ -456,7 +456,11 @@ std::optional<Pose> frontagePose(const World &world, BoxKind kind, ParkPoint poi
   const bool onPaving = std::ranges::any_of(surface.Pieces, [served, point](const SurfacePiece &p) {
     return p.Kind == served && pieceDistance(p, point) == 0.0;
   });
-  if (!onPaving && nearest.Distance > FRONTAGE_SETBACK + size.Depth) {
+  // A box at the pointer could have its door within CONNECTION_REACH of the paving out to this
+  // distance, so it fronts the paving at least that far out.
+  const double nearReach =
+      std::max(FRONTAGE_SETBACK + size.Depth, CONNECTION_REACH + 0.5 * size.Depth);
+  if (!onPaving && nearest.Distance > nearReach) {
     return std::nullopt;
   }
   const Fronting fronting = frontingFor(steps, nearest, point);
