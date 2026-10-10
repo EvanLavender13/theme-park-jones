@@ -14,7 +14,8 @@ namespace tpj {
 namespace {
 
 constexpr SDL_GPUTextureFormat COLOR_FORMAT = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-constexpr SDL_FColor SKY_COLOR = {0.62f, 0.76f, 0.90f, 1.0f};
+// The scene is lit in linear light, which needs more range and precision than COLOR_FORMAT has.
+constexpr SDL_GPUTextureFormat SCENE_FORMAT = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
 constexpr uint32_t TERRAIN_CELLS_PER_SIDE = 128;
 
 struct TerrainVertex {
@@ -26,6 +27,19 @@ struct TerrainVertex {
 struct CameraUniforms {
   Mat4 ViewProjection;
   float Eye[4];
+};
+
+// Matches the std140 `Light` block in light.glsl. Settings holds 1 in its first float when the
+// light gives brightness only, and the exposure in its second.
+struct LightUniforms {
+  float SunDirection[4];
+  float Sun[4];
+  float MoonDirection[4];
+  float Moon[4];
+  float AmbientSky[4];
+  float AmbientGround[4];
+  float Sky[4];
+  float Settings[4];
 };
 
 // Matches the std140 `Ramp` block in overlay.frag: the ramp's colors, the color for none, and the
@@ -41,7 +55,8 @@ void logError(const char *what) {
 }
 
 SDL_GPUShader *loadShader(SDL_GPUDevice *device, const char *fileName, SDL_GPUShaderStage stage,
-                          uint32_t uniformBufferCount, uint32_t storageBufferCount) {
+                          uint32_t uniformBufferCount, uint32_t storageBufferCount,
+                          uint32_t samplerCount) {
   char path[1024];
   SDL_snprintf(path, sizeof(path), "%sshaders/%s", SDL_GetBasePath(), fileName);
   size_t size = 0;
@@ -59,6 +74,7 @@ SDL_GPUShader *loadShader(SDL_GPUDevice *device, const char *fileName, SDL_GPUSh
   info.stage = stage;
   info.num_uniform_buffers = uniformBufferCount;
   info.num_storage_buffers = storageBufferCount;
+  info.num_samplers = samplerCount;
   SDL_GPUShader *shader = SDL_CreateGPUShader(device, &info);
   SDL_free(code);
   if (shader == nullptr) {
@@ -80,24 +96,33 @@ SDL_GPUTextureFormat chooseDepthFormat(SDL_GPUDevice *device) {
   return SDL_GPU_TEXTUREFORMAT_D16_UNORM;
 }
 
-// The buffers a fragment shader reads: its uniform buffers and its storage buffers.
+// The resources a fragment shader reads: its uniform buffers, its storage buffers, and its
+// samplers.
 struct FragmentBuffers {
   uint32_t Uniforms = 0;
   uint32_t Storage = 0;
+  uint32_t Samplers = 0;
 };
 
-// A lit, depth-tested pipeline with back faces culled. Depth is reversed: nearer is greater. A
-// translucent one blends by alpha, passes equal depths, and writes no depth.
+// The vertex attributes a pipeline reads from one buffer, and the bytes between vertices.
+struct VertexLayout {
+  const SDL_GPUVertexAttribute *Attributes = nullptr;
+  uint32_t AttributeCount = 0;
+  uint32_t Pitch = 0;
+};
+
+// A depth-tested pipeline with back faces culled, drawing into a target of the given format.
+// Depth is reversed: nearer is greater. A translucent one blends by alpha, passes equal depths,
+// and writes no depth.
 SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *vertexFile,
-                                        const char *fragmentFile,
-                                        const SDL_GPUVertexAttribute *attributes,
-                                        uint32_t attributeCount, uint32_t pitch, bool translucent,
-                                        FragmentBuffers fragmentBuffers) {
+                                        const char *fragmentFile, VertexLayout layout,
+                                        bool translucent, FragmentBuffers fragmentBuffers,
+                                        SDL_GPUTextureFormat targetFormat) {
   SDL_GPUShader *vertexShader =
-      loadShader(renderer.Device, vertexFile, SDL_GPU_SHADERSTAGE_VERTEX, 1, 0);
+      loadShader(renderer.Device, vertexFile, SDL_GPU_SHADERSTAGE_VERTEX, 1, 0, 0);
   SDL_GPUShader *fragmentShader =
       loadShader(renderer.Device, fragmentFile, SDL_GPU_SHADERSTAGE_FRAGMENT,
-                 fragmentBuffers.Uniforms, fragmentBuffers.Storage);
+                 fragmentBuffers.Uniforms, fragmentBuffers.Storage, fragmentBuffers.Samplers);
   if (vertexShader == nullptr || fragmentShader == nullptr) {
     SDL_ReleaseGPUShader(renderer.Device, vertexShader);
     SDL_ReleaseGPUShader(renderer.Device, fragmentShader);
@@ -106,11 +131,11 @@ SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *ve
 
   SDL_GPUVertexBufferDescription vertexBuffer = {};
   vertexBuffer.slot = 0;
-  vertexBuffer.pitch = pitch;
+  vertexBuffer.pitch = layout.Pitch;
   vertexBuffer.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
   SDL_GPUColorTargetDescription colorTarget = {};
-  colorTarget.format = COLOR_FORMAT;
+  colorTarget.format = targetFormat;
   if (translucent) {
     colorTarget.blend_state.enable_blend = true;
     colorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
@@ -126,8 +151,8 @@ SDL_GPUGraphicsPipeline *createPipeline(const Renderer &renderer, const char *ve
   info.fragment_shader = fragmentShader;
   info.vertex_input_state.vertex_buffer_descriptions = &vertexBuffer;
   info.vertex_input_state.num_vertex_buffers = 1;
-  info.vertex_input_state.vertex_attributes = attributes;
-  info.vertex_input_state.num_vertex_attributes = attributeCount;
+  info.vertex_input_state.vertex_attributes = layout.Attributes;
+  info.vertex_input_state.num_vertex_attributes = layout.AttributeCount;
   info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
   info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
   info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
@@ -162,7 +187,8 @@ bool createTerrainPipeline(Renderer &renderer) {
   attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
   attributes[1].offset = offsetof(TerrainVertex, Normal);
   renderer.TerrainPipeline = createPipeline(renderer, "terrain.vert.spv", "terrain.frag.spv",
-                                            attributes, 2, sizeof(TerrainVertex), false, {});
+                                            VertexLayout{attributes, 2, sizeof(TerrainVertex)},
+                                            false, FragmentBuffers{.Uniforms = 1}, SCENE_FORMAT);
   return renderer.TerrainPipeline != nullptr;
 }
 
@@ -183,11 +209,17 @@ bool createParkPipeline(Renderer &renderer) {
   attributes[2].buffer_slot = 0;
   attributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
   attributes[2].offset = offsetof(ParkVertex, Color);
-  renderer.ParkPipeline = createPipeline(renderer, "park.vert.spv", "park.frag.spv", attributes, 3,
-                                         sizeof(ParkVertex), false, {});
-  renderer.GhostPipeline = createPipeline(renderer, "park.vert.spv", "park.frag.spv", attributes, 3,
-                                          sizeof(ParkVertex), true, {});
-  return renderer.ParkPipeline != nullptr && renderer.GhostPipeline != nullptr;
+  const VertexLayout layout{attributes, 3, sizeof(ParkVertex)};
+  const FragmentBuffers light{.Uniforms = 1};
+  renderer.ParkPipeline = createPipeline(renderer, "park.vert.spv", "park.frag.spv", layout, false,
+                                         light, SCENE_FORMAT);
+  // Ghosts and marks draw after the tonemap, into the color target.
+  renderer.GhostPipeline = createPipeline(renderer, "park.vert.spv", "ghost.frag.spv", layout, true,
+                                          light, COLOR_FORMAT);
+  renderer.MarksPipeline = createPipeline(renderer, "park.vert.spv", "marks.frag.spv", layout, true,
+                                          light, COLOR_FORMAT);
+  return renderer.ParkPipeline != nullptr && renderer.GhostPipeline != nullptr &&
+         renderer.MarksPipeline != nullptr;
 }
 
 bool createOverlayPipeline(Renderer &renderer) {
@@ -201,9 +233,55 @@ bool createOverlayPipeline(Renderer &renderer) {
   attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UINT;
   attributes[1].offset = offsetof(OverlayVertex, Piece);
   renderer.OverlayPipeline =
-      createPipeline(renderer, "overlay.vert.spv", "overlay.frag.spv", attributes, 2,
-                     sizeof(OverlayVertex), false, FragmentBuffers{1, 2});
+      createPipeline(renderer, "overlay.vert.spv", "overlay.frag.spv",
+                     VertexLayout{attributes, 2, sizeof(OverlayVertex)}, false,
+                     FragmentBuffers{.Uniforms = 2, .Storage = 2}, COLOR_FORMAT);
   return renderer.OverlayPipeline != nullptr;
+}
+
+// The full-screen pass that tonemaps the scene target into the color target, and the sampler it
+// reads the scene with.
+bool createTonemapPipeline(Renderer &renderer) {
+  SDL_GPUShader *vertexShader =
+      loadShader(renderer.Device, "tonemap.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0, 0);
+  SDL_GPUShader *fragmentShader =
+      loadShader(renderer.Device, "tonemap.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 0, 1);
+  if (vertexShader == nullptr || fragmentShader == nullptr) {
+    SDL_ReleaseGPUShader(renderer.Device, vertexShader);
+    SDL_ReleaseGPUShader(renderer.Device, fragmentShader);
+    return false;
+  }
+  SDL_GPUColorTargetDescription colorTarget = {};
+  colorTarget.format = COLOR_FORMAT;
+  SDL_GPUGraphicsPipelineCreateInfo info = {};
+  info.vertex_shader = vertexShader;
+  info.fragment_shader = fragmentShader;
+  info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+  info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+  info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+  info.target_info.color_target_descriptions = &colorTarget;
+  info.target_info.num_color_targets = 1;
+  renderer.TonemapPipeline = SDL_CreateGPUGraphicsPipeline(renderer.Device, &info);
+  SDL_ReleaseGPUShader(renderer.Device, vertexShader);
+  SDL_ReleaseGPUShader(renderer.Device, fragmentShader);
+  if (renderer.TonemapPipeline == nullptr) {
+    logError("Cannot create the tonemap pipeline");
+    return false;
+  }
+  // The pass reads the scene at the size it writes it, so it never filters.
+  SDL_GPUSamplerCreateInfo sampler = {};
+  sampler.min_filter = SDL_GPU_FILTER_NEAREST;
+  sampler.mag_filter = SDL_GPU_FILTER_NEAREST;
+  sampler.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+  sampler.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+  sampler.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+  sampler.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+  renderer.SceneSampler = SDL_CreateGPUSampler(renderer.Device, &sampler);
+  if (renderer.SceneSampler == nullptr) {
+    logError("Cannot create the scene sampler");
+    return false;
+  }
+  return true;
 }
 
 constexpr uint32_t TERRAIN_VERTICES_PER_SIDE = TERRAIN_CELLS_PER_SIDE + 1;
@@ -416,6 +494,7 @@ bool ensureRenderTargets(Renderer &renderer, uint32_t width, uint32_t height) {
       renderer.TargetHeight == height) {
     return true;
   }
+  SDL_ReleaseGPUTexture(renderer.Device, renderer.SceneTarget);
   SDL_ReleaseGPUTexture(renderer.Device, renderer.ColorTarget);
   SDL_ReleaseGPUTexture(renderer.Device, renderer.DepthTarget);
 
@@ -427,15 +506,19 @@ bool ensureRenderTargets(Renderer &renderer, uint32_t width, uint32_t height) {
   info.num_levels = 1;
   info.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
-  info.format = COLOR_FORMAT;
+  info.format = SCENE_FORMAT;
   info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+  renderer.SceneTarget = SDL_CreateGPUTexture(renderer.Device, &info);
+
+  info.format = COLOR_FORMAT;
   renderer.ColorTarget = SDL_CreateGPUTexture(renderer.Device, &info);
 
   info.format = static_cast<SDL_GPUTextureFormat>(renderer.DepthFormat);
   info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
   renderer.DepthTarget = SDL_CreateGPUTexture(renderer.Device, &info);
 
-  if (renderer.ColorTarget == nullptr || renderer.DepthTarget == nullptr) {
+  if (renderer.SceneTarget == nullptr || renderer.ColorTarget == nullptr ||
+      renderer.DepthTarget == nullptr) {
     logError("Cannot create render targets");
     return false;
   }
@@ -509,8 +592,15 @@ bool createRenderer(Renderer &renderer, SDL_Window *window, float terrainSize) {
     return false;
   }
   renderer.DepthFormat = chooseDepthFormat(renderer.Device);
+  if (!SDL_GPUTextureSupportsFormat(renderer.Device, SCENE_FORMAT, SDL_GPU_TEXTURETYPE_2D,
+                                    SDL_GPU_TEXTUREUSAGE_COLOR_TARGET |
+                                        SDL_GPU_TEXTUREUSAGE_SAMPLER)) {
+    logError("The GPU cannot render the scene in a float target");
+    return false;
+  }
   if (!createTerrainPipeline(renderer) || !createParkPipeline(renderer) ||
-      !createOverlayPipeline(renderer) || !createTerrainMesh(renderer, terrainSize)) {
+      !createOverlayPipeline(renderer) || !createTonemapPipeline(renderer) ||
+      !createTerrainMesh(renderer, terrainSize)) {
     return false;
   }
 
@@ -533,8 +623,11 @@ void destroyRenderer(Renderer &renderer) {
   if (renderer.UiInitialized) {
     ImGui_ImplSDLGPU3_Shutdown();
   }
+  SDL_ReleaseGPUTexture(renderer.Device, renderer.SceneTarget);
   SDL_ReleaseGPUTexture(renderer.Device, renderer.ColorTarget);
   SDL_ReleaseGPUTexture(renderer.Device, renderer.DepthTarget);
+  SDL_ReleaseGPUSampler(renderer.Device, renderer.SceneSampler);
+  SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.TonemapPipeline);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.TerrainVertices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.TerrainIndices);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.TerrainPipeline);
@@ -551,6 +644,11 @@ void destroyRenderer(Renderer &renderer) {
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.GhostVertices);
   SDL_ReleaseGPUBuffer(renderer.Device, renderer.GhostIndices);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.GhostPipeline);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.TintVertices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.TintIndices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.MarkVertices);
+  SDL_ReleaseGPUBuffer(renderer.Device, renderer.MarkIndices);
+  SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.MarksPipeline);
   if (renderer.Window != nullptr) {
     SDL_ReleaseWindowFromGPUDevice(renderer.Device, renderer.Window);
   }
@@ -619,9 +717,13 @@ bool setOverlayShades(Renderer &renderer, const OverlayShades &shades) {
   return uploadStorage(renderer.Device, shadeWords(shades), renderer.OverlayShades);
 }
 
-bool setGhostMesh(Renderer &renderer, const ParkMesh &mesh) {
-  return replaceMesh(renderer, mesh, renderer.GhostVertices, renderer.GhostIndices,
-                     renderer.GhostIndexCount);
+bool setGhostMesh(Renderer &renderer, const GhostMesh &ghost) {
+  return replaceMesh(renderer, ghost.Tints, renderer.TintVertices, renderer.TintIndices,
+                     renderer.TintIndexCount) &&
+         replaceMesh(renderer, ghost.Lit, renderer.GhostVertices, renderer.GhostIndices,
+                     renderer.GhostIndexCount) &&
+         replaceMesh(renderer, ghost.Marks, renderer.MarkVertices, renderer.MarkIndices,
+                     renderer.MarkIndexCount);
 }
 
 bool setGuestMesh(Renderer &renderer, const ParkMesh &mesh) {
@@ -663,7 +765,39 @@ void drawOverlay(SDL_GPURenderPass *pass, const Renderer &renderer) {
   SDL_DrawGPUIndexedPrimitives(pass, renderer.OverlayIndexCount, 1, 0, 0, 0);
 }
 
-void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const CameraView &camera) {
+void copyRgb(Rgb color, float (&to)[4]) {
+  to[0] = color.R;
+  to[1] = color.G;
+  to[2] = color.B;
+  to[3] = 1.0f;
+}
+
+void copyDirection(Vec3 direction, float (&to)[4]) {
+  to[0] = direction.X;
+  to[1] = direction.Y;
+  to[2] = direction.Z;
+  to[3] = 0.0f;
+}
+
+// The light's uniforms, with its exposure, giving brightness only when asked.
+LightUniforms lightUniforms(const DayLight &light, bool brightnessOnly) {
+  LightUniforms uniforms = {};
+  copyDirection(light.SunDirection, uniforms.SunDirection);
+  copyRgb(light.Sun, uniforms.Sun);
+  copyDirection(light.MoonDirection, uniforms.MoonDirection);
+  copyRgb(light.Moon, uniforms.Moon);
+  copyRgb(light.AmbientSky, uniforms.AmbientSky);
+  copyRgb(light.AmbientGround, uniforms.AmbientGround);
+  copyRgb(light.Sky, uniforms.Sky);
+  uniforms.Settings[0] = brightnessOnly ? 1.0f : 0.0f;
+  uniforms.Settings[1] = light.Exposure;
+  return uniforms;
+}
+
+// Draws the terrain, the park, and the guests into the scene target, lit by the light, keeping the
+// depth for the passes after the tonemap.
+void drawLitScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands,
+                  const CameraView &camera, const DayLight &light) {
   const float aspect =
       static_cast<float>(renderer.TargetWidth) / static_cast<float>(renderer.TargetHeight);
   CameraUniforms uniforms = {};
@@ -674,17 +808,12 @@ void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const C
   uniforms.Eye[2] = camera.Eye.Z;
   uniforms.Eye[3] = 1.0f;
   SDL_PushGPUVertexUniformData(commands, 0, &uniforms, sizeof(uniforms));
-  RampUniforms ramp = {};
-  for (size_t i = 0; i < OVERLAY_RAMP.size(); ++i) {
-    ramp.Colors[i] = OVERLAY_RAMP[i];
-  }
-  ramp.Zero = OVERLAY_ZERO_COLOR;
-  ramp.Middle[0] = renderer.OverlayHalf;
-  SDL_PushGPUFragmentUniformData(commands, 0, &ramp, sizeof(ramp));
+  const LightUniforms lit = lightUniforms(light, false);
+  SDL_PushGPUFragmentUniformData(commands, 0, &lit, sizeof(lit));
 
   SDL_GPUColorTargetInfo colorTarget = {};
-  colorTarget.texture = renderer.ColorTarget;
-  colorTarget.clear_color = SKY_COLOR;
+  colorTarget.texture = renderer.SceneTarget;
+  colorTarget.clear_color = {light.Sky.R, light.Sky.G, light.Sky.B, 1.0f};
   colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
   colorTarget.store_op = SDL_GPU_STOREOP_STORE;
 
@@ -693,30 +822,74 @@ void drawScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const C
   // Reversed depth clears to the far plane, 0.
   depthTarget.clear_depth = 0.0f;
   depthTarget.load_op = SDL_GPU_LOADOP_CLEAR;
-  depthTarget.store_op = SDL_GPU_STOREOP_DONT_CARE;
+  depthTarget.store_op = SDL_GPU_STOREOP_STORE;
   depthTarget.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
   depthTarget.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
   depthTarget.cycle = true;
 
   SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(commands, &colorTarget, 1, &depthTarget);
-  SDL_BindGPUGraphicsPipeline(pass, renderer.TerrainPipeline);
-  const SDL_GPUBufferBinding vertexBinding = {renderer.TerrainVertices, 0};
-  SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
-  const SDL_GPUBufferBinding indexBinding = {renderer.TerrainIndices, 0};
-  SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-  SDL_DrawGPUIndexedPrimitives(pass, renderer.TerrainIndexCount, 1, 0, 0, 0);
-
-  // The camera uniforms pushed before the pass serve these pipelines too. The overlay lies just
-  // over the guest paving and under its edge lines, boxes, and guests. Guests are opaque boxes,
-  // drawn as the park's are. Ghosts and highlights come after everything opaque, so they blend over
-  // it.
+  drawMesh(pass, renderer.TerrainPipeline, renderer.TerrainVertices, renderer.TerrainIndices,
+           renderer.TerrainIndexCount);
+  // The camera and light uniforms pushed before the pass serve these pipelines too. Guests are
+  // opaque boxes, drawn as the park's are, but take only the light's brightness.
   drawMesh(pass, renderer.ParkPipeline, renderer.ParkVertices, renderer.ParkIndices,
            renderer.ParkIndexCount);
-  drawOverlay(pass, renderer);
+  const LightUniforms brightness = lightUniforms(light, true);
+  SDL_PushGPUFragmentUniformData(commands, 0, &brightness, sizeof(brightness));
   drawMesh(pass, renderer.ParkPipeline, renderer.GuestVertices, renderer.GuestIndices,
            renderer.GuestIndexCount);
+  SDL_EndGPURenderPass(pass);
+}
+
+// Tonemaps the scene target into the color target.
+void drawTonemap(const Renderer &renderer, SDL_GPUCommandBuffer *commands, const DayLight &light) {
+  const LightUniforms lit = lightUniforms(light, false);
+  SDL_PushGPUFragmentUniformData(commands, 0, &lit, sizeof(lit));
+  SDL_GPUColorTargetInfo colorTarget = {};
+  colorTarget.texture = renderer.ColorTarget;
+  colorTarget.load_op = SDL_GPU_LOADOP_DONT_CARE;
+  colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+  SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(commands, &colorTarget, 1, nullptr);
+  SDL_BindGPUGraphicsPipeline(pass, renderer.TonemapPipeline);
+  const SDL_GPUTextureSamplerBinding scene = {renderer.SceneTarget, renderer.SceneSampler};
+  SDL_BindGPUFragmentSamplers(pass, 0, &scene, 1);
+  SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+  SDL_EndGPURenderPass(pass);
+}
+
+// Draws the overlay, then the ghost's tints, the park it previews, and its marks, into the color
+// target over the tonemapped scene, depth tested against the scene's depth. The light's uniforms
+// pushed for the tonemap still serve them.
+void drawOverlayAndGhost(const Renderer &renderer, SDL_GPUCommandBuffer *commands) {
+  RampUniforms ramp = {};
+  for (size_t i = 0; i < OVERLAY_RAMP.size(); ++i) {
+    ramp.Colors[i] = OVERLAY_RAMP[i];
+  }
+  ramp.Zero = OVERLAY_ZERO_COLOR;
+  ramp.Middle[0] = renderer.OverlayHalf;
+  SDL_PushGPUFragmentUniformData(commands, 1, &ramp, sizeof(ramp));
+
+  SDL_GPUColorTargetInfo colorTarget = {};
+  colorTarget.texture = renderer.ColorTarget;
+  colorTarget.load_op = SDL_GPU_LOADOP_LOAD;
+  colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+  SDL_GPUDepthStencilTargetInfo depthTarget = {};
+  depthTarget.texture = renderer.DepthTarget;
+  depthTarget.load_op = SDL_GPU_LOADOP_LOAD;
+  depthTarget.store_op = SDL_GPU_STOREOP_DONT_CARE;
+  depthTarget.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+  depthTarget.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+
+  // The overlay lies just over the guest paving and under its edge lines, boxes, and guests, which
+  // the scene's depth holds. Ghosts come after it, so they blend over it.
+  SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(commands, &colorTarget, 1, &depthTarget);
+  drawOverlay(pass, renderer);
+  drawMesh(pass, renderer.MarksPipeline, renderer.TintVertices, renderer.TintIndices,
+           renderer.TintIndexCount);
   drawMesh(pass, renderer.GhostPipeline, renderer.GhostVertices, renderer.GhostIndices,
            renderer.GhostIndexCount);
+  drawMesh(pass, renderer.MarksPipeline, renderer.MarkVertices, renderer.MarkIndices,
+           renderer.MarkIndexCount);
   SDL_EndGPURenderPass(pass);
 }
 
@@ -748,7 +921,7 @@ void blitToSwapchain(const Renderer &renderer, SDL_GPUCommandBuffer *commands,
 
 } // namespace
 
-bool drawFrame(Renderer &renderer, const CameraView &camera, ImDrawData *ui,
+bool drawFrame(Renderer &renderer, const CameraView &camera, const DayLight &light, ImDrawData *ui,
                const char *capturePath) {
   TPJ_PROFILE_ZONE();
   SDL_GPUCommandBuffer *commands = SDL_AcquireGPUCommandBuffer(renderer.Device);
@@ -771,7 +944,9 @@ bool drawFrame(Renderer &renderer, const CameraView &camera, ImDrawData *ui,
     return SDL_SubmitGPUCommandBuffer(commands) && swapchain == nullptr;
   }
 
-  drawScene(renderer, commands, camera);
+  drawLitScene(renderer, commands, camera, light);
+  drawTonemap(renderer, commands, light);
+  drawOverlayAndGhost(renderer, commands);
   if (ui != nullptr && renderer.UiInitialized) {
     drawUi(renderer, commands, ui);
   }

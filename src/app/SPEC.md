@@ -24,7 +24,7 @@ If the main loop throws, for example when one of the simulation's world invarian
 
 ## The scene
 
-The park's walkways and shop marks are rebuilt whenever the park's intent changes or a park is opened. The guests are rebuilt whenever the world ticks or the park's intent changes, as an edit applied while paused changes it. The scene always shows the current world. When a world first has something to show, the camera frames the whole park.
+The park's walkways and shop marks are rebuilt whenever the park's intent changes or a park is opened. The guests are rebuilt whenever the world ticks or the park's intent changes, as an edit applied while paused changes it. The scene always shows the current world. When a world first has something to show, the camera frames the whole park. The scene is lit by the light at the world's time of day (render/SPEC.md, The light).
 
 ## Tools and the ghost
 
