@@ -11,7 +11,6 @@
 #include "app/ui/time_panel.h"
 #include "app/ui/tool_panel.h"
 #include "legible/inspect.h"
-#include "legible/park_summary.h"
 #include "render/renderer.h"
 
 #include <imgui.h>
@@ -34,7 +33,6 @@ void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &c
   stats.SimTick = world.Tick;
   stats.Focus = camera.Focus;
   stats.Distance = camera.Distance;
-  stats.Park = summarizePark(world);
   drawDebugPanel(stats, shown.Graph, shown.FoodOverlay);
   drawTimePanel(parkTime(world.Tick), speed);
   interaction.settleHours(world);

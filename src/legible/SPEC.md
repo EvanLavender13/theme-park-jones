@@ -18,7 +18,6 @@ The app calls:
 - food.h for foodAvailability
 - preview.h for keepPreview and previewedWorld
 - inspect.h for pickSubject and inspectSubject
-- park_summary.h for summarizePark
 
 views calls availability.h for availabilityValues and availabilityBends. The app and tpj_bench read FOOD_AVAILABILITY from food.h.
 
@@ -60,7 +59,3 @@ inspectSubject reads the subject's record afresh at each call, so if an inspecto
 - a table of every option the guest would weigh if it chose now, with each term of its score and its probability (principle 8)
 
 For a shop it shows its stock and units on order of each good, its queue, what limits it, and whether it is starved.
-
-## Park summary
-
-summarizePark gives what the Debug panel shows about the park: each shop and its record, the number of guests, their mean hunger, how many are waiting, and the meals eaten so far.
