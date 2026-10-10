@@ -12,6 +12,7 @@ void drawDebugPanel(const DebugStats &stats, bool &showGraph, bool &showFoodOver
     const ImGuiIO &io = ImGui::GetIO();
     ImGui::Text("Frame %.2f ms (%.0f fps)", 1000.0f / io.Framerate, io.Framerate);
     ImGui::Text("Sim tick %llu", static_cast<unsigned long long>(stats.SimTick));
+    ImGui::Text("Guests %llu", static_cast<unsigned long long>(stats.Guests));
     ImGui::Text("Focus %.1f, %.1f", stats.Focus.X, stats.Focus.Z);
     ImGui::Text("Distance %.1f m", stats.Distance);
     ImGui::Checkbox("Graph", &showGraph);
