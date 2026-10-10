@@ -5,7 +5,7 @@
 namespace tpj {
 
 void drawShopContextTooltip(const ShopContext &context) {
-  // A second tooltip in a frame joins the first, so this reads below the food tooltip.
+  // A second tooltip in a frame joins the first, so this reads below the need tooltip.
   if (!ImGui::BeginTooltip()) {
     return;
   }

@@ -2,10 +2,10 @@
 #include "app/input/cursor.h"
 #include "app/input/platform_input.h"
 #include "app/ui/debug_panel.h"
-#include "app/ui/food_tooltip.h"
 #include "app/ui/graph_view.h"
 #include "app/ui/hours_panel.h"
 #include "app/ui/inspector_window.h"
+#include "app/ui/need_tooltip.h"
 #include "app/ui/shop_context_tooltip.h"
 #include "app/ui/snap_guides.h"
 #include "app/ui/time_panel.h"
@@ -35,7 +35,7 @@ void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &c
   stats.Guests = parkGuests(world).size();
   stats.Focus = camera.Focus;
   stats.Distance = camera.Distance;
-  drawDebugPanel(stats, shown.Graph, shown.FoodOverlay);
+  drawDebugPanel(stats, shown.Graph, shown.Overlay);
   drawTimePanel(parkTime(world.Tick), speed);
   interaction.settleHours(world);
   const OpeningHours hours = parkHours(world);
@@ -104,8 +104,8 @@ ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, ParkSessi
     drawGraphView(world, view);
   }
   drawSnapGuides(interaction.snapGuides(), interaction.measuredLengths(world), view);
-  if (Shown.FoodOverlay) {
-    drawFoodTooltip(previewedWorld(world, preview), overlayShape,
+  if (Shown.Overlay) {
+    drawNeedTooltip(previewedWorld(world, preview), *Shown.Overlay, overlayShape,
                     pointUnderCursor(readCursor(window), view, OVERLAY_HEIGHT));
   }
   if (preview.Shop) {

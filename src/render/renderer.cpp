@@ -42,11 +42,10 @@ struct LightUniforms {
   float Settings[4];
 };
 
-// Matches the std140 `Ramp` block in overlay.frag: the ramp's colors, the color for none, and the
-// value that shades halfway up the ramp, in Middle's first float.
+// Matches the std140 `Ramp` block in overlay.frag: the ramp's colors and the value that shades
+// halfway up the ramp, in Middle's first float.
 struct RampUniforms {
   Rgba Colors[OVERLAY_RAMP.size()];
-  Rgba Zero;
   float Middle[4];
 };
 
@@ -865,7 +864,6 @@ void drawOverlayAndGhost(const Renderer &renderer, SDL_GPUCommandBuffer *command
   for (size_t i = 0; i < OVERLAY_RAMP.size(); ++i) {
     ramp.Colors[i] = OVERLAY_RAMP[i];
   }
-  ramp.Zero = OVERLAY_ZERO_COLOR;
   ramp.Middle[0] = renderer.OverlayHalf;
   SDL_PushGPUFragmentUniformData(commands, 1, &ramp, sizeof(ramp));
 

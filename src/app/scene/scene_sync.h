@@ -4,6 +4,7 @@
 #include "legible/inspect.h"
 #include "legible/preview.h"
 #include "render/paving_overlay.h"
+#include "sim/guests/guests.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/world.h"
@@ -25,12 +26,12 @@ struct WorldMeshes {
 };
 
 // What the ghost and overlay meshes are built from besides the preview: the tool's highlight, the
-// Inspector's subject, whether the food overlay shows, where a path tool's first click would start
-// the path, and Edit path's radius and edge handles and the handle under the pointer.
+// Inspector's subject, which need's overlay shows, if any, where a path tool's first click would
+// start the path, and Edit path's radius and edge handles and the handle under the pointer.
 struct PreviewLook {
   std::optional<EntityKey> Highlight;
   std::optional<InspectorSubject> Inspected;
-  bool FoodOverlay = false;
+  std::optional<GuestNeed> Overlay;
   std::optional<PathStart> Start;
   std::optional<ParkPoint> Finish;
   std::vector<EditHandle> Handles;
@@ -59,7 +60,7 @@ public:
   // first call, when the preview was just made again, or when the look differs from the last
   // call's. Remembers the look.
   bool syncLook(bool remade, const PreviewLook &look);
-  // Keeps the food overlay's shape for the previewed world: while shown, built again when the
+  // Keeps the overlay's shape for the previewed world: while shown, built again when the
   // world's path points or segments differ from those it was last built from, and while not
   // shown, empty. Returns whether the shape changed.
   bool syncOverlayShape(const World &previewed, bool shown);

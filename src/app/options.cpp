@@ -2,7 +2,9 @@
 
 #include <SDL3/SDL_log.h>
 
+#include <array>
 #include <charconv>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <string_view>
@@ -22,11 +24,25 @@ bool parseCount(const char *text, uint64_t &count) {
 // needs one, and --frame-times needs a positive --frames.
 bool consistent(const Options &options, bool framesGiven, bool speedGiven) {
   const bool needsWindow = framesGiven || speedGiven || options.CapturePath != nullptr ||
-                           options.ShowGraph || options.ShowFoodOverlay ||
+                           options.ShowGraph || options.Overlay.has_value() ||
                            options.LightHour.has_value();
   const bool hashRefuses = options.PrintHash && needsWindow;
   const bool timesUnbounded = options.FrameTimes && options.FrameLimit <= 0;
   return !hashRefuses && !timesUnbounded;
+}
+
+// --overlay's names for the needs, in NEEDS order.
+constexpr std::array<std::string_view, NEEDS.size()> OVERLAY_NAMES{"food", "drink", "rest",
+                                                                   "toilet"};
+
+// The need --overlay names, or none for a name it doesn't know.
+std::optional<GuestNeed> overlayNamed(std::string_view name) {
+  for (size_t i = 0; i < OVERLAY_NAMES.size(); ++i) {
+    if (OVERLAY_NAMES[i] == name) {
+      return NEEDS[i];
+    }
+  }
+  return std::nullopt;
 }
 
 } // namespace
@@ -58,9 +74,8 @@ std::optional<Options> parseOptions(int argc, const char *const *argv) {
     } else if (strcmp(argv[i], "--graph") == 0) {
       options.ShowGraph = true;
     } else if (strcmp(argv[i], "--overlay") == 0 && hasValue) {
-      // food is the only overlay.
-      valid = strcmp(argv[++i], "food") == 0;
-      options.ShowFoodOverlay = valid;
+      options.Overlay = overlayNamed(argv[++i]);
+      valid = options.Overlay.has_value();
     } else if (strcmp(argv[i], "--light-hour") == 0 && hasValue) {
       uint64_t hour = 0;
       valid = parseCount(argv[++i], hour) && hour < 24;
@@ -74,7 +89,7 @@ std::optional<Options> parseOptions(int argc, const char *const *argv) {
   if (!valid || !consistent(options, framesGiven, speedGiven)) {
     SDL_Log("Usage: %s [--park PATH] [--ticks N] [--speed N] [--hash] [--frames N] [--capture "
             "PATH] [--graph] "
-            "[--overlay food] [--light-hour H] [--frame-times]",
+            "[--overlay food|drink|rest|toilet] [--light-hour H] [--frame-times]",
             argv[0]);
     return std::nullopt;
   }

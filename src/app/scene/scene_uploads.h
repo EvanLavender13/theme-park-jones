@@ -16,8 +16,9 @@ bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes
                        OrbitCamera &camera);
 // Builds the ghost, meaning the preview's edit with its candidate's walkways and starved marks,
 // then the look's highlight, then its inspected guest or shop's mark, and gives it to the
-// renderer, with the food overlay's shape when it changed, and while the look shows the overlay,
-// the shape's shades by the previewed world's food availability. False if an upload failed.
+// renderer, with the overlay's shape when it changed, and while the look shows a need's overlay,
+// the shape's shades by the previewed world's availability of that need. False if an upload
+// failed.
 bool uploadPreviewMeshes(Renderer &renderer, const World &world, const Preview &preview,
                          const PreviewLook &look, const OverlayShape &shape, bool shapeChanged);
 

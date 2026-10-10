@@ -1,6 +1,6 @@
 #include "bench/stages.h"
 
-#include "legible/food.h"
+#include "legible/needs.h"
 #include "legible/preview.h"
 #include "render/guest_mesh.h"
 #include "render/park_mesh.h"
@@ -109,7 +109,7 @@ std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
   // What a tick costs while the overlay is shown: the shape is built only when the paths change.
   const OverlayShape shape = buildOverlayShape(park);
   const auto shades = timeRepeated(nothing, [&park, &shape](Nothing /*input*/) {
-    return availabilityShades(park, shape, FOOD_AVAILABILITY);
+    return availabilityShades(park, shape, needAvailability(GuestNeed::Hunger));
   });
   stages.push_back(
       StageResult{"food-overlay", shades.Times, ResultKind::Values, shades.Last.Knots.size()});
