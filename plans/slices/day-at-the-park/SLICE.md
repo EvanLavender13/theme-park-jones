@@ -30,7 +30,7 @@ At 21:00 the gate stops admitting guests. The guests still inside walk home, and
 
 Four park files are checked in under tests/parks:
 
-- day.park holds an entrance, a guest path, a food shop, a drink shop, a bench, a toilet block, a depot, and a backstage path. The two shops stand far enough apart along the guest path that each one's overlay fades before it reaches the other. Its hours are 9:00 to 21:00. It starts at 9:00 with no guests.
+- day.park holds an entrance, a guest path, a food shop, a drink shop, a bench, a toilet block, a depot, and a backstage path. The two shops stand at opposite ends of the guest path. explained-needs sets each need overlay's discount curve in game time, so each shop's overlay fades before it reaches the other. Its hours are 9:00 to 21:00. It starts at 9:00 with no guests.
 - no-toilet.park is day.park without the toilet block.
 - noon.park is day.park run to 12:00, with guests in the park.
 - evening.park is day.park run to shortly before 21:00, so the cross-build check's run of it crosses closing.
@@ -82,7 +82,7 @@ The whole slice builds on good-paths, which is complete: wide paths, the frontag
 4. `plausible-operations/served-needs`: Shops order and serve food and drink as separate goods, benches and toilet blocks hold guests in seats and stalls, and every facility publishes need offers. Depends on: members 2 and 3.
 5. `believable-guests/a-day-out`: Guests arrive by the curve over the opening hours, carry four needs, and weigh need offers against going home. Depends on: members 1, 2, and 4.
 6. `stylized-presentation/day-and-night` (capability to be planned): The sun, sky, and a hemispheric ambient light change with the time of day alone, and night keeps a dim, cool light that stays readable. Depends on: member 1.
-7. `legible-simulation/explained-needs`: Each need gets an overlay with hover attribution, previews, and an --overlay option, and the player gets the departures panel, inspectors for guests, benches, and toilet blocks, and an hours panel that previews the arrival curve. Depends on: members 1 through 5.
+7. `legible-simulation/explained-needs`: Each need gets an overlay with hover attribution, previews, and an --overlay option, with its discount curve set in game time so day.park's two shops shade apart, and the player gets the departures panel, inspectors for guests, benches, and toilet blocks, and an hours panel that previews the arrival curve. Depends on: members 1 through 5.
 
 ## Out of scope
 
