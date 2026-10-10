@@ -3,10 +3,12 @@
 //
 //   tpj_scenarios [--ticks N] [FILE...]
 //   tpj_scenarios --compare LEFT RIGHT
-//   tpj_scenarios --slice-parks FED WARM CUT MAIN_STREET WARM_MAIN_STREET FACILITIES STOCKED
+//   tpj_scenarios --slice-parks FED WARM CUT MAIN_STREET WARM_MAIN_STREET FACILITIES STOCKED DAY
+//     NO_TOILET NOON EVENING
 //
 // Timings go to standard error, so they never enter the compared output.
 
+#include "scenarios/day_parks.h"
 #include "scenarios/runner.h"
 #include "scenarios/scenarios.h"
 #include "scenarios/slice_parks.h"
@@ -22,9 +24,12 @@
 #include <iostream>
 #include <optional>
 #include <sstream>
+#include <stddef.h>
+#include <stdexcept>
 #include <stdint.h>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -118,11 +123,12 @@ bool writeFile(const std::string &path, const std::string &text) {
 
 // Makes the slice's parks from FED's text and writes them to FED, WARM, and CUT, makes the warm
 // main street park from MAIN_STREET's text and writes it to WARM_MAIN_STREET, and makes the stocked
-// park from FACILITIES' text and writes it to STOCKED. It never writes MAIN_STREET or FACILITIES,
-// and it writes no file until every park is made.
+// park from FACILITIES' text and writes it to STOCKED, and makes the day parks and writes them to
+// DAY, NO_TOILET, NOON, and EVENING. It never writes MAIN_STREET or FACILITIES, and it writes no
+// file until every park is made.
 int writeSliceParks(const std::vector<std::string> &arguments) {
-  if (arguments.size() != 8) {
-    std::cerr << "tpj_scenarios: --slice-parks takes seven files\n";
+  if (arguments.size() != 12) {
+    std::cerr << "tpj_scenarios: --slice-parks takes eleven files\n";
     return 1;
   }
   const std::string &fedPath = arguments[1];
@@ -164,23 +170,30 @@ int writeSliceParks(const std::vector<std::string> &arguments) {
     std::cerr << "tpj_scenarios: " << facilitiesPath << ": " << error.what() << '\n';
     return 1;
   }
-  const std::array<const std::string *, 3> texts{&parks.Fed, &parks.Warm, &parks.Cut};
-  for (size_t i = 0; i < texts.size(); ++i) {
-    const std::string &path = arguments[i + 1];
-    if (!writeFile(path, *texts[i])) {
+  tpj::DayParks dayParks;
+  try {
+    dayParks = tpj::makeDayParks();
+  } catch (const std::logic_error &error) {
+    std::cerr << "tpj_scenarios: day parks: " << error.what() << '\n';
+    return 1;
+  }
+  // Each written park's text, by its argument's index. MAIN_STREET and FACILITIES, at 4 and 6, are
+  // only read.
+  const std::array<std::pair<size_t, const std::string *>, 9> written{{{1, &parks.Fed},
+                                                                       {2, &parks.Warm},
+                                                                       {3, &parks.Cut},
+                                                                       {5, &warmMainStreet},
+                                                                       {7, &stocked},
+                                                                       {8, &dayParks.Day},
+                                                                       {9, &dayParks.NoToilet},
+                                                                       {10, &dayParks.Noon},
+                                                                       {11, &dayParks.Evening}}};
+  for (const auto &[index, text] : written) {
+    const std::string &path = arguments[index];
+    if (!writeFile(path, *text)) {
       std::cerr << "tpj_scenarios: cannot write " << path << '\n';
       return 1;
     }
-  }
-  const std::string &warmMainStreetPath = arguments[5];
-  if (!writeFile(warmMainStreetPath, warmMainStreet)) {
-    std::cerr << "tpj_scenarios: cannot write " << warmMainStreetPath << '\n';
-    return 1;
-  }
-  const std::string &stockedPath = arguments[7];
-  if (!writeFile(stockedPath, stocked)) {
-    std::cerr << "tpj_scenarios: cannot write " << stockedPath << '\n';
-    return 1;
   }
   return 0;
 }

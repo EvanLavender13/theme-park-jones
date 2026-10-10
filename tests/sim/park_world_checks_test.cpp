@@ -1,8 +1,9 @@
 // The world-as-value standards over the park schema's real types. The checked worlds are every
 // park file directly in tests/parks/, opened as the app opens it and stepped, and the worlds a few
-// edits of warm.park reach, each chosen for what it makes the capabilities do. A park file checked
-// in there is covered with no change here, and a type the park schema registers that no checked
-// world holds fails the checks, so a capability's new state is covered once it is registered.
+// edits of warm.park and noon.park reach, each chosen for what it makes the capabilities do. A park
+// file checked in there is covered with no change here, and a type the park schema registers that
+// no checked world holds fails the checks, so a capability's new state is covered once it is
+// registered.
 
 #include "sim/command_queue.h"
 #include "sim/entity_key.h"
@@ -13,6 +14,7 @@
 #include "sim/park/intent.h"
 #include "sim/park/surface.h"
 #include "sim/park_schema.h"
+#include "sim/routes/networks.h"
 #include "sim/save.h"
 #include "sim/schema.h"
 #include "sim/world.h"
@@ -52,9 +54,6 @@ constexpr std::array UNHELD_TYPES{
     UnheldType{"previous-network",
                "no resolution ends holding a previous network, so no world between cycles, its "
                "copies and saves, or any candidate holds one"},
-    UnheldType{"facility-service",
-               "no checked park holds a guest that visits a bench or toilet block until "
-               "a-day-out's parks do"},
 };
 
 // A second shop beside warm.park's shop, facing the guest segments along x = 0 and backing onto
@@ -63,6 +62,9 @@ constexpr std::array UNHELD_TYPES{
 // are within a connector's reach. Its footprint, z from 102.8 to 110.8, clears the first shop's,
 // which starts at z = 111, and the guest segment along z = 100.
 constexpr Pose SECOND_SHOP{6.5, 106.8, -1.0, 0.0};
+
+// A second toilet block in noon.park, beside the guest path in from the entrance and facing it.
+constexpr Pose SECOND_TOILET_BLOCK{5.5, 106.0, -1.0, 0.0};
 
 struct ParkFile {
   std::string Name;
@@ -100,11 +102,13 @@ World openPark(std::string_view text) {
   return world;
 }
 
-World openWarmPark() {
-  const std::string text = readText(std::filesystem::path(TPJ_PARKS_DIR) / "warm.park");
+std::string parkText(std::string_view name) {
+  const std::string text = readText(std::filesystem::path(TPJ_PARKS_DIR) / name);
   REQUIRE_FALSE(text.empty());
-  return openPark(text);
+  return text;
 }
+
+World openParkNamed(std::string_view name) { return openPark(parkText(name)); }
 
 World steppedOnce(const World &world) {
   World stepped = copyWorld(world);
@@ -167,7 +171,7 @@ EntityKey firstShop(const World &world) {
   return NULL_KEY;
 }
 
-// An edit of warm.park, named for why it was chosen.
+// An edit of a park, named for why it was chosen.
 struct ChosenEdit {
   std::string Name;
   ParkEdit Edit;
@@ -605,7 +609,7 @@ ChosenEdit restoringGuestSegmentUnderFreshKey(const World &before) {
 // The edits of warm.park, made from the world as a cycle leaves it. Each requires the state it was
 // chosen for, so a change to warm.park that loses that state fails here rather than quietly
 // checking less.
-std::vector<ChosenEdit> chosenEdits(const World &before) {
+std::vector<ChosenEdit> warmChosenEdits(const World &before) {
   std::vector<ChosenEdit> edits{deletingGuestSegment(before),
                                 addingPathEndingOnGuestSegment(before),
                                 addingPathCrossingGuestSegment(before),
@@ -628,13 +632,100 @@ std::vector<ChosenEdit> chosenEdits(const World &before) {
   return edits;
 }
 
+// noon.park's shop that sells drink only.
+EntityKey drinkOnlyShop(const World &world) {
+  for (const ParkBox &box : parkBoxes(world)) {
+    if (box.Kind == BoxKind::Shop && box.Stock == ShopStock::Drink) {
+      return box.Key;
+    }
+  }
+  return NULL_KEY;
+}
+
+// A new toilet block is joined to the guest network and offered while guests are in the park, so
+// the guests' choices and the facilities' service state take in a new facility.
+ChosenEdit addingToiletBlock(const World &before) {
+  REQUIRE_FALSE(parkGuests(before).empty());
+  const AddBox add{BoxKind::ToiletBlock, SECOND_TOILET_BLOCK};
+  REQUIRE(isAccepted(before, ParkEdit{add}));
+  const EntityKey added{before.nextKey()};
+  // Without a guest connector, the new toilet block would be offered to no guest.
+  const World candidate = makeCandidate(before, queueOf(ParkEdit{add}));
+  const std::vector<Carrier> &carriers = parkNetwork(candidate, PathKind::Guest).carriers();
+  const bool connected = std::ranges::any_of(carriers, [&](const Carrier &carrier) {
+    return carrier.Key == connectorKey(added, Face::Front) ||
+           carrier.Key == connectorKey(added, Face::Back);
+  });
+  REQUIRE(connected);
+  return {"adding a second toilet block facing the guest path in from the entrance, while guests "
+          "are in the park",
+          add};
+}
+
+// The shop keeps its key, kind, and pose, and only its stock changes from drink to both goods
+// while guests are in the park, so it becomes a food offer as well as a drink offer.
+ChosenEdit settingDrinkShopToBothUnderGuests(const World &before) {
+  REQUIRE_FALSE(parkGuests(before).empty());
+  const EntityKey shop = drinkOnlyShop(before);
+  REQUIRE(shop != NULL_KEY);
+  const SetShopStock set{shop, ShopStock::Both};
+  REQUIRE(isAccepted(before, ParkEdit{set}));
+  // Without the setting held on the shop, this edit would leave the world as it was.
+  const World candidate = makeCandidate(before, queueOf(ParkEdit{set}));
+  const std::vector<ParkBox> boxes = parkBoxes(candidate);
+  const auto found =
+      std::ranges::find_if(boxes, [&](const ParkBox &box) { return box.Key == shop; });
+  REQUIRE(found != boxes.end());
+  REQUIRE(found->Stock == ShopStock::Both);
+  return {"setting the shop that sells drink only to stock both goods while guests are in the park",
+          set};
+}
+
+// The park's hours change while guests are in the park, which moves when arrivals stop and when
+// closing draws guests home.
+ChosenEdit settingOpeningHoursEarlierUnderGuests(const World &before) {
+  REQUIRE_FALSE(parkGuests(before).empty());
+  // 8:00 to 20:00.
+  const OpeningHours hours{28800, 72000};
+  REQUIRE(parkHours(before) != hours);
+  const SetOpeningHours set{hours};
+  REQUIRE(isAccepted(before, ParkEdit{set}));
+  // Without the hours held by the park, this edit would leave the world as it was.
+  const World candidate = makeCandidate(before, queueOf(ParkEdit{set}));
+  REQUIRE(parkHours(candidate) == hours);
+  return {"setting the park's opening hours to 8:00 to 20:00 while guests are in the park", set};
+}
+
+// The edits of noon.park, made from the world as a cycle leaves it. Each requires the state it was
+// chosen for, so a change to noon.park that loses that state fails here rather than quietly
+// checking less.
+std::vector<ChosenEdit> noonChosenEdits(const World &before) {
+  std::vector<ChosenEdit> edits{addingToiletBlock(before),
+                                settingDrinkShopToBothUnderGuests(before),
+                                settingOpeningHoursEarlierUnderGuests(before)};
+  for (const ChosenEdit &chosen : edits) {
+    INFO(chosen.Name);
+    REQUIRE(isAccepted(before, chosen.Edit));
+  }
+  return edits;
+}
+
+// A park file whose chosen edits the checks cover, and the function that chooses them.
+struct EditedPark {
+  std::string_view Name;
+  std::vector<ChosenEdit> (*Edits)(const World &before);
+};
+
+constexpr std::array EDITED_PARKS{EditedPark{"warm.park", warmChosenEdits},
+                                  EditedPark{"noon.park", noonChosenEdits}};
+
 // A world the checks hold, named for a failure's message.
 struct CheckedWorld {
   std::string Name;
   World Value;
 };
 
-// Each park file opened and stepped, and for each chosen edit of warm.park, the candidate made
+// Each park file opened and stepped, and for each chosen edit of an edited park, the candidate made
 // with it from the world a cycle leaves and the world that queuing it for that cycle gives.
 std::vector<CheckedWorld> checkedWorlds() {
   std::vector<CheckedWorld> worlds;
@@ -647,15 +738,18 @@ std::vector<CheckedWorld> checkedWorlds() {
     worlds.push_back(CheckedWorld{park.Name + ", opened", std::move(opened)});
     worlds.push_back(CheckedWorld{park.Name + ", stepped", std::move(stepped)});
   }
-  const World warm = openWarmPark();
-  const World before = steppedOnce(warm);
-  for (const ChosenEdit &chosen : chosenEdits(before)) {
-    CommandQueue commands = queueOf(chosen.Edit);
-    World candidate = makeCandidate(before, commands);
-    World committed = copyWorld(warm);
-    stepWorld(committed, commands);
-    worlds.push_back(CheckedWorld{"warm.park, candidate of " + chosen.Name, std::move(candidate)});
-    worlds.push_back(CheckedWorld{"warm.park, committing " + chosen.Name, std::move(committed)});
+  for (const EditedPark &park : EDITED_PARKS) {
+    const World opened = openParkNamed(park.Name);
+    const World before = steppedOnce(opened);
+    const std::string name(park.Name);
+    for (const ChosenEdit &chosen : park.Edits(before)) {
+      CommandQueue commands = queueOf(chosen.Edit);
+      World candidate = makeCandidate(before, commands);
+      World committed = copyWorld(opened);
+      stepWorld(committed, commands);
+      worlds.push_back(CheckedWorld{name + ", candidate of " + chosen.Name, std::move(candidate)});
+      worlds.push_back(CheckedWorld{name + ", committing " + chosen.Name, std::move(committed)});
+    }
   }
   return worlds;
 }
@@ -681,18 +775,17 @@ TEST_CASE("The save of every checked world loads back, resolves equal to the wor
   }
 }
 
-// A preview is exact only if the candidate is the world its commit makes, whether a cycle commits
-// it or, while the game is paused, commitCommands does.
-TEST_CASE("Each chosen edit's candidate, made from warm.park as a cycle leaves it, equals the "
-          "world that queuing the edit for that cycle gives and the world that committing it "
-          "without a cycle gives") {
-  const World warm = openWarmPark();
-  const World before = steppedOnce(warm);
-  for (const ChosenEdit &chosen : chosenEdits(before)) {
-    INFO(chosen.Name);
+// Checks each chosen edit of the park, made from the park as a cycle leaves it, against the world
+// that queuing the edit for that cycle gives and the world that committing it without a cycle
+// gives.
+void checkCandidatesEqualCommits(const EditedPark &park) {
+  const World opened = openParkNamed(park.Name);
+  const World before = steppedOnce(opened);
+  for (const ChosenEdit &chosen : park.Edits(before)) {
+    INFO(park.Name << ", " << chosen.Name);
     CommandQueue commands = queueOf(chosen.Edit);
     const World candidate = makeCandidate(before, commands);
-    World committed = copyWorld(warm);
+    World committed = copyWorld(opened);
     stepWorld(committed, commands);
     CHECK(worldsEqual(candidate, committed));
 
@@ -702,6 +795,20 @@ TEST_CASE("Each chosen edit's candidate, made from warm.park as a cycle leaves i
     CHECK(worldsEqual(candidate, committedPaused));
     CHECK(committedPaused.Tick == before.Tick);
   }
+}
+
+// A preview is exact only if the candidate is the world its commit makes, whether a cycle commits
+// it or, while the game is paused, commitCommands does.
+TEST_CASE("Each chosen edit's candidate, made from warm.park as a cycle leaves it, equals the "
+          "world that queuing the edit for that cycle gives and the world that committing it "
+          "without a cycle gives") {
+  checkCandidatesEqualCommits(EDITED_PARKS[0]);
+}
+
+TEST_CASE("Each chosen edit's candidate, made from noon.park as a cycle leaves it with guests in "
+          "the park, equals the world that queuing the edit for that cycle gives and the world "
+          "that committing it without a cycle gives") {
+  checkCandidatesEqualCommits(EDITED_PARKS[1]);
 }
 
 // Whether some guest in both worlds stands at a different place in the second.
@@ -750,10 +857,12 @@ TEST_CASE("Two runs from the same park file, given the same edits at the same ti
     INFO(park.Name);
     CHECK(twoRunsEndEqual(park.Text, std::nullopt, sawGuestMove));
   }
-  const std::string warmText = readText(std::filesystem::path(TPJ_PARKS_DIR) / "warm.park");
-  for (const ChosenEdit &chosen : chosenEdits(steppedOnce(openWarmPark()))) {
-    INFO("warm.park, " << chosen.Name);
-    CHECK(twoRunsEndEqual(warmText, chosen.Edit, sawGuestMove));
+  for (const EditedPark &park : EDITED_PARKS) {
+    const std::string text = parkText(park.Name);
+    for (const ChosenEdit &chosen : park.Edits(steppedOnce(openPark(text)))) {
+      INFO(park.Name << ", " << chosen.Name);
+      CHECK(twoRunsEndEqual(text, chosen.Edit, sawGuestMove));
+    }
   }
   CHECK(sawGuestMove);
 }
