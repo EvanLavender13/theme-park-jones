@@ -13,6 +13,7 @@
 
 #include <array>
 #include <format>
+#include <stddef.h>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -26,8 +27,11 @@ constexpr EntityKey TEMPLATE_SEGMENT{4};
 constexpr std::array<double, 5> ROWS{-80.0, -40.0, 0.0, 40.0, 80.0};
 // The paths of each grid direction, 20 m apart from -90 m.
 constexpr int GRID_LINES = 10;
-// A row's cells, 20 m apart from -80 m; those whose index mod 3 is 2 stay empty.
+// A row's cells, 20 m apart from -80 m. Those whose index mod 3 is 2 hold a toilet block where the
+// others hold a shop.
 constexpr int ROW_CELLS = 9;
+// The stock settings the shops take in turn, in key order, so a third sell each.
+constexpr std::array<ShopStock, 3> STOCKS{ShopStock::Food, ShopStock::Drink, ShopStock::Both};
 
 // Applies the command, or throws naming it when the world refuses it.
 template <typename Command>
@@ -48,13 +52,16 @@ void addPath(World &world, PathKind kind, ParkPoint from, ParkPoint to) {
 void addBox(World &world, BoxKind kind, Pose at) {
   applyAccepted(
       world, AddBox{kind, at},
-      std::format("the {} at ({}, {})", kind == BoxKind::Shop ? "shop" : "depot", at.X, at.Z));
+      std::format("the {} at ({}, {})", enumNames(kind)[static_cast<size_t>(kind)], at.X, at.Z));
 }
 
 // The coordinate of a grid line or cell: the first plus 20 m per step.
 double gridAt(double first, int step) { return first + 20.0 * static_cast<double>(step); }
 
-// The entrance's path, the guest grid, the backstage spine and rows, the shops, and the depots.
+// The entrance's path, the guest grid, the backstage spine and rows, the shops, the depots, a
+// toilet block in each row's cells without a shop, and a bench in every cell. Shops and toilet
+// blocks face the guest path south of their row, 1 m from its paving, and benches the guest path
+// north of it.
 void layOut(World &world) {
   applyAccepted(world, DeleteSegment{TEMPLATE_SEGMENT}, "deleting the template's segment");
   addPath(world, PathKind::Guest, {0.0, 123.0}, {0.0, 90.0});
@@ -81,14 +88,48 @@ void layOut(World &world) {
   for (const double z : {-60.0, 0.0, 60.0}) {
     addBox(world, BoxKind::Depot, Pose{.X = -111.5, .Z = z, .FacingX = 1.0, .FacingZ = 0.0});
   }
+  for (const double row : ROWS) {
+    for (int k = 2; k < ROW_CELLS; k += 3) {
+      addBox(world, BoxKind::ToiletBlock,
+             Pose{.X = gridAt(-80.0, k), .Z = row - 5.0, .FacingX = 0.0, .FacingZ = -1.0});
+    }
+  }
+  for (const double row : ROWS) {
+    for (int k = 0; k < ROW_CELLS; ++k) {
+      addBox(world, BoxKind::Bench,
+             Pose{.X = gridAt(-80.0, k), .Z = row + 7.0, .FacingX = 0.0, .FacingZ = 1.0});
+    }
+  }
 }
 
-// Throws naming the first shop, in key order, with no depot to supply it.
+// Sets the shops, in key order, to the stock settings of STOCKS in turn.
+void stockShops(World &world) {
+  size_t next = 0;
+  for (const ParkBox &box : parkBoxes(world)) {
+    if (box.Kind == BoxKind::Shop) {
+      const ShopStock stock = STOCKS[next++ % STOCKS.size()];
+      if (stock != box.Stock) {
+        applyAccepted(world, SetShopStock{box.Key, stock},
+                      std::format("the stock of shop {}", static_cast<uint64_t>(box.Key)));
+      }
+    }
+  }
+}
+
+// Throws naming the first shop, in key order, with no depot to supply it, or the first bench or
+// toilet block with no guest connector.
 void refuseStarvedShops(const World &world) {
+  const Network &guests = parkNetwork(world, PathKind::Guest);
   for (const ParkBox &box : parkBoxes(world)) {
     if (box.Kind == BoxKind::Shop && !nearestDepot(world, box.Key)) {
       throw std::logic_error(
           std::format("full park: shop {} is starved", static_cast<uint64_t>(box.Key)));
+    }
+    if ((box.Kind == BoxKind::Bench || box.Kind == BoxKind::ToiletBlock) &&
+        !guests.firstAnchoredNode(box.Key)) {
+      throw std::logic_error(std::format("full park: {} {} has no guest connector",
+                                         enumNames(box.Kind)[static_cast<size_t>(box.Kind)],
+                                         static_cast<uint64_t>(box.Key)));
     }
   }
 }
@@ -117,6 +158,7 @@ void placeGuests(World &world, uint64_t stayUntil) {
 World makeFullPark(uint64_t warmTicks) {
   World world = makeNewPark(FULL_PARK_SEED);
   layOut(world);
+  stockShops(world);
   resolveWorld(world);
   refuseStarvedShops(world);
   placeGuests(world, warmTicks + FULL_PARK_STAY);

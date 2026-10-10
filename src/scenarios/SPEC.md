@@ -50,11 +50,12 @@ tests/parks/fed.park, warm.park, cut.park, warm-main-street.park, and stocked.pa
 makeFullPark makes the stress park at the size the game means to support:
 
 - about 4 km of guest path in a grid of 100 junctions
-- 30 shops, each joined to the guest network and to a backstage row
+- 30 shops, each joined to the guest network and to a backstage row, a third each selling food, drink, and both
 - three depots
+- 15 toilet blocks and 45 benches, each joined to the guest network
 - 2,000 guests spread evenly along the paths
 
-By default it is stepped a minute into play (FULL_PARK_WARM_TICKS). Every shop is reachable and supplied. If that would not hold, it throws std::logic_error naming the edit or the shop. Every park it gives is valid, and none of its shops is starved. Its save is the same text on every build. tpj_bench --full-park writes it to tests/parks/stress/full.park (bench/SPEC.md).
+By default it is stepped a minute into play (FULL_PARK_WARM_TICKS). Every shop is reachable and supplied, and every bench and toilet block is joined to the guest network. If that would not hold, it throws std::logic_error naming the edit, the shop, or the facility. Every park it gives is valid, and none of its shops is starved. Its save is the same text on every build. tpj_bench --full-park writes it to tests/parks/stress/full.park (bench/SPEC.md).
 
 ## Cross-build check
 
