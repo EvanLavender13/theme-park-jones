@@ -80,7 +80,6 @@ Unordered pool this milestone draws later features from.
 - The ghost draws its candidate's guests, so deleting a path under guests previews where they will stand.
 - A queue drawn as a line of guests at the shop, instead of queued guests standing on its anchor together.
 - Guests facing the way they walk, and interpolated between ticks at high frame rates.
-- An arrival rate that varies over the day.
 
 ## Open questions
 

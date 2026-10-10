@@ -108,13 +108,13 @@ This is the smallest version in which the park's layout visibly matters to someo
 
 2. `spread-guests`: guests walk on the paving itself, each with its own ground position and speed. Each walks straight toward the farthest point of its network route it can reach with its box on the paving, keeps to its own side, and steps around nearby guests, which it senses through guest presence. Its place on the network follows from where it stands. Guests decide each turn about 10 m before it and walk through shaping points without choosing. Member of the good-paths slice. Depends on: hungry-guests, shared-medium's carrier-widths and ground-fields, and navigable-networks' wide-routes.
 
+3. `a-day-out`: guests arrive by an authored curve over the opening hours and carry four needs: hunger, thirst, tiredness, and bladder. They weigh food, drink, rest, and toilet offers, and going home is a scored option that replaces the fixed stay. Each departure is tallied by its reason. Member of the day-at-the-park slice. Depends on: deterministic-simulation's park-clock, effortless-building's facilities-and-hours, and plausible-operations' served-needs.
+
 Later milestones come from the deepening candidates once the slice has been played.
 
 ## Deepening candidates
 
-- More needs: thirst, tiredness, and bladder. Each is a private motive that offers answer.
 - Rides as offers of fun and spectacle, with queues through the same visit flow.
-- Satisfaction: guests leave early when needs go unmet, instead of staying a fixed time.
 - Personality: each guest scales the decision weights in its own way (decision 0019).
 - Curiosity in wandering: guests prefer less-visited edges or new sights.
 - Groups and families that choose together.
