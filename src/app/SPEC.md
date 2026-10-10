@@ -24,7 +24,7 @@ If the main loop throws, for example when one of the simulation's world invarian
 
 ## The scene
 
-The park's walkways and shop marks are rebuilt whenever the park's intent changes or a park is opened. The guests are rebuilt whenever the world ticks or the park's intent changes, as an edit applied while paused changes it. The scene always shows the current world. When a world first has something to show, the camera frames the whole park. The scene is lit by the light at the world's time of day (render/SPEC.md, The light).
+The park's walkways and shop marks are rebuilt whenever the park's intent changes or a park is opened. The guests are rebuilt whenever the world ticks or the park's intent changes, as an edit applied while paused changes it. The scene always shows the current world. When a world first has something to show, the camera frames the whole park. The scene is lit by the light at the world's time of day (render/SPEC.md, The light), unless the Light panel previews another time.
 
 ## Tools and the ghost
 
@@ -68,6 +68,8 @@ The Time panel shows the park's day and its time of day on a 24-hour clock in ho
 
 The Hours panel shows the park's opening hours on a 24-hour clock, as Opens and Closes, each with - and + buttons, and an Apply button below them. Each button moves its time to the quarter hour before or after. Opens runs from 00:00 to 23:45, and Closes from 00:15 to 24:00, which is midnight. A + on Opens that brings it to or past Closes moves Closes to a quarter hour after it, and a - on Closes that brings it to or before Opens moves Opens to a quarter hour before it. The panel shows the player's choice once they press a button, and the park's hours otherwise. While the tool and the Inspector give no edit of their own, a choice that differs from the park's hours is the edit the ghost and the preview show, a SetOpeningHours. Apply commits it, and it applies at the next tick, or at once while paused. The choice stays until the park has those hours, and Apply is disabled while the choice is the park's hours. Replacing the world drops the choice. With no saved layout the panel starts at the window's top center, below the Time panel.
 
+The Light panel has a Preview checkbox and an Hour slider that shows a time of day on a 24-hour clock in hours and minutes. While Preview is unchecked, the slider shows the park's time of day and follows it. Dragging the slider checks Preview. While Preview is checked, the scene is lit by the light at the slider's time, and the slider stays where it was put. Unchecking Preview lights the scene by the park's time of day again. The preview changes only the light. The clock, the tick, and the world are the same with it as without it. Opening a park or starting a new one keeps the preview. With no saved layout the panel starts at the window's bottom right.
+
 The Graph checkbox draws the networks' lines and nodes over the scene and behind the panels. The Food overlay checkbox shows food availability on the guest paving of the previewed park (views/SPEC.md). Its shape is built again only when the previewed park's path points or segments change. While the overlay is shown, hovering shaded paving shows the food value at the overlay place of the point under the cursor at the overlay's height (render/SPEC.md) and, for each shop that contributes, the terms that make up the value. Hovering anywhere else shows no food tooltip. If no supplied shop is reachable, the tooltip says so. While the preview places a shop, the tooltip also shows the hungry footfall at its door and its supply route, or says that it has no supply route.
 
 The Inspector shows its subject's title and rows. For a guest, it also shows the options the guest is choosing between, with their chances, and heading home's terms (legible/SPEC.md, Inspectors). It says when the subject has left the park. It updates every tick, stays open when the tool changes, and closes with its close button. With no saved layout it starts at the window's bottom left.
@@ -78,6 +80,7 @@ The Inspector shows its subject's title and rows. For a guest, it also shows the
 - --capture PATH writes the last frame to PATH as a BMP and exits. It exits after 3 frames unless --frames says otherwise.
 - --frame-times, with a positive --frames, writes one line at exit. The line is `frame-times`, then the duration in nanoseconds of each frame from the second to the next to last, each after a single space. With N frames, the line holds N - 2 durations, and neither loading nor the first frame's one-off work is among them. scripts/runtime-report.sh times the app with it (bench/SPEC.md).
 - --graph and --overlay food check those boxes at start, so a capture shows them. food is the only overlay.
+- --light-hour H starts the app with the Light panel's Preview checked and its slider at H:00, so a capture shows that hour's light on any world. H is a whole hour from 0 to 23.
 - --park PATH starts from that park file instead of a new park.
 - --speed N starts the app paused when N is 0, and at 1x, 2x, or 4x when N is 1, 2, or 4.
 - --ticks N steps N cycles before the first frame.
@@ -88,6 +91,7 @@ The app prints the usage and exits with a nonzero status for any of these:
 - an unknown option
 - a missing or malformed value
 - a --speed value other than 0, 1, 2, or 4
+- a --light-hour value that is not a whole hour from 0 to 23
 - --frame-times without a positive --frames
 - --hash with any option that needs a window
 

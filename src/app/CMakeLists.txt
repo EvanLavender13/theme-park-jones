@@ -28,6 +28,7 @@ add_executable(tpj_app
     ui/graph_view.cpp
     ui/hours_panel.cpp
     ui/inspector_window.cpp
+    ui/light_panel.cpp
     ui/shop_context_tooltip.cpp
     ui/snap_guides.cpp
     ui/time_panel.cpp
