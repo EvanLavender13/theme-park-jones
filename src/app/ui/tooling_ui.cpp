@@ -76,6 +76,7 @@ ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, ParkSessi
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
   drawPanels(dialogs, session, camera, Shown, interaction, Speed, keys);
+  drawLightPanel(parkTime(session.world().Tick).Second, Light);
   const World &world = session.world();
   interaction.settleStock(world);
   if (const std::optional<InspectorSubject> subject = interaction.subject()) {

@@ -18,6 +18,17 @@ bool parseCount(const char *text, uint64_t &count) {
   return !value.empty() && result.ec == std::errc() && result.ptr == end;
 }
 
+// Whether the options make sense together: --hash opens no window, so it refuses every option that
+// needs one, and --frame-times needs a positive --frames.
+bool consistent(const Options &options, bool framesGiven, bool speedGiven) {
+  const bool needsWindow = framesGiven || speedGiven || options.CapturePath != nullptr ||
+                           options.ShowGraph || options.ShowFoodOverlay ||
+                           options.LightHour.has_value();
+  const bool hashRefuses = options.PrintHash && needsWindow;
+  const bool timesUnbounded = options.FrameTimes && options.FrameLimit <= 0;
+  return !hashRefuses && !timesUnbounded;
+}
+
 } // namespace
 
 std::optional<Options> parseOptions(int argc, const char *const *argv) {
@@ -50,23 +61,20 @@ std::optional<Options> parseOptions(int argc, const char *const *argv) {
       // food is the only overlay.
       valid = strcmp(argv[++i], "food") == 0;
       options.ShowFoodOverlay = valid;
+    } else if (strcmp(argv[i], "--light-hour") == 0 && hasValue) {
+      uint64_t hour = 0;
+      valid = parseCount(argv[++i], hour) && hour < 24;
+      options.LightHour = hour;
     } else if (strcmp(argv[i], "--frame-times") == 0) {
       options.FrameTimes = true;
     } else {
       valid = false;
     }
   }
-  if (options.PrintHash && (framesGiven || speedGiven || options.CapturePath != nullptr ||
-                            options.ShowGraph || options.ShowFoodOverlay)) {
-    valid = false;
-  }
-  if (options.FrameTimes && options.FrameLimit <= 0) {
-    valid = false;
-  }
-  if (!valid) {
+  if (!valid || !consistent(options, framesGiven, speedGiven)) {
     SDL_Log("Usage: %s [--park PATH] [--ticks N] [--speed N] [--hash] [--frames N] [--capture "
             "PATH] [--graph] "
-            "[--overlay food] [--frame-times]",
+            "[--overlay food] [--light-hour H] [--frame-times]",
             argv[0]);
     return std::nullopt;
   }
