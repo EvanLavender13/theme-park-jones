@@ -53,6 +53,7 @@ Unordered pool this milestone draws later features from.
 
 - A moon and stars drawn in the night sky.
 - Moon phases that change the night's light from day to day.
+- Live editing of the day's keyframes in the Light panel, with a way to export the values, so the light can be tuned without naming values to change.
 
 ## Open questions
 
