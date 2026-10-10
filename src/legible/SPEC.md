@@ -52,11 +52,13 @@ A preview of adding or moving a shop also tells what the shop would find:
 
 ## Inspectors
 
-An inspector explains one guest or shop from what it publishes about itself (decision 0025). pickSubject replaces the subject when the player picks a guest or shop. It keeps the subject when they pick anything else or nothing. The subject is kept after its entity is gone, so the inspector can say what it was.
+An inspector explains one guest, shop, bench, or toilet block from what it publishes about itself (decision 0025). pickSubject replaces the subject when the player picks one of these. It keeps the subject when they pick anything else or nothing. The subject is kept after its entity is gone, so the inspector can say what it was.
 
 inspectSubject reads the subject's record afresh at each call, so if an inspector is shown every frame, it follows every tick. It says when the subject is gone. For a guest it shows:
 
 - its activity, its four needs, when it arrived, its target and the need it heads there for, or while it heads home the reason it heads home for, meals eaten, and last meal
-- a table of every option the guest would weigh if it chose now, with each offer's facility and need, heading home's reason, each term of an offer's score, each option's score, and its probability, and below it a table of heading home's base and reason terms when heading home is an option (principle 8)
+- a table of six rows, one for each of hunger, thirst, tiredness, and the toilet, then carrying on and heading home (principle 8). A need's row shows the facility of the guest's highest-scoring offer of that need, each term of that offer's score, and its score, and the probability that the guest picks any of its offers of that need. If the guest has no offer of that need, the row says so. Heading home's row shows the reason it would head home for, its commitment, its score, and its probability, or says that there is no route home. Carrying on's row shows its score and its probability. Below the table is a table of heading home's base and reason terms when heading home is an option.
 
 For a shop it shows its stock and units on order of each good, its queue, what limits it, and whether it is starved.
+
+For a bench or a toilet block it shows its places, how many are taken, and how many guests wait at its door.

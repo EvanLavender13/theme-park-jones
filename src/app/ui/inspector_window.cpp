@@ -22,21 +22,21 @@ void drawRows(const char *id, const std::vector<InspectorRow> &rows) {
   ImGui::EndTable();
 }
 
-// The options the guest would weigh now, one to a row.
+// The guest's choices, one to a row.
 void drawChoices(const std::vector<ChoiceRow> &choices) {
-  ImGui::TextUnformatted("Options now");
+  ImGui::TextUnformatted("Choices now");
   if (!ImGui::BeginTable("choices", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
     return;
   }
   for (const char *heading :
-       {"Option", "Need", "Relief", "Distance", "Wait", "Commitment", "Score", "Chance"}) {
+       {"Choice", "Target", "Relief", "Distance", "Wait", "Commitment", "Score", "Chance"}) {
     ImGui::TableSetupColumn(heading);
   }
   ImGui::TableHeadersRow();
   for (const ChoiceRow &choice : choices) {
     ImGui::TableNextRow();
     for (const std::string *cell :
-         {&choice.Option, &choice.Need, &choice.Relief, &choice.Distance, &choice.Wait,
+         {&choice.Choice, &choice.Target, &choice.Relief, &choice.Distance, &choice.Wait,
           &choice.Commitment, &choice.Score, &choice.Probability}) {
       ImGui::TableNextColumn();
       ImGui::TextUnformatted(cell->c_str());

@@ -15,7 +15,7 @@ namespace tpj {
 bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes &meshes,
                        OrbitCamera &camera);
 // Builds the ghost, meaning the preview's edit with its candidate's walkways and starved marks,
-// then the look's highlight, then its inspected guest or shop's mark, and gives it to the
+// then the look's highlight, then its inspected guest's or box's mark, and gives it to the
 // renderer, with the overlay's shape when it changed, and while the look shows a need's overlay,
 // the shape's shades by the previewed world's availability of that need. False if an upload
 // failed.
