@@ -5,6 +5,9 @@ add_executable(tpj_integration_tests
     early_turns_test.cpp
     food_loop_test.cpp
     frontage_test.cpp
+    opening_hours_test.cpp
+    shop_stock_test.cpp
+    toilet_block_test.cpp
     undo_test.cpp)
 # So that the tests include their shared fixtures as support/....
 target_include_directories(tpj_integration_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

@@ -1,6 +1,6 @@
 # Slice: Day at the Park
 
-Status: planned
+Status: complete
 
 ## Summary
 
@@ -48,10 +48,11 @@ a-day-out adds three edits of noon.park to the world checks' chosen edits, so ea
 5. A capture of day.park at 23:00 shows the empty park at night, with every box and path still distinguishable from the ground. (scripted capture: stylized-presentation, believable-guests)
 6. A capture of noon.park with the toilet overlay on shows the guest paving shaded around the toilet block. (scripted capture: legible-simulation)
 7. A capture of noon.park with the drink overlay on shows the guest paving shaded in the ramp's best colors around the drink shop and its worst around the food shop. (scripted capture: legible-simulation)
-8. In the running app, no guest arrives while the park is closed, every guest admitted has left before the next opening, and guests arrive again after it. (manual)
-9. In the running app, if the player switches a shop away from drink, the shop places no more drink orders. Its drink offer ends once it has served the drink it held and the drink already on its way, and it serves no drink after that. (manual)
+8. Opening hours bound the day: from day.park's start through the next day's opening, no guest arrives while the park is closed, every guest admitted has left before the next opening, and guests arrive again after it. (integration test)
+9. Switching noon.park's drink shop to stock food only stops its drink: it places no more drink orders, its drink offer ends once it has served the drink it held and the drink already on its way, and it serves no drink after that. (integration test)
 10. In the running app, hovering a need's overlay lists each facility's contribution, and the contributions match the value shown, to the precision shown. (manual)
 11. In the running app, these work as the scenario describes: the speed controls and the clock, setting the opening hours with the arrival curve previewed, placing benches and toilet blocks facing the paths, setting a shop's stock with its preview, undoing and redoing each of these, switching the overlay between needs with hover attribution, the departures panel, and the guest, bench, and toilet block inspectors. (manual)
+12. A toilet block relieves its guests: at closing, the guests in day.park have a lower mean bladder than those in no-toilet.park. (integration test)
 
 ## Medium
 
@@ -81,7 +82,7 @@ The whole slice builds on good-paths, which is complete: wide paths, the frontag
 3. `navigable-networks/facility-doors`: Benches and toilet blocks connect to nearby guest paths by their front doors and become route distance sources. Depends on: member 2.
 4. `plausible-operations/served-needs`: Shops order and serve food and drink as separate goods, benches and toilet blocks hold guests in seats and stalls, and every facility publishes need offers. Depends on: members 2 and 3.
 5. `believable-guests/a-day-out`: Guests arrive by the curve over the opening hours, carry four needs, and weigh need offers against going home. Depends on: members 1, 2, and 4.
-6. `stylized-presentation/day-and-night` (capability to be planned): The sun, sky, and a hemispheric ambient light change with the time of day alone, and night keeps a dim, cool light that stays readable. Depends on: member 1.
+6. `stylized-presentation/day-and-night`: The sun, sky, and a hemispheric ambient light change with the time of day alone, and night keeps a dim, cool light that stays readable. Depends on: member 1.
 7. `legible-simulation/explained-needs`: Each need gets an overlay with hover attribution, previews, and an --overlay option, with its discount curve set in game time so day.park's two shops shade apart, and the player gets the departures panel, inspectors for guests, benches, and toilet blocks, and an hours panel that previews the arrival curve. Depends on: members 1 through 5.
 
 ## Out of scope
