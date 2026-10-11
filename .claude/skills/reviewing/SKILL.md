@@ -41,7 +41,7 @@ Planning briefs are the exception. If a planning skill dispatches a review of it
 - Fix Major findings directly when the fix follows from the principles and settled decisions and needs no new design choice.
 - Bring the user only the Major findings that need a design choice. Give each one a sentence or two and a recommended option.
 - Report the rest in one line, for example "review fixed A, B, and C".
-- Dispatch the follow-up review only when a Major fix changed a core definition that other plans rely on. Before you dispatch it, check the fix against every kind of edit or case the definition covers.
+- If the round had a Blocker or Major finding, dispatch a fresh full review after fixing it, as "Reviewing again" says.
 
 For code reviews, and for reviews the user asks for directly, still follow steps 6 and 7.
 
@@ -57,15 +57,15 @@ The dispatch prompt must not contain:
 
 The reviewer needs the artifact, the context paths, and the type. Nothing else.
 
-## Review budget
+## Reviewing again
 
-Limit the number of reviews of one artifact, because a reviewer asked to find issues will keep finding smaller ones.
+A plan isn't done while it has serious problems. Anything a plan misses turns up later as a surprise during implementation.
 
-- Run one full review per artifact. Stage or commit the artifact first, so later fixes show up as a diff.
-- Run at most one follow-up review. Run it only when the full review had Blocker or Major findings and their fixes changed the design, not just the wording. The follow-up checks that each finding was addressed. It reports only Blocker or Major problems that the fixes introduced. It doesn't re-review untouched parts.
-- Don't run a third pass. Fix anything the follow-up finds without another review, or record it as an open question.
-
-Later stages catch what plan reviews miss: milestone and feature reviews against their parents, the separate test pass, and slice closing. You can let a plan move on before it is flawless.
+- Stage or commit the artifact before each review, so later fixes show up as a diff.
+- If a round finds a Blocker or Major, fix it and dispatch a fresh full review. Repeat until a round finds none. No round is the last while a Blocker or Major remains, however many rounds it takes.
+- If a round finds only Minor issues, fix them without another review. A reviewer asked to find issues keeps finding smaller ones.
+- Before each new round, check the artifact yourself for the same kind of gap the last round found.
+- If Majors keep coming after a few rounds, look for the root cause instead of patching each one. A common cause is mechanism written into a brief that should state only requirements. Fix the cause, then review again.
 
 ## Dispatch template
 
@@ -80,30 +80,13 @@ Focus (optional, only if the user specified): <one short phrase>
 Follow your standard procedure. Return findings in the standard format.
 ```
 
-## Follow-up dispatch template
-
-Include the full review's report verbatim. It is the reviewer's own output, not your assessment, so it doesn't break dispatch hygiene. Don't describe the fixes. The reviewer reads them from the artifact and the diff.
-
-```
-Follow-up review of the following artifact.
-
-Artifact: <path>
-Changes since the full review: <git command that shows them, or "the artifact was revised throughout">
-Required context (read these before reviewing): <comma-separated paths>
-
-Full review report:
-<verbatim report>
-
-Follow your follow-up procedure. Return findings in the standard format.
-```
-
 ## After the review
 
 The user chooses one of:
 
 - Accept some or all findings and invoke the appropriate planning or implementation skill to address them.
 - Reject findings with reasoning. Don't argue.
-- Dispatch the one follow-up review the review budget allows, when it applies.
+- Dispatch a fresh full review after fixes, as "Reviewing again" says.
 
 Don't edit the artifact. Don't invoke another skill on the user's behalf.
 
