@@ -8,6 +8,7 @@
 #include "app/session/park_dialogs.h"
 #include "app/session/park_session.h"
 #include "app/ui/light_panel.h"
+#include "legible/arrivals.h"
 #include "legible/preview.h"
 #include "render/paving_overlay.h"
 #include "sim/guests/guests.h"
@@ -37,17 +38,18 @@ public:
   [[nodiscard]] GameSpeed &speed() { return Speed; }
   [[nodiscard]] const LightPreview &lightPreview() const { return Light; }
 
-  // Builds the frame's ImGui frame and gives its draw data: the Debug, Time, Hours, and Tools
-  // panels, which set the shown views from their controls, select the tool the player chose, and
-  // start the park action they pressed, and the Time panel's speed buttons, which set the speed.
-  // The Hours panel's buttons set the interaction's chosen hours, and its Apply applies them. It
-  // undoes or redoes as the Tools panel's buttons or the frame's keys ask, unless the tool held or
-  // had drawn something, which it drops instead. It builds the Light panel, which sets the preview.
-  // It also builds the Inspector while the interaction has a subject, forgetting it when closed,
-  // whose stock controls set the interaction's chosen stock and apply it; the graph over the scene
-  // while it is shown; the snap's guides and the measured lengths; the shown need's tooltip at the
-  // cursor while an overlay is, on the preview's candidate when it has one, over the overlay's
-  // shape; and a shop ghost's context.
+  // Builds the frame's ImGui frame and gives its draw data: the Debug, Time, Hours, Departures, and
+  // Tools panels, which set the shown views from their controls, select the tool the player chose,
+  // and start the park action they pressed, and the Time panel's speed buttons, which set the
+  // speed. The Hours panel's buttons set the interaction's chosen hours, and its Apply applies
+  // them. It draws the arrival curve for the hours it shows, kept between frames, and marks the
+  // time of day. It undoes or redoes as the Tools panel's buttons or the frame's keys ask, unless
+  // the tool held or had drawn something, which it drops instead. It builds the Light panel, which
+  // sets the preview. It also builds the Inspector while the interaction has a subject, forgetting
+  // it when closed, whose stock controls set the interaction's chosen stock and apply it; the graph
+  // over the scene while it is shown; the snap's guides and the measured lengths; the shown need's
+  // tooltip at the cursor while an overlay is, on the preview's candidate when it has one, over the
+  // overlay's shape; and a shop ghost's context.
   [[nodiscard]] ImDrawData *build(SDL_Window *window, ParkDialogs &dialogs, ParkSession &session,
                                   const OrbitCamera &camera, Interaction &interaction,
                                   const Preview &preview, const OverlayShape &overlayShape,
@@ -57,6 +59,7 @@ private:
   ShownViews Shown;
   GameSpeed Speed;
   LightPreview Light;
+  KeptArrivalDay Arrivals;
 };
 
 } // namespace tpj

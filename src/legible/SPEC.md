@@ -19,6 +19,7 @@ The app calls:
 - needs.h for needAvailability and needAvailabilityName
 - preview.h for keepPreview and previewedWorld
 - inspect.h for pickSubject and inspectSubject
+- arrivals.h for keepArrivalDay
 
 views calls availability.h for availabilityValues and availabilityBends. The app and tpj_bench read each need's availability from needs.h.
 
@@ -62,3 +63,7 @@ inspectSubject reads the subject's record afresh at each call, so if an inspecto
 For a shop it shows its stock and units on order of each good, its queue, what limits it, and whether it is starved.
 
 For a bench or a toilet block it shows its places, how many are taken, and how many guests wait at its door.
+
+## Arrivals
+
+An arrival day is the arrival curve through a day as the park would have it with some opening hours: the guests per game hour each entrance admits at the start of each game minute from 00:00 (sim/guests/SPEC.md). If the hours differ from the park's, it is read from a candidate with only those hours applied (decision 0025), and otherwise from the park itself. keepArrivalDay keeps one between frames and makes it again only when the hours differ from the kept day's. The arrival curve reads only the hours, so a kept day stays exact while the park ticks and changes.
