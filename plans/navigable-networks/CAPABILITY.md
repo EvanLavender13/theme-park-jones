@@ -55,6 +55,7 @@ A tooling view in ImGui draws the derived graphs over the park, with their nodes
   - believable-guests, to choose (decision 0019) and to move;
   - plausible-operations, for a shop's supply route length, for whether the shop is supplied, and for the delay it gives supply packets;
   - legible-simulation, for the overlay's discount and for preview context.
+- Best seats: two entry fields this capability produces, best rest seats and best meal seats, each with one source. At each place, each gives the pieces of furniture that serve its need best from there, counting the walk, with each piece's distance, relief, segment, and next step. believable-guests samples them to choose a seat and walk to it. legible-simulation samples them for its seating overlays. This capability reads effortless-building's seat places and plausible-operations' seat offers to derive them.
 - Park intent (decision 0025): this capability reads it from effortless-building, committed or candidate, and derives everything above from it. Connections are derived here and are never saved.
 
 ## Principles
@@ -63,7 +64,7 @@ A tooling view in ImGui draws the derived graphs over the park, with their nodes
 - Principle 1 and decision 0007 are at risk if the derived networks depend on edit history. The park world checks guard them, because a saved world must load back and resolve equal, and a loaded world keeps none of its edit history.
 - Principle 10 is at risk from tie-breaking and from floating-point lengths and meetings. The tie rules are fixed. Lengths and meetings use basic operations under the simulation's flags. The cross-build script covers both.
 - Principle 2 is at risk when a box or path is removed. Unconnected boxes and unreachable places are ordinary states. They have no entries, and nothing crashes.
-- Principle 6 is at risk if other capabilities read graph internals instead of sampling. They reach networks only through shared-medium's network type and the route distance field.
+- Principle 6 is at risk if other capabilities read graph internals instead of sampling. They reach networks only through shared-medium's network type, the route distance field, and the best seats fields.
 
 ## Dependencies
 
@@ -90,6 +91,7 @@ It is useful on its own. Before any guest exists, the tooling view shows exactly
 1. `paths-become-routes`: guest and backstage graphs derived from committed or candidate path intent, with junctions, crossings, and edges measured by arc length. It also adds box connections by face within a fixed reach, the route distance field with distances and next edges for every anchored source, and the ImGui graph view. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value, shared-medium's first-field-and-flow, and effortless-building's sketch-a-park.
 2. `wide-routes`: nodes only at points and connector ends, so paths join on the network only where they share a point. Each segment's carrier takes its width, and doors connect within reach of a segment's drawn paving. Member of the good-paths slice. Depends on: shared-medium's carrier-widths and effortless-building's path-network.
 3. `facility-doors`: bench and toilet block front doors serve the guest network, with walkways no wider than their door's face, so the new facilities become guest route distance sources. Member of the day-at-the-park slice. Depends on: effortless-building's facilities-and-hours.
+4. `best-seats`: the best rest seats and best meal seats fields. Sampled anywhere on the guest paving, each gives the pieces of furniture that serve its need best from there, counting the walk, and the next step toward each, from one search per field seeded from every seat. Member of the somewhere-to-sit slice. Depends on: effortless-building's furnished-paths and plausible-operations' served-seats.
 
 Later milestones come from the deepening candidates, once the slice shows how networks are used.
 
