@@ -99,9 +99,11 @@ The app restructure follows, under those rules. It tries the rules on the code t
 
 3. `keyed-storage`: EnTT dropped, and the world stores its components itself, keyed by EntityKey and iterated in key order (decision 0039). Code reaches components only through World. The simulation doesn't change. Depends on: 0039 accepted.
 
+4. `sim-components`: src/sim/park/edits.cpp, src/sim/guests/guests.cpp, and src/sim/park/surface.cpp split so each concern is a component behind an internal header. Their public headers stay as they are, and the simulation doesn't change. Depends on: milestone 1 and the somewhere-to-sit slice closed.
+
 ## Deepening candidates
 
-- Audit render/renderer.cpp for concerns that deserve their own components. At 608 lines, it is the next largest file. Gated on: an audit showing it holds more than one.
+- Audit render/renderer.cpp for concerns that deserve their own components. It is 959 lines. Its parts are mostly SDL_GPU setup steps, which may count as one concern. Gated on: an audit showing it holds more than one.
 - Levelization within a module: a check that a module's files form no include cycle among themselves, as Lakos requires of components. Gated on: a cycle found in review, or a module large enough that one is likely.
 - Restructure src/scenarios/main.cpp so it only composes. Beside its composition, it holds file reading, output comparison, timing reports, and slice-park writing. Gated on: composed-app, whose shape it follows.
 
