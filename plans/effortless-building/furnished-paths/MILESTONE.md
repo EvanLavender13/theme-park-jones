@@ -2,7 +2,7 @@
 
 Slice: somewhere-to-sit
 
-Status: planned
+Status: complete
 
 ## Summary
 
