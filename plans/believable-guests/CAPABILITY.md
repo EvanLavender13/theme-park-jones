@@ -124,6 +124,8 @@ Later milestones come from the deepening candidates once the slice has been play
 - Aggregate guests at scale: distant or numerous guests are simulated as flows, and individuals are shown near the camera. Gated on: profiling.
 - Local knowledge and wayfinding: a guest knows only what it has noticed. Each attraction publishes a noticeability that fades with route distance. A guest follows route distance's next steps with some uncertainty, and a park map lowers that uncertainty. Guests without maps wander, and can get lost in a large park. Builds on fuzzy choice.
 - Fuzzy choice: a guest weighs only a few options it happens to notice, such as nearby or recently seen shops and rides. It doesn't score every reachable option at every junction. With this, a choice's cost doesn't grow with the number of attractions, and decisions feel human rather than exhaustive.
+- Guest personality beyond one tolerance: a tolerance for each need, and traits such as a conscientious guest who goes out of its way to find a bin.
+- Litter that attracts litter: a guest carries litter a shorter way where litter already lies, as people litter more in littered places.
 
 ## Open questions
 

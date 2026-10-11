@@ -143,6 +143,7 @@ Later milestones come from the deepening candidates, once the slice has been pla
 - Maintenance as a flow for rides, with infrastructure as its capacity (decision 0006).
 - Dirt as a stock in toilet blocks. It builds up with use, and cleaning staff drain it. Dirt lowers the toilet offer's appeal but doesn't close the toilet.
 - A shop's record counts the guests it is serving as well as those queued, so its panel doesn't show a queue of 0 while a served guest still waits for its meal.
+- A cleaning standard for each staff room, such as spotless, tidy, or basic, that sets how dirty a place gets before its crew goes there.
 
 ## Open questions
 

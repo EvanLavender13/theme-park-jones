@@ -78,9 +78,9 @@ The whole slice depends on day-at-the-park, which gives food and drink as separa
 - Shipments that reroute around congestion. Routes stay shortest by distance.
 - New ghost previews of supply changes, such as previewing load on the trunk before widening it.
 - Restocking standards for shops. Shops keep their fixed reorder levels.
-- Garbage and anything else that leaves the park.
+- Anything else that leaves the park. Garbage is the exception: litter-and-janitors, which lands first, has staff rooms send garbage over backstage paths to the nearest depot, which disposes of it. This slice must instead send that garbage out of the park through the service entrances, sensibly, as the user asked. Plan it in when this slice is next revised.
 - Roads and trucks outside the park.
-- Where staff cross between guest and backstage paths (docs/open-questions.md). Carts stay on backstage paths.
+- Staff crossing between guest and backstage paths. Decision 0040 lets them cross only through buildings. Carts stay on backstage paths.
 
 ## Open questions
 
