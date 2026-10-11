@@ -9,6 +9,7 @@ sim/*
 sim/medium
 sim/park
 sim/routes
+sim/furniture
 sim/operations
 sim/guests
 sim/park_schema

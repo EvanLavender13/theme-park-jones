@@ -75,6 +75,30 @@ template <typename Visitor> void visitFields(Visitor &visitor, ShopStockIntent &
   visitor.field("stock", stock.Stock);
 }
 
+// The furnishing of a guest segment's left side, held only when that side has one.
+struct LeftFurnishingIntent {
+  SideFurnishing Held;
+
+  bool operator==(const LeftFurnishingIntent &) const = default;
+};
+
+template <typename Visitor> void visitFields(Visitor &visitor, LeftFurnishingIntent &furnishing) {
+  visitor.field("kind", furnishing.Held.Kind);
+  visitor.field("spacing", furnishing.Held.Spacing);
+}
+
+// The furnishing of a guest segment's right side, held only when that side has one.
+struct RightFurnishingIntent {
+  SideFurnishing Held;
+
+  bool operator==(const RightFurnishingIntent &) const = default;
+};
+
+template <typename Visitor> void visitFields(Visitor &visitor, RightFurnishingIntent &furnishing) {
+  visitor.field("kind", furnishing.Held.Kind);
+  visitor.field("spacing", furnishing.Held.Spacing);
+}
+
 // The park's opening hours, held by one entity only when they are not DEFAULT_HOURS.
 struct OpeningHoursIntent {
   OpeningHours Hours;

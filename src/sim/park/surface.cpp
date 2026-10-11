@@ -228,6 +228,14 @@ public:
     Surface.Pieces.push_back(added);
   }
 
+  // Adds one side of a segment's body, from where it starts to where it ends, unless its end lies
+  // no farther along the segment than its start.
+  void bodySide(EntityKey segment, bool left, ParkPoint start, ParkPoint end, ParkPoint along) {
+    if (wants(segment) && dot(end - start, along) > 0.0) {
+      Surface.Sides.push_back(BodySide{segment, left, start, end});
+    }
+  }
+
   // Adds the run of points as an edge line, leaving out each point that repeats the one before.
   template <typename Points> void edge(PathKind kind, EntityKey owner, const Points &points) {
     if (!Edges || !wants(owner)) {
@@ -814,6 +822,9 @@ PavedSurface buildSurface(const PathLayout &layout, const PathGround &ground,
     output.piece(shape.Kind, shape.Key,
                  {shape.trimmed(0, RIGHT), shape.trimmed(1, LEFT), shape.trimmed(1, RIGHT),
                   shape.trimmed(0, LEFT)});
+    // Seen from the From end, the left side ends at the To end's right, and the right at its left.
+    output.bodySide(shape.Key, true, shape.trimmed(0, LEFT), shape.trimmed(1, RIGHT), shape.Along);
+    output.bodySide(shape.Key, false, shape.trimmed(0, RIGHT), shape.trimmed(1, LEFT), shape.Along);
   }
   std::ranges::stable_sort(surface.Pieces, {}, &SurfacePiece::Owner);
   std::ranges::stable_sort(surface.Edges, {}, &EdgeLine::Owner);
@@ -1010,6 +1021,7 @@ void hideJoined(PavedSurface &surface, const std::vector<SurfacePiece> &hiders, 
   }
   PavedSurface visible;
   visible.Pieces = std::move(surface.Pieces);
+  visible.Sides = std::move(surface.Sides);
   Visible writer(visible);
   std::vector<size_t> near;
   std::vector<std::pair<double, double>> hidden;

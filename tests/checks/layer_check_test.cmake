@@ -114,7 +114,7 @@ if(CASE STREQUAL "repository_layers")
         list(JOIN units " " layer)
         list(APPEND actual "${layer}")
     endforeach()
-    set(expected core sim/* sim/medium sim/park sim/routes sim/operations sim/guests
+    set(expected core sim/* sim/medium sim/park sim/routes sim/furniture sim/operations sim/guests
         sim/park_schema "legible render scenarios tools" views bench "app/input app/session"
         "app/scene app/ui" app/*)
     if(NOT "${actual}" STREQUAL "${expected}")

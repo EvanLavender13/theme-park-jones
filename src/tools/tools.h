@@ -25,7 +25,8 @@ enum class ToolKind : uint8_t {
   MoveBox,
   EditPath,
   RemovePoint,
-  Delete
+  Delete,
+  Furnish
 };
 
 // A place drag nearer than this to where the box lands keeps the facing it had, in meters.
@@ -66,6 +67,19 @@ inline constexpr double SIDE_REACH = 0.5;
 // Edit path sets a segment's width between these, in meters.
 inline constexpr double MIN_PATH_WIDTH = 1.5;
 inline constexpr double MAX_PATH_WIDTH = 16.0;
+// The Furnish tool's spacing lies between these, in meters.
+inline constexpr double FURNISH_MIN_SPACING = 2.0;
+inline constexpr double FURNISH_MAX_SPACING = 30.0;
+
+// What the Furnish tool lays: a kind, or none to remove furnishing, the spacing, and whether on
+// both sides or on the side the pointer is on.
+struct FurnishChoice {
+  std::optional<FurnitureKind> Kind = FurnitureKind::Bench;
+  double Spacing = 10.0;
+  bool BothSides = true;
+
+  bool operator==(const FurnishChoice &) const = default;
+};
 
 // What an Edit path handle is: a path point's marker, which sets nothing, or what it sets: a
 // corner's radius, an edge's radius, a segment's width, or a taper's length.
@@ -192,6 +206,8 @@ struct ToolState {
   double GrabFrom = 0.0;
   // A path tool's stops so far.
   std::vector<PathStop> Drawn;
+  // What the Furnish tool lays. Selecting a tool keeps it.
+  FurnishChoice Furnish;
 };
 
 // Sets the tool, dropping any hold without committing.
@@ -204,6 +220,9 @@ void pressPointer(ToolState &tool, const World &world);
 // The primary button went up: the edit to commit, which is the tentative edit of the moment
 // before when the press took hold.
 std::optional<ParkEdit> releasePointer(ToolState &tool, const World &world);
+
+// Sets what the Furnish tool lays.
+void setFurnishChoice(ToolState &tool, const FurnishChoice &choice);
 
 // The edit the ghost shows.
 std::optional<ParkEdit> tentativeEdit(const ToolState &tool, const World &world);

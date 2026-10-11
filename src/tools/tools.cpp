@@ -199,6 +199,55 @@ std::optional<InsertPoint> insertAt(const World &world, ParkPoint point) {
   return std::nullopt;
 }
 
+// The first guest segment in key order whose ground line passes within half its width of the point.
+std::optional<ParkSegment> guestSegmentAt(const World &world, ParkPoint point) {
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Kind != PathKind::Guest) {
+      continue;
+    }
+    const std::vector<CarrierPoint> &line = segment.Line;
+    for (size_t i = 0; i + 1 < line.size(); ++i) {
+      if (segmentDistance(point, line[i], line[i + 1]) <= 0.5 * segment.Width) {
+        return segment;
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+// The Furnish tool's edit: the guest segment under the pointer with the tool's choice on both
+// sides, or on the side of the line from its From point to its To point that the pointer lies on,
+// the other side keeping its furnishing. A choice with no kind removes furnishing.
+std::optional<ParkEdit> furnishEdit(const ToolState &tool, const World &world) {
+  if (!tool.Pointer) {
+    return std::nullopt;
+  }
+  const std::optional<ParkSegment> segment = guestSegmentAt(world, *tool.Pointer);
+  if (!segment) {
+    return std::nullopt;
+  }
+  std::optional<SideFurnishing> chosen;
+  if (tool.Furnish.Kind) {
+    chosen = SideFurnishing{*tool.Furnish.Kind, tool.Furnish.Spacing};
+  }
+  if (tool.Furnish.BothSides) {
+    return SetFurnishing{segment->Key, Furnishing{chosen, chosen}};
+  }
+  const std::optional<ParkPoint> from = stopPosition(world, OnPoint{segment->From});
+  const std::optional<ParkPoint> to = stopPosition(world, OnPoint{segment->To});
+  if (!from || !to) {
+    return std::nullopt;
+  }
+  // A quarter turn counter-clockwise of the segment's direction, seen from above, is its left.
+  const double alongX = to->X - from->X;
+  const double alongZ = to->Z - from->Z;
+  const double leftward =
+      ((tool.Pointer->X - from->X) * alongZ) - ((tool.Pointer->Z - from->Z) * alongX);
+  Furnishing furnishing = segment->Furnished;
+  (leftward > 0.0 ? furnishing.Left : furnishing.Right) = chosen;
+  return SetFurnishing{segment->Key, furnishing};
+}
+
 // The edit a dragged radius handle, edge handle, taper handle, or side makes with the pointer where
 // it is: the arc's middle moved as far into the corner as the pointer has moved, the edge's middle
 // moved as far along its Toward as the pointer has moved, where the longest curve starts moved as
@@ -439,7 +488,8 @@ void pressPointer(ToolState &tool, const World &world) {
     return;
   }
   tool.Dragged = false;
-  if (tool.Kind == ToolKind::Delete || tool.Kind == ToolKind::RemovePoint) {
+  if (tool.Kind == ToolKind::Delete || tool.Kind == ToolKind::RemovePoint ||
+      tool.Kind == ToolKind::Furnish) {
     tool.Holding = true;
   } else if (isPathTool(tool.Kind) && tool.Pointer) {
     if (const std::optional<PathStop> next = nextStop(tool, world)) {
@@ -521,6 +571,9 @@ std::optional<ParkEdit> tentativeEdit(const ToolState &tool, const World &world)
     }
     return std::nullopt;
   }
+  if (tool.Kind == ToolKind::Furnish) {
+    return furnishEdit(tool, world);
+  }
   if (tool.Kind == ToolKind::Delete && tool.Pointer) {
     if (const std::optional<EntityKey> box = boxAt(world, *tool.Pointer)) {
       return DeleteBox{*box};
@@ -570,8 +623,15 @@ std::optional<EntityKey> highlightedEntity(const ToolState &tool, const World &w
       return point;
     }
   }
+  if (tool.Kind == ToolKind::Furnish && !tool.Holding && tool.Pointer) {
+    if (const std::optional<ParkSegment> segment = guestSegmentAt(world, *tool.Pointer)) {
+      return segment->Key;
+    }
+  }
   return std::nullopt;
 }
+
+void setFurnishChoice(ToolState &tool, const FurnishChoice &choice) { tool.Furnish = choice; }
 
 std::optional<EntityKey> boxAt(const World &world, ParkPoint point) {
   for (const ParkBox &box : parkBoxes(world)) {

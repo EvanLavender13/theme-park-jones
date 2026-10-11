@@ -10,6 +10,7 @@ render reads:
 - the networks through parkNetwork, connectorWalkways, and the Network type's queries
 - guests through parkGuests and guestRecord
 - shops through shopRecord
+- the furniture through parkFurniture
 - the time of day through parkTime
 
 It depends on no module but sim and core. The paving overlay shades by values it is given, and views supplies them.
@@ -50,7 +51,7 @@ The scene is lit in linear light and tonemapped to the screen. The tonemap keeps
 
 ## The park
 
-buildParkMesh gives a world's park as the player sees it. Each entrance, path, and box is in its place, at its size and height. If a door has a connector, its walkway is drawn as part of the paved surface, joined to the segment it reaches (connectorWalkways). Guest paths, backstage paths, shops, depots, benches, toilet blocks, and the entrance each have their own opaque color. Paths draw as the paved surface parkSurface gives: each piece filled in its kind's color, and a strip EDGE_LINE_WIDTH wide along each edge line, on the paving's side, in a darker shade of that color, above the fills. Where an edge line turns sharply, its strip has no gap. Each starved shop has a mark floating over its roof, in a color unlike any other in the scene.
+buildParkMesh gives a world's park as the player sees it. Each entrance, path, and box is in its place, at its size and height. If a door has a connector, its walkway is drawn as part of the paved surface, joined to the segment it reaches (connectorWalkways). Guest paths, backstage paths, shops, depots, benches, toilet blocks, and the entrance each have their own opaque color. Paths draw as the paved surface parkSurface gives: each piece filled in its kind's color, and a strip EDGE_LINE_WIDTH wide along each edge line, on the paving's side, in a darker shade of that color, above the fills. Where an edge line turns sharply, its strip has no gap. Each piece of furniture is drawn as a low box over its footprint, benches and tables each in their own color. Each starved shop has a mark floating over its roof, in a color unlike any other in the scene.
 
 meshBounds gives the smallest rectangle on the ground that holds a mesh's vertices, or none for an empty mesh.
 
@@ -67,7 +68,7 @@ buildGhostMesh(world, edit, candidate) gives the edit's ghost in three parts. It
 
 Whatever the edit adds or changes in a kind's color, the candidate's walkways, and its starved marks are in the Lit part. The invalid and delete tints are in the Tints part, and the join marks and sides in JOIN_MARK_COLOR are in the Marks part.
 
-With the candidate world, the ghost also shows the candidate's walkways as strips over the paving, and its starved marks. Where one of these lies on a committed one, it blends into it. Only the walkways the edit adds or moves, and the shops it would starve, stand out. When the delete tool hovers a backstage segment, the ghost marks each shop the deletion leaves with no depot. buildGhostMesh(world, edit) makes the candidate itself. If a caller already holds the candidate, the caller passes it instead.
+With the candidate world, the ghost also shows the candidate's walkways as strips over the paving, and its starved marks. Where one of these lies on a committed one, it blends into it. Only the walkways the edit adds or moves, and the shops it would starve, stand out. With the candidate world, the ghost also shows each piece of the candidate's furniture that the edit adds, moves, or changes the kind of, translucent in its kind's color, in the Lit part, and each piece of the world's furniture that the edit removes, moves, or changes the kind of, where it stands now, in the delete tint, in the Tints part. When the delete tool hovers a backstage segment, the ghost marks each shop the deletion leaves with no depot. buildGhostMesh(world, edit) makes the candidate itself. If a caller already holds the candidate, the caller passes it instead.
 
 appendPathStart shows where a path would start before its first click: a translucent disc of the path's width, with a join mark when the click would join a point or segment. appendFinishMark marks the stop where a click would finish the path, in FINISH_MARK_COLOR, wider than a join mark and under it. Ghost and highlighted segments, and the candidate's walkways in a ghost, lie GHOST_LIFT above the park's paths, so they never flicker against the paths beneath them. appendEntity adds the box, segment, or path point a key holds, in a given color such as HIGHLIGHT_TINT. A box is shaped as the park draws it, a segment as its own pieces of the surface, which are its body and its halves of the corners at its ends, and a path point is a flat disc of JOIN_MARK_RADIUS. It adds nothing when the key holds none of these.
 

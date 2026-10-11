@@ -8,6 +8,8 @@ The player furnishes guest segments with a Furnish brush, and the new furniture 
 
 Furnishing is a separate intent component on the segment's entity, as shop-stock is on a box, so unfurnished parks save exactly as before. parkSegments and SegmentRecord carry it as an optional value. Splits, merges, corner splits, and RestoreIntent copy it through two new store operations, which do nothing on a layout copy. parkSurface also gives each segment's body sides, from the corners it builds the body piece from. A resolver in the new module sim/furniture walks the furnished segments and lays evenly spread pieces on derived entities along those sides. The renderer draws them, and the ghost compares the candidate's pieces with the world's.
 
+Revised during implementation, at the user's choice after play: each side of a segment holds its own furnishing, a kind and a spacing, in a left-furnishing and a right-furnishing component. With One side, the brush sets only the side under the pointer, so the other side's furniture no longer shows in the delete tint. The tasks below keep their original wording; FEATURE.md and the specs give the per-side rules.
+
 ## Placement
 
 Decision 0027 places each behavior this feature adds:
@@ -194,7 +196,7 @@ Step 2: Interaction gains chooseFurnish(choice), which calls setFurnishChoice on
 
 Step 3: Build the app.
 
-Run: `cmake.exe --build --preset windows-debug --target ThemeParkJones`
+Run: `cmake.exe --build --preset windows-debug --target tpj_app`
 Expected: the build ends with no warnings and no errors.
 
 ### Task 17: Confirm the parks are unchanged

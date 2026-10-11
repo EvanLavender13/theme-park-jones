@@ -33,12 +33,25 @@ struct EdgeLine {
   size_t Count = 0;
 };
 
+// Where one side of a segment's body runs, seen walking from its From point to its To point: its
+// segment, whether it is the left side, and where it starts, nearer the From point, and ends.
+struct BodySide {
+  EntityKey Segment = NULL_KEY;
+  bool Left = false;
+  ParkPoint Start;
+  ParkPoint End;
+
+  bool operator==(const BodySide &) const = default;
+};
+
 // The paving the park's segments make: its pieces and its edge lines, each list in ascending key
-// order of its owner, and the positions the edge lines run through.
+// order of its owner, the positions the edge lines run through, and the sides of each segment's
+// body, in ascending key order of the segment, the left side first.
 struct PavedSurface {
   std::vector<SurfacePiece> Pieces;
   std::vector<EdgeLine> Edges;
   std::vector<ParkPoint> EdgePoints;
+  std::vector<BodySide> Sides;
 };
 
 // The piece's corners.

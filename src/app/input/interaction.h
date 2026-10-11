@@ -57,6 +57,8 @@ public:
   // SetOpeningHours applies.
   void settleHours(const World &world);
   void selectTool(ToolKind kind);
+  // Sets what the Furnish tool lays.
+  void chooseFurnish(const FurnishChoice &choice);
   // Drops what the tool holds or has drawn, as selecting it again does, and gives whether there was
   // anything: a held press or a drawn stop.
   bool dropHeld();

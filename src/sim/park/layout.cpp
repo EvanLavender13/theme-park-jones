@@ -461,8 +461,15 @@ PathGround groundOf(const PathLayout &layout) {
         endLine(line, to);
       }
     }
-    segments.push_back(ParkSegment{key, intent.Kind, intent.From, intent.To, intent.Width,
-                                   std::move(line), intent.FromEdge, intent.ToEdge});
+    segments.push_back(ParkSegment{key,
+                                   intent.Kind,
+                                   intent.From,
+                                   intent.To,
+                                   intent.Width,
+                                   std::move(line),
+                                   intent.FromEdge,
+                                   intent.ToEdge,
+                                   {}});
   }
   std::vector<ParkCorner> corners;
   corners.reserve(roundings.size());

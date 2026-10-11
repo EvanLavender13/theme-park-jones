@@ -28,7 +28,7 @@ The park's walkways and shop marks are rebuilt whenever the park's intent change
 
 ## Tools and the ghost
 
-The Tools panel selects the tool. The tools are Look, Guest path, Backstage path, Place shop, Place depot, Place bench, Place toilet, Move box, Edit path, Remove point, and Delete (tools/SPEC.md). Look is the tool at start. While a path is being drawn, the panel says to click the last point again to finish, and Cancel path drops the drawn points. Clicks over a panel never reach the tool. When the tool commits an edit, the edit applies at the next tick, or at once while paused.
+The Tools panel selects the tool. The tools are Look, Guest path, Backstage path, Place shop, Place depot, Place bench, Place toilet, Furnish, Move box, Edit path, Remove point, and Delete (tools/SPEC.md). Look is the tool at start. While a path is being drawn, the panel says to click the last point again to finish, and Cancel path drops the drawn points. Clicks over a panel never reach the tool. When the tool commits an edit, the edit applies at the next tick, or at once while paused.
 
 The Tools panel has Undo and Redo buttons, each disabled while there is nothing to undo or redo. Ctrl+Z undoes, and Ctrl+Y or Ctrl+Shift+Z redoes, unless a text field has the keyboard. While a path is being drawn or the button holds an edit, undo and redo drop it, as Cancel path does, and change nothing else. Otherwise they apply at the next tick, with no ghost (decision 0029), in a tick of their own, so an edit committed while one waits applies at the tick after. While paused, they apply at the next frame instead, alone. While an edit or another undo or redo waits for its tick, undo and redo do nothing.
 
@@ -37,6 +37,8 @@ The ghost shows what the tool's edit would do. It shows the candidate park's wal
 While the tool snaps, the guides of the snap in effect draw over the scene and behind the panels, each kind in its own color: a ring on a point, a line from a door, a solid line along a segment, a dashed ray from an anchor that runs on past the stop, and ticks at whole meters. The length of each segment measuredLengths gives shows at its middle, in meters to two decimals. A frame gives the tool the meters of ground a screen pixel spans at the pointer, averaged across and up the screen. Holding Ctrl turns snapping off while it is held, unless a text field has the keyboard.
 
 While the tool is Look, clicking a guest, a shop, a bench, or a toilet block opens the Inspector on it. If the click hits nothing, or an entity with nothing to inspect such as a depot or the entrance, the Inspector stays as it was.
+
+While Furnish is chosen, the Tools panel shows Kind, as radio buttons None, Benches, and Tables, Spacing, as a slider in meters, and Sides, as radio buttons One side and Both sides. They set what the tool lays. The choice starts at Benches on both sides and lasts while the app runs.
 
 When the Inspector shows a shop, it has a Sells row of radio buttons, Food, Drink, and Both, with the shop's stock setting marked, and an Apply button. Choosing another setting marks it, and while the tool gives no edit of its own, the choice is the edit the ghost and the preview show, a SetShopStock. Apply commits it, and it applies at the next tick, or at once while paused. The choice stays marked until the shop has that setting, and Apply is disabled while the chosen setting is the shop's. Picking another subject, closing the Inspector, or replacing the world drops the choice.
 

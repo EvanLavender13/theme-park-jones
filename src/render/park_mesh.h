@@ -77,6 +77,15 @@ constexpr Rgba boxColor(BoxKind kind) {
   return {0.84f, 0.42f, 0.30f, 1.0f};
 }
 
+constexpr float furnitureHeight(FurnitureKind kind) {
+  return kind == FurnitureKind::Table ? 0.75f : 0.5f;
+}
+
+// A bench takes a bench box's color, and a table its own.
+constexpr Rgba furnitureColor(FurnitureKind kind) {
+  return kind == FurnitureKind::Table ? Rgba{0.36f, 0.52f, 0.30f, 1.0f} : boxColor(BoxKind::Bench);
+}
+
 // The color a box's front face takes: red, green, and blue moved 0.4 of the way to 1.
 Rgba lightened(Rgba color);
 
@@ -190,8 +199,12 @@ void appendStarvedMark(ParkMesh &mesh, const Pose &pose, Rgba color);
 // STARVED_COLOR with the alpha given.
 void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha);
 
-// The world's entrances, paths, walkways, and boxes, in that order and each in key order, then a
-// starved mark over each starved shop.
+// Adds a box over each piece of the world's furniture, in key order, in its kind's color with the
+// alpha given.
+void appendFurniture(ParkMesh &mesh, const World &world, float alpha);
+
+// The world's entrances, paths, walkways, boxes, and furniture, in that order and each in key
+// order, then a starved mark over each starved shop.
 ParkMesh buildParkMesh(const World &world);
 
 // Adds the box, segment, or path point the key holds, in the color: a box shaped as buildParkMesh
@@ -210,8 +223,9 @@ struct GhostMesh {
 // The ghost of an edit on a world: the box it adds or moves, and the paved surface it adds or
 // changes, drawn as buildParkMesh draws paving GHOST_LIFT higher, in Lit translucent in its kind's
 // color when accepted, and in Tints in INVALID_TINT when not; what an accepted deletion removes, in
-// Tints in DELETE_TINT; its join marks, in Marks; and the candidate's walkways and starved marks,
-// in Lit, when a candidate is given.
+// Tints in DELETE_TINT; its join marks, in Marks; and, when a candidate is given, the candidate's
+// walkways and starved marks and the pieces of furniture it adds or moves, in Lit, and the pieces
+// it removes, in Tints in DELETE_TINT.
 GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
                          const std::optional<World> &candidate);
 // The same ghost with the candidate makeCandidate gives for the edit when it is accepted, and none

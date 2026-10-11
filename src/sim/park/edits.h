@@ -181,6 +181,14 @@ struct SetOpeningHours {
   bool operator==(const SetOpeningHours &) const = default;
 };
 
+// The segment's furnishing on both sides.
+struct SetFurnishing {
+  EntityKey Segment = NULL_KEY;
+  Furnishing To;
+
+  bool operator==(const SetFurnishing &) const = default;
+};
+
 // A path segment's intent as RestoreIntent puts it: a ParkSegment without its ground line.
 struct SegmentRecord {
   EntityKey Key = NULL_KEY;
@@ -190,6 +198,7 @@ struct SegmentRecord {
   double Width = 0.0;
   double FromEdge = DEFAULT_EDGE_RADIUS;
   double ToEdge = DEFAULT_EDGE_RADIUS;
+  Furnishing Furnished;
 
   bool operator==(const SegmentRecord &) const = default;
 };
@@ -220,14 +229,14 @@ struct RestoreIntent {
 
 // Registers AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
 // RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, SetTaperLength, SetShopStock,
-// SetOpeningHours, and RestoreIntent, in that order.
+// SetOpeningHours, SetFurnishing, and RestoreIntent, in that order.
 void addParkEdits(WorldSchema &schema);
 
-// A tentative or committed edit to park intent: one of the fifteen commands.
+// A tentative or committed edit to park intent: one of the sixteen commands.
 using ParkEdit =
     std::variant<AddPath, AddBox, MoveBox, DeleteSegment, DeleteBox, MovePoint, InsertPoint,
                  RemovePoint, SetCornerRadius, SetSegmentWidth, SetEdgeRadius, SetTaperLength,
-                 SetShopStock, SetOpeningHours, RestoreIntent>;
+                 SetShopStock, SetOpeningHours, SetFurnishing, RestoreIntent>;
 
 // The stop's ground position: a NewPoint's own, an OnPoint's point's, the place Along of the way
 // from an OnSegment's segment's From point to its To point, or the place an OnBend names on its
@@ -254,14 +263,14 @@ std::vector<ParkPoint> pathCrossings(const World &world, const RemovePoint &remo
 // Each segment the edit adds, or whose ground line or width it changes, as it would lie after the
 // edit, in ascending key order, a new segment with the key the commit would give it. Given whether
 // or not the world refuses the edit for meeting a solid. Empty when the edit names nothing it acts
-// on, when a segment it adds or reshapes has no ground line, for edits of boxes, and for
-// RestoreIntent, which shows no ghost.
+// on, when a segment it adds or reshapes has no ground line, for edits of boxes, of the opening
+// hours, and of furnishing, and for RestoreIntent, which shows no ghost.
 std::vector<ParkSegment> editedSegments(const World &world, const ParkEdit &edit);
 
 // The pieces and edge lines of each segment and point whose part of the surface the edit changes,
 // as they would lie after the edit, in ascending key order of their owners. Empty when the edit
 // names nothing it acts on, when a segment it adds or reshapes has no ground line, for edits of
-// boxes, and for RestoreIntent, which shows no ghost.
+// boxes, of the opening hours, and of furnishing, and for RestoreIntent, which shows no ghost.
 PavedSurface editedSurface(const World &world, const ParkEdit &edit);
 
 // Whether the command would be applied to the world: it describes a physical object, names what it
@@ -281,6 +290,7 @@ bool isAccepted(const World &world, const SetEdgeRadius &command);
 bool isAccepted(const World &world, const SetTaperLength &command);
 bool isAccepted(const World &world, const SetShopStock &command);
 bool isAccepted(const World &world, const SetOpeningHours &command);
+bool isAccepted(const World &world, const SetFurnishing &command);
 bool isAccepted(const World &world, const RestoreIntent &command);
 
 // Whether the command the edit holds would be applied to the world.
@@ -305,6 +315,7 @@ void applyCommand(World &world, const SetEdgeRadius &command);
 void applyCommand(World &world, const SetTaperLength &command);
 void applyCommand(World &world, const SetShopStock &command);
 void applyCommand(World &world, const SetOpeningHours &command);
+void applyCommand(World &world, const SetFurnishing &command);
 void applyCommand(World &world, const RestoreIntent &command);
 
 // Whether every solid and line has its geometry, stays in the park, and conflicts with no other.
