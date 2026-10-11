@@ -683,6 +683,17 @@ std::optional<typename F::Entry> sourceEntryAtNode(const World &world, const Net
   return slot->Entries[*first].Value;
 }
 
+// Every source's resolved entries of the field, sources ascending, or none before the field's
+// first resolution. Resolvers read with it, since stepped entries are state.
+template <FieldDefinition F>
+std::span<const FieldSlot<typename F::Entry>> resolvedSlots(const World &world) {
+  const auto *resolved = world.tryGet<ResolvedEntries<F>>(fieldKey(F::Name));
+  if (resolved == nullptr) {
+    return {};
+  }
+  return resolved->Slots;
+}
+
 // The field's entries at the place, as sampleField gives them, but choosing each source's resolved
 // entries whatever its stepped ones. Resolvers sample with it, since stepped entries are state.
 template <FieldDefinition F>

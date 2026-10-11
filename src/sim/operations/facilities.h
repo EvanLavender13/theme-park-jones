@@ -76,7 +76,7 @@ struct FacilityRecord {
 std::optional<FacilityRecord> facilityRecord(const World &world, EntityKey facility);
 // Registers the flow kinds rest-visits, rests, toilet-visits, and toilet-uses, the facility-service
 // state, the rest-offer and toilet-offer fields and their resolvers, then the system that steps
-// benches and toilet blocks. addOperations calls it last.
+// benches and toilet blocks. addOperations calls it after the shops' registrations.
 void addFacilities(WorldSchema &schema);
 
 } // namespace tpj

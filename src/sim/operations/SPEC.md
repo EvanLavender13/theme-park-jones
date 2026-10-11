@@ -18,9 +18,13 @@ addOperations then calls addFacilities, which registers:
 - the fields rest-offer and toilet-offer and the resolvers that publish them;
 - the system that steps benches and toilet blocks, after the depots.
 
+addOperations last calls addSeats, which registers the flow kind seat-visits, a piece's seat state, the field seat-offers and the resolver that publishes it, and the system that steps the pieces holding seat visits, after benches and toilet blocks. It needs furniture's registrations before it, and addPark calls addFurniture before addOperations.
+
 It needs the routes module's registrations before it, and addPark calls it after addRoutes.
 
 Shops, depots, and facilities read the backstage route distance field, the guest network's anchors, parkBoxes, and their own ledger stocks. Every shop box of parkBoxes is a shop, and every depot box is a depot. Every bench box is a bench, and every toilet block box is a toilet block. Benches and toilet blocks are facilities. A shop sells the goods its stock setting names (park/SPEC.md).
+
+Seats read the seat places field, their own seat offers, and their own ledger stocks. They read furniture only through the seat places field.
 
 Other modules call operations.h for:
 
@@ -31,6 +35,8 @@ Other modules call operations.h for:
 - the consumption causes.
 
 Other modules call facilities.h for the RestVisits and Rests flow kinds, through which guests visit benches and receive rests, ToiletVisits and ToiletUses, for toilet blocks, the RestOffer and ToiletOffer fields, and facilityRecord.
+
+Other modules call seats.h for the SeatVisits flow kind, through which guests visit furniture and get rests, the SeatOffers field and its SeatOffer, SEAT_TIME, and the relief of each kind's seat.
 
 ## Goods
 
@@ -91,3 +97,13 @@ When a facility is deleted, the guests waiting at its door get their visits back
 Each bench publishes its offer in the entry field rest-offer, and each toilet block in toilet-offer. It publishes one OfferEntry at its guest anchor, holding REST_RELIEF or TOILET_RELIEF, the ticks the next guest to arrive would wait for a place, and that it has places. The wait is exact if no other visit arrives. If a facility is newly placed, or is in a candidate, it offers a wait of 0 at once, before it has stepped. If a facility has no guest connection, it publishes nothing.
 
 facilityRecord(world, key) returns a facility's inspection record for display (decision 0025). The record holds its places, how many of them are taken, and how many guests wait at its door. It is computed from the facility's state, not stored, so it adds nothing to a save. For a key that is not a bench or toilet block box, it returns none.
+
+## Seats
+
+Each piece of furniture with a seat place serves guests from its seats. It needs no supplies.
+
+Each such piece publishes one SeatOffer in the resolved entry field seat-offers, at its seat place's place. The offer holds the tiredness a rest there relieves and the hunger a meal eaten there relieves, each on a scale from 0 to 1, and the piece's number of seats. A table relieves a meal more and tiredness less than a bench. The offers follow from the seat places alone, so a candidate's pieces offer at once, and a piece no longer laid offers nothing. An offer has no wait, because no guest waits at a piece.
+
+Guests visit a piece through seat-visits. A piece takes the visits that reach it in a tick one at a time. While one of its seats is free, it gives the seat to the guest, who keeps it for SEAT_TIME. Then the visit comes back with a rest, and the seat is free from that tick. If every seat is taken, the visit comes back after RETURN_DELAY with no serving. A piece with no seat place has no seats, so every visit to it comes back that way. A tick's work for seats grows with the visits reaching pieces, never with the number of pieces (decision 0031).
+
+When a resolution no longer lays a piece, visits on their way to it, and visits that reached it in the same tick, come back to their guests with no serving. Guests it seated still get their rests when their time is up. If a visit or rest is sent to a guest who has left, it is consumed as abandoned, or as undeliverable when the piece is gone as well. Every unit is accounted for, so the rests furniture creates always equal the guests it has seated.

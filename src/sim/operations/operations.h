@@ -177,8 +177,8 @@ std::optional<ShopRecord> shopRecord(const World &world, EntityKey shop);
 std::string_view limitingFactorName(LimitingFactor factor);
 // Registers the flow kinds supply-orders, supplies, guest-visits, meals, drink-orders,
 // drink-supplies, drink-visits, and drinks, the shop-service state, the food-offer and drink-offer
-// fields and their resolvers, then the systems that step shops and then depots, and last calls
-// addFacilities.
+// fields and their resolvers, then the systems that step shops and then depots, then calls
+// addFacilities, and last calls addSeats.
 // The routes module's registrations must come first.
 void addOperations(WorldSchema &schema);
 
