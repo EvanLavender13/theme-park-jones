@@ -50,6 +50,8 @@ Create a task for each item. Complete them in order.
     - Cross-capability interactions missing from the medium map.
     - Members out of order.
     - Criteria that can't be observed or tested.
+    - Claims about existing code. Read the code behind every criterion and every Medium rule before you dispatch the review, and fix the draft yourself. Read the park world checks (tests/sim/park_world_checks_test.cpp) for what checked parks must hold, the runtime report's stages (src/bench/SPEC.md) for any runtime criterion, each park file a criterion names, and the medium's rules (src/sim/medium/SPEC.md) for every field and flow the Medium uses.
+    - A member whose new state no checked park holds when it lands, or whose behavior can't be played because its producer lands later.
 12. Review. Stage SLICE.md and RESEARCH.md, then dispatch the reviewer with `reviewing`. Handle the findings as `reviewing` describes for planning briefs. Fix Minor findings and settled Major findings yourself. Bring the user only the Major findings that need a design choice, and report the rest in one line.
 13. Ask the user to approve.
 

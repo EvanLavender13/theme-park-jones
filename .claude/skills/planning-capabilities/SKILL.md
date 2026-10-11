@@ -59,6 +59,7 @@ Create a task for each item. Complete them in order.
     - Foundation criteria that imply the capability can be finished.
     - Scope that reaches into another quality.
     - Interactions that bypass the medium.
+    - Claims about existing code. Read that code before you dispatch the review, and fix the draft yourself.
 12. Review. Stage CAPABILITY.md and RESEARCH.md, then dispatch the reviewer with `reviewing`. If a slice names this capability, give it SLICE.md as context. Handle the findings as `reviewing` describes for planning briefs. Fix Minor findings and settled Major findings yourself. Bring the user only the Major findings that need a design choice, and report the rest in one line.
 13. Ask the user to approve the brief.
 
