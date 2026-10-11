@@ -1,5 +1,7 @@
 #include "sim/furniture/furniture.h"
 
+#include "sim/medium/field.h"
+#include "sim/medium/network.h"
 #include "sim/mix.h"
 #include "sim/park/edits.h"
 #include "sim/park/geometry.h"
@@ -965,6 +967,33 @@ const LaidChain *keptChain(const World &world, const std::vector<const LaidChain
   return whole ? *found : nullptr;
 }
 
+// Publishes each piece's seat place from its segment, at the place on the segment's guest carrier
+// nearest the piece, each segment's entries in key order of their pieces.
+void publishSeatPlaces(World &world) {
+  const Network &network = parkNetwork(world, PathKind::Guest);
+  std::vector<std::pair<EntityKey, PlacedEntry<SeatPlace>>> placed;
+  for (const FurniturePiece &piece : parkFurniture(world)) {
+    const std::optional<Place> at =
+        network.nearestPlaceOn(piece.Segment, GroundPoint{piece.At.X, piece.At.Z});
+    if (!at) {
+      continue;
+    }
+    placed.emplace_back(
+        piece.Segment,
+        PlacedEntry<SeatPlace>{*at, SeatPlace{piece.Key, piece.At, piece.Kind,
+                                              furnitureSeats(piece.Kind), piece.Segment}});
+  }
+  std::ranges::stable_sort(placed, {}, &std::pair<EntityKey, PlacedEntry<SeatPlace>>::first);
+  for (size_t i = 0; i < placed.size();) {
+    const EntityKey segment = placed[i].first;
+    std::vector<PlacedEntry<SeatPlace>> entries;
+    for (; i < placed.size() && placed[i].first == segment; ++i) {
+      entries.push_back(placed[i].second);
+    }
+    publishResolved<SeatPlaces>(world, segment, std::move(entries));
+  }
+}
+
 // Lays the pieces each furnished guest segment asks for, chain by chain, and removes every piece
 // laid before that this resolution doesn't lay. A chain whose reads are the same as when the last
 // resolution laid it keeps its pieces, which are what laying it again would give.
@@ -1016,6 +1045,7 @@ void layFurniture(World &world) {
     world.emplaceOrReplace<LaidChains>(world.createDerivedEntity(NULL_KEY, LAID_PURPOSE, 0),
                                        std::move(now));
   }
+  publishSeatPlaces(world);
 }
 
 } // namespace
@@ -1023,6 +1053,7 @@ void layFurniture(World &world) {
 void addFurniture(WorldSchema &schema) {
   schema.addComponent<FurniturePieceState>("furniture-piece", DataKind::Derived);
   schema.addComponent<LaidChains>("laid-furniture", DataKind::Derived);
+  addField<SeatPlaces>(schema);
   schema.addResolver("furniture", layFurniture, {"walked-surface"});
 }
 

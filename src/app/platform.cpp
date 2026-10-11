@@ -18,12 +18,15 @@ SdlVideo::~SdlVideo() {
   }
 }
 
-MainWindow::MainWindow(const SdlVideo &video) {
+MainWindow::MainWindow(const SdlVideo &video, bool hidden) {
   if (!video.ready()) {
     return;
   }
-  Window = SDL_CreateWindow("Theme Park Jones", 1600, 900,
-                            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+  SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+  if (hidden) {
+    flags |= SDL_WINDOW_HIDDEN;
+  }
+  Window = SDL_CreateWindow("Theme Park Jones", 1600, 900, flags);
   if (Window == nullptr) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateWindow: %s", SDL_GetError());
   }

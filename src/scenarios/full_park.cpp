@@ -30,6 +30,8 @@ constexpr int GRID_LINES = 10;
 // A row's cells, 20 m apart from -80 m. Those whose index mod 3 is 2 hold a toilet block where the
 // others hold a shop.
 constexpr int ROW_CELLS = 9;
+// How far apart each guest segment's furniture stands, in meters.
+constexpr double FURNITURE_SPACING = 10.0;
 // The stock settings the shops take in turn, in key order, so a third sell each.
 constexpr std::array<ShopStock, 3> STOCKS{ShopStock::Food, ShopStock::Drink, ShopStock::Both};
 
@@ -102,6 +104,18 @@ void layOut(World &world) {
   }
 }
 
+// Benches on the left side of every guest segment and tables on its right.
+void furnish(World &world) {
+  const SideFurnishing benches{FurnitureKind::Bench, FURNITURE_SPACING};
+  const SideFurnishing tables{FurnitureKind::Table, FURNITURE_SPACING};
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Kind == PathKind::Guest) {
+      applyAccepted(world, SetFurnishing{segment.Key, Furnishing{benches, tables}},
+                    "furnishing segment " + std::to_string(static_cast<uint64_t>(segment.Key)));
+    }
+  }
+}
+
 // Sets the shops, in key order, to the stock settings of STOCKS in turn.
 void stockShops(World &world) {
   size_t next = 0;
@@ -156,6 +170,7 @@ void placeGuests(World &world) {
 World makeFullPark(uint64_t warmTicks) {
   World world = makeNewPark(FULL_PARK_SEED);
   layOut(world);
+  furnish(world);
   stockShops(world);
   resolveWorld(world);
   refuseStarvedShops(world);
