@@ -28,8 +28,9 @@ private:
 class MainWindow {
 public:
   // Opens the resizable, high pixel density window titled Theme Park Jones, 1600 by 900, when
-  // SDL's video is ready, logging SDL's error when it cannot.
-  explicit MainWindow(const SdlVideo &video);
+  // SDL's video is ready, logging SDL's error when it cannot. A hidden window never shows or takes
+  // focus.
+  MainWindow(const SdlVideo &video, bool hidden);
   MainWindow(const MainWindow &) = delete;
   MainWindow &operator=(const MainWindow &) = delete;
   MainWindow(MainWindow &&) = delete;

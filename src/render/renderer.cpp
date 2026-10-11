@@ -937,8 +937,22 @@ bool drawFrame(Renderer &renderer, const CameraView &camera, const DayLight &lig
     SDL_CancelGPUCommandBuffer(commands);
     return false;
   }
-  // A null swapchain texture means the window is minimized; skip the frame.
-  if (swapchain == nullptr || !ensureRenderTargets(renderer, width, height)) {
+  // A hidden window has no swapchain texture, but its frames are still drawn, at its size, for
+  // runs that time or capture them without showing a window.
+  const bool hidden = (SDL_GetWindowFlags(renderer.Window) & SDL_WINDOW_HIDDEN) != 0;
+  if (swapchain == nullptr && hidden) {
+    int pixelWidth = 0;
+    int pixelHeight = 0;
+    if (!SDL_GetWindowSizeInPixels(renderer.Window, &pixelWidth, &pixelHeight)) {
+      logError("Cannot read the window's size");
+      SDL_CancelGPUCommandBuffer(commands);
+      return false;
+    }
+    width = static_cast<uint32_t>(pixelWidth);
+    height = static_cast<uint32_t>(pixelHeight);
+  }
+  // A null swapchain texture on a shown window means it is minimized; skip the frame.
+  if ((swapchain == nullptr && !hidden) || !ensureRenderTargets(renderer, width, height)) {
     return SDL_SubmitGPUCommandBuffer(commands) && swapchain == nullptr;
   }
 
@@ -948,7 +962,9 @@ bool drawFrame(Renderer &renderer, const CameraView &camera, const DayLight &lig
   if (ui != nullptr && renderer.UiInitialized) {
     drawUi(renderer, commands, ui);
   }
-  blitToSwapchain(renderer, commands, swapchain);
+  if (swapchain != nullptr) {
+    blitToSwapchain(renderer, commands, swapchain);
+  }
 
   if (capturePath != nullptr) {
     return submitWithCapture(renderer, commands, capturePath);

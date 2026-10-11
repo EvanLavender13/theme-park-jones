@@ -25,7 +25,8 @@ constexpr float PARK_SIZE_METERS = 256.0f;
 } // namespace
 
 Application::Application(const Options &options, World start)
-    : Window(Video), Gui(Window), Gpu(Window, Gui, PARK_SIZE_METERS), Session(std::move(start)),
+    : Window(Video, options.FrameTimes || options.CapturePath != nullptr), Gui(Window),
+      Gpu(Window, Gui, PARK_SIZE_METERS), Session(std::move(start)),
       Interactions(Session.generation()),
       Ui({options.ShowGraph, options.Overlay}, GameSpeed(options.Speed),
          LightPreview{options.LightHour.has_value(), options.LightHour.value_or(0) * 3600}),

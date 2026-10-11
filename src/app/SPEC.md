@@ -83,6 +83,8 @@ The Inspector shows its subject's title and rows. For a guest, it also shows the
 - --frames N exits after N frames.
 - --capture PATH writes the last frame to PATH as a BMP and exits. It exits after 3 frames unless --frames says otherwise.
 - --frame-times, with a positive --frames, writes one line at exit. The line is `frame-times`, then the duration in nanoseconds of each frame from the second to the next to last, each after a single space. With N frames, the line holds N - 2 durations, and neither loading nor the first frame's one-off work is among them. scripts/runtime-report.sh times the app with it (bench/SPEC.md).
+
+With --capture or --frame-times, the window is hidden. It never shows or takes focus, and every frame is still drawn at the window's size, so captures and timings run while the player uses the computer. A hidden window's frames don't wait for the screen, so --frame-times then gives what each frame costs the app, not the display's refresh.
 - --graph checks the Graph checkbox at start, and --overlay food, drink, rest, or toilet chooses that need's overlay at start, so a capture shows them.
 - --light-hour H starts the app with the Light panel's Preview checked and its slider at H:00, so a capture shows that hour's light on any world. H is a whole hour from 0 to 23.
 - --park PATH starts from that park file instead of a new park.
