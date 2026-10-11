@@ -4,6 +4,7 @@ add_library(tpj_sim STATIC
     clock.cpp
     cycle.cpp
     draw.cpp
+    furniture/furniture.cpp
     guests/footfall.cpp
     guests/ground.cpp
     guests/guests.cpp

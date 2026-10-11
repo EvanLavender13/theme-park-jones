@@ -4,7 +4,7 @@ The park's editing tools: what the player's pointer does to the park. A tool nev
 
 ## Boundary
 
-A ToolState holds one tool, of a ToolKind: None, GuestPath, BackstagePath, PlaceShop, PlaceDepot, PlaceBench, PlaceToilet, MoveBox, EditPath, RemovePoint, or Delete. The app drives it with four calls: selectTool, movePointer, pressPointer, and releasePointer. The app reads tentativeEdit, the edit the ghost shows, and highlightedEntity, the entity the tool marks. boxAt, segmentAt, pointAt, handleAt, and sideAt are the picking queries the tools use. frontagePose gives the pose of a box that fronts paving. editHandles and hoveredHandle give the handles Edit path shows. snapGuides and measuredLengths give what the app draws for snapping. An EditHistory holds the committed edits to undo and redo. clearHistory, noteEdits, undoEdit, and redoEdit change it, and canUndo and canRedo read it.
+A ToolState holds one tool, of a ToolKind: None, GuestPath, BackstagePath, PlaceShop, PlaceDepot, PlaceBench, PlaceToilet, MoveBox, EditPath, RemovePoint, Delete, or Furnish. The app drives it with four calls: selectTool, movePointer, pressPointer, and releasePointer. The app reads tentativeEdit, the edit the ghost shows, and highlightedEntity, the entity the tool marks. boxAt, segmentAt, pointAt, handleAt, and sideAt are the picking queries the tools use. frontagePose gives the pose of a box that fronts paving. editHandles and hoveredHandle give the handles Edit path shows. snapGuides and measuredLengths give what the app draws for snapping. An EditHistory holds the committed edits to undo and redo. clearHistory, noteEdits, undoEdit, and redoEdit change it, and canUndo and canRedo read it. setFurnishChoice sets what the Furnish tool lays: a kind of furniture or none, a spacing, and one side or both.
 
 ## Input
 
@@ -71,9 +71,11 @@ Remove point marks the path point under the pointer, as pointAt gives it, when e
 
 Delete removes the box under the pointer. If there is no box, it removes the segment under the pointer, and any point no other segment uses. The ghost shows what it removes.
 
+Furnish sets the furnishing of the guest segment under the pointer, the first in key order whose width covers the pointer. Its edit is a SetFurnishing of that segment. With both sides chosen, it gives both sides the tool's choice: its kind and spacing, or no furnishing when the choice has no kind. With one side, it gives the choice to the side of the segment's line the pointer lies on, and the other side keeps its furnishing. The tool marks that segment. Over no guest segment it gives no edit and marks nothing. A click commits the edit.
+
 ## History
 
-The history holds a list of edits to undo and a list of edits to redo. Each edit is the intent it changed: the path points, segments, and boxes it removed, those it added, and those it changed, before and after. A box's record holds its kind, pose, and stock setting. When an edit changes the opening hours, it also holds them before and after, and its reversal sets them back. The entrance never changes.
+The history holds a list of edits to undo and a list of edits to redo. Each edit is the intent it changed: the path points, segments, and boxes it removed, those it added, and those it changed, before and after. A box's record holds its kind, pose, and stock setting. A segment's record holds its furnishing. When an edit changes the opening hours, it also holds them before and after, and its reversal sets them back. The entrance never changes.
 
 clearHistory empties both lists and takes the world's intent as the intent the history saw last. noteEdits takes the world after commands were applied, by a cycle or by commitCommands (sim/SPEC.md). It compares the world's intent with the intent the history saw last, then takes the world's intent as the intent it saw last. If nothing changed, it records nothing. Otherwise the change is one edit, even when several commands made it in one cycle. If the change came from an undo, the edit goes on the redo list. If it came from a redo, it goes on the undo list. Any other change goes on the undo list and empties the redo list.
 

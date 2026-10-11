@@ -7,6 +7,7 @@
 
 #include "sim/command_queue.h"
 #include "sim/entity_key.h"
+#include "sim/furniture/furniture.h"
 #include "sim/guests/guests.h"
 #include "sim/medium/flow.h"
 #include "sim/operations/operations.h"
@@ -590,8 +591,8 @@ ChosenEdit restoringGuestSegmentUnderFreshKey(const World &before) {
   const EntityKey name{before.nextKey()};
   RestoreIntent restore;
   restore.Remove = {segmentKey};
-  restore.Add.Segments = {
-      SegmentRecord{name, old.Kind, old.From, old.To, old.Width, old.FromEdge, old.ToEdge}};
+  restore.Add.Segments = {SegmentRecord{name, old.Kind, old.From, old.To, old.Width, old.FromEdge,
+                                        old.ToEdge, old.Furnished}};
   REQUIRE(isAccepted(before, ParkEdit{restore}));
   // Without the segment back under a new key with guests on it, this edit would check nothing
   // that deletingGuestSegment doesn't.
@@ -696,13 +697,56 @@ ChosenEdit settingOpeningHoursEarlierUnderGuests(const World &before) {
   return {"setting the park's opening hours to 8:00 to 20:00 while guests are in the park", set};
 }
 
+// The guest segment whose points lie farthest apart, the first in key order among equals.
+EntityKey longestGuestSegment(const World &world) {
+  EntityKey longest = NULL_KEY;
+  double longestLength = 0.0;
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Kind != PathKind::Guest) {
+      continue;
+    }
+    const ParkPoint from = pointPosition(world, segment.From);
+    const ParkPoint to = pointPosition(world, segment.To);
+    const double alongX = to.X - from.X;
+    const double alongZ = to.Z - from.Z;
+    const double length = std::sqrt((alongX * alongX) + (alongZ * alongZ));
+    if (length > longestLength) {
+      longest = segment.Key;
+      longestLength = length;
+    }
+  }
+  return longest;
+}
+
+// The longest guest segment takes benches on its left side and its right side while guests are in
+// the park, so the save holds a furnishing line for each side and the resolution lays furniture
+// pieces along the segment.
+ChosenEdit furnishingLongestGuestSegmentUnderGuests(const World &before) {
+  REQUIRE_FALSE(parkGuests(before).empty());
+  const EntityKey segmentKey = longestGuestSegment(before);
+  REQUIRE(segmentKey != NULL_KEY);
+  const SideFurnishing benches{FurnitureKind::Bench, 10.0};
+  const Furnishing bothSides{benches, benches};
+  const SetFurnishing set{segmentKey, bothSides};
+  REQUIRE(isAccepted(before, ParkEdit{set}));
+  // Without each side's furnishing held on the segment and pieces laid for it, the checked worlds
+  // would hold neither side's furnishing intent nor the furniture-piece type.
+  const World candidate = makeCandidate(before, queueOf(ParkEdit{set}));
+  REQUIRE(segmentWithKey(candidate, segmentKey).Furnished == bothSides);
+  REQUIRE_FALSE(parkFurniture(candidate).empty());
+  return {"furnishing noon.park's longest guest segment with benches on both sides, 10 m apart, "
+          "while guests are in the park",
+          set};
+}
+
 // The edits of noon.park, made from the world as a cycle leaves it. Each requires the state it was
 // chosen for, so a change to noon.park that loses that state fails here rather than quietly
 // checking less.
 std::vector<ChosenEdit> noonChosenEdits(const World &before) {
   std::vector<ChosenEdit> edits{addingToiletBlock(before),
                                 settingDrinkShopToBothUnderGuests(before),
-                                settingOpeningHoursEarlierUnderGuests(before)};
+                                settingOpeningHoursEarlierUnderGuests(before),
+                                furnishingLongestGuestSegmentUnderGuests(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);
     REQUIRE(isAccepted(before, chosen.Edit));

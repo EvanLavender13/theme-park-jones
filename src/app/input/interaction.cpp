@@ -81,6 +81,8 @@ void Interaction::settleHours(const World &world) {
 
 void Interaction::selectTool(ToolKind kind) { tpj::selectTool(Tool, kind); }
 
+void Interaction::chooseFurnish(const FurnishChoice &choice) { setFurnishChoice(Tool, choice); }
+
 bool Interaction::dropHeld() {
   if (!Tool.Holding && Tool.Drawn.empty()) {
     return false;

@@ -55,9 +55,12 @@ void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &c
   drawDeparturesPanel(departureTally(world));
   const ToolPanelChoice choice =
       drawToolPanel(interaction.tool().Kind, !interaction.tool().Drawn.empty(), session.canUndo(),
-                    session.canRedo(), dialogs.dialogShowing());
+                    session.canRedo(), dialogs.dialogShowing(), interaction.tool().Furnish);
   if (choice.Tool) {
     interaction.selectTool(*choice.Tool);
+  }
+  if (choice.Furnish) {
+    interaction.chooseFurnish(*choice.Furnish);
   }
   dialogs.press(choice.Park);
   const HistoryAction asked = choice.History != HistoryAction::None ? choice.History : keys;

@@ -15,7 +15,8 @@ IntentRecords recordsOf(const World &world) {
   records.Points = parkPathPoints(world);
   for (const ParkSegment &segment : parkSegments(world)) {
     records.Segments.push_back(SegmentRecord{segment.Key, segment.Kind, segment.From, segment.To,
-                                             segment.Width, segment.FromEdge, segment.ToEdge});
+                                             segment.Width, segment.FromEdge, segment.ToEdge,
+                                             segment.Furnished});
   }
   records.Boxes = parkBoxes(world);
   records.Hours = parkHours(world);

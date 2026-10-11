@@ -16,13 +16,16 @@ struct ToolPanelChoice {
   std::optional<ToolKind> Tool;
   ParkAction Park = ParkAction::None;
   HistoryAction History = HistoryAction::None;
+  // What the Furnish tool lays, when the player changed it.
+  std::optional<FurnishChoice> Furnish;
 };
 
 // Draws the Tools panel: the park buttons, disabled while a dialog shows, the Undo and Redo
-// buttons, each disabled while it can't act, a choice for each tool, and while the tool is drawing
-// a path, a hint and a Cancel path button. Call between ImGui::NewFrame and ImGui::Render.
+// buttons, each disabled while it can't act, a choice for each tool, while the tool is drawing a
+// path, a hint and a Cancel path button, and while Furnish is the tool, the kind, spacing, and
+// sides it lays. Call between ImGui::NewFrame and ImGui::Render.
 ToolPanelChoice drawToolPanel(ToolKind current, bool drawing, bool canUndo, bool canRedo,
-                              bool dialogShowing);
+                              bool dialogShowing, const FurnishChoice &furnish);
 
 } // namespace tpj
 

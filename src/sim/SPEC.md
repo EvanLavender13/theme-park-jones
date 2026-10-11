@@ -59,9 +59,10 @@ makeParkSchema returns the park's schema, which is exactly what addPark register
 1. the medium
 2. park intent and its commands
 3. routes
-4. operations
-5. guests
-6. last, the routes finisher, which drops the previous networks after every finisher that reads them
+4. furniture
+5. operations
+6. guests
+7. last, the routes finisher, which drops the previous networks after every finisher that reads them
 
 makeNewPark(seed) gives the new-park template (sim/park/SPEC.md) with that schema. Park files load with that schema. If a scenario adds synthetic entities, it calls addPark and then registers them.
 

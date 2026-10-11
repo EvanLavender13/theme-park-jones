@@ -2,11 +2,11 @@
 
 ## Summary
 
-The player furnishes guest paths with a Furnish brush. They pick benches, tables, or none, a spacing, and one side or both in the Tools panel, hover a guest segment to see the furniture as a ghost, and click to apply it. Furnishing is saved segment intent, set by a new SetFurnishing command. It follows a segment through splits, merges, and corner splits, and undo and redo restore it. A new sim module, furniture, lays the pieces in resolution along the straight sides of each furnished segment's paving, evenly spread and clear of the segment's ends. Each piece is a derived entity, and the park and every ghost draw them. This is the core feature of furnished-paths. yielding-furniture makes the pieces yield to boxes, walkways, other paving, and junction mouths, and follow curves.
+The player furnishes guest paths with a Furnish brush. They pick benches, tables, or none, a spacing, and one side or both in the Tools panel, hover a guest segment to see the furniture as a ghost, and click to apply it. Furnishing is saved segment intent, held for each side of a segment, and set by a new SetFurnishing command. It follows a segment through splits, merges, and corner splits, and undo and redo restore it. A new sim module, furniture, lays the pieces in resolution along the straight sides of each furnished segment's paving, evenly spread and clear of the segment's ends. Each piece is a derived entity, and the park and every ghost draw them. This is the core feature of furnished-paths. yielding-furniture makes the pieces yield to boxes, walkways, other paving, and junction mouths, and follow curves.
 
 ## Acceptance criteria
 
-1. The Tools panel has Furnish. With it chosen, the panel shows Kind (None, Benches, Tables), Spacing as a slider in meters, and Sides (One side, Both sides), starting at Benches on both sides. Hovering a guest segment highlights it, and the ghost shows the pieces the candidate adds or moves in their colors, and the pieces it removes in the delete tint. With One side, the side is the one the pointer is on. A click commits that SetFurnishing, and with Kind None it removes the segment's furnishing. Over a backstage segment or bare ground, nothing is highlighted, no ghost shows, and a click commits nothing. (play: on a new park, draw a few guest paths freehand, with a sharp bend and a junction, and furnish them with each kind, spacing, and side)
+1. The Tools panel has Furnish. With it chosen, the panel shows Kind (None, Benches, Tables), Spacing as a slider in meters, and Sides (One side, Both sides), starting at Benches on both sides. Hovering a guest segment highlights it, and the ghost shows the pieces the candidate adds, moves, or changes the kind of in their colors, and the pieces it removes, moves, or replaces, where they stand now, in the delete tint. With One side, the side is the one the pointer is on, and the other side keeps its furniture, so its pieces don't change in the ghost. A click commits that SetFurnishing, and Kind None removes the furniture from the side or sides chosen. Over a backstage segment or bare ground, nothing is highlighted, no ghost shows, and a click commits nothing. (play: on a new park, draw a few guest paths freehand, with a sharp bend and a junction, and furnish them with each kind, spacing, and side)
 2. Pieces stand on the verge beside each furnished side of the segment's paving, outside it, facing it, along the straight part of the side. They are evenly spaced, as close to the set spacing as the side's length allows, and keep clear of the side's ends. A side too short for one piece has none. Benches and tables have their own shapes and colors. (play, as in criterion 1, and a capture of the park saved from it)
 3. Furnishing is saved and edited as intent. Saving and opening a furnished park gives back the same furniture. Drawing a path across a furnished segment, inserting a point in it, or dragging its point leaves furniture on every part. Removing a point between a furnished and an unfurnished segment leaves the merged segment furnished on the same side of the paving. Inserting a point on a rounded corner's arc keeps furniture on both segments. Deleting a furnished segment and undoing brings its furniture back, and undo and redo restore every furnishing change. (play)
 4. The park world checks hold the furnishing intent and the pieces through a new chosen edit of noon.park, and its candidate equals its commit. (listed test, run with ctest)
@@ -15,7 +15,7 @@ The player furnishes guest paths with a Furnish brush. They pick benches, tables
 
 ## Tests
 
-- The park world checks gain one chosen edit of noon.park, in tests/sim/park_world_checks_test.cpp: furnishing noon.park's longest guest segment with benches on both sides, at a spacing of 10 m, with SetFurnishing, while guests are in the park. It requires that the candidate's parkSegments gives that segment the furnishing, and that the candidate's parkFurniture gives at least one piece. Like the other chosen edits, its candidate must equal the world that commits it, and both are among the checked worlds, so the checks hold the furnishing intent and the furniture-piece type.
+- The park world checks gain one chosen edit of noon.park, in tests/sim/park_world_checks_test.cpp: furnishing noon.park's longest guest segment with benches at a spacing of 10 m on its left side and its right side, with SetFurnishing, while guests are in the park. It requires that the candidate's parkSegments gives that segment the furnishing, and that the candidate's parkFurniture gives at least one piece. Like the other chosen edits, its candidate must equal the world that commits it, and both are among the checked worlds, so the checks hold both sides' furnishing intent and the furniture-piece type.
 
 ## Medium
 
@@ -29,11 +29,11 @@ src/sim/SPEC.md, Schemas and the park: the registration list becomes the medium;
 
 src/sim/park/SPEC.md:
 
-- Boundary: addParkIntent registers the intent types entrance, path-point, path-segment, box, shop-stock, opening-hours, and furnishing. addParkEdits registers the sixteen commands.
-- Intent, new bullet after the segment's: "A guest segment can have a furnishing: a kind of furniture, bench or table, a spacing in meters, and a side, left, right, or both, seen walking from its From point to its To point. parkSegments gives each segment's furnishing, or none."
-- Save lines, new bullet: "a segment's furnishing, only when it has one, in a furnishing line: its kind, spacing, and side." After the kind names: "Furniture kinds are saved as bench and table, and sides as left, right, and both."
-- Commands: "Sixteen commands change intent", with SetFurnishing listed before RestoreIntent. New sentence after SetOpeningHours': "SetFurnishing names a segment and a furnishing, or none." A RestoreIntent segment record holds "a segment's kind, two points, width, edge radii, and furnishing". Acceptance: "For SetFurnishing, it means the key holds a guest segment, and any furnishing it gives has a known kind and side and a spacing that is finite and above zero." RestoreIntent's acceptance adds "every furnishing it holds is on a guest segment, with a known kind and side and a spacing that is finite and above zero".
-- Effects: the AddPath split rule reads "The segment keeps its key, kind, width, furnishing, and edge radius at its From end" and "A new segment of the same kind, width, and furnishing runs on from each split point". MovePoint's two bullets keep "furnishing" with the key, kind, width, and edge radii. RemovePoint's bullet: "The one with the lower key keeps its key, kind, and far end, takes the wider of the two widths, and keeps its furnishing, or takes the other's when it has none." The corner split: "The last new segment takes the second segment's width and furnishing, and the rest the first's." New sentence after the effects list: "When a segment takes another's furnishing and the two run opposite ways, its side is turned, left for right." New bullet: "SetFurnishing sets the segment's furnishing, or removes it, and changes nothing else. A segment with no furnishing holds no furnishing line."
+- Boundary: addParkIntent registers the intent types entrance, path-point, path-segment, box, shop-stock, opening-hours, left-furnishing, and right-furnishing. addParkEdits registers the sixteen commands.
+- Intent, new bullet after the segment's: "A guest segment can have furnishing on each side, its left and its right, seen walking from its From point to its To point. A side's furnishing is a kind of furniture, bench or table, and a spacing in meters. parkSegments gives each segment's furnishing: each side's, or none on that side."
+- Save lines, new bullet: "each side's furnishing of a segment, only when that side has one, in a left-furnishing or right-furnishing line: its kind and spacing." After the kind names: "Furniture kinds are saved as bench and table."
+- Commands: "Sixteen commands change intent", with SetFurnishing listed before RestoreIntent. New sentence after SetOpeningHours': "SetFurnishing names a segment and its furnishing on each side." A RestoreIntent segment record holds "a segment's kind, two points, width, edge radii, and furnishing". Acceptance: "For SetFurnishing, it means the key holds a guest segment, and each side's furnishing it gives has a known kind and a spacing that is finite and above zero." RestoreIntent's acceptance adds "every furnishing it holds is on a guest segment, with a known kind and a spacing that is finite and above zero on each side".
+- Effects: the AddPath split rule reads "The segment keeps its key, kind, width, furnishing, and edge radius at its From end" and "A new segment of the same kind, width, and furnishing runs on from each split point". MovePoint's two bullets keep "furnishing" with the key, kind, width, and edge radii. RemovePoint's bullet: "The one with the lower key keeps its key, kind, and far end, takes the wider of the two widths, and keeps each side's furnishing, or takes the other's on a side that has none." The corner split: "The last new segment takes the second segment's width and furnishing, and the rest the first's." New sentence after the effects list: "When a segment takes another's furnishing and the two run opposite ways, the other's left side's furnishing becomes its right side's, and the other's right its left." New bullet: "SetFurnishing sets the segment's furnishing on both sides and changes nothing else. A side with no furnishing holds no line for it."
 - Paved surface, new paragraph after the edge lines': "parkSurface also gives the sides of each segment's body, the part of its paving between the surface at its two ends. For each segment with a ground line, in key order, it gives its left side and then its right side, seen walking from its From point to its To point, each from where it stops nearer the From point to where it stops nearer the To point. A side that stops at the To end no farther along than it stops at the From end is left out."
 - editedSegments and editedSurface give none "for edits of boxes, of the opening hours, and of furnishing". A ParkEdit holds "any one of the sixteen commands".
 
@@ -55,19 +55,19 @@ src/sim/furniture/SPEC.md, new:
 
     ## Laying
 
-    Pieces stand on each furnished side of a guest segment: the left side, the right side, or both, seen walking from its From point to its To point. They stand beside that side of the segment's body, as parkSurface gives it without walkways, on the verge just outside the paving, each with its front facing it. Each such side is a stretch. Pieces in a stretch keep clear of its ends, and they are evenly spaced, as close to the furnishing's spacing as the stretch allows and never so close that neighbours touch. If a stretch is too short for one piece, it has none.
+    Pieces stand on each side of a guest segment that has furnishing, its left or its right, seen walking from its From point to its To point. Each side has its own kind and spacing. They stand beside that side of the segment's body, as parkSurface gives it without walkways, on the verge just outside the paving, each with its front facing it. Each such side is a stretch. Pieces in a stretch keep clear of its ends, and they are evenly spaced, as close to its side's spacing as the stretch allows and never so close that neighbours touch. If a stretch is too short for one piece, it has none.
 
 src/tools/SPEC.md:
 
 - Boundary: the ToolKinds gain Furnish. "setFurnishChoice sets what the Furnish tool lays: a kind of furniture or none, a spacing, and one side or both."
-- Tools, new paragraph after Delete's: "Furnish sets the furnishing of the guest segment under the pointer, the first in key order whose width covers the pointer. Its edit is a SetFurnishing of that segment to the tool's choice: no furnishing when the choice has no kind, and otherwise the kind and spacing on both sides, or, for one side, on the side of the segment's line the pointer lies on. The tool marks that segment. Over no guest segment it gives no edit and marks nothing. A click commits the edit."
+- Tools, new paragraph after Delete's: "Furnish sets the furnishing of the guest segment under the pointer, the first in key order whose width covers the pointer. Its edit is a SetFurnishing of that segment. With both sides chosen, it gives both sides the tool's choice: its kind and spacing, or no furnishing when the choice has no kind. With one side, it gives the choice to the side of the segment's line the pointer lies on, and the other side keeps its furnishing. The tool marks that segment. Over no guest segment it gives no edit and marks nothing. A click commits the edit."
 - History: "A segment's record holds its furnishing."
 
 src/render/SPEC.md:
 
 - Boundary: render also reads the furniture through parkFurniture.
 - The park: "Each piece of furniture is drawn as a low box over its footprint, benches and tables each in their own color."
-- Ghosts and highlights, with the candidate paragraph: "With the candidate world, the ghost also shows each piece of the candidate's furniture that the edit adds or moves, translucent in its kind's color, in the Lit part, and each piece of the world's furniture that the candidate lacks, in the delete tint, in the Tints part."
+- Ghosts and highlights, with the candidate paragraph: "With the candidate world, the ghost also shows each piece of the candidate's furniture that the edit adds, moves, or changes the kind of, translucent in its kind's color, in the Lit part, and each piece of the world's furniture that the edit removes, moves, or changes the kind of, where it stands now, in the delete tint, in the Tints part."
 
 src/app/SPEC.md, Tools and the ghost: the tools list gains Furnish, after Place toilet. New paragraph: "While Furnish is chosen, the Tools panel shows Kind, as radio buttons None, Benches, and Tables, Spacing, as a slider in meters, and Sides, as radio buttons One side and Both sides. They set what the tool lays. The choice starts at Benches on both sides and lasts while the app runs."
 
@@ -79,21 +79,26 @@ sim/park/intent.h:
     enum class FurnitureKind : uint8_t { Bench, Table };
     constexpr std::array<std::string_view, 2> enumNames(FurnitureKind /*value*/) { return {"bench", "table"}; }
 
-    // A side of a segment, seen walking from its From point to its To point, or both.
-    enum class FurnishedSide : uint8_t { Left, Right, Both };
-    constexpr std::array<std::string_view, 3> enumNames(FurnishedSide /*value*/) { return {"left", "right", "both"}; }
+    // A side of a segment, seen walking from its From point to its To point.
+    enum class FurnishedSide : uint8_t { Left, Right };
+    constexpr std::array<std::string_view, 2> enumNames(FurnishedSide /*value*/) { return {"left", "right"}; }
 
-    // What a guest segment's verge holds: a kind of furniture, the spacing it asks for, in meters, and
-    // the side or sides.
-    struct Furnishing {
+    // What one side of a guest segment's verge holds: a kind of furniture and its spacing, in meters.
+    struct SideFurnishing {
       FurnitureKind Kind = FurnitureKind::Bench;
       double Spacing = 0.0;
-      FurnishedSide Side = FurnishedSide::Both;
+      bool operator==(const SideFurnishing &) const = default;
+    };
+
+    // A guest segment's furnishing: each side's, or none on that side.
+    struct Furnishing {
+      std::optional<SideFurnishing> Left;
+      std::optional<SideFurnishing> Right;
       bool operator==(const Furnishing &) const = default;
     };
 
     // ParkSegment gains, last:
-    std::optional<Furnishing> Furnished{};
+    Furnishing Furnished;
 
 sim/park/surface.h:
 
@@ -113,15 +118,15 @@ sim/park/surface.h:
 
 sim/park/edits.h:
 
-    // The segment's furnishing, or none to remove it.
+    // The segment's furnishing on both sides.
     struct SetFurnishing {
       EntityKey Segment = NULL_KEY;
-      std::optional<Furnishing> To;
+      Furnishing To;
       bool operator==(const SetFurnishing &) const = default;
     };
 
     // SegmentRecord gains, last:
-    std::optional<Furnishing> Furnished{};
+    Furnishing Furnished;
 
     // ParkEdit gains SetFurnishing before RestoreIntent; isAccepted and applyCommand gain overloads.
 

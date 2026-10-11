@@ -8,6 +8,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <stdint.h>
 #include <string_view>
 #include <vector>
@@ -48,6 +49,38 @@ enum class ShopStock : uint8_t { Food, Drink, Both };
 constexpr std::array<std::string_view, 3> enumNames(ShopStock /*value*/) {
   return {"food", "drink", "both"};
 }
+
+// A kind of furniture.
+enum class FurnitureKind : uint8_t { Bench, Table };
+
+constexpr std::array<std::string_view, 2> enumNames(FurnitureKind /*value*/) {
+  return {"bench", "table"};
+}
+
+// A side of a segment, seen walking from its From point to its To point.
+enum class FurnishedSide : uint8_t { Left, Right };
+
+constexpr std::array<std::string_view, 2> enumNames(FurnishedSide /*value*/) {
+  return {"left", "right"};
+}
+
+// What one side of a guest segment's verge holds: a kind of furniture and the spacing it asks for,
+// in meters.
+struct SideFurnishing {
+  FurnitureKind Kind = FurnitureKind::Bench;
+  double Spacing = 0.0;
+
+  bool operator==(const SideFurnishing &) const = default;
+};
+
+// A guest segment's furnishing: each side's, seen walking from its From point to its To point, or
+// none on that side.
+struct Furnishing {
+  std::optional<SideFurnishing> Left;
+  std::optional<SideFurnishing> Right;
+
+  bool operator==(const Furnishing &) const = default;
+};
 
 // A position and a facing, a direction on the ground held as given, not normalized.
 struct Pose {
@@ -134,8 +167,9 @@ struct ParkCorner {
 };
 
 // A path segment's intent, as other modules read it: its kind, its two points, its width, its
-// ground line, which is empty when the segment has no physical shape, and its edge radius at each
-// end, for the edge that starts from its left side there, seen walking away from that end's point.
+// ground line, which is empty when the segment has no physical shape, its edge radius at each end,
+// for the edge that starts from its left side there, seen walking away from that end's point, and
+// its furnishing.
 struct ParkSegment {
   EntityKey Key = NULL_KEY;
   PathKind Kind = PathKind::Guest;
@@ -145,6 +179,7 @@ struct ParkSegment {
   std::vector<CarrierPoint> Line;
   double FromEdge = DEFAULT_EDGE_RADIUS;
   double ToEdge = DEFAULT_EDGE_RADIUS;
+  Furnishing Furnished;
 
   bool operator==(const ParkSegment &) const = default;
 };
@@ -174,7 +209,7 @@ struct OpeningHours {
 inline constexpr OpeningHours DEFAULT_HOURS{};
 
 // Registers the private intent component types entrance, path-point, path-segment, box,
-// shop-stock, and opening-hours, in that order.
+// shop-stock, opening-hours, left-furnishing, and right-furnishing, in that order.
 void addParkIntent(WorldSchema &schema);
 
 // Every entity holding that kind of intent, in ascending key order.

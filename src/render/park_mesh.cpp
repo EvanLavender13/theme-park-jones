@@ -1,6 +1,7 @@
 #include "render/park_mesh.h"
 
 #include "sim/command_queue.h"
+#include "sim/furniture/furniture.h"
 #include "sim/medium/network.h"
 #include "sim/operations/operations.h"
 #include "sim/routes/networks.h"
@@ -277,6 +278,34 @@ void appendStraightPath(ParkMesh &mesh, const World &world, const AddPath &path,
   }
 }
 
+// Whether the piece the key holds is missing from the other furniture, or differs there in its kind
+// or its pose.
+bool isChangedIn(const std::vector<FurniturePiece> &other, const FurniturePiece &piece) {
+  const auto found = std::ranges::lower_bound(other, piece.Key, {}, &FurniturePiece::Key);
+  return found == other.end() || found->Key != piece.Key || found->Kind != piece.Kind ||
+         !(found->At == piece.At);
+}
+
+// Adds to the ghost each piece of the candidate's furniture that the world lacks, or holds with
+// another kind or pose, translucent in its kind's color, and each piece of the world's furniture
+// that the candidate lacks, or holds with another kind or pose, in the delete tint.
+void appendFurnitureChanges(GhostMesh &ghost, const World &world, const World &candidate) {
+  const std::vector<FurniturePiece> was = parkFurniture(world);
+  const std::vector<FurniturePiece> is = parkFurniture(candidate);
+  for (const FurniturePiece &piece : is) {
+    if (isChangedIn(was, piece)) {
+      appendBox(ghost.Lit, piece.At, furnitureSize(piece.Kind), furnitureHeight(piece.Kind),
+                ghostColor(true, furnitureColor(piece.Kind)));
+    }
+  }
+  for (const FurniturePiece &piece : was) {
+    if (isChangedIn(is, piece)) {
+      appendBox(ghost.Tints, piece.At, furnitureSize(piece.Kind), furnitureHeight(piece.Kind),
+                DELETE_TINT);
+    }
+  }
+}
+
 // Adds, in the delete tint, the box or segment a deletion removes, or both segments at a point
 // RemovePoint merges.
 void appendDeleted(ParkMesh &mesh, const World &world, const ParkEdit &edit) {
@@ -469,8 +498,17 @@ ParkMesh buildParkMesh(const World &world) {
   for (const ParkBox &box : parkBoxes(world)) {
     appendBox(mesh, box.At, boxSize(box.Kind), boxHeight(box.Kind), boxColor(box.Kind));
   }
+  appendFurniture(mesh, world, 1.0f);
   appendStarvedMarks(mesh, world, 1.0f);
   return mesh;
+}
+
+void appendFurniture(ParkMesh &mesh, const World &world, float alpha) {
+  for (const FurniturePiece &piece : parkFurniture(world)) {
+    const Rgba base = furnitureColor(piece.Kind);
+    appendBox(mesh, piece.At, furnitureSize(piece.Kind), furnitureHeight(piece.Kind),
+              Rgba{base.R, base.G, base.B, alpha});
+  }
 }
 
 std::optional<GroundBounds> meshBounds(const ParkMesh &mesh) {
@@ -601,6 +639,7 @@ GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
     if (candidate) {
       appendWalkways(ghost.Lit, *candidate, GHOST_ALPHA);
       appendStarvedMarks(ghost.Lit, *candidate, GHOST_ALPHA);
+      appendFurnitureChanges(ghost, world, *candidate);
     }
     return ghost;
   }
@@ -627,6 +666,7 @@ GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
   if (candidate) {
     appendWalkways(ghost.Lit, *candidate, GHOST_ALPHA);
     appendStarvedMarks(ghost.Lit, *candidate, GHOST_ALPHA);
+    appendFurnitureChanges(ghost, world, *candidate);
   }
   return ghost;
 }

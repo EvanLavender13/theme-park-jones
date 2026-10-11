@@ -31,6 +31,8 @@ void addParkIntent(WorldSchema &schema) {
   schema.addComponent<BoxIntent>("box", DataKind::Intent);
   schema.addComponent<ShopStockIntent>("shop-stock", DataKind::Intent);
   schema.addComponent<OpeningHoursIntent>("opening-hours", DataKind::Intent);
+  schema.addComponent<LeftFurnishingIntent>("left-furnishing", DataKind::Intent);
+  schema.addComponent<RightFurnishingIntent>("right-furnishing", DataKind::Intent);
 }
 
 std::vector<ParkEntrance> parkEntrances(const World &world) {
@@ -45,7 +47,18 @@ std::vector<ParkPathPoint> parkPathPoints(const World &world) {
   });
 }
 
-std::vector<ParkSegment> parkSegments(const World &world) { return segmentsOf(layoutOf(world)); }
+std::vector<ParkSegment> parkSegments(const World &world) {
+  std::vector<ParkSegment> segments = segmentsOf(layoutOf(world));
+  for (ParkSegment &segment : segments) {
+    if (const auto *left = world.tryGet<LeftFurnishingIntent>(segment.Key)) {
+      segment.Furnished.Left = left->Held;
+    }
+    if (const auto *right = world.tryGet<RightFurnishingIntent>(segment.Key)) {
+      segment.Furnished.Right = right->Held;
+    }
+  }
+  return segments;
+}
 
 std::vector<ParkCorner> parkCorners(const World &world) { return cornersOf(layoutOf(world)); }
 

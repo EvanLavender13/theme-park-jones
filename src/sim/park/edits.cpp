@@ -94,6 +94,43 @@ template <typename Kind> bool isKnown(Kind kind) {
   return static_cast<size_t>(kind) < enumNames(kind).size();
 }
 
+// Gives the segment the furnishing: each side's intent holds that side's furnishing, and a side
+// with none holds no intent, so it saves as one never furnished.
+void setFurnishingOf(World &world, EntityKey segment, const Furnishing &furnishing) {
+  if (furnishing.Left) {
+    world.emplaceOrReplace<LeftFurnishingIntent>(segment, LeftFurnishingIntent{*furnishing.Left});
+  } else {
+    world.remove<LeftFurnishingIntent>(segment);
+  }
+  if (furnishing.Right) {
+    world.emplaceOrReplace<RightFurnishingIntent>(segment,
+                                                  RightFurnishingIntent{*furnishing.Right});
+  } else {
+    world.remove<RightFurnishingIntent>(segment);
+  }
+}
+
+bool isFurnished(const Furnishing &furnishing) {
+  return furnishing.Left.has_value() || furnishing.Right.has_value();
+}
+
+// The furnishing as a segment running the other way holds it: left and right swapped.
+Furnishing turned(const Furnishing &furnishing) {
+  return Furnishing{furnishing.Right, furnishing.Left};
+}
+
+// Whether one side's furnishing has a known kind and a spacing finite and above zero.
+bool isSideValid(const std::optional<SideFurnishing> &side) {
+  return !side || (isKnown(side->Kind) && std::isfinite(side->Spacing) && side->Spacing > 0.0);
+}
+
+// Whether a segment of the kind can hold the furnishing: none, or, on a guest segment, a valid
+// furnishing on each side that has one.
+bool isFurnishingValid(const Furnishing &furnishing, PathKind kind) {
+  return !isFurnished(furnishing) ||
+         (kind == PathKind::Guest && isSideValid(furnishing.Left) && isSideValid(furnishing.Right));
+}
+
 bool leavesPark(const Solid &solid) {
   constexpr double LIMIT = HALF_PARK + CONTACT_TOLERANCE;
   return std::ranges::any_of(solid.Shape.Corners, [](const ParkPoint &corner) {
@@ -263,7 +300,9 @@ struct PlanLine {
 // that existing point's radius becomes RoundedTo. Curves holds the radii written last, so that
 // the edit keeps every curve. If Edged is not NULL_KEY, that existing
 // segment's edge radius at its From end, when EdgedAtFrom, or else at its To end, becomes EdgedTo.
-// If Tapered is not NULL_KEY, that existing point's taper length becomes TaperedTo.
+// If Tapered is not NULL_KEY, that existing point's taper length becomes TaperedTo. If Inheritor
+// is not NULL_KEY, each side of that existing segment that has no furnishing takes that side of
+// Inherits, as a merged segment takes the other's.
 struct EditPlan {
   std::vector<PlanPoint> Points;
   std::vector<size_t> Stops;
@@ -281,6 +320,8 @@ struct EditPlan {
   EntityKey Tapered = NULL_KEY;
   double TaperedTo = 0.0;
   CurveWrites Curves;
+  EntityKey Inheritor = NULL_KEY;
+  Furnishing Inherits;
 };
 
 // Whether the key holds a path point that some segment uses, every such segment of the kind.
@@ -959,6 +1000,12 @@ std::optional<EditPlan> planRemove(const World &world, const RemovePoint &comman
                                 {},
                                 low.From == command.Point ? highEdge : low.FromEdge,
                                 low.To == command.Point ? highEdge : low.ToEdge});
+  // The merged segment runs as low does, so high's furnishing turns when high ran the other way.
+  if (isFurnished(high.Furnished)) {
+    const bool sameWay = (low.To == command.Point) == (high.From == command.Point);
+    plan.Inheritor = low.Key;
+    plan.Inherits = sameWay ? high.Furnished : turned(high.Furnished);
+  }
   plan.Destroyed = {high.Key, command.Point};
   if (!linesHaveGround(plan)) {
     return std::nullopt;
@@ -1075,6 +1122,19 @@ public:
   }
   PathPointIntent &point(EntityKey key) { return Target->get<PathPointIntent>(key); }
   PathSegmentIntent &segment(EntityKey key) { return Target->get<PathSegmentIntent>(key); }
+  Furnishing furnished(EntityKey key) const {
+    Furnishing furnishing;
+    if (const auto *left = Target->tryGet<LeftFurnishingIntent>(key)) {
+      furnishing.Left = left->Held;
+    }
+    if (const auto *right = Target->tryGet<RightFurnishingIntent>(key)) {
+      furnishing.Right = right->Held;
+    }
+    return furnishing;
+  }
+  void setFurnished(EntityKey key, const Furnishing &furnishing) {
+    setFurnishingOf(*Target, key, furnishing);
+  }
 
 private:
   World *Target;
@@ -1106,6 +1166,9 @@ public:
   PathSegmentIntent &segment(EntityKey key) {
     return std::ranges::lower_bound(Target->Segments, key, {}, &LayoutSegment::Key)->Intent;
   }
+  // A layout holds no furnishing, since no path's shape depends on it.
+  static Furnishing furnished(EntityKey /*key*/) { return {}; }
+  void setFurnished(EntityKey /*key*/, const Furnishing & /*furnishing*/) {}
 
 private:
   PathLayout *Target;
@@ -1152,6 +1215,12 @@ void applyBendSplit(Store &store, const BendSplit &bend, const std::vector<Entit
     return segment.From == point ? segment.FromEdge : segment.ToEdge;
   };
   const double outer = outerOnFirst ? edgeAtPoint(first) : edgeAtPoint(second);
+  // The new parts run from the first segment toward the second, so a segment's furnishing turns
+  // when it ran the other way: the first from the point, or the second into it.
+  const Furnishing firstFurnished = first.From == point ? turned(store.furnished(bend.Segments[0]))
+                                                        : store.furnished(bend.Segments[0]);
+  const Furnishing secondFurnished = second.To == point ? turned(store.furnished(bend.Segments[1]))
+                                                        : store.furnished(bend.Segments[1]);
   (second.From == point ? second.From : second.To) = keys[bend.Points.back()];
   const double width = second.Width;
   // The corner's point, then each place followed by the corner point after it.
@@ -1168,6 +1237,7 @@ void applyBendSplit(Store &store, const BendSplit &bend, const std::vector<Entit
         first.Kind, chain[j], chain[j + 1], j + 2 == chain.size() ? width : first.Width,
         fromCorner && !outerOnFirst ? outer : DEFAULT_EDGE_RADIUS,
         !fromCorner && outerOnFirst ? outer : DEFAULT_EDGE_RADIUS});
+    store.setFurnished(part, j + 2 == chain.size() ? secondFurnished : firstFurnished);
     // The end at a place is added there when the place's point was already a path point.
     const size_t place = bend.At[(fromCorner ? j : j - 1) / 2].Point;
     report.report(part, fromCorner ? 1 : 0, report.existing(place));
@@ -1181,6 +1251,7 @@ template <typename Store>
 void applySplit(Store &store, const Split &split, const std::vector<EntityKey> &keys,
                 const AddedEnds &report) {
   const PathSegmentIntent was = store.segment(split.Segment);
+  const Furnishing furnished = store.furnished(split.Segment);
   store.segment(split.Segment).To = keys[split.At.front().Point];
   store.segment(split.Segment).ToEdge = DEFAULT_EDGE_RADIUS;
   report.report(split.Segment, 1, report.existing(split.At.front().Point));
@@ -1190,6 +1261,7 @@ void applySplit(Store &store, const Split &split, const std::vector<EntityKey> &
     const EntityKey part = store.addSegment(
         PathSegmentIntent{was.Kind, keys[split.At[k].Point], to, was.Width, DEFAULT_EDGE_RADIUS,
                           last ? was.ToEdge : DEFAULT_EDGE_RADIUS});
+    store.setFurnished(part, furnished);
     report.report(part, 0, report.existing(split.At[k].Point));
     report.report(part, 1, !last && report.existing(split.At[k + 1].Point));
   }
@@ -1215,6 +1287,10 @@ void applyLine(Store &store, const PlanLine &line, const std::vector<EntityKey> 
       store.segment(line.Key) = part;
     } else {
       key = store.addSegment(part);
+      // Every later part of a reshaped segment keeps its furnishing.
+      if (line.Key != NULL_KEY) {
+        store.setFurnished(key, store.furnished(line.Key));
+      }
     }
     report.report(key, 0, first ? line.FromAdded : report.existing(from));
     report.report(key, 1, last ? line.ToAdded : report.existing(to));
@@ -1265,6 +1341,13 @@ void applyPlan(Store &store, const EditPlan &plan, std::vector<SegmentEnd> *adde
   }
   for (const Split &split : plan.Splits) {
     applySplit(store, split, keys, report);
+  }
+  // Before the lines, so every part of a merged segment that splits takes what it inherits.
+  if (plan.Inheritor != NULL_KEY) {
+    Furnishing kept = store.furnished(plan.Inheritor);
+    kept.Left = kept.Left ? kept.Left : plan.Inherits.Left;
+    kept.Right = kept.Right ? kept.Right : plan.Inherits.Right;
+    store.setFurnished(plan.Inheritor, kept);
   }
   for (const PlanLine &line : plan.Lines) {
     applyLine(store, line, keys, report);
@@ -1497,6 +1580,9 @@ std::optional<EditPlan> planOf(const World & /*world*/, const SetShopStock & /*c
 std::optional<EditPlan> planOf(const World & /*world*/, const SetOpeningHours & /*command*/) {
   return std::nullopt;
 }
+std::optional<EditPlan> planOf(const World & /*world*/, const SetFurnishing & /*command*/) {
+  return std::nullopt;
+}
 // RestoreIntent has no plan, and it shows no ghost.
 std::optional<EditPlan> planOf(const World & /*world*/, const RestoreIntent & /*command*/) {
   return std::nullopt;
@@ -1530,6 +1616,7 @@ void addParkEdits(WorldSchema &schema) {
   schema.addCommand<SetTaperLength>();
   schema.addCommand<SetShopStock>();
   schema.addCommand<SetOpeningHours>();
+  schema.addCommand<SetFurnishing>();
   schema.addCommand<RestoreIntent>();
 }
 
@@ -1721,7 +1808,8 @@ bool namesValid(const World &world, const PathLayout &before, const RestoreInten
   const auto segmentValid = [&pointLeft](const SegmentRecord &segment) {
     return isKnown(segment.Kind) && segment.From != segment.To && pointLeft(segment.From) &&
            pointLeft(segment.To) && std::isfinite(segment.Width) && segment.Width > 0.0 &&
-           isAtLeastZero(segment.FromEdge) && isAtLeastZero(segment.ToEdge);
+           isAtLeastZero(segment.FromEdge) && isAtLeastZero(segment.ToEdge) &&
+           isFurnishingValid(segment.Furnished, segment.Kind);
   };
   for (const IntentRecords *records : {&command.Set, &command.Add}) {
     if (!std::ranges::all_of(records->Points, isPointValid) ||
@@ -1759,13 +1847,14 @@ template <typename Store> void applyRestore(Store &store, const RestoreIntent &c
                              segment.Width, segment.FromEdge,    segment.ToEdge};
   };
   for (const SegmentRecord &segment : command.Add.Segments) {
-    store.addSegment(intentOf(segment));
+    store.setFurnished(store.addSegment(intentOf(segment)), segment.Furnished);
   }
   for (const ParkPathPoint &point : command.Set.Points) {
     store.point(point.Key) = PathPointIntent{point.At, point.Radius, point.Taper};
   }
   for (const SegmentRecord &segment : command.Set.Segments) {
     store.segment(segment.Key) = intentOf(segment);
+    store.setFurnished(segment.Key, segment.Furnished);
   }
 }
 
@@ -1951,6 +2040,12 @@ bool isAccepted(const World & /*world*/, const SetOpeningHours &command) {
   return areHoursValid(command.Hours);
 }
 
+bool isAccepted(const World &world, const SetFurnishing &command) {
+  const PathSegmentIntent *segment = findIntent<PathSegmentIntent>(world, command.Segment);
+  return segment != nullptr && segment->Kind == PathKind::Guest &&
+         isFurnishingValid(command.To, PathKind::Guest);
+}
+
 bool isAccepted(const World &world, const RestoreIntent &command) {
   return isRestoreAccepted(world, command);
 }
@@ -2048,6 +2143,12 @@ void applyCommand(World &world, const SetShopStock &command) {
 void applyCommand(World &world, const SetOpeningHours &command) {
   if (isAccepted(world, command)) {
     setHours(world, command.Hours);
+  }
+}
+
+void applyCommand(World &world, const SetFurnishing &command) {
+  if (isAccepted(world, command)) {
+    setFurnishingOf(world, command.Segment, command.To);
   }
 }
 
