@@ -1,7 +1,4 @@
-// Shaping points on a checked-in park: inserting a point into a straight guest segment ahead of a
-// wandering guest in a closed park leaves it wandering as it walks through the new point. If the
-// guest chose there, it would head home. The test compares the park with the same park after the
-// insert, so it doesn't depend on how far before a node a guest makes its choice.
+// Inserting a point ahead of a wandering guest doesn't make it choose there.
 
 #include "support/park_files.h"
 

@@ -1,6 +1,4 @@
-// Frontage beside paving as it is drawn: a shop the frontage snap places beyond the sharp outside
-// corner of a wide guest path, or beside a segment of the widest width the tools allow, is
-// accepted by the world and connected to the guest network.
+// Shops the frontage snap places beside wide paving are accepted and connect to guests.
 
 #include "support/park_files.h"
 

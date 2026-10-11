@@ -1,7 +1,4 @@
-// Undo on a checked-in park: deleting a segment of tests/parks/main-street.park and undoing the
-// deletion through the tools' history gives back the same networks, although the restored segment
-// takes a fresh key. The test compares the networks by their lines, widths, and route distances,
-// not by keys.
+// Undoing a segment's deletion gives back the same networks, though the segment takes a new key.
 
 #include "support/park_files.h"
 

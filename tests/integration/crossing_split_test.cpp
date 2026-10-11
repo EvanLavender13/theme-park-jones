@@ -1,7 +1,4 @@
-// A crossing under walking guests on a checked-in park: a guest path drawn across the main street
-// of tests/parks/warm-main-street.park splits the street in two, and every guest on the street
-// stays at the ground position it stood at. The test compares the park with the same park after the
-// edit, both stepped through the cycle that applies it.
+// Drawing a guest path across a street splits it without moving the guests on it.
 
 #include "support/park_files.h"
 

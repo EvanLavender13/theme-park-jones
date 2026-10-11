@@ -18,7 +18,7 @@ The suite consists of three parts:
 - the integration tests in tests/integration;
 - the mechanical checks: tests/checks and the sim symbol check.
 
-A feature adds a test only in two cases. A test reproduces each bug the feature fixes. A test also covers each consequence across modules that the player depends on and that the feature's FEATURE.md names, stated as cause and effect, as food_loop_test does. State a feature registers is covered by the park world checks once a park file in tests/parks/ holds it, so a feature adds to a park file rather than writing a test. Each test a feature adds is listed in its FEATURE.md, which the user approves. No agent derives tests from specs or criteria.
+A feature adds a test only in two cases. A test reproduces each bug the feature fixes. A test also covers each consequence across modules that the player depends on and that the feature's FEATURE.md names, stated as cause and effect, as supply_route_test does. State a feature registers is covered by the park world checks once a park file in tests/parks/ holds it, so a feature adds to a park file rather than writing a test. Each test a feature adds is listed in its FEATURE.md, which the user approves. No agent derives tests from specs or criteria.
 
 A feature is otherwise verified by playing it, by `--capture`, by `tpj_scenarios --compare` when the simulation must not change, and by the release checks.
 

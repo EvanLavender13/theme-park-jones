@@ -1,6 +1,4 @@
-// The food loop on a checked-in park: cutting the backstage segments of tests/parks/warm.park,
-// which supply its shop, leaves its guests hungrier than the same park uncut. This compares a park
-// with itself cut, so it is not a standard the sim's park world checks prove over every park file.
+// Cutting a shop's supply route leaves the park's guests hungrier.
 
 #include "support/park_files.h"
 
