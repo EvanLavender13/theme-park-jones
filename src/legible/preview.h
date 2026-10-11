@@ -45,11 +45,15 @@ struct KeptPreview {
   Preview Made;
 };
 
-// Makes the kept preview again, as previewEdit gives it, when nothing is kept or the world's tick
-// or the edit differs from the kept one's, and returns whether it did. The kept preview is
-// previewEdit's only while the world changes just by ticking: empty it when the world is
+// Makes the kept preview again, as previewEdit gives it, when nothing is kept, when the edit
+// differs from the kept one's, or, when following ticks, when the world's tick differs, and
+// returns whether it did. Otherwise it reads the shop context's footfall from the world again.
+// Ticks change the world's state but nothing it derives from intent, so a preview kept across
+// ticks still shows what the edit derives exactly; follow ticks to show the candidate's state.
+// The kept preview holds only while the world changes just by ticking: empty it when the world is
 // replaced, or changed without a tick, as edits applied while paused change it.
-bool keepPreview(KeptPreview &kept, const World &world, const std::optional<ParkEdit> &edit);
+bool keepPreview(KeptPreview &kept, const World &world, const std::optional<ParkEdit> &edit,
+                 bool followTicks);
 
 // A shop ghost's context in the candidate of the edit on the world, or none when the edit neither
 // adds nor moves a shop. Changes nothing.

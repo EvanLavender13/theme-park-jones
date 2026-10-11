@@ -71,7 +71,7 @@ Remove point marks the path point under the pointer, as pointAt gives it, when e
 
 Delete removes the box under the pointer. If there is no box, it removes the segment under the pointer, and any point no other segment uses. The ghost shows what it removes.
 
-Furnish sets the furnishing of the guest segment under the pointer, the first in key order whose width covers the pointer. Its edit is a SetFurnishing of that segment. With both sides chosen, it gives both sides the tool's choice: its kind and spacing, or no furnishing when the choice has no kind. With one side, it gives the choice to the side of the segment's line the pointer lies on, and the other side keeps its furnishing. The tool marks that segment. Over no guest segment it gives no edit and marks nothing. A click commits the edit.
+Furnish sets the furnishing of the guest segment under the pointer: the first in key order whose width covers the pointer, or, where the pointer lies on other guest paving, as at a junction or on a walkway, the one whose ground line passes nearest it, the first in key order on a tie. Its edit is a SetFurnishing of that segment. With both sides chosen, it gives both sides the tool's choice: its kind and spacing, or no furnishing when the choice has no kind. With one side, it gives the choice to the side of the segment's line the pointer lies on, and the other side keeps its furnishing. The tool marks that segment. Over no guest segment it gives no edit and marks nothing. A click commits the edit.
 
 ## History
 

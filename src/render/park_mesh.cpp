@@ -481,8 +481,8 @@ void appendStarvedMark(ParkMesh &mesh, const Pose &pose, Rgba color) {
 
 void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha) {
   for (const ParkBox &box : parkBoxes(world)) {
-    const std::optional<ShopRecord> record = shopRecord(world, box.Key);
-    if (record && record->Starved) {
+    // A shop is starved when it has no supply route, as its record says.
+    if (box.Kind == BoxKind::Shop && !nearestDepot(world, box.Key)) {
       appendStarvedMark(mesh, box.At,
                         Rgba{STARVED_COLOR.R, STARVED_COLOR.G, STARVED_COLOR.B, alpha});
     }
@@ -494,7 +494,7 @@ ParkMesh buildParkMesh(const World &world) {
   for (const ParkEntrance &entrance : parkEntrances(world)) {
     appendBox(mesh, entrance.At, ENTRANCE_SIZE, ENTRANCE_HEIGHT, ENTRANCE_COLOR);
   }
-  appendSurface(mesh, parkSurface(world, parkWalkways(world)), 0.0f, pathColor);
+  appendSurface(mesh, walkedSurface(world), 0.0f, pathColor);
   for (const ParkBox &box : parkBoxes(world)) {
     appendBox(mesh, box.At, boxSize(box.Kind), boxHeight(box.Kind), boxColor(box.Kind));
   }
@@ -534,7 +534,7 @@ void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color)
     }
   }
   PavedSurface own;
-  for (const SurfacePiece &piece : parkSurface(world).Pieces) {
+  for (const SurfacePiece &piece : resolvedSurface(world).Pieces) {
     if (piece.Owner == key) {
       own.Pieces.push_back(piece);
     }
@@ -593,7 +593,7 @@ std::vector<EntityKey> ownersOf(const PavedSurface &surface) {
 // The pieces and edge lines the owners hold in the park's surface with its walkways, so a ghost's
 // walkways join their segments as the committed park's do.
 PavedSurface ownedWithWalkways(const World &world, const std::vector<EntityKey> &owners) {
-  return ownedBy(parkSurface(world, parkWalkways(world)), owners);
+  return ownedBy(walkedSurface(world), owners);
 }
 
 // The pieces and edge lines that belong to the segments editedSegments gives: from the candidate's

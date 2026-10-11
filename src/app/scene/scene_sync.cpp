@@ -30,8 +30,9 @@ WorldMeshes SceneSync::syncWorld(const World &world, uint64_t generation) {
   return meshes;
 }
 
-bool SceneSync::syncPreview(const World &world, const std::optional<ParkEdit> &edit) {
-  return keepPreview(Kept, world, edit);
+bool SceneSync::syncPreview(const World &world, const std::optional<ParkEdit> &edit,
+                            bool followTicks) {
+  return keepPreview(Kept, world, edit, followTicks);
 }
 
 bool SceneSync::syncLook(bool remade, const PreviewLook &look) {

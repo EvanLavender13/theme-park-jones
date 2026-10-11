@@ -507,7 +507,7 @@ void resolvePathNetworks(World &world) {
   const std::vector<ParkSegment> segments = parkSegments(world);
   const std::vector<ParkEntrance> entrances = parkEntrances(world);
   const std::vector<ParkBox> boxes = parkBoxes(world);
-  const PavedSurface surface = parkSurface(world);
+  const PavedSurface &surface = resolvedSurface(world);
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
     Network network =
         deriveNetwork(segments, surface.Pieces, doorsServing(entrances, boxes, kind), kind);
@@ -518,6 +518,26 @@ void resolvePathNetworks(World &world) {
     }
     world.emplaceOrReplace<Network>(key, std::move(network));
   }
+}
+
+// Derived, on its own entity: the park's paved surface with every connector's walkway.
+struct WalkedSurface {
+  PavedSurface Held;
+};
+
+template <typename Visitor> void visitFields(Visitor &visitor, WalkedSurface &walked) {
+  visitor.field("surface", walked.Held);
+}
+
+inline constexpr uint64_t WALKED_SURFACE_PURPOSE = hashName("walked-surface");
+
+void resolveWalkedSurface(World &world) {
+  std::vector<Walkway> walkways = connectorWalkways(world, PathKind::Guest);
+  for (const Walkway &walkway : connectorWalkways(world, PathKind::Backstage)) {
+    walkways.push_back(walkway);
+  }
+  const EntityKey key = world.createDerivedEntity(NULL_KEY, WALKED_SURFACE_PURPOSE, 0);
+  world.emplaceOrReplace<WalkedSurface>(key, WalkedSurface{parkSurface(world, walkways)});
 }
 
 // Removes both kinds' previous networks, so no resolution ends holding one.
@@ -602,6 +622,13 @@ std::vector<Walkway> connectorWalkways(const World &world, PathKind kind) {
   return walkways;
 }
 
+const PavedSurface &walkedSurface(const World &world) {
+  static const PavedSurface EMPTY;
+  const WalkedSurface *walked =
+      world.tryGet<WalkedSurface>(deriveKey(NULL_KEY, WALKED_SURFACE_PURPOSE, 0));
+  return walked != nullptr ? walked->Held : EMPTY;
+}
+
 const Network &parkNetwork(const World &world, PathKind kind) {
   static const Network EMPTY;
   const Network *network = world.tryGet<Network>(networkKey(kind));
@@ -610,7 +637,9 @@ const Network &parkNetwork(const World &world, PathKind kind) {
 
 void addRoutes(WorldSchema &schema) {
   schema.addComponent<PreviousNetwork>("previous-network", DataKind::Derived);
-  schema.addResolver("path-networks", &resolvePathNetworks);
+  schema.addComponent<WalkedSurface>("walked-surface", DataKind::Derived);
+  schema.addResolver("path-networks", &resolvePathNetworks, {"paved-surface"});
+  schema.addResolver("walked-surface", &resolveWalkedSurface, {"path-networks"});
   addRouteDistance(schema);
 }
 

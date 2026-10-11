@@ -923,15 +923,7 @@ void ensureDepartures(World &world) {
 
 } // namespace
 
-std::vector<EntityKey> parkGuests(const World &world) {
-  std::vector<EntityKey> keys;
-  for (const EntityKey key : world.keys()) {
-    if (world.has<Guest>(key)) {
-      keys.push_back(key);
-    }
-  }
-  return keys;
-}
+std::vector<EntityKey> parkGuests(const World &world) { return world.keysWith<Guest>(); }
 
 std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
   const Guest *state = world.tryGet<Guest>(guest);

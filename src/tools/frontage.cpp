@@ -447,7 +447,7 @@ Fronting frontingFor(const std::vector<EdgeStep> &steps, const NearestPlace &nea
 std::optional<Pose> frontagePose(const World &world, BoxKind kind, ParkPoint point) {
   const PathKind served = kind == BoxKind::Depot ? PathKind::Backstage : PathKind::Guest;
   const FootprintSize size = boxSize(kind);
-  const PavedSurface surface = parkSurface(world);
+  const PavedSurface &surface = resolvedSurface(world);
   const std::vector<EdgeStep> steps = edgeSteps(surface, served);
   if (steps.empty()) {
     return std::nullopt;

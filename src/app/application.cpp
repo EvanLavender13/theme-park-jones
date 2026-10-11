@@ -100,10 +100,12 @@ bool Application::runFrames() {
     Interactions.movePointer(
         Session.world(), PointerSample{groundUnderCursor(cursor, view),
                                        groundPerPixel(cursor, view).value_or(0.0), input.SnapsOff});
-    // Made again only when the world ticks or the edit changes, so the ghost, the overlay, and the
-    // tooltips show one candidate, and frames between ticks rebuild nothing.
+    // Made again only when the edit changes, so the ghost, the overlay, and the tooltips show one
+    // candidate, and frames rebuild nothing while the pointer rests. The need overlay reads the
+    // candidate's state, so while it is shown the preview is made again at each tick too.
     const bool remade =
-        Scene.syncPreview(Session.world(), Interactions.tentativeEdit(Session.world()));
+        Scene.syncPreview(Session.world(), Interactions.tentativeEdit(Session.world()),
+                          Ui.shown().Overlay.has_value());
     // Kept current before the panels, for the need tooltip, and again after them, so a change of
     // the Overlay row shows in this frame.
     bool shapeChanged = Scene.syncOverlayShape(previewedWorld(Session.world(), Scene.preview()),

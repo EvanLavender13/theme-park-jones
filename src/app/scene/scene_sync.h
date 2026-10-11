@@ -52,9 +52,9 @@ public:
   // intent differs, the kept preview is emptied, so an edit applied without a tick is previewed
   // afresh.
   WorldMeshes syncWorld(const World &world, uint64_t generation);
-  // After the pointer moves: keeps the preview of the edit as keepPreview does, returning whether
-  // it was made again.
-  bool syncPreview(const World &world, const std::optional<ParkEdit> &edit);
+  // After the pointer moves: keeps the preview of the edit as keepPreview does, following ticks
+  // when asked, returning whether it was made again.
+  bool syncPreview(const World &world, const std::optional<ParkEdit> &edit, bool followTicks);
   [[nodiscard]] const Preview &preview() const { return Kept.Made; }
   // After the panels: whether the ghost and overlay meshes need building, which they do at the
   // first call, when the preview was just made again, or when the look differs from the last
