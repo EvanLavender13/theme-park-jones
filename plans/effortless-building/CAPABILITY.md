@@ -134,6 +134,8 @@ Later milestones are drawn from the deepening candidates once the slice has been
 - Stamps beyond a square: other shapes, stamps the player saves from a selection, and stamps that stay grouped so the player can move and rescale them together.
 - Frontage as saved intent: a box is attached to a path by a distance along it, a side, and a setback. When the player reshapes the path, its boxes move with it.
 - A row tool that lays boxes along a stretch of path in one drag, after Cities: Skylines 2's Line Tool.
+- Furniture layout patterns beyond even spacing, such as clusters with gaps and alternating sides, and trims and offsets along a furnished segment.
+- Single pieces of furniture placed or removed by hand, as exceptions to a segment's furnishing setting.
 
 ## Open questions
 
