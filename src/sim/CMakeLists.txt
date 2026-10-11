@@ -16,6 +16,7 @@ add_library(tpj_sim STATIC
     musl_log.cpp
     operations/facilities.cpp
     operations/operations.cpp
+    operations/seats.cpp
     park/curves.cpp
     park/edits.cpp
     park/geometry.cpp

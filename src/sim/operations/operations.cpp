@@ -6,6 +6,7 @@
 #include "sim/operations/facilities.h"
 #include "sim/operations/internal/offer_entries.h"
 #include "sim/operations/internal/shop_service.h"
+#include "sim/operations/seats.h"
 #include "sim/park/intent.h"
 #include "sim/routes/networks.h"
 #include "sim/routes/route_distance.h"
@@ -745,6 +746,7 @@ void addOperations(WorldSchema &schema) {
   schema.addSystem(&stepShops);
   schema.addSystem(&stepDepots);
   addFacilities(schema);
+  addSeats(schema);
 }
 
 } // namespace tpj

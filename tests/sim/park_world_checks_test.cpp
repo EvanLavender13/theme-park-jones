@@ -55,6 +55,9 @@ constexpr std::array UNHELD_TYPES{
     UnheldType{"previous-network",
                "no resolution ends holding a previous network, so no world between cycles, its "
                "copies and saves, or any candidate holds one"},
+    UnheldType{"seat-service",
+               "no park holds a guest seated at furniture until believable-guests' seated-meals "
+               "remakes the day parks with guests who sit"},
 };
 
 // A second shop beside warm.park's shop, facing the guest segments along x = 0 and backing onto

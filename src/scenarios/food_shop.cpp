@@ -2,11 +2,13 @@
 #include "sim/command_queue.h"
 #include "sim/draw.h"
 #include "sim/entity_key.h"
+#include "sim/furniture/furniture.h"
 #include "sim/guests/guests.h"
 #include "sim/medium/flow.h"
 #include "sim/mix.h"
 #include "sim/operations/facilities.h"
 #include "sim/operations/operations.h"
+#include "sim/operations/seats.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/park_schema.h"
@@ -35,6 +37,8 @@ constexpr uint64_t SPAWN_PURPOSE = hashName("food-shop-spawn");
 constexpr uint64_t GUEST_PURPOSE = hashName("food-shop-guest");
 // A guest appears in a cycle with this chance.
 constexpr double SPAWN_CHANCE = 1.0 / 45.0;
+// A new guest visits the furnished path's first bench with this chance, and otherwise a drawn box.
+constexpr double SEAT_CHANCE = 0.5;
 // A guest waits at least LEAST_PATIENCE ticks for its visit to come back, and up to EXTRA_PATIENCE
 // more.
 constexpr double LEAST_PATIENCE = 100.0;
@@ -94,11 +98,13 @@ void stepGuests(World &world) {
     const int64_t drinkVisits = unitsHeld<DrinkVisits>(world, key, key);
     const int64_t restVisits = unitsHeld<RestVisits>(world, key, key);
     const int64_t toiletVisits = unitsHeld<ToiletVisits>(world, key, key);
-    if (visits > 0 || drinkVisits > 0 || restVisits > 0 || toiletVisits > 0) {
+    const int64_t seatVisits = unitsHeld<SeatVisits>(world, key, key);
+    if (visits > 0 || drinkVisits > 0 || restVisits > 0 || toiletVisits > 0 || seatVisits > 0) {
       consumeHeld<GuestVisits>(world, key, FINISHED_CAUSE);
       consumeHeld<DrinkVisits>(world, key, FINISHED_CAUSE);
       consumeHeld<RestVisits>(world, key, FINISHED_CAUSE);
       consumeHeld<ToiletVisits>(world, key, FINISHED_CAUSE);
+      consumeHeld<SeatVisits>(world, key, FINISHED_CAUSE);
       consumeHeld<Meals>(world, key, EATEN_CAUSE);
       consumeHeld<Drinks>(world, key, DRUNK_CAUSE);
       consumeHeld<Rests>(world, key, RESTED_CAUSE);
@@ -124,13 +130,19 @@ void stepGuests(World &world) {
   const double patience =
       LEAST_PATIENCE + (EXTRA_PATIENCE * drawUniform(drawKey(world, key, GUEST_PURPOSE, 0)));
   world.emplace<SyntheticGuest>(key, SyntheticGuest{world.Tick + static_cast<uint64_t>(patience)});
+  const auto walk = static_cast<uint32_t>(
+      1.0 + (LONGEST_WALK * drawUniform(drawKey(world, key, GUEST_PURPOSE, 2))));
+  const std::vector<FurniturePiece> furniture = parkFurniture(world);
+  if (!furniture.empty() && drawUniform(drawKey(world, key, GUEST_PURPOSE, 4)) < SEAT_CHANCE) {
+    createUnits<SeatVisits>(world, key, key, 1);
+    sendUnits<SeatVisits>(world, key, furniture.front().Key, key, 1, walk);
+    return;
+  }
   if (visited.empty()) {
     return;
   }
   const auto pick = static_cast<size_t>(drawUniform(drawKey(world, key, GUEST_PURPOSE, 1)) *
                                         static_cast<double>(visited.size()));
-  const auto walk = static_cast<uint32_t>(
-      1.0 + (LONGEST_WALK * drawUniform(drawKey(world, key, GUEST_PURPOSE, 2))));
   sendVisit(world, key, visited[pick], walk);
 }
 
@@ -147,7 +159,8 @@ AddPath supplyPath() {
 // routes.park's shop, depot, and backstage segment, a shop far from any backstage segment, and a
 // bench and a toilet block beside it. The first shop sells food and drink. The bench's footprint,
 // x -41 to -39 and z 44.5 to 45.5, and the toilet block's, x -64 to -56 and z 57.5 to 62.5, clear
-// the second shop's, x -44 to -36 and z 57 to 63.
+// the second shop's, x -44 to -36 and z 57 to 63. A guest path along z = -20, clear of every box,
+// carries benches on both sides every 10 m.
 void populateFoodShop(World &world) {
   applyCommand(world, AddBox{BoxKind::Shop, Pose{6.5, 115.0, -1.0, 0.0}});
   applyCommand(world, SetShopStock{parkBoxes(world).front().Key, ShopStock::Both});
@@ -156,6 +169,13 @@ void populateFoodShop(World &world) {
   applyCommand(world, AddBox{BoxKind::Bench, Pose{-40.0, 45.0, 0.0, 1.0}});
   applyCommand(world, AddBox{BoxKind::ToiletBlock, Pose{-60.0, 60.0, 0.0, 1.0}});
   applyCommand(world, supplyPath());
+  applyCommand(world, AddPath{PathKind::Guest, {NewPoint{{-40.0, -20.0}}, NewPoint{{0.0, -20.0}}}});
+  const SideFurnishing benches{FurnitureKind::Bench, 10.0};
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Kind == PathKind::Guest) {
+      applyCommand(world, SetFurnishing{segment.Key, Furnishing{benches, benches}});
+    }
+  }
 }
 
 // Deletes the backstage segment CUT_TICK ticks into each CUT_PERIOD, and draws it again at the

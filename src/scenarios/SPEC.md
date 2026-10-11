@@ -24,7 +24,7 @@ registeredScenarios lists the synthetic scenarios. Each is named and seeded, and
 - derived entities
 - the medium's fields, ground fields, and flows
 - random park edits, with the guests and shops they affect
-- shops selling food and drink, whose supply is cut and restored, and a bench and a toilet block
+- shops selling food and drink, whose supply is cut and restored, a bench and a toilet block, and a furnished guest path whose bench seats guests and turns them away when full
 
 This way, if any part of the simulation's arithmetic or ordering could differ between builds, it shows up in the compared output.
 
