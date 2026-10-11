@@ -66,6 +66,11 @@ std::optional<Place> connectionPlace(const World &candidate, EntityKey shop) {
   return std::nullopt;
 }
 
+// The world's hungry footfall at the place on its guest network.
+double footfallAt(const World &world, const Place &place) {
+  return fieldValue<HungryFootfall>(world, parkNetwork(world, PathKind::Guest), place);
+}
+
 } // namespace
 
 Preview previewEdit(const World &world, const std::optional<ParkEdit> &edit) {
@@ -84,8 +89,14 @@ const World &previewedWorld(const World &world, const Preview &preview) {
   return preview.Candidate ? *preview.Candidate : world;
 }
 
-bool keepPreview(KeptPreview &kept, const World &world, const std::optional<ParkEdit> &edit) {
-  if (kept.Tick == world.Tick && kept.Made.Edit == edit) {
+bool keepPreview(KeptPreview &kept, const World &world, const std::optional<ParkEdit> &edit,
+                 bool followTicks) {
+  if (kept.Tick.has_value() && kept.Made.Edit == edit &&
+      (kept.Tick == world.Tick || !followTicks)) {
+    // The shop's footfall is the world's now, which ticks change.
+    if (kept.Made.Shop && kept.Made.Shop->Connection) {
+      kept.Made.Shop->Footfall = footfallAt(world, *kept.Made.Shop->Connection);
+    }
     return false;
   }
   kept.Made = previewEdit(world, edit);
@@ -104,8 +115,7 @@ std::optional<ShopContext> shopContext(const World &world, const World &candidat
   context.Connection = connectionPlace(candidate, *shop);
   // Footfall is sampled in the committed world, since a candidate is never stepped.
   if (context.Connection) {
-    context.Footfall =
-        fieldValue<HungryFootfall>(world, parkNetwork(world, PathKind::Guest), *context.Connection);
+    context.Footfall = footfallAt(world, *context.Connection);
   }
   context.Supply = nearestDepot(candidate, *shop);
   return context;

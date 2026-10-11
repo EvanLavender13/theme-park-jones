@@ -2,6 +2,7 @@
 
 #include "sim/park/geometry.h"
 #include "sim/park/surface.h"
+#include "sim/routes/networks.h"
 #include "tools/internal/snapping.h"
 
 #include <algorithm>
@@ -199,20 +200,37 @@ std::optional<InsertPoint> insertAt(const World &world, ParkPoint point) {
   return std::nullopt;
 }
 
-// The first guest segment in key order whose ground line passes within half its width of the point.
+// The guest segment under the point: the first in key order whose ground line passes within half
+// its width of it, or, where the point lies on other guest paving, as at a junction, the one whose
+// ground line passes nearest it, the first in key order on a tie.
 std::optional<ParkSegment> guestSegmentAt(const World &world, ParkPoint point) {
+  std::optional<ParkSegment> nearest;
+  double nearestDistance = INFINITY;
   for (const ParkSegment &segment : parkSegments(world)) {
     if (segment.Kind != PathKind::Guest) {
       continue;
     }
     const std::vector<CarrierPoint> &line = segment.Line;
     for (size_t i = 0; i + 1 < line.size(); ++i) {
-      if (segmentDistance(point, line[i], line[i + 1]) <= 0.5 * segment.Width) {
+      const double distance = segmentDistance(point, line[i], line[i + 1]);
+      if (distance <= 0.5 * segment.Width) {
         return segment;
+      }
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = segment;
       }
     }
   }
-  return std::nullopt;
+  if (!nearest) {
+    return std::nullopt;
+  }
+  // Walkways are guest paving too.
+  const PavedSurface &surface = walkedSurface(world);
+  const bool onPaving = std::ranges::any_of(surface.Pieces, [point](const SurfacePiece &piece) {
+    return piece.Kind == PathKind::Guest && pieceDistance(piece, point) == 0.0;
+  });
+  return onPaving ? nearest : std::nullopt;
 }
 
 // The Furnish tool's edit: the guest segment under the pointer with the tool's choice on both

@@ -410,13 +410,11 @@ std::vector<Rounding> roundingsOf(const PathLayout &layout,
 
 PathLayout layoutOf(const World &world) {
   PathLayout layout;
-  for (const EntityKey key : world.keys()) {
-    if (const auto *point = world.tryGet<PathPointIntent>(key)) {
-      layout.Points.push_back(LayoutPoint{key, *point});
-    }
-    if (const auto *segment = world.tryGet<PathSegmentIntent>(key)) {
-      layout.Segments.push_back(LayoutSegment{key, *segment});
-    }
+  for (const EntityKey key : world.keysWith<PathPointIntent>()) {
+    layout.Points.push_back(LayoutPoint{key, world.get<PathPointIntent>(key)});
+  }
+  for (const EntityKey key : world.keysWith<PathSegmentIntent>()) {
+    layout.Segments.push_back(LayoutSegment{key, world.get<PathSegmentIntent>(key)});
   }
   return layout;
 }

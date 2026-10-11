@@ -243,7 +243,7 @@ OverlayShape buildOverlayShape(const World &world) {
   OverlayShape shape;
   const std::vector<std::pair<EntityKey, EntityKey>> ends = addLines(world, shape);
   std::vector<EntityKey> owners;
-  for (const SurfacePiece &piece : parkSurface(world).Pieces) {
+  for (const SurfacePiece &piece : resolvedSurface(world).Pieces) {
     if (piece.Kind == PathKind::Guest && addPiece(shape, piece, ends)) {
       owners.push_back(piece.Owner);
     }

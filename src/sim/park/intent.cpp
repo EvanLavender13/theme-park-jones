@@ -14,10 +14,8 @@ namespace {
 // Every entity holding the component T, made public by toValue, in ascending key order.
 template <typename T, typename ToValue> auto collectIntent(const World &world, ToValue toValue) {
   std::vector<decltype(toValue(EntityKey{}, std::declval<const T &>()))> result;
-  for (const EntityKey key : world.keys()) {
-    if (const T *intent = world.tryGet<T>(key); intent != nullptr) {
-      result.push_back(toValue(key, *intent));
-    }
+  for (const EntityKey key : world.keysWith<T>()) {
+    result.push_back(toValue(key, world.get<T>(key)));
   }
   return result;
 }

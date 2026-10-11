@@ -14,7 +14,7 @@ A guest reads the park only through the medium and intent:
 - its own stocks of each need's visits and servings: guest-visits and meals, drink-visits and drinks, rest-visits and rests, and toilet-visits and toilet-uses;
 - parkEntrances, and the opening hours through parkHours and isOpenAt (decision 0025);
 - the park's clock, parkTime;
-- the guest paving, from parkSurface with the guest walkways, walkwayPiece, parkSegments, and keyedWalkways (decision 0025);
+- the guest paving, from routes' walkedSurface, walkwayPiece, parkSegments, and keyedWalkways (decision 0025);
 - guest presence, which only guests publish and sample.
 
 A guest visits facilities, which are shops, benches, and toilet blocks, and receives servings through those flows. No other module reads a guest's state.

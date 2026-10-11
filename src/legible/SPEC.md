@@ -43,7 +43,7 @@ needAvailability(need) gives a need's availability, in needs.h. Food's sources a
 
 A preview shows what a tentative edit would do before it is committed (decision 0025). Its candidate is exactly the world that committing the edit at the next cycle would give. A preview has a candidate only when the world accepts the edit. previewedWorld gives the candidate when there is one, and the world otherwise. Every explanation of the committed park works on the candidate the same way.
 
-keepPreview holds a preview between frames. It makes the preview again only when the world's tick or the edit has changed, and returns whether it did. If a caller replaces the world, or changes it without a tick, as edits applied while paused change it, the caller must empty the kept preview.
+keepPreview holds a preview between frames, and returns whether it made it again. It makes it again when the edit has changed. If the caller follows ticks, it also makes it again when the world's tick has changed. Otherwise it keeps the candidate across ticks, and reads the shop context's footfall from the world again. Ticks change the world's state but nothing the world derives from intent. A kept candidate therefore still shows exactly what committing the edit would derive, such as its paving, walkways, furniture, and supply routes. Its state is the world's from the tick it was made. The app follows ticks while it shows a need overlay, which reads the candidate's state. If a caller replaces the world, or changes it without a tick, as edits applied while paused change it, the caller must empty the kept preview.
 
 A preview of adding or moving a shop also tells what the shop would find:
 

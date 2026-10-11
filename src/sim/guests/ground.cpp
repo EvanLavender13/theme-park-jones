@@ -269,12 +269,8 @@ void resolveGuestGround(World &world) {
   std::vector<CarrierGroup> carriers = std::move(joined.Carriers);
 
   const std::vector<KeyedWalkway> keyed = keyedWalkways(world, PathKind::Guest);
-  std::vector<Walkway> ways;
-  ways.reserve(keyed.size());
-  for (const KeyedWalkway &walkway : keyed) {
-    ways.push_back(walkway.Way);
-  }
-  const PavedSurface surface = parkSurface(world, ways);
+  // Backstage paving never joins guest paving, so its walkways hide no guest edge.
+  const PavedSurface &surface = walkedSurface(world);
 
   std::vector<GroundWall> walls;
   std::vector<GroundPiece> pieces;
@@ -507,7 +503,7 @@ const GuestGround &guestGround(const World &world) {
 
 void addGuestGround(WorldSchema &schema) {
   schema.addComponent<GuestGround>("guest-ground", DataKind::Derived);
-  schema.addResolver("guest-ground", &resolveGuestGround, {"path-networks"});
+  schema.addResolver("guest-ground", &resolveGuestGround, {"walked-surface"});
 }
 
 } // namespace tpj

@@ -1,8 +1,10 @@
 #include "sim/park/surface.h"
 
+#include "sim/mix.h"
 #include "sim/park/geometry.h"
 #include "sim/park/internal/around.h"
 #include "sim/park/internal/layout.h"
+#include "sim/schema.h"
 
 #include <algorithm>
 #include <array>
@@ -180,14 +182,26 @@ struct TaperFit {
   double MaxLength = 0.0;
 };
 
+// A segment end's half of a turn: the run of positions in a list where it lies, where it starts
+// and how many it holds, and the side whose half it meets. A Count of 0 is no turn.
+struct TurnSpan {
+  size_t First = 0;
+  size_t Count = 0;
+  SideLink Meets;
+};
+
 // Lists reused from one point to the next, so building a surface allocates only while they grow,
-// and the point's taper, after trimPoint.
+// and the point's taper, after trimPoint. Turns holds, for each shape, at each end and on each
+// side, its half of the outline's turn there, in TurnPoints, starting from its trimmed corner. Only
+// buildSurface sizes Turns.
 struct Scratch {
   std::vector<End> Group;
   std::vector<Pair> Pairs;
   std::vector<ParkPoint> Outline;
   std::vector<ParkPoint> Fan;
   TaperFit Taper;
+  std::vector<ParkPoint> TurnPoints;
+  std::vector<std::array<std::array<TurnSpan, 2>, 2>> Turns;
 };
 
 // Writes the pieces and edge lines of the owners it wants into a surface.
@@ -228,12 +242,52 @@ public:
     Surface.Pieces.push_back(added);
   }
 
-  // Adds one side of a segment's body, from where it starts to where it ends, unless its end lies
-  // no farther along the segment than its start.
-  void bodySide(EntityKey segment, bool left, ParkPoint start, ParkPoint end, ParkPoint along) {
-    if (wants(segment) && dot(end - start, along) > 0.0) {
-      Surface.Sides.push_back(BodySide{segment, left, start, end});
+  // Adds one side of the shape, the left or the right seen from its From end: its turn at the From
+  // end, reversed, which ends where its body starts, and then its turn at the To end, or the
+  // trimmed corner alone at an end with no turn on that side. Positions that repeat the one before
+  // are left out. The side is left out when its body ends behind where it starts, or when fewer
+  // than two positions remain.
+  void side(const Shape &shape, bool left, const std::array<std::array<TurnSpan, 2>, 2> &turns,
+            const std::vector<ParkPoint> &turnPoints) {
+    if (!wants(shape.Key)) {
+      return;
     }
+    // Seen from the From end, the left side ends at the To end's right, and the right at its left.
+    const Side fromSide = left ? LEFT : RIGHT;
+    const Side toSide = left ? RIGHT : LEFT;
+    const ParkPoint start = shape.trimmed(0, fromSide);
+    const ParkPoint end = shape.trimmed(1, toSide);
+    if (dot(end - start, shape.Along) < -SAME_POINT) {
+      return;
+    }
+    const size_t first = Surface.SidePoints.size();
+    const auto add = [this, first](ParkPoint at) {
+      if (Surface.SidePoints.size() == first || !samePoint(Surface.SidePoints.back(), at)) {
+        Surface.SidePoints.push_back(at);
+      }
+    };
+    const TurnSpan &before = turns[0][fromSide];
+    const TurnSpan &after = turns[1][toSide];
+    for (size_t i = before.Count; i > 0; --i) {
+      add(turnPoints[before.First + i - 1]);
+    }
+    if (before.Count == 0) {
+      add(start);
+    }
+    const size_t body = Surface.SidePoints.size() - 1 - first;
+    for (size_t i = 0; i < after.Count; ++i) {
+      add(turnPoints[after.First + i]);
+    }
+    if (after.Count == 0) {
+      add(end);
+    }
+    const size_t count = Surface.SidePoints.size() - first;
+    if (count < 2) {
+      Surface.SidePoints.resize(first);
+      return;
+    }
+    Surface.Sides.push_back(
+        SegmentSide{shape.Key, left, first, count, body, {before.Meets, after.Meets}});
   }
 
   // Adds the run of points as an edge line, leaving out each point that repeats the one before.
@@ -583,6 +637,47 @@ void outlinePair(std::vector<ParkPoint> &outline, ParkPoint at, const Pair &pair
   outline.push_back(b.trimmed(whichB, RIGHT));
 }
 
+// The side of the shape's segment that is the end's side, seen walking from its From point: the
+// left side at the From end is its left, and at the To end its right.
+SideLink sideAt(const Shape &shape, const End &end, Side side) {
+  return SideLink{shape.Key, (end.Which == 0) == (side == LEFT), end.Which == 0};
+}
+
+// Splits the outline of the turn from the first end's left side to the second end's right side
+// halfway along its length, and keeps each half as its end's turn on that side, each starting from
+// that end's trimmed corner and meeting the other's.
+void appendHalves(Scratch &scratch, const std::vector<ParkPoint> &outline,
+                  const std::vector<Shape> &shapes, const End &first, const End &second) {
+  double total = 0.0;
+  for (size_t i = 0; i + 1 < outline.size(); ++i) {
+    total += lengthOf(outline[i + 1] - outline[i]);
+  }
+  const double half = total / 2.0;
+  const size_t n = outline.size();
+  const auto appendHalf = [&](bool forward) {
+    const auto at = [&](size_t i) { return forward ? outline[i] : outline[n - 1 - i]; };
+    const size_t start = scratch.TurnPoints.size();
+    scratch.TurnPoints.push_back(at(0));
+    double walked = 0.0;
+    for (size_t i = 0; i + 1 < n && walked < half; ++i) {
+      const double step = lengthOf(at(i + 1) - at(i));
+      if (walked + step >= half) {
+        scratch.TurnPoints.push_back(at(i) + (at(i + 1) - at(i)) * ((half - walked) / step));
+      } else {
+        scratch.TurnPoints.push_back(at(i + 1));
+      }
+      walked += step;
+    }
+    return std::pair{start, scratch.TurnPoints.size() - start};
+  };
+  const auto [firstStart, firstCount] = appendHalf(true);
+  scratch.Turns[first.Shape][first.Which][LEFT] =
+      TurnSpan{firstStart, firstCount, sideAt(shapes[second.Shape], second, RIGHT)};
+  const auto [secondStart, secondCount] = appendHalf(false);
+  scratch.Turns[second.Shape][second.Which][RIGHT] =
+      TurnSpan{secondStart, secondCount, sideAt(shapes[first.Shape], first, LEFT)};
+}
+
 // A point's paving and its edge lines, after trimPoint. At a corner, the paving belongs to the
 // segment on its side of the line into the corner. Elsewhere, it belongs to the point, fanned from
 // it, or cut into triangles where its outline curves.
@@ -593,6 +688,9 @@ void buildPoint(Output &output, Scratch &scratch, EntityKey point, ParkPoint at,
   const PathKind kind = shapes[ends[0].Shape].Kind;
   std::vector<ParkPoint> &ring = scratch.Fan;
   ring.clear();
+  const auto away = [&](size_t index) {
+    return shapes[ends[index].Shape].outward(ends[index].Which);
+  };
   for (size_t i = 0; i < count; ++i) {
     const size_t j = (i + 1) % count;
     const Shape &a = shapes[ends[i].Shape];
@@ -601,6 +699,12 @@ void buildPoint(Output &output, Scratch &scratch, EntityKey point, ParkPoint at,
     const size_t whichB = ends[j].Which;
     const bool curves = scratch.Taper.Tapers && scratch.Taper.Curves[i];
     outlinePair(scratch.Outline, at, scratch.Pairs[i], a, whichA, b, whichB, curves);
+    // Unless the two segments leave the point in the same direction, each one's side runs on into
+    // the other's along half the turn between them.
+    if (!scratch.Turns.empty() &&
+        (std::abs(ccw(away(i), away(j))) > PARALLEL || dot(away(i), away(j)) <= 0.0)) {
+      appendHalves(scratch, scratch.Outline, shapes, ends[i], ends[j]);
+    }
     ring.push_back(a.trimmed(whichA, RIGHT));
     ring.insert(ring.end(), scratch.Outline.begin(), scratch.Outline.end() - 1);
     scratch.Outline.insert(scratch.Outline.begin(), a.middle(whichA, LEFT));
@@ -798,6 +902,7 @@ PavedSurface buildSurface(const PathLayout &layout, const PathGround &ground,
   PavedSurface surface;
   Output output(surface, wanted, focus == nullptr, edges);
   Scratch scratch;
+  scratch.Turns.assign(shapes.size(), {});
   askPoints(layout, ends, ground, scratch, shapes, focus != nullptr ? &asked : nullptr);
   // Every segment's trims are set before any edge line is written, since an edge line runs to the
   // middle between a side's trims at both ends. The second pass sets the same trims again.
@@ -818,13 +923,13 @@ PavedSurface buildSurface(const PathLayout &layout, const PathGround &ground,
                    }
                  });
   }
-  for (const Shape &shape : shapes) {
+  for (size_t i = 0; i < shapes.size(); ++i) {
+    const Shape &shape = shapes[i];
     output.piece(shape.Kind, shape.Key,
                  {shape.trimmed(0, RIGHT), shape.trimmed(1, LEFT), shape.trimmed(1, RIGHT),
                   shape.trimmed(0, LEFT)});
-    // Seen from the From end, the left side ends at the To end's right, and the right at its left.
-    output.bodySide(shape.Key, true, shape.trimmed(0, LEFT), shape.trimmed(1, RIGHT), shape.Along);
-    output.bodySide(shape.Key, false, shape.trimmed(0, RIGHT), shape.trimmed(1, LEFT), shape.Along);
+    output.side(shape, true, scratch.Turns[i], scratch.TurnPoints);
+    output.side(shape, false, scratch.Turns[i], scratch.TurnPoints);
   }
   std::ranges::stable_sort(surface.Pieces, {}, &SurfacePiece::Owner);
   std::ranges::stable_sort(surface.Edges, {}, &EdgeLine::Owner);
@@ -1022,6 +1127,7 @@ void hideJoined(PavedSurface &surface, const std::vector<SurfacePiece> &hiders, 
   PavedSurface visible;
   visible.Pieces = std::move(surface.Pieces);
   visible.Sides = std::move(surface.Sides);
+  visible.SidePoints = std::move(surface.SidePoints);
   Visible writer(visible);
   std::vector<size_t> near;
   std::vector<std::pair<double, double>> hidden;
@@ -1183,6 +1289,10 @@ std::span<const ParkPoint> edgePoints(const PavedSurface &surface, const EdgeLin
   return std::span(surface.EdgePoints).subspan(edge.First, edge.Count);
 }
 
+std::span<const ParkPoint> sidePoints(const PavedSurface &surface, const SegmentSide &side) {
+  return std::span(surface.SidePoints).subspan(side.First, side.Count);
+}
+
 double pieceDistance(const SurfacePiece &piece, ParkPoint point) {
   const std::span<const ParkPoint> corners = pieceCorners(piece);
   if (corners.empty()) {
@@ -1259,6 +1369,28 @@ std::vector<EntityKey> pointsAffected(const PathLayout &layout, const PathGround
 PavedSurface parkSurface(const World &world) {
   const PathLayout layout = layoutOf(world);
   return surfaceOf(layout, groundOf(layout));
+}
+
+namespace {
+
+inline constexpr uint64_t SURFACE_PURPOSE = hashName("paved-surface");
+
+void resolvePavedSurface(World &world) {
+  const EntityKey key = world.createDerivedEntity(NULL_KEY, SURFACE_PURPOSE, 0);
+  world.emplaceOrReplace<PavedSurface>(key, parkSurface(world));
+}
+
+} // namespace
+
+const PavedSurface &resolvedSurface(const World &world) {
+  static const PavedSurface EMPTY;
+  const PavedSurface *surface = world.tryGet<PavedSurface>(deriveKey(NULL_KEY, SURFACE_PURPOSE, 0));
+  return surface != nullptr ? *surface : EMPTY;
+}
+
+void addPavedSurface(WorldSchema &schema) {
+  schema.addComponent<PavedSurface>("paved-surface", DataKind::Derived);
+  schema.addResolver("paved-surface", &resolvePavedSurface);
 }
 
 PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways) {

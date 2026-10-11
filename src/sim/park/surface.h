@@ -24,6 +24,16 @@ struct SurfacePiece {
   bool operator==(const SurfacePiece &) const = default;
 };
 
+template <typename Visitor> void visitFields(Visitor &visitor, SurfacePiece &piece) {
+  visitor.field("kind", piece.Kind);
+  visitor.field("owner", piece.Owner);
+  visitor.field("corner-0", piece.Corners[0]);
+  visitor.field("corner-1", piece.Corners[1]);
+  visitor.field("corner-2", piece.Corners[2]);
+  visitor.field("corner-3", piece.Corners[3]);
+  visitor.field("count", piece.Count);
+}
+
 // A run of positions along the paving's outline, with the paving on its left seen from above: the
 // Count positions of its surface's EdgePoints from First. Owner is the point it runs around.
 struct EdgeLine {
@@ -33,36 +43,94 @@ struct EdgeLine {
   size_t Count = 0;
 };
 
-// Where one side of a segment's body runs, seen walking from its From point to its To point: its
-// segment, whether it is the left side, and where it starts, nearer the From point, and ends.
-struct BodySide {
+template <typename Visitor> void visitFields(Visitor &visitor, EdgeLine &edge) {
+  visitor.field("kind", edge.Kind);
+  visitor.field("owner", edge.Owner);
+  visitor.field("first", edge.First);
+  visitor.field("count", edge.Count);
+}
+
+// The side of a segment that another side's line runs on into: that segment, whether it is its
+// left side, seen walking from its From point to its To point, and whether the line meets it at
+// its From end. A Segment of NULL_KEY is none.
+struct SideLink {
   EntityKey Segment = NULL_KEY;
   bool Left = false;
-  ParkPoint Start;
-  ParkPoint End;
+  bool AtFrom = false;
 
-  bool operator==(const BodySide &) const = default;
+  bool operator==(const SideLink &) const = default;
 };
 
+template <typename Visitor> void visitFields(Visitor &visitor, SideLink &link) {
+  visitor.field("segment", link.Segment);
+  visitor.field("left", link.Left);
+  visitor.field("at-from", link.AtFrom);
+}
+
+// One side of a segment, seen walking from its From point to its To point: its segment, whether it
+// is the left side, the Count positions of its surface's SidePoints from First that it runs
+// through, from its From end to its To end, the index among them of where its body starts, and,
+// at its From end and at its To end, the side it runs on into there, or none where it stops.
+struct SegmentSide {
+  EntityKey Segment = NULL_KEY;
+  bool Left = false;
+  size_t First = 0;
+  size_t Count = 0;
+  size_t Body = 0;
+  std::array<SideLink, 2> RunsOn{};
+
+  bool operator==(const SegmentSide &) const = default;
+};
+
+template <typename Visitor> void visitFields(Visitor &visitor, SegmentSide &side) {
+  visitor.field("segment", side.Segment);
+  visitor.field("left", side.Left);
+  visitor.field("first", side.First);
+  visitor.field("count", side.Count);
+  visitor.field("body", side.Body);
+  visitor.field("runs-on-from", side.RunsOn[0]);
+  visitor.field("runs-on-to", side.RunsOn[1]);
+}
+
 // The paving the park's segments make: its pieces and its edge lines, each list in ascending key
-// order of its owner, the positions the edge lines run through, and the sides of each segment's
-// body, in ascending key order of the segment, the left side first.
+// order of its owner, the positions the edge lines run through, the sides of each segment, in
+// ascending key order of the segment, the left side first, and the positions the sides run
+// through.
 struct PavedSurface {
   std::vector<SurfacePiece> Pieces;
   std::vector<EdgeLine> Edges;
   std::vector<ParkPoint> EdgePoints;
-  std::vector<BodySide> Sides;
+  std::vector<SegmentSide> Sides;
+  std::vector<ParkPoint> SidePoints;
 };
+
+template <typename Visitor> void visitFields(Visitor &visitor, PavedSurface &surface) {
+  visitor.field("pieces", surface.Pieces);
+  visitor.field("edges", surface.Edges);
+  visitor.field("edge-points", surface.EdgePoints);
+  visitor.field("sides", surface.Sides);
+  visitor.field("side-points", surface.SidePoints);
+}
 
 // The piece's corners.
 std::span<const ParkPoint> pieceCorners(const SurfacePiece &piece);
 // The positions the edge line of the surface runs through.
 std::span<const ParkPoint> edgePoints(const PavedSurface &surface, const EdgeLine &edge);
+// The positions the side of the surface runs through.
+std::span<const ParkPoint> sidePoints(const PavedSurface &surface, const SegmentSide &side);
 // How far the point lies from the piece, in meters: 0 when it lies on the piece.
 double pieceDistance(const SurfacePiece &piece, ParkPoint point);
 
 // The park's paved surface. A segment with an empty ground line adds nothing.
 PavedSurface parkSurface(const World &world);
+
+// The park's paved surface as the last resolution derived it with parkSurface, or an empty surface
+// when the world holds none, as before its first resolution. Read it outside resolution, and in
+// resolvers that depend on paved-surface; read parkSurface where intent may have changed since.
+const PavedSurface &resolvedSurface(const World &world);
+
+// Registers the derived surface and the paved-surface resolver that keeps it for resolvedSurface.
+void addPavedSurface(WorldSchema &schema);
 
 // A strip of paving from a door to a segment, joined to it: its kind, the segment it joins, the
 // door, the unit direction out of the door's face, where it ends inside the segment's paving, and

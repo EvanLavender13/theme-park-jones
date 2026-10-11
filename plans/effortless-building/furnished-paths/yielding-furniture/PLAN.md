@@ -6,7 +6,20 @@ Furniture follows each furnished side around bends and tapers, yields to everyth
 
 ## Approach
 
-parkSurface's sides become lines: each side's body, and at an end where exactly two segments meet, half of the outline's turn there, taken from the outline buildPoint already makes. sim/furniture puts every obstacle into a uniform grid: paving and walkway pieces, box and entrance footprints, door frontage strips, and each piece as it is laid. It tests a piece's grown footprint at places every half meter along each side's line, and refines the ends of each free run by halving. It spreads pieces evenly in each run, as it does now over a whole side. A side's runs are found before any of its pieces is laid, so a run that nothing changed lays the same pieces.
+parkSurface's sides become lines: each side's body, and at each end where other segments use its point, half of the outline's turn between it and the next segment, taken from the outline buildPoint already makes. sim/furniture puts every obstacle into a uniform grid: paving and walkway pieces, box and entrance footprints, door frontage strips, and each piece as it is laid. It tests a piece's grown footprint at places every half meter along each side's line, and refines the ends of each free run by halving. Sides with the same furnishing that run on into each other are laid as one chain. A chain's runs are found before any of its pieces is laid, and pieces spread evenly in each run, so a run that nothing changed lays the same pieces. The Changes during implementation section lists what else differs from the tasks below.
+
+## Changes during implementation
+
+Play and timing on full.park changed the approach after Tasks 3 to 6 were written. The code differs from those steps as follows:
+
+- Sides with the same furnishing that run on into each other are laid as one chain, so spacing runs on unbroken across segments. A chain that closes on itself is laid as a ring when nothing but a place too short for a piece blocks it.
+- A piece that would touch the one before it moves on along the line until it doesn't, and the pieces after it share the room left. If the last piece can't fit, the run takes one gap fewer.
+- Where only paving is in its way, as inside a tight curve, a piece steps back from the paving up to a meter.
+- Furnish picking falls back to the nearest guest segment when the pointer is on guest paving, junctions and walkways included.
+- The paved surface is kept as derived data, once without walkways (sim/park, resolvedSurface) and once with every walkway (sim/routes, walkedSurface). Networks, guest ground, furniture, render, and the tools read these instead of building the surface again.
+- Furniture keeps, for each chain, a hash of everything its laying reads and the keys it laid. A resolution lays again only chains whose line, furnishing, or nearby obstacles changed.
+- The app keeps a preview across ticks unless a need overlay is shown, since ticks change nothing the edit derives.
+- parkBoxes, parkEntrances, parkPathPoints, parkSegments, and parkGuests read only their own component's keys, not every entity's. Starved marks ask nearestDepot instead of building each shop's whole record.
 
 ## Placement
 
@@ -15,6 +28,10 @@ Decision 0027 places each behavior this feature adds:
 - Each side's line around turns: sim/park, in sim/park/surface.h. surface.cpp builds the outline's turns, and only it knows their shape.
 - Obstacles, stretches, and the even spread within them: sim/furniture, in sim/furniture/furniture.cpp, beside the laying it replaces. It reads walkways and doors from routes, which lies in a lower layer.
 - The park that holds every case: tests/parks/furnished-paths.park, which the park world checks read.
+- Furnish picking on junctions and walkways: tools, in src/tools/tools.cpp's guestSegmentAt, which the Furnish tool already uses to pick its segment.
+- The surface kept without walkways: sim/park, in sim/park/surface.h, beside parkSurface, which builds it.
+- The surface kept with every walkway: sim/routes, in sim/routes/networks.h, since routes makes the walkways.
+- Keeping a preview across ticks: legible, in legible/preview.h, which already keeps previews between frames. The app only passes whether an overlay is shown.
 
 ## Tasks
 
@@ -101,6 +118,10 @@ Expected: the build ends with no warnings and no errors.
 
 Files:
 - Modify: `src/sim/furniture/furniture.cpp`
+
+Revised again after play on jank.park, where spacing jumped between segments and tight curves were bare. Sides that run on into each other with the same furnishing are laid as one line, a chain, closed where the curb closes; a ring is spread evenly all the way around. Each piece belongs to the side it stands beside and is keyed by where it stands along its segment. A piece that would touch the paving steps back up to MAX_SETBACK. A piece that would touch the one before moves on by NUDGE_STEP, and the pieces after share the room left, instead of the run taking a gap fewer; neighbours keep NEIGHBOUR_CLEARANCE, half the margin, around each other so gentle curves don't nudge. The surface's sides name the side they run on into. The Furnish tool picks the segment nearest the pointer when the pointer is on junction paving.
+
+Revised during implementation, after play: stations are measured along the line through the pieces' centers, the side's line moved off the paving by VERGE_GAP plus half the depth, so neighbours keep the spacing on the inside of a curve. Where that line folds back inside a tight bend, the positions that would step backward are left out. At a junction, each pair of neighbouring arms is halved as at a bend, so furniture follows a junction's edges too; the user found long rounded junction edges in jank.park left bare. Where neighbours in a stretch would touch at its spread, as around a curve, the stretch takes one gap fewer and spreads again, instead of leaving a piece out.
 
 Step 1: Replace layStretch with laying along a side's line. Measure places on the line by station: the distance along the line, shifted so that on the body it equals the distance along the segment's direction from its From point. Let c be `dot(body - from, along)` less the line's length up to the body, where body is the side's position at Body, from is the From point's position, and along the segment's unit direction. Then the station u lies at the length u - c along the line. A change at one end of the side leaves the stations of every place on the body, and beyond it toward the other end, as they were.
 
@@ -330,6 +351,6 @@ Expected: the build has no warnings, ctest reports 100% tests passed, and tidy r
 Files:
 - Modify: `plans/effortless-building/furnished-paths/MILESTONE.md`
 
-Step 1: In MILESTONE.md's Medium, change the sentence on what sim/furniture reads to: "sim/furniture reads park intent through parkSegments, parkPathPoints, parkBoxes, parkEntrances, footprintOf, and parkSurface, and doors and walkways through routes' parkDoors and keyedWalkways."
+Step 1: In MILESTONE.md's Medium, change the sentence on what sim/furniture reads to: "sim/furniture reads park intent through parkSegments, parkPathPoints, parkBoxes, parkEntrances, and footprintOf, and doors, walkways, and the paved surface with its walkways through routes' parkDoors, keyedWalkways, and walkedSurface."
 
-Step 2: Stage only this feature's paths: src/sim/park/SPEC.md, src/sim/park/surface.h, src/sim/park/surface.cpp, src/sim/furniture/, tests/parks/furnished-paths.park, plans/effortless-building/furnished-paths/MILESTONE.md, and plans/effortless-building/furnished-paths/yielding-furniture/. Commit them by pathspec with the commit-hygiene skill, subject `Sim: Make furniture follow curves and yield to obstacles`. If the format hook rewraps a file, add it and amend before merging. Merge into main as implementing-features says, and rebuild windows-release.
+Step 2: Stage only this feature's paths: src/sim/park/, src/sim/routes/, src/sim/furniture/, src/sim/guests/ground.cpp, src/sim/guests/guests.cpp, src/sim/guests/SPEC.md, src/sim/park_schema.cpp, src/tools/SPEC.md, src/tools/tools.cpp, src/tools/frontage.cpp, src/render/park_mesh.cpp, src/render/paving_overlay.cpp, src/legible/, src/app/application.cpp, src/app/SPEC.md, src/app/scene/, tests/parks/furnished-paths.park, plans/effortless-building/furnished-paths/MILESTONE.md, and plans/effortless-building/furnished-paths/yielding-furniture/. Commit them by pathspec with the commit-hygiene skill, subject `Sim: Make furniture follow curves and yield to obstacles`. If the format hook rewraps a file, add it and amend before merging. Merge into main as implementing-features says, and rebuild windows-release.

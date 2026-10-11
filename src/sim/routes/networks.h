@@ -69,6 +69,11 @@ struct KeyedWalkway {
 // Each walkway connectorWalkways gives, in the same order, with its connector's key.
 std::vector<KeyedWalkway> keyedWalkways(const World &world, PathKind kind);
 
+// The park's paved surface with every connector's walkway, guest walkways first, as the last
+// resolution derived it with parkSurface, or an empty surface when the world holds none, as before
+// its first resolution. Resolvers that read it depend on walked-surface.
+const PavedSurface &walkedSurface(const World &world);
+
 // The kind's network as the last resolution derived it, or an empty network when the world holds
 // none, as before its first resolution.
 const Network &parkNetwork(const World &world, PathKind kind);
