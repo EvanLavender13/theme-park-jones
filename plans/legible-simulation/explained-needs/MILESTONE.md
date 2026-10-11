@@ -58,6 +58,7 @@ Unordered pool this milestone draws later features from.
 - A curve for each need, if guests ever weigh distance differently by need.
 - Expanding a need's row in the guest's choice table to show every offer of that need.
 - Departures by reason over past days, beside today's.
+- Hovering the Hours panel's arrival curve to read the time and the rate under the cursor.
 - A ghost's context for needs other than hunger, such as the guests near a toilet block ghost who need the toilet. Gated on: a footfall field for each need.
 
 ## Open questions
