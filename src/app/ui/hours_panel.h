@@ -1,9 +1,11 @@
 #ifndef TPJ_APP_UI_HOURS_PANEL_H
 #define TPJ_APP_UI_HOURS_PANEL_H
 
+#include "legible/arrivals.h"
 #include "sim/park/intent.h"
 
 #include <optional>
+#include <stdint.h>
 
 namespace tpj {
 
@@ -25,8 +27,9 @@ struct HoursUse {
 // while Chosen is Current. Opens runs from 00:00 to 23:45 and Closes from 00:15 to 24:00, which is
 // a closing second of 0. A + on Opens that brings it to or past Closes moves Closes to a quarter
 // hour after it, and a - on Closes that brings it to or before Opens moves Opens to a quarter hour
-// before it. Call between ImGui::NewFrame and ImGui::Render.
-HoursUse drawHoursPanel(const HoursControls &hours);
+// before it. Below Apply it draws the curve from 00:00 to 24:00, scaled to ARRIVAL_CURVE's peak,
+// with a vertical line at the second of the day. Call between ImGui::NewFrame and ImGui::Render.
+HoursUse drawHoursPanel(const HoursControls &hours, const ArrivalDay &curve, uint64_t second);
 
 } // namespace tpj
 

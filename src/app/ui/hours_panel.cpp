@@ -1,9 +1,13 @@
 #include "app/ui/hours_panel.h"
 
 #include "sim/clock.h"
+#include "sim/guests/guests.h"
 
 #include <imgui.h>
 
+#include <algorithm>
+#include <array>
+#include <stddef.h>
 #include <stdint.h>
 
 namespace tpj {
@@ -44,9 +48,43 @@ int drawSteps(const char *id, bool lowerDisabled, bool raiseDisabled) {
   return step;
 }
 
+// The arrival curve's area, in pixels.
+inline constexpr float CURVE_WIDTH = 240.0f;
+inline constexpr float CURVE_HEIGHT = 60.0f;
+
+// The curve from 00:00 to 24:00 in a framed area, scaled so ARRIVAL_CURVE's peak reaches its top,
+// with a vertical line at the second of the day, and the times below it.
+void drawCurve(const ArrivalDay &curve, uint64_t second) {
+  ImGui::TextUnformatted("Arrivals per hour at each entrance");
+  ImGui::Dummy(ImVec2(CURVE_WIDTH, CURVE_HEIGHT));
+  const ImVec2 low = ImGui::GetItemRectMin();
+  const ImVec2 high = ImGui::GetItemRectMax();
+  ImDrawList *draw = ImGui::GetWindowDrawList();
+  draw->AddRectFilled(low, high, ImGui::GetColorU32(ImGuiCol_FrameBg));
+  const double peak = std::ranges::max(ARRIVAL_CURVE, {}, &CurvePoint::Y).Y;
+  // The last point, at 24:00, takes the 00:00 sample.
+  std::array<ImVec2, ARRIVAL_SAMPLES + 1> points;
+  for (size_t i = 0; i < points.size(); ++i) {
+    const double rate = curve[i % ARRIVAL_SAMPLES];
+    points[i] = ImVec2(low.x + CURVE_WIDTH * static_cast<float>(i) / ARRIVAL_SAMPLES,
+                       high.y - CURVE_HEIGHT * static_cast<float>(rate / peak));
+  }
+  draw->AddPolyline(points.data(), static_cast<int>(points.size()),
+                    ImGui::GetColorU32(ImGuiCol_PlotLines), ImDrawFlags_None, 1.5f);
+  const float now = low.x + CURVE_WIDTH * static_cast<float>(second) / DAY_SECONDS;
+  draw->AddLine(ImVec2(now, low.y), ImVec2(now, high.y),
+                ImGui::GetColorU32(ImGuiCol_PlotLinesHovered));
+  const float left = ImGui::GetCursorPosX();
+  ImGui::TextUnformatted("00:00");
+  ImGui::SameLine(left + 0.5f * (CURVE_WIDTH - ImGui::CalcTextSize("12:00").x));
+  ImGui::TextUnformatted("12:00");
+  ImGui::SameLine(left + CURVE_WIDTH - ImGui::CalcTextSize("24:00").x);
+  ImGui::TextUnformatted("24:00");
+}
+
 } // namespace
 
-HoursUse drawHoursPanel(const HoursControls &hours) {
+HoursUse drawHoursPanel(const HoursControls &hours, const ArrivalDay &curve, uint64_t second) {
   HoursUse use;
   uint64_t opening = hours.Chosen.Opening;
   // A closing second of 0 is the end of the day while stepping and showing.
@@ -93,6 +131,7 @@ HoursUse drawHoursPanel(const HoursControls &hours) {
       use.Apply = true;
     }
     ImGui::EndDisabled();
+    drawCurve(curve, second);
   }
   ImGui::End();
   return use;

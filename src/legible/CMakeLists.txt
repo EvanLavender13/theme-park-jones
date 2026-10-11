@@ -2,6 +2,7 @@
 # link the simulation alone, so tests compute them without a window (principle 10).
 add_library(tpj_legible STATIC
     availability.cpp
+    arrivals.cpp
     needs.cpp
     inspect.cpp
     preview.cpp)
