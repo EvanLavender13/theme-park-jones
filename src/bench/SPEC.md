@@ -49,7 +49,7 @@ scripts/runtime-report.sh [--launches N] REPORT builds the runners with windows-
 
 - tpj_bench on every park in tests/parks/stress/ with windows-release
 - tpj_bench again with windows-debug, stepping fewer ticks and skipping full.park, which debug cannot step in reasonable time
-- the windows-release app on every park, first without and then with the food overlay shown, so the report shows what rebuilding the overlay at every tick costs a player who shows it
+- the windows-release app on every park, first without and then with the food overlay shown, so the report shows what rebuilding the overlay at every tick costs a player who shows it. The app's window stays hidden (app/SPEC.md), so nothing appears on screen.
 
 Running in rounds lets drift widen every park's spread alike, rather than moving one park's median. The script writes the summarized report to REPORT, prints it against the budget, and says how long it took.
 
@@ -57,4 +57,4 @@ scripts/runtime-report.sh --compare BEFORE AFTER prints the comparison of two re
 
 ## Stress parks
 
-tests/parks/stress/ holds the parks that only the runtime report reads. Each is named for what it holds. winding-path.park is a single guest path about 3 km long with one shop. full.park is the full park: 2,000 guests, 30 shops selling food, drink, or both, 15 toilet blocks, 45 benches, and 4 km of guest path, a minute into play.
+tests/parks/stress/ holds the parks that only the runtime report reads. Each is named for what it holds. winding-path.park is a single guest path about 3 km long with one shop. full.park is the full park: 2,000 guests, 30 shops selling food, drink, or both, 15 toilet blocks, 45 benches, furniture on every guest segment, and 4 km of guest path, a minute into play.

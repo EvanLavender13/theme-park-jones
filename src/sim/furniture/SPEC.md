@@ -4,7 +4,7 @@ This module serves the effortless-building capability (plans/effortless-building
 
 ## Boundary
 
-furniture reads intent only through parkSegments, parkPathPoints, parkBoxes, parkEntrances, and footprintOf (sim/park/SPEC.md), and doors, walkways, and the paved surface with its walkways only through routes' parkDoors, keyedWalkways, and walkedSurface (sim/routes/SPEC.md). addFurniture registers the derived types furniture-piece and laid-furniture and its resolver. addPark calls it after addRoutes. Other modules read the furniture through parkFurniture and furnitureSize.
+furniture reads intent only through parkSegments, parkPathPoints, parkBoxes, parkEntrances, and footprintOf (sim/park/SPEC.md), and doors, walkways, and the paved surface with its walkways only through routes' parkDoors, keyedWalkways, and walkedSurface (sim/routes/SPEC.md). It reads the guest network through routes' parkNetwork. addFurniture registers the derived types furniture-piece and laid-furniture, the field seat places, and the furniture resolver. addPark calls it after addRoutes. Other modules read the furniture through parkFurniture and furnitureSize, and its seats through the seat places field and furnitureSeats.
 
 ## Pieces
 
@@ -23,3 +23,7 @@ A piece can't stand where it, with a margin around it, would overlap paving of e
 The places along a line where a piece can stand make its stretches. Pieces in a stretch are evenly spaced along the line through their centers, as close to the side's spacing as the stretch allows and never so close that neighbours touch. Where a piece would touch the one before it, as around a tight curve, it moves on along the line until it doesn't, and the pieces after it share the room left evenly. Where a line stops, its pieces keep clear of its end. Where it runs on into a side with other furnishing or none, the nearest piece stands half the spacing from its end. A closed line with nothing in its way, or nothing but a place too short for a piece, is spread evenly all the way around. If a stretch is too short for one piece, it has none.
 
 If an edit leaves a stretch and everything that blocks it as they were, the stretch's pieces keep their keys and poses, wherever else the edit changes the line. Furniture never makes an edit refused. Where a box or a path takes the place of pieces, they yield (principle 5).
+
+## Seat places
+
+Seat places is a resolved entry field on the guest network, named seat-places. Each furnished guest segment is the source of one entry for each piece it lays, in key order of the pieces. The entry lies at the place on the segment's ground line nearest the piece's position. A SeatPlace holds the piece's key, its pose, its kind, its number of seats, and its segment. furnitureSeats gives a kind's number of seats: 2 for a bench and 4 for a table. If the guest network has no carrier for a piece's segment, the piece has no entry. A segment that lays no piece publishes nothing.
