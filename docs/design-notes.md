@@ -64,7 +64,7 @@ Most staff work is a stock at a place. The stock builds up, and staff capacity d
 
 The logistical play is in the layout, not in who walks: where staff rooms sit, how far they are from what needs care, and which routes staff travel. Whether a pool or agents drain a stock stays inside the entity (decision 0018, principle 6). If a job feels dull as a pool, it could become agents without changing anything that reads its work.
 
-Where staff pass between guest and backstage paths is an open question.
+Staff pass between guest and backstage paths only through buildings open on both sides, such as a staff room (decision 0040).
 
 ## Figures
 
