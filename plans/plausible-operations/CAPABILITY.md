@@ -129,6 +129,7 @@ It is useful on its own, because it can be run and observed with synthetic guest
 
 1. `supplied-food-shop`: the depot and the generic food shop, resolved from committed or candidate intent. It adds (s, S) orders and supplies over the backstage network, and meal service limited by the scarcest of demand, supply, and service rate. It also adds the food offer, unserved returns, the inspection record with its limiting factor, and the starved marking on the box. Member of the boxes-and-tubes slice. Depends on: deterministic-simulation's world-as-value, shared-medium's first-field-and-flow, navigable-networks' paths-become-routes, and effortless-building's sketch-a-park.
 2. `served-needs`: food and drink as separate goods that shops order and serve by their stock setting, seats on benches and stalls in toilet blocks, and an offer for each need with an exact wait. Member of the day-at-the-park slice. Depends on: effortless-building's facilities-and-hours, navigable-networks' facility-doors, and supplied-food-shop.
+3. `served-seats`: each piece of furniture publishes a seat offer with rest and meal relief by kind, takes seat visits, seats guests while a seat is free and returns them unseated when it is full, and sends rests. Member of the somewhere-to-sit slice. Depends on: effortless-building's furnished-paths and served-needs.
 
 Later milestones come from the deepening candidates, once the slice has been played.
 
