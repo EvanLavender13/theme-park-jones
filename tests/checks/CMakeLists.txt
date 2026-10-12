@@ -145,3 +145,5 @@ tpj_placement_case("placement check reports nothing and passes when PLANS is emp
     empty_plans)
 tpj_placement_case("placement check prints each report line whole to standard error"
     long_report_line)
+
+add_subdirectory(allocations)

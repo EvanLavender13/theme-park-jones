@@ -162,6 +162,9 @@ public:
   [[nodiscard]] EntityKey nodeAnchor(uint32_t node) const;
   // The nodes anchored to the entity, ascending.
   [[nodiscard]] std::vector<uint32_t> anchoredNodes(EntityKey entity) const;
+  // The same nodes, in a list the caller keeps, which it clears first. Allocates nothing once the
+  // list has grown.
+  void anchoredNodes(EntityKey entity, std::vector<uint32_t> &nodes) const;
   // The lowest node anchored to the entity, the first anchoredNodes gives, or none. Allocates
   // nothing.
   [[nodiscard]] std::optional<uint32_t> firstAnchoredNode(EntityKey entity) const;

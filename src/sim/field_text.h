@@ -2,6 +2,7 @@
 #define TPJ_SIM_FIELD_TEXT_H
 
 #include "sim/entity_key.h"
+#include "sim/fixed_list.h"
 
 #include <algorithm>
 #include <array>
@@ -18,9 +19,14 @@
 
 namespace tpj {
 
-template <typename T> struct IsVector : std::false_type {};
+// A list field: a std::vector, or a FixedList, which walks, saves, and loads as a vector does.
+template <typename T> struct IsList : std::false_type {};
 template <typename T, typename Allocator>
-struct IsVector<std::vector<T, Allocator>> : std::true_type {};
+struct IsList<std::vector<T, Allocator>> : std::true_type {};
+template <typename T, size_t N> struct IsList<FixedList<T, N>> : std::true_type {};
+
+template <typename T> struct IsFixedList : std::false_type {};
+template <typename T, size_t N> struct IsFixedList<FixedList<T, N>> : std::true_type {};
 
 template <typename> inline constexpr bool UNSUPPORTED_FIELD = false;
 
@@ -172,7 +178,7 @@ template <typename Field> void writeValue(std::string &out, std::string_view nam
     out += names[index];
   } else if constexpr (std::is_same_v<Field, double> || std::is_integral_v<Field>) {
     writeNumber(out, value);
-  } else if constexpr (IsVector<Field>::value) {
+  } else if constexpr (IsList<Field>::value) {
     out += '[';
     bool first = true;
     for (auto &&element : value) {
@@ -260,7 +266,7 @@ template <typename Field> void readValue(TextCursor &cursor, std::string_view na
     cursor.fail("'" + std::string(token) + "' is not a value of '" + std::string(name) + "'");
   } else if constexpr (std::is_integral_v<Field>) {
     value = readNumber<Field>(cursor, name);
-  } else if constexpr (IsVector<Field>::value) {
+  } else if constexpr (IsList<Field>::value) {
     value.clear();
     cursor.expect('[');
     bool first = true;
@@ -269,6 +275,11 @@ template <typename Field> void readValue(TextCursor &cursor, std::string_view na
         cursor.expect(' ');
       }
       first = false;
+      if constexpr (IsFixedList<Field>::value) {
+        if (value.size() == value.capacity()) {
+          cursor.fail("'" + std::string(name) + "' holds more values than it can");
+        }
+      }
       readValue(cursor, name, value.emplace_back());
     }
     cursor.expect(']');

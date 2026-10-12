@@ -42,9 +42,9 @@ bool WorldSchema::sameComponents(const WorldSchema &other) const {
       });
 }
 
-void WorldSchema::addSystem(WorldFunction step) { Systems.push_back(step); }
+void WorldSchema::addSystem(StepFunction step) { Systems.push_back(step); }
 
-void WorldSchema::addSwap(WorldFunction swap) { Swaps.push_back(swap); }
+void WorldSchema::addSwap(StepFunction swap) { Swaps.push_back(swap); }
 
 void WorldSchema::addFinisher(WorldFunction finish) { Finishers.push_back(finish); }
 

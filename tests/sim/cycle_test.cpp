@@ -57,10 +57,10 @@ struct Mark {
 // Resolvers named against alphabetical order, so that only registration order explains the calls.
 std::shared_ptr<const WorldSchema> makeRecordingSchema() {
   auto schema = std::make_shared<WorldSchema>();
-  schema->addSystem([](World &world) { record("system 1", world); });
-  schema->addSystem([](World &world) { record("system 2", world); });
-  schema->addSwap([](World &world) { record("swap 1", world); });
-  schema->addSwap([](World &world) { record("swap 2", world); });
+  schema->addSystem([](World &world, TickBuffers & /*buffers*/) { record("system 1", world); });
+  schema->addSystem([](World &world, TickBuffers & /*buffers*/) { record("system 2", world); });
+  schema->addSwap([](World &world, TickBuffers & /*buffers*/) { record("swap 1", world); });
+  schema->addSwap([](World &world, TickBuffers & /*buffers*/) { record("swap 2", world); });
   schema->addResolver("zones", [](World &world) { record("resolver zones", world); });
   schema->addResolver("access", [](World &world) { record("resolver access", world); }, {"zones"});
   schema->addCommand<Note>();
@@ -97,13 +97,13 @@ struct ResizePlan {
   componentOf<Plan>(world, command.Key).Size = command.Size;
 }
 
-void countUp(World &world) {
+void countUp(World &world, TickBuffers & /*buffers*/) {
   for (const EntityKey key : world.keysWith<Probe>()) {
     world.get<Probe>(key).Count += 1;
   }
 }
 
-void publishCounts(World &world) {
+void publishCounts(World &world, TickBuffers & /*buffers*/) {
   for (const EntityKey key : world.keysWith<Probe>()) {
     Probe &probe = world.get<Probe>(key);
     probe.Small = static_cast<uint16_t>(probe.Count);
@@ -293,8 +293,8 @@ struct Look {
 
 TEST_CASE("isStepping, isResolving, and isFinishing are each true exactly while their stage runs") {
   auto schema = std::make_shared<WorldSchema>();
-  schema->addSystem([](World &world) { recordFlags("system", world); });
-  schema->addSwap([](World &world) { recordFlags("swap", world); });
+  schema->addSystem([](World &world, TickBuffers & /*buffers*/) { recordFlags("system", world); });
+  schema->addSwap([](World &world, TickBuffers & /*buffers*/) { recordFlags("swap", world); });
   schema->addResolver("watch", [](World &world) { recordFlags("resolver", world); });
   schema->addFinisher([](World &world) { recordFlags("finisher", world); });
   schema->addCommand<Look>();

@@ -44,10 +44,11 @@ void visitFields(Visitor &visitor, PlacedEntry<Entry> &entry) {
 template <typename Entry> struct FieldSlot {
   EntityKey Source = NULL_KEY;
   std::vector<PlacedEntry<Entry>> Entries;
-  // The positions of Entries ordered by place, made on the slot's first sample. Derived from
-  // Entries, which nothing changes in place, and never visited, so saves, hashes, and comparisons
-  // never see it.
-  mutable std::optional<std::vector<uint32_t>> ByPlace = std::nullopt;
+  // The positions of Entries ordered by place, made on the slot's first sample when Ordered is
+  // false. Derived from Entries, which nothing changes in place, and never visited, so saves,
+  // hashes, and comparisons never see it.
+  mutable std::vector<uint32_t> ByPlace;
+  mutable bool Ordered = false;
 };
 
 template <typename Visitor, typename Entry>
@@ -61,36 +62,44 @@ inline bool placeBefore(const Place &a, const Place &b) {
   return a.Carrier != b.Carrier ? a.Carrier < b.Carrier : a.Distance < b.Distance;
 }
 
-// The positions of the items whose place's distance is not NaN, each once, ordered by carrier key,
-// then distance, then position. Items are field entries or kept entries.
-template <typename Item> std::vector<uint32_t> orderItemsByPlace(std::span<const Item> items) {
-  std::vector<uint32_t> order;
-  order.reserve(items.size());
+// Fills order, which it clears first, with the positions of the items whose place's distance is
+// not NaN, each once, ordered by carrier key, then distance, then position. Items are field entries
+// or kept entries. Allocates nothing once the order has grown.
+template <typename Item>
+void orderItemsByPlace(std::span<const Item> items, std::vector<uint32_t> &order) {
+  order.clear();
   for (uint32_t i = 0; i < items.size(); ++i) {
     // A NaN distance equals no place and lies inside no edge, and would break the ordering.
     if (!std::isnan(items[i].At.Distance)) {
       order.push_back(i);
     }
   }
-  std::ranges::stable_sort(
-      order, [items](uint32_t a, uint32_t b) { return placeBefore(items[a].At, items[b].At); });
-  return order;
+  // Positions break ties, so this gives the stable order without stable_sort's buffer.
+  std::ranges::sort(order, [items](uint32_t a, uint32_t b) {
+    if (placeBefore(items[a].At, items[b].At)) {
+      return true;
+    }
+    return !placeBefore(items[b].At, items[a].At) && a < b;
+  });
 }
 
 // The positions of the entries whose distance is not NaN, each once, ordered by carrier key, then
 // distance, then position.
 template <typename Entry>
 std::vector<uint32_t> orderByPlace(std::span<const PlacedEntry<Entry>> entries) {
-  return orderItemsByPlace(entries);
+  std::vector<uint32_t> order;
+  orderItemsByPlace(entries, order);
+  return order;
 }
 
 // The slot's entries ordered by place, as orderItemsByPlace gives them, made on the first call and
 // kept in the slot. A slot is a field slot or a kept slot.
 template <typename Slot> std::span<const uint32_t> entriesByPlace(const Slot &slot) {
-  if (!slot.ByPlace) {
-    slot.ByPlace = orderItemsByPlace(std::span(slot.Entries));
+  if (!slot.Ordered) {
+    orderItemsByPlace(std::span(slot.Entries), slot.ByPlace);
+    slot.Ordered = true;
   }
-  return *slot.ByPlace;
+  return slot.ByPlace;
 }
 
 // An entry sampled at a place, with the source that published it.
@@ -185,6 +194,9 @@ void visitFields(Visitor &visitor, ResolvedEntries<F> &resolved) {
 template <FieldDefinition F> struct SteppedEntries {
   std::vector<FieldSlot<typename F::Entry>> Readable;
   std::vector<FieldSlot<typename F::Entry>> Pending;
+  // Slots a swap took out of Readable, their lists emptied, kept so that the next publishes reuse
+  // their memory. Never visited, so walks, saves, hashes, and comparisons never see them.
+  std::vector<FieldSlot<typename F::Entry>> Retired;
 };
 
 template <typename Visitor, typename F>
@@ -230,14 +242,21 @@ template <FieldDefinition F> void emptyResolvedEntries(World &world) {
   static_cast<void>(world.getOrEmplace<SteppedEntries<F>>(key));
 }
 
-// The field's swap: makes the entries published during the tick readable, replacing the last.
-template <FieldDefinition F> void swapSteppedEntries(World &world) {
+// The field's swap: makes the entries published during the tick readable, replacing the last,
+// whose slots it keeps for the next publishes.
+template <FieldDefinition F> void swapSteppedEntries(World &world, TickBuffers & /*buffers*/) {
   auto *stepped = world.tryGet<SteppedEntries<F>>(fieldKey(F::Name));
   if (stepped == nullptr) {
     return;
   }
-  stepped->Readable = std::move(stepped->Pending);
-  stepped->Pending.clear();
+  for (FieldSlot<typename F::Entry> &slot : stepped->Readable) {
+    slot.Entries.clear();
+    slot.ByPlace.clear();
+    slot.Ordered = false;
+    stepped->Retired.push_back(std::move(slot));
+  }
+  stepped->Readable.clear();
+  stepped->Readable.swap(stepped->Pending);
 }
 
 // The field's finisher: after a resolution with a previous one to compare with, clears the
@@ -304,16 +323,19 @@ void publishResolved(World &world, EntityKey source,
     throw std::invalid_argument("source " + std::to_string(static_cast<uint64_t>(source)) +
                                 " has already published into field " + name);
   }
-  slots.insert(at, Slot{.Source = source, .Entries = std::move(entries)});
+  Slot slot;
+  slot.Source = source;
+  slot.Entries = std::move(entries);
+  slots.insert(at, std::move(slot));
 }
 
-// Gives a source's entries for this tick, readable after the swap that ends it. Systems only.
-// Throws std::logic_error when the world is not stepping or holds no stepped entries for the
+// Gives a source's entries for this tick, empty, for the system to fill. They are readable after
+// the swap that ends the tick. The list stays valid until the next publish into the field. Systems
+// only. Throws std::logic_error when the world is not stepping or holds no stepped entries for the
 // field, and std::invalid_argument for the null key or a source that has already published into
 // the field in this tick.
 template <FieldDefinition F>
-void publishStepped(World &world, EntityKey source,
-                    std::vector<PlacedEntry<typename F::Entry>> entries) {
+std::vector<PlacedEntry<typename F::Entry>> &publishStepped(World &world, EntityKey source) {
   using Slot = FieldSlot<typename F::Entry>;
   const std::string name(F::Name);
   if (!world.isStepping()) {
@@ -332,7 +354,13 @@ void publishStepped(World &world, EntityKey source,
     throw std::invalid_argument("source " + std::to_string(static_cast<uint64_t>(source)) +
                                 " has already published into field " + name + " this tick");
   }
-  slots.insert(at, Slot{.Source = source, .Entries = std::move(entries)});
+  Slot slot;
+  if (!stepped->Retired.empty()) {
+    slot = std::move(stepped->Retired.back());
+    stepped->Retired.pop_back();
+  }
+  slot.Source = source;
+  return slots.insert(at, std::move(slot))->Entries;
 }
 
 // The positions of the slot's entries at exactly the place, ascending.
@@ -443,6 +471,14 @@ template <typename Entry> struct SampleRun {
   std::vector<EdgePosition> Positions;
 };
 
+// The working lists of sampleSlotsAt: the scratch each source's lookups reuse, the run of places
+// inside one edge, and the entries at one node.
+template <typename Entry> struct SampleLists {
+  SampleScratch<Entry> Scratch;
+  SampleRun<Entry> Run;
+  std::vector<SampledEntry<Entry>> Single;
+};
+
 // Hands visit(index, entry) each entry from the slots at the run's places, one slot at a time and,
 // for each slot, the run's places in order, and empties the run: those at exactly the place, or
 // what the field's sampleEdge makes of each slot's entries gathered once for the run's edge.
@@ -490,14 +526,17 @@ void finishRun(const Network &network, std::span<const Place> places,
 // interleave, one slot at a time. Consecutive places strictly inside one edge share
 // each slot's gathered entries, so only the field's rule runs at each of them. readFor(slot)
 // gives the function reading a position of that slot.
+// This form reuses the lists it is given, so it allocates nothing once they have grown.
 template <FieldDefinition F, typename Slot, typename ReadFor, typename AtNode, typename Visit>
 void sampleSlotsAt(const Network &network, std::span<const Place> places,
-                   std::span<const Slot *const> slots, ReadFor readFor, AtNode atNode,
-                   Visit visit) {
+                   std::span<const Slot *const> slots, ReadFor readFor, AtNode atNode, Visit visit,
+                   SampleLists<typename F::Entry> &lists) {
   using Entry = typename F::Entry;
-  SampleScratch<Entry> scratch;
-  SampleRun<Entry> run;
-  std::vector<SampledEntry<Entry>> single;
+  SampleScratch<Entry> &scratch = lists.Scratch;
+  SampleRun<Entry> &run = lists.Run;
+  std::vector<SampledEntry<Entry>> &single = lists.Single;
+  run.Indices.clear();
+  run.Positions.clear();
   for (size_t index = 0; index < places.size(); ++index) {
     const std::optional<NetworkPosition> position = network.resolve(places[index]);
     if (position) {
@@ -525,18 +564,26 @@ void sampleSlotsAt(const Network &network, std::span<const Place> places,
   finishRun<F>(network, places, slots, readFor, run, scratch, visit);
 }
 
-// Each source's slot, in ascending key order: its readable stepped slot when it has one, and
-// otherwise its resolved one.
+template <FieldDefinition F, typename Slot, typename ReadFor, typename AtNode, typename Visit>
+void sampleSlotsAt(const Network &network, std::span<const Place> places,
+                   std::span<const Slot *const> slots, ReadFor readFor, AtNode atNode,
+                   Visit visit) {
+  SampleLists<typename F::Entry> lists;
+  sampleSlotsAt<F>(network, places, slots, readFor, atNode, visit, lists);
+}
+
+// Fills slots, which it clears first, with each source's slot, in ascending key order: its readable
+// stepped slot when it has one, and otherwise its resolved one.
 template <FieldDefinition F>
-std::vector<const FieldSlot<typename F::Entry> *> layeredSlots(const World &world,
-                                                               EntityKey holder) {
+void layeredSlots(const World &world, EntityKey holder,
+                  std::vector<const FieldSlot<typename F::Entry> *> &slots) {
   using Slot = FieldSlot<typename F::Entry>;
-  const std::vector<Slot> none;
+  static const std::vector<Slot> NONE;
   const auto *resolved = world.tryGet<ResolvedEntries<F>>(holder);
   const auto *stepped = world.tryGet<SteppedEntries<F>>(holder);
-  const std::vector<Slot> &fromResolved = resolved != nullptr ? resolved->Slots : none;
-  const std::vector<Slot> &fromStepped = stepped != nullptr ? stepped->Readable : none;
-  std::vector<const Slot *> slots;
+  const std::vector<Slot> &fromResolved = resolved != nullptr ? resolved->Slots : NONE;
+  const std::vector<Slot> &fromStepped = stepped != nullptr ? stepped->Readable : NONE;
+  slots.clear();
   auto r = fromResolved.begin();
   auto s = fromStepped.begin();
   while (r != fromResolved.end() || s != fromStepped.end()) {
@@ -551,6 +598,14 @@ std::vector<const FieldSlot<typename F::Entry> *> layeredSlots(const World &worl
       ++s;
     }
   }
+}
+
+// Each source's slot, in ascending key order, as the filling form gives them.
+template <FieldDefinition F>
+std::vector<const FieldSlot<typename F::Entry> *> layeredSlots(const World &world,
+                                                               EntityKey holder) {
+  std::vector<const FieldSlot<typename F::Entry> *> slots;
+  layeredSlots<F>(world, holder, slots);
   return slots;
 }
 
@@ -633,6 +688,40 @@ std::vector<SampledEntry<typename F::Entry>> sampleField(const World &world, con
     }
     return sampleSlots<F>(network, place, layeredSlots<F>(world, holder));
   }
+}
+
+// The lists sampleField reuses, and the entries it gives. Keep one to sample the same field many
+// times without allocating once its lists have grown.
+template <typename Entry> struct FieldSample {
+  std::vector<const FieldSlot<Entry> *> Slots;
+  SampleLists<Entry> Lists;
+  std::vector<SampledEntry<Entry>> Entries;
+};
+
+// Fills the sample's Entries, which it clears first, with what sampleField gives at the place.
+// Allocates nothing once the sample's lists have grown.
+template <FieldDefinition F>
+void sampleField(const World &world, const Network &network, const Place &place,
+                 FieldSample<typename F::Entry> &sample) {
+  using Entry = typename F::Entry;
+  using Slot = FieldSlot<Entry>;
+  static_assert(!KeptFieldDefinition<F>, "a kept field has no filling form of sampleField");
+  sample.Entries.clear();
+  const EntityKey holder = fieldKey(F::Name);
+  if (!world.isLive(holder)) {
+    return;
+  }
+  layeredSlots<F>(world, holder, sample.Slots);
+  sampleSlotsAt<F>(
+      network, std::span<const Place>(&place, 1), std::span<const Slot *const>(sample.Slots),
+      [](const Slot &slot) { return [&slot](uint32_t i) { return slot.Entries[i].Value; }; },
+      [&network](const Slot &slot, uint32_t node, SampleScratch<Entry> &scratch,
+                 std::vector<SampledEntry<Entry>> &sampled,
+                 auto read) { sampleSlotAtNode(network, slot, node, scratch, sampled, read); },
+      [&sample](size_t /*index*/, const SampledEntry<Entry> &entry) {
+        sample.Entries.push_back(entry);
+      },
+      sample.Lists);
 }
 
 // The field's entries at each of the places on the network, exactly as sampleField gives them at

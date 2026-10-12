@@ -185,12 +185,13 @@ DayParks makeDayParks() {
   furnish(unfurnished, guestSegmentJoining(unfurnished, PATH_IN).Key, Furnishing{});
   resolveWorld(unfurnished);
   parks.Unfurnished = saveWorld(unfurnished);
+  TickBuffers buffers;
   for (uint64_t tick = 0; tick < NOON_TICKS; ++tick) {
-    stepWorld(world);
+    stepWorld(world, buffers);
   }
   parks.Noon = saveWorld(world);
   for (uint64_t tick = NOON_TICKS; tick < EVENING_TICKS; ++tick) {
-    stepWorld(world);
+    stepWorld(world, buffers);
   }
   parks.Evening = saveWorld(world);
   return parks;

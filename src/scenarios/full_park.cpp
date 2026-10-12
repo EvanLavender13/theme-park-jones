@@ -175,8 +175,9 @@ World makeFullPark(uint64_t warmTicks) {
   resolveWorld(world);
   refuseStarvedShops(world);
   placeGuests(world);
+  TickBuffers buffers;
   for (uint64_t tick = 0; tick < warmTicks; ++tick) {
-    stepWorld(world);
+    stepWorld(world, buffers);
   }
   return world;
 }

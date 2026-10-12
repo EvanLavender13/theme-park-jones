@@ -11,6 +11,7 @@ Modules inside the sim register their component types, systems, swap functions, 
 - sim/world.h
 - sim/entity_key.h
 - sim/command_queue.h
+- sim/tick_buffers.h
 - sim/save.h
 - sim/draw.h
 - sim/sim_math.h
@@ -28,7 +29,7 @@ The world advances only through stepWorld, one fixed tick of SIM_TICK_SECONDS at
 5. The queued commands apply in submission order.
 6. Resolution runs again if a command made it pending.
 
-stepWorld(world) is the same cycle with no commands.
+Systems and swaps take the world and a TickBuffers, which holds the lists they reuse from tick to tick. stepWorld(world, commands, buffers) passes the caller's buffers to every system and swap. stepWorld(world, buffers) is the same cycle with no commands. If you step a world repeatedly, keep one TickBuffers and pass it to every cycle. A TickBuffers holds one value of each type a module asks for, made on first use and kept. It is never part of a world, so walks, hashes, saves, and copies never see it. Each system and swap clears a list before it reads it, so a world steps to the same result whatever buffers it is given. stepWorld(world, commands) and stepWorld(world) step one cycle with buffers of their own.
 
 commitCommands(world, commands) applies the queued commands in submission order and resolves, without stepping the systems, advancing World::Tick, or running the swaps. It empties the queue. The world then equals the candidate makeCandidate would have made from it with those commands, so if a cycle has just left it, it equals the world that queuing the commands for that cycle would have given. If the queue is empty and no resolution is pending, nothing changes. If a queued command's type isn't registered, it throws std::invalid_argument and changes nothing. The app uses it to apply the player's edits while the game is paused.
 
@@ -47,6 +48,8 @@ Resolvers create entities with createDerivedEntity. Its key is a pure function o
 Code reaches an entity's components through World, by key. get, tryGet, has, emplace, emplaceOrReplace, getOrEmplace, and remove each take the entity's key. If the key isn't live, tryGet gives nothing, has is false, and remove does nothing. isLive says whether a key names a live entity.
 
 keysWith<T>() lists the keys of the entities that hold T, in ascending order. If a system visits them in that order, it visits them in the same order in a copy and after a load.
+
+keysWith<T>(keys) puts the same keys in a list the caller keeps, clearing it first. forEachWith<T>(visit) calls visit(key, component) for each entity that holds T, in the same order, and visit must not add or remove a T. Neither allocates once the list has grown.
 
 If code adds a component of a type the world's schema doesn't register, emplace, emplaceOrReplace, and getOrEmplace throw WorldInvariantError in every build, and the world doesn't change. No entity ever holds such a type. In debug builds, they also throw WorldInvariantError if the key isn't live.
 
@@ -112,6 +115,8 @@ Values are written this way:
 - A vector is its elements between [ and ].
 - A struct is its fields as name=value between { and }.
 
+A component may hold a FixedList, a list with a fixed capacity, wherever it may hold a vector. Walks, saves, and loads treat it exactly as a vector. If a save holds more values than its capacity, loadWorld throws LoadError.
+
 loadWorld accepts carriage returns, blank lines, a last line with no line feed, and any number that std::from_chars reads in full. A hand-written save loads, though it may re-save with numbers spelled differently. If loadWorld meets anything else it cannot read, it throws LoadError, whose message and line() name the line. saveWorld throws std::invalid_argument for an enum value with no name.
 
 ## Determinism
@@ -121,3 +126,7 @@ The same world stepped the same number of times gives the same result, bit for b
 cmake/check_sim_symbols.cmake enforces this rule. It fails when an archive references a C runtime transcendental function, in any of its forms. When it fails, it prints the symbol and the object that references it. Exactly rounded functions such as sqrt, floor, and fmod are still allowed. It runs on tpj_sim's archive.
 
 The results also depend on the floating-point environment, which must be round-to-nearest with subnormals kept. In debug builds, constructing a World checks the constructing thread's environment. It throws WorldInvariantError if the environment is not the default.
+
+## Memory in play
+
+Once its buffers have grown, a cycle with no commands frees no memory it allocated (decision 0041). The world keeps the memory of the entities and components it removes and reuses it for those it adds. Once the park has held as many as it holds, guests arriving and leaving and seat service starting and ending allocate nothing. The allocation check in tests/checks holds a stretch of full.park's ticks to the first sentence.

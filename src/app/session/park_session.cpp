@@ -20,8 +20,9 @@ OpenedPark startingPark(const char *parkPath, uint64_t ticks) {
     opened = openParkFile(parkPath);
   }
   if (opened.Park) {
+    TickBuffers buffers;
     for (uint64_t tick = 0; tick < ticks; ++tick) {
-      stepWorld(*opened.Park);
+      stepWorld(*opened.Park, buffers);
     }
   }
   return opened;
@@ -37,12 +38,12 @@ void ParkSession::step() {
     CommandQueue alone;
     queueEdit(alone, *Restore);
     Restore.reset();
-    stepWorld(Current, alone);
+    stepWorld(Current, alone, Buffers);
     noteEdits(History, Current);
     return;
   }
   const bool edited = !Commands.empty();
-  stepWorld(Current, Commands);
+  stepWorld(Current, Commands, Buffers);
   if (edited) {
     noteEdits(History, Current);
   }

@@ -52,12 +52,11 @@ Unordered pool this milestone draws later features from.
 ## Open questions
 
 - How a kept preview gives exactly what makeCandidate gives at each tick without resolving a new world, given that resolution's finishers change state and applying an edit takes a key from the counter. kept-preview answers it, and the park world checks confirm it. If no way holds, kept-preview reports that to the user before planning further.
-- How long a warm-up the check needs, so that no buffer grows twice during the repeats. quiet-tick finds it by running the check on full.park.
 
 ## Research notes
 
 - The work steady play repeats comes from the app's frame loop, so the check covers what the player's machine actually does each frame.
-- The check fails if a heap block is both allocated and freed during repeated work. That catches temporary lists and lists rebuilt every time. A buffer may grow to a new largest size, because the new block outlives the repeats and the freed one came from before them.
+- The check fails if a heap block is both allocated and freed during repeated work. That catches temporary lists and lists rebuilt every time. A list moving to a larger block passes, since the conventions let a list grow.
 - The world's storage allocates a node for each component added. On full.park, seat service comes and goes as pieces fill and empty, so the storage must reuse its nodes.
 
 The details are in RESEARCH.md.

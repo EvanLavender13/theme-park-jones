@@ -53,6 +53,13 @@ Place midpointOf(const NetworkEdge &edge) {
 struct GuestOnStretch {
   size_t Stretch = 0;
   double Hunger = 0.0;
+  // The guest's position in ascending key order.
+  size_t Order = 0;
+};
+
+// The list stepFootfall keeps in the buffers from tick to tick.
+struct FootfallLists {
+  std::vector<GuestOnStretch> OnStretches;
 };
 
 // A kept entry carried to a stretch of the new network, as its index in edges().
@@ -78,17 +85,22 @@ KeptEntry combineCarried(std::span<const CarriedEntry> group, const Place &midpo
 
 // Moves the value of each stretch some guest stands in toward the summed hunger of the guests
 // there, and visits no other stretch.
-void stepFootfall(World &world) {
+void stepFootfall(World &world, TickBuffers &buffers) {
   const Network &network = parkNetwork(world, PathKind::Guest);
   // In ascending key order, then grouped by stretch with that order kept within each.
-  std::vector<GuestOnStretch> onStretches;
-  for (const EntityKey key : parkGuests(world)) {
-    const Guest &guest = world.get<Guest>(key);
+  std::vector<GuestOnStretch> &onStretches = buffers.get<FootfallLists>().OnStretches;
+  onStretches.clear();
+  size_t order = 0;
+  world.forEachWith<Guest>([&](EntityKey /*key*/, const Guest &guest) {
     if (const std::optional<size_t> stretch = stretchOf(network, guest.At)) {
-      onStretches.push_back({.Stretch = *stretch, .Hunger = guest.Hunger});
+      onStretches.push_back({.Stretch = *stretch, .Hunger = guest.Hunger, .Order = order});
     }
-  }
-  std::ranges::stable_sort(onStretches, {}, &GuestOnStretch::Stretch);
+    ++order;
+  });
+  // Order breaks ties, so this keeps key order within a stretch without stable_sort's buffer.
+  std::ranges::sort(onStretches, [](const GuestOnStretch &a, const GuestOnStretch &b) {
+    return a.Stretch != b.Stretch ? a.Stretch < b.Stretch : a.Order < b.Order;
+  });
   for (auto group = onStretches.begin(); group != onStretches.end();) {
     const size_t stretch = group->Stretch;
     double hunger = 0.0;

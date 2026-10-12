@@ -5,6 +5,7 @@
 #include "sim/component_store.h"
 #include "sim/entity_key.h"
 #include "sim/schema.h"
+#include "sim/tick_buffers.h"
 #include "sim/type_id.h"
 
 #include <map>
@@ -95,6 +96,12 @@ public:
   template <typename T> void remove(EntityKey key);
   // Keys of the entities that hold T, ascending.
   template <typename T> [[nodiscard]] std::vector<EntityKey> keysWith() const;
+  // The same keys, in a list the caller keeps, which it clears first. Allocates nothing once the
+  // list has grown.
+  template <typename T> void keysWith(std::vector<EntityKey> &keys) const;
+  // Calls visit(key, component) for each entity that holds T, in ascending key order. visit must
+  // not add or remove a T. Allocates nothing.
+  template <typename T, typename Visit> void forEachWith(Visit &&visit) const;
   // True when the entity is live and holds the registered type.
   [[nodiscard]] bool holds(const ComponentType &type, EntityKey key) const;
 
@@ -121,6 +128,8 @@ private:
   std::shared_ptr<const WorldSchema> Schema;
   uint64_t NextKey = 1;
   std::map<EntityKey, EntityRecord> ByKey;
+  // Nodes of destroyed entities' records, kept for later entities. Never copied, walked, or saved.
+  std::vector<std::map<EntityKey, EntityRecord>::node_type> SpareRecords;
   // One store per registered type, in registration order.
   std::vector<std::unique_ptr<ComponentStore>> Stores;
   bool ResolvePending = true;
@@ -136,7 +145,7 @@ private:
   friend uint64_t hashWorld(const World &world);
   friend void validateWorld(const World &world);
   friend void resolveWorld(World &world);
-  friend void stepWorld(World &world, CommandQueue &commands);
+  friend void stepWorld(World &world, CommandQueue &commands, TickBuffers &buffers);
   friend World makeCandidate(const World &world, const CommandQueue &commands);
   friend void commitCommands(World &world, CommandQueue &commands);
   friend std::string saveWorld(const World &world);
@@ -197,27 +206,55 @@ template <typename T> bool World::has(EntityKey key) const {
 }
 
 template <typename T, typename... Args> void World::emplace(EntityKey key, Args &&...args) {
-  storeToAdd<T>(key).Items.try_emplace(key, std::forward<Args>(args)...);
+  TypedStore<T> &store = storeToAdd<T>(key);
+  if (!store.Items.contains(key)) {
+    store.add(key, std::forward<Args>(args)...);
+  }
 }
 
 template <typename T> void World::emplaceOrReplace(EntityKey key, T value) {
-  storeToAdd<T>(key).Items.insert_or_assign(key, std::move(value));
+  TypedStore<T> &store = storeToAdd<T>(key);
+  const auto found = store.Items.find(key);
+  if (found != store.Items.end()) {
+    found->second = std::move(value);
+  } else {
+    store.add(key, std::move(value));
+  }
 }
 
 template <typename T> T &World::getOrEmplace(EntityKey key) {
   static_assert(!std::is_empty_v<T>, "getOrEmplace needs a type that holds a value");
-  return storeToAdd<T>(key).Items.try_emplace(key).first->second;
+  TypedStore<T> &store = storeToAdd<T>(key);
+  const auto found = store.Items.find(key);
+  return found != store.Items.end() ? found->second : store.add(key);
 }
 
 template <typename T> void World::remove(EntityKey key) {
   if (TypedStore<T> *store = findStore<T>()) {
-    store->Items.erase(key);
+    store->erase(key);
   }
 }
 
 template <typename T> std::vector<EntityKey> World::keysWith() const {
   const TypedStore<T> *store = findStore<T>();
   return store == nullptr ? std::vector<EntityKey>{} : store->keys();
+}
+
+template <typename T> void World::keysWith(std::vector<EntityKey> &keys) const {
+  keys.clear();
+  if (const TypedStore<T> *store = findStore<T>()) {
+    for (const auto &entry : store->Items) {
+      keys.push_back(entry.first);
+    }
+  }
+}
+
+template <typename T, typename Visit> void World::forEachWith(Visit &&visit) const {
+  if (const TypedStore<T> *store = findStore<T>()) {
+    for (const auto &[key, component] : store->Items) {
+      visit(key, component);
+    }
+  }
 }
 
 // A world equal to this one, sharing its schema, and independent of it from then on.
@@ -231,11 +268,16 @@ void validateWorld(const World &world);
 
 // Calls every registered resolver once, in registration order, and clears the pending resolution.
 void resolveWorld(World &world);
-// One cycle: resolve if pending, step the systems, advance Tick, run the swaps, apply the queued
-// commands in submission order, and resolve if pending. Empties the queue. Throws
-// std::invalid_argument, changing nothing, if a queued command's type is not registered.
-void stepWorld(World &world, CommandQueue &commands);
+// One cycle, passing the buffers to every system and swap: resolve if pending, step the systems,
+// advance Tick, run the swaps, apply the queued commands in submission order, and resolve if
+// pending. Empties the queue. Throws std::invalid_argument, changing nothing, if a queued command's
+// type is not registered.
+void stepWorld(World &world, CommandQueue &commands, TickBuffers &buffers);
 // One cycle with no commands.
+void stepWorld(World &world, TickBuffers &buffers);
+// One cycle with buffers of its own, for callers that step once.
+void stepWorld(World &world, CommandQueue &commands);
+// One cycle with no commands and buffers of its own, for callers that step once.
 void stepWorld(World &world);
 // A copy of the world with the commands applied and resolved, not stepped. The world is unchanged.
 // Throws std::invalid_argument if a command's type is not registered.

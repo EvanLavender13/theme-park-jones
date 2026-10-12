@@ -163,7 +163,7 @@ void resolveStallEntries(World &world) {
 
 // Every 5 ticks the depot makes 2 goods, and it ships all it holds, once it holds 4, to a stall
 // it draws.
-void stepDepot(World &world) {
+void stepDepot(World &world, TickBuffers & /*buffers*/) {
   const EntityKey depot = lowestKeyWith<Depot>(world);
   if (depot == NULL_KEY) {
     return;
@@ -186,12 +186,12 @@ void stepDepot(World &world) {
 
 // Each stall offers the goods it holds, and serves each visit it holds while its goods last,
 // sending the visit back to its visitor. Visits whose visitor is gone are abandoned.
-void stepStalls(World &world) {
+void stepStalls(World &world, TickBuffers & /*buffers*/) {
   for (const EntityKey stall : keysWith<Stall>(world)) {
     int64_t goods = unitsHeld<Goods>(world, stall, NULL_KEY);
-    publishStepped<StallOffer>(world, stall,
-                               {{.At = trackPlace(world, stallDistance(world, stall)),
-                                 .Value = static_cast<double>(goods)}});
+    publishStepped<StallOffer>(world, stall)
+        .push_back({.At = trackPlace(world, stallDistance(world, stall)),
+                    .Value = static_cast<double>(goods)});
     for (const FlowHolding &holding : stockOf<Visits>(world, stall)) {
       if (!world.isLive(holding.Handle)) {
         consumeUnits<Visits>(world, stall, holding.Handle, holding.Units, "abandoned");
@@ -209,7 +209,7 @@ void stepStalls(World &world) {
 // dropping its mark in its last tick if its key is even. It finishes a visit that came back, and
 // otherwise, on its turn, sends a visit to a stall it draws, weighted by the offers there. The draw
 // also depends on the visitors near it.
-void stepVisitors(World &world) {
+void stepVisitors(World &world, TickBuffers & /*buffers*/) {
   const Network *network = trackNetwork(world);
   if (network == nullptr) {
     return;
@@ -225,7 +225,8 @@ void stepVisitors(World &world) {
     } else {
       setGroundEntry<VisitorPresence>(world, key, standing, visitor.Distance);
     }
-    publishStepped<Crowd>(world, key, {{.At = trackPlace(world, visitor.Distance), .Value = 1.0}});
+    publishStepped<Crowd>(world, key)
+        .push_back({.At = trackPlace(world, visitor.Distance), .Value = 1.0});
     const int64_t returned = unitsHeld<Visits>(world, key, key);
     if (returned > 0) {
       consumeUnits<Visits>(world, key, key, returned, "done");
@@ -262,7 +263,7 @@ void stepVisitors(World &world) {
 }
 
 // Visitors retire at RETIREMENT_AGE, and every SPAWN_INTERVAL ticks one arrives at a drawn place.
-void turnOverVisitors(World &world) {
+void turnOverVisitors(World &world, TickBuffers & /*buffers*/) {
   for (const EntityKey key : keysWith<Visitor>(world)) {
     if (world.get<Visitor>(key).Age >= RETIREMENT_AGE) {
       world.destroyEntity(key);

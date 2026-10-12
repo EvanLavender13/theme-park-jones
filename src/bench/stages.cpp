@@ -123,9 +123,10 @@ std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
   World stepped = copyWorld(park);
   std::vector<int64_t> tickTimes;
   tickTimes.reserve(ticks);
+  TickBuffers buffers;
   for (uint64_t tick = 0; tick < ticks; ++tick) {
     const Clock::time_point start = Clock::now();
-    stepWorld(stepped);
+    stepWorld(stepped, buffers);
     const Clock::time_point end = Clock::now();
     tickTimes.push_back(nanosecondsBetween(start, end));
   }

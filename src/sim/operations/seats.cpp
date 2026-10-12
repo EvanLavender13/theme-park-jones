@@ -1,6 +1,7 @@
 #include "sim/operations/seats.h"
 
 #include "sim/entity_key.h"
+#include "sim/fixed_list.h"
 #include "sim/furniture/furniture.h"
 #include "sim/medium/field.h"
 #include "sim/medium/flow.h"
@@ -11,6 +12,7 @@
 #include "sim/world.h"
 
 #include <algorithm>
+#include <span>
 #include <stdint.h>
 #include <string>
 #include <utility>
@@ -32,7 +34,7 @@ void copyStocks(const World &world, EntityKey endpoint, std::vector<FlowStock> &
   }
   const auto [first, last] =
       std::ranges::equal_range(ledger->Stocks, endpoint, {}, &FlowStock::Endpoint);
-  out.assign(first, last);
+  copyGrowing(out, std::span<const FlowStock>(first, last));
 }
 
 // Publishes one offer for each seat place, at its place, from its piece, pieces in ascending key
@@ -62,7 +64,7 @@ struct SeatBuffers {
   std::vector<FlowStock> Visits;
   std::vector<FlowStock> Rests;
   // The taken seats' free ticks of a piece with no seat state.
-  std::vector<uint64_t> FreeAt;
+  FixedList<uint64_t, MOST_FURNITURE_SEATS> FreeAt;
 };
 
 // The piece's seats, as its seat offer gives them, or 0 when it has none.
@@ -84,8 +86,11 @@ void servePiece(World &world, EntityKey piece, SeatBuffers &buffers) {
   if (stored == nullptr) {
     buffers.FreeAt.clear();
   }
-  std::vector<uint64_t> &freeAt = stored != nullptr ? stored->FreeAt : buffers.FreeAt;
-  std::erase_if(freeAt, [&world](uint64_t at) { return at <= world.Tick; });
+  FixedList<uint64_t, MOST_FURNITURE_SEATS> &freeAt =
+      stored != nullptr ? stored->FreeAt : buffers.FreeAt;
+  freeAt.erase(std::remove_if(freeAt.begin(), freeAt.end(),
+                              [&world](uint64_t at) { return at <= world.Tick; }),
+               freeAt.end());
   const uint32_t seats = seatsOf(world, piece);
   for (const FlowStock &held : buffers.Visits) {
     const EntityKey guest = held.Handle;
@@ -115,12 +120,13 @@ void servePiece(World &world, EntityKey piece, SeatBuffers &buffers) {
 // piece holds a visit under its guest's key, and a guest holds its own under its own. A piece the
 // resolution after the last swap removed is skipped, and the next swap passes its stock to its
 // guests.
-void stepSeats(World &world) {
+void stepSeats(World &world, TickBuffers &tick) {
   const Ledger *ledger = ledgerOf<SeatVisits>(world);
   if (ledger == nullptr) {
     return;
   }
-  SeatBuffers buffers;
+  SeatBuffers &buffers = tick.get<SeatBuffers>();
+  buffers.Pieces.clear();
   for (const FlowStock &stock : ledger->Stocks) {
     if (stock.Handle != stock.Endpoint && isLive(world, stock.Endpoint) &&
         (buffers.Pieces.empty() || buffers.Pieces.back() != stock.Endpoint)) {

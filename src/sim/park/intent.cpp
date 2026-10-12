@@ -4,6 +4,7 @@
 #include "sim/park/internal/components.h"
 #include "sim/park/internal/layout.h"
 
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -34,8 +35,15 @@ void addParkIntent(WorldSchema &schema) {
 }
 
 std::vector<ParkEntrance> parkEntrances(const World &world) {
-  return collectIntent<EntranceIntent>(world, [](EntityKey key, const EntranceIntent &entrance) {
-    return ParkEntrance{key, entrance.At};
+  std::vector<ParkEntrance> entrances;
+  parkEntrances(world, entrances);
+  return entrances;
+}
+
+void parkEntrances(const World &world, std::vector<ParkEntrance> &entrances) {
+  entrances.clear();
+  world.forEachWith<EntranceIntent>([&entrances](EntityKey key, const EntranceIntent &entrance) {
+    entrances.push_back(ParkEntrance{key, entrance.At});
   });
 }
 
@@ -61,16 +69,29 @@ std::vector<ParkSegment> parkSegments(const World &world) {
 std::vector<ParkCorner> parkCorners(const World &world) { return cornersOf(layoutOf(world)); }
 
 std::vector<ParkBox> parkBoxes(const World &world) {
-  return collectIntent<BoxIntent>(world, [&world](EntityKey key, const BoxIntent &box) {
+  std::vector<ParkBox> boxes;
+  parkBoxes(world, boxes);
+  return boxes;
+}
+
+void parkBoxes(const World &world, std::vector<ParkBox> &boxes) {
+  boxes.clear();
+  world.forEachWith<BoxIntent>([&world, &boxes](EntityKey key, const BoxIntent &box) {
     const ShopStockIntent *stock = world.tryGet<ShopStockIntent>(key);
-    return ParkBox{key, box.Kind, box.At, stock != nullptr ? stock->Stock : ShopStock::Food};
+    boxes.push_back(
+        ParkBox{key, box.Kind, box.At, stock != nullptr ? stock->Stock : ShopStock::Food});
   });
 }
 
 OpeningHours parkHours(const World &world) {
-  const std::vector<OpeningHours> held = collectIntent<OpeningHoursIntent>(
-      world, [](EntityKey /*key*/, const OpeningHoursIntent &hours) { return hours.Hours; });
-  return held.empty() ? DEFAULT_HOURS : held.front();
+  std::optional<OpeningHours> first;
+  world.forEachWith<OpeningHoursIntent>(
+      [&first](EntityKey /*key*/, const OpeningHoursIntent &hours) {
+        if (!first) {
+          first = hours.Hours;
+        }
+      });
+  return first.value_or(DEFAULT_HOURS);
 }
 
 bool isOpenAt(const OpeningHours &hours, uint64_t second) {

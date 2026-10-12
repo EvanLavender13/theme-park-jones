@@ -54,7 +54,17 @@ World::World(std::shared_ptr<const WorldSchema> schema, uint64_t seed)
   }
 }
 
-void World::addEntity(EntityKey key) { ByKey[key] = EntityRecord{std::nullopt}; }
+void World::addEntity(EntityKey key) {
+  if (SpareRecords.empty() || ByKey.contains(key)) {
+    ByKey[key] = EntityRecord{std::nullopt};
+    return;
+  }
+  auto node = std::move(SpareRecords.back());
+  SpareRecords.pop_back();
+  node.key() = key;
+  node.mapped() = EntityRecord{std::nullopt};
+  ByKey.insert(std::move(node));
+}
 
 EntityKey World::createEntity() {
   if (WORLD_CHECKS && (Resolving || Finishing)) {
@@ -92,7 +102,11 @@ bool World::destroyEntity(EntityKey key) {
   if (found == ByKey.end()) {
     return false;
   }
-  ByKey.erase(found);
+  // As a store's spare nodes do, a full list makes room for every record, so it rarely grows.
+  if (SpareRecords.size() == SpareRecords.capacity()) {
+    SpareRecords.reserve(ByKey.size() + SpareRecords.size());
+  }
+  SpareRecords.push_back(ByKey.extract(found));
   for (const std::unique_ptr<ComponentStore> &store : Stores) {
     store->erase(key);
   }

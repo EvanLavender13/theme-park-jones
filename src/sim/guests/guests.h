@@ -266,9 +266,11 @@ double arrivalCurve(const World &world, uint64_t second);
 EntityKey addGuest(World &world, const Place &place);
 // The need curve's value at the level, clamped to [0, 1].
 double needCurve(double level);
-// Sets each option's softmax probability from the scores and returns the index the draw picks.
-// Throws std::invalid_argument for no options or a score that is not finite.
-size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options);
+// Sets each option's softmax probability from the scores and returns the index the draw picks,
+// filling weights, which it clears first, with the weights the probabilities came from. Throws
+// std::invalid_argument for no options or a score that is not finite.
+size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options,
+                   std::vector<double> &weights);
 // Registers the guest state, guest presence, the system that steps guests and admits new ones, and
 // the finisher that carries their places across each resolution, and then hungry footfall's field,
 // state, system, and finisher. The routes and operations modules' registrations come first, and

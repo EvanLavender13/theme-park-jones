@@ -43,7 +43,8 @@ struct KeptSlot {
   // The positions of Entries ordered by place, made the first time it is needed and kept as the
   // swap adds entries. Derived from Entries' places, which nothing changes, and never visited, so
   // saves, hashes, and comparisons never see it.
-  mutable std::optional<std::vector<uint32_t>> ByPlace = std::nullopt;
+  mutable std::vector<uint32_t> ByPlace;
+  mutable bool Ordered = false;
 };
 
 template <typename Visitor> void visitFields(Visitor &visitor, KeptSlot &slot) {
@@ -127,7 +128,7 @@ template <KeptFieldDefinition F> void emptyKeptEntries(World &world) {
 }
 
 // The field's swap: applies the tick's changes in the order made, then empties them.
-template <KeptFieldDefinition F> void applyKeptChanges(World &world) {
+template <KeptFieldDefinition F> void applyKeptChanges(World &world, TickBuffers & /*buffers*/) {
   KeptEntries<F> *kept = findKeptEntries<F>(world);
   if (kept == nullptr) {
     return;
@@ -135,7 +136,9 @@ template <KeptFieldDefinition F> void applyKeptChanges(World &world) {
   for (const KeptChange &change : kept->Pending) {
     auto at = std::ranges::lower_bound(kept->Slots, change.Source, {}, &KeptSlot::Source);
     if (at == kept->Slots.end() || at->Source != change.Source) {
-      at = kept->Slots.insert(at, KeptSlot{.Source = change.Source, .Entries = {}});
+      KeptSlot added;
+      added.Source = change.Source;
+      at = kept->Slots.insert(at, std::move(added));
     }
     KeptSlot &slot = *at;
     const std::span<const uint32_t> found = positionsAt(slot, change.At);
@@ -148,9 +151,10 @@ template <KeptFieldDefinition F> void applyKeptChanges(World &world) {
     const auto position = static_cast<uint32_t>(slot.Entries.size());
     slot.Entries.push_back({.At = change.At, .Value = change.Value, .Tick = world.Tick});
     // An order made is kept; one not yet made is made from the entries when next needed.
-    if (std::optional<std::vector<uint32_t>> &order = slot.ByPlace; order.has_value()) {
+    if (slot.Ordered) {
+      std::vector<uint32_t> &order = slot.ByPlace;
       const auto placeOf = [&slot](uint32_t i) -> const Place & { return slot.Entries[i].At; };
-      order->insert(std::ranges::upper_bound(*order, change.At, placeBefore, placeOf), position);
+      order.insert(std::ranges::upper_bound(order, change.At, placeBefore, placeOf), position);
     }
   }
   kept->Pending.clear();
@@ -246,7 +250,8 @@ void replaceKeptEntries(World &world, EntityKey source, std::vector<KeptEntry> e
                                   std::to_string(world.Tick));
     }
   }
-  std::vector<uint32_t> order = orderItemsByPlace(std::span<const KeptEntry>(entries));
+  std::vector<uint32_t> order;
+  orderItemsByPlace(std::span<const KeptEntry>(entries), order);
   // The order ascends, so two entries at one place are neighbours in it.
   for (size_t i = 1; i < order.size(); ++i) {
     if (!placeBefore(entries[order[i - 1]].At, entries[order[i]].At)) {
@@ -262,10 +267,13 @@ void replaceKeptEntries(World &world, EntityKey source, std::vector<KeptEntry> e
     return;
   }
   if (!held) {
-    at = kept->Slots.insert(at, KeptSlot{.Source = source, .Entries = {}});
+    KeptSlot added;
+    added.Source = source;
+    at = kept->Slots.insert(at, std::move(added));
   }
   at->Entries = std::move(entries);
   at->ByPlace = std::move(order);
+  at->Ordered = true;
 }
 
 // Appends what the field's node rule gives for the source at the node, when the source has an

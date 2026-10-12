@@ -219,8 +219,12 @@ std::vector<ParkSegment> parkSegments(const World &world);
 // Every corner, in ascending key order of its point.
 std::vector<ParkCorner> parkCorners(const World &world);
 std::vector<ParkBox> parkBoxes(const World &world);
+// As the returning forms, into a list the caller keeps, which they clear first. They allocate
+// nothing once the list has grown.
+void parkEntrances(const World &world, std::vector<ParkEntrance> &entrances);
+void parkBoxes(const World &world, std::vector<ParkBox> &boxes);
 
-// The park's opening hours, or DEFAULT_HOURS when none are set.
+// The park's opening hours, or DEFAULT_HOURS when none are set. Allocates nothing.
 OpeningHours parkHours(const World &world);
 // Whether a park with the hours is open at the second of the day: from Opening up to but not
 // including Closing, past midnight when Closing is at or before Opening, and always when the two

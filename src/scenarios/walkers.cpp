@@ -40,7 +40,7 @@ constexpr std::array<double, 3> STEPS = {-0.5, 0.0, 0.5};
 
 // Each walker picks a step by softmax over how close it would end to home, weighted by its
 // energy, then its energy relaxes toward a drawn rest.
-void stepWalkers(World &world) {
+void stepWalkers(World &world, TickBuffers & /*buffers*/) {
   for (const EntityKey key : world.keys()) {
     auto *walker = world.tryGet<Walker>(key);
     if (walker == nullptr) {
@@ -65,7 +65,7 @@ void stepWalkers(World &world) {
 }
 
 // Walkers retire at their lifetime, and every SPAWN_INTERVAL ticks one joins at a drawn position.
-void turnOverWalkers(World &world) {
+void turnOverWalkers(World &world, TickBuffers & /*buffers*/) {
   std::vector<EntityKey> retiring;
   for (const EntityKey key : world.keys()) {
     const auto *walker = world.tryGet<Walker>(key);
