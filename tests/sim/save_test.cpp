@@ -54,7 +54,7 @@ template <typename Visitor> void visitFields(Visitor &visitor, Route &route) {
 }
 
 // A state process that takes several ticks: each probe's samples fill up to four, one per tick.
-void advanceProbes(World &world) {
+void advanceProbes(World &world, TickBuffers & /*buffers*/) {
   for (const EntityKey key : world.keysWith<Probe>()) {
     Probe &probe = world.get<Probe>(key);
     probe.Level += 0.1;

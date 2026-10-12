@@ -270,12 +270,17 @@ EntityKey Network::nodeAnchor(uint32_t node) const {
 
 std::vector<uint32_t> Network::anchoredNodes(EntityKey entity) const {
   std::vector<uint32_t> nodes;
+  anchoredNodes(entity, nodes);
+  return nodes;
+}
+
+void Network::anchoredNodes(EntityKey entity, std::vector<uint32_t> &nodes) const {
+  nodes.clear();
   for (const NodeAnchor &anchor : Anchors) {
     if (anchor.Entity == entity) {
       nodes.push_back(anchor.Node);
     }
   }
-  return nodes;
 }
 
 std::optional<uint32_t> Network::firstAnchoredNode(EntityKey entity) const {

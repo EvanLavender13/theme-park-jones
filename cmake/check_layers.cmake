@@ -6,8 +6,9 @@
 #     <unit> holds no file
 #     <unit> is listed more than once
 #
-# A unit of the table is written src/<unit>, a test of module m, under tests/m, as tests/m, and a
-# file under tests/integration as tests/integration.
+# A unit of the table is written src/<unit>, and a test of module m, under tests/m, as tests/m.
+# tests/integration and tests/checks sit above every layer, and a file under either is written as
+# tests/integration or tests/checks.
 #
 # Usage: cmake -DROOT=<tree> -DLAYERS=<table> -P check_layers.cmake
 
@@ -64,8 +65,9 @@ foreach(line IN LISTS tableLines)
     endforeach()
     math(EXPR layer "${layer} + 1")
 endforeach()
-# tests/integration sits above every layer.
-set(INTEGRATION_LAYER ${layer})
+# tests/integration and tests/checks sit above every layer.
+set(TOP_LAYER ${layer})
+set(TOP_TESTS integration checks)
 
 # Sets placedLabel and placedLayer in the caller to the unit and layer of the file at path, and
 # placedHolders to every unit of the table that holds it. The label is empty for a file in no
@@ -123,9 +125,9 @@ function(place path)
         if(count GREATER 1)
             list(GET components 0 module)
             list(FIND modules "${module}" moduleIndex)
-            if(module STREQUAL "integration")
-                set(label "tests/integration")
-                set(layerOfFile ${INTEGRATION_LAYER})
+            if(module IN_LIST TOP_TESTS)
+                set(label "tests/${module}")
+                set(layerOfFile ${TOP_LAYER})
             elseif(NOT moduleIndex EQUAL -1)
                 set(label "tests/${module}")
                 list(GET moduleLayers ${moduleIndex} layerOfFile)
@@ -143,7 +145,7 @@ function(may_include fileLabel fileLayer headerLabel headerLayer)
     set(result FALSE)
     if(headerLabel STREQUAL fileLabel OR headerLayer LESS fileLayer)
         set(result TRUE)
-    elseif(fileLabel STREQUAL "tests/integration")
+    elseif(fileLabel STREQUAL "tests/integration" OR fileLabel STREQUAL "tests/checks")
         set(result TRUE)
     elseif(fileLabel MATCHES "^tests/(.+)$")
         # A module's tests may include any of the module's units and its other tests.

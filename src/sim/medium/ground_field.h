@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <concepts>
+#include <span>
 #include <stddef.h>
 #include <stdexcept>
 #include <stdint.h>
@@ -107,7 +108,7 @@ template <GroundFieldDefinition F> void emptyGroundEntries(World &world) {
 
 // The field's swap: makes the tick's changes readable, and removes dropped entries and those of
 // entities that are gone.
-template <GroundFieldDefinition F> void swapGroundEntries(World &world) {
+template <GroundFieldDefinition F> void swapGroundEntries(World &world, TickBuffers & /*buffers*/) {
   GroundEntries<F> *entries = findGroundEntries<F>(world);
   if (entries == nullptr) {
     return;
@@ -150,7 +151,7 @@ size_t groundChangeAt(World &world, GroundEntries<F> *entries, EntityKey entity)
                                 " takes no entry for the null key");
   }
   if (!entries->Changing) {
-    entries->Next.assign(entries->Readable.begin(), entries->Readable.end());
+    copyGrowing(entries->Next, std::span<const GroundEntry<typename F::Entry>>(entries->Readable));
     entries->Changing = true;
   }
   const auto at =

@@ -72,17 +72,8 @@ double curveAt(std::span<const CurvePoint> curve, double x) {
   return curve.back().Y;
 }
 
-// The keys of the entrances, ascending.
-std::vector<EntityKey> entranceKeys(const World &world) {
-  std::vector<EntityKey> keys;
-  for (const ParkEntrance &entrance : parkEntrances(world)) {
-    keys.push_back(entrance.Key);
-  }
-  return keys;
-}
-
 // The least entrance entry in the sample, ties to the lower key, or none.
-const RouteEntry *homeEntry(const RouteSample &routes, const std::vector<EntityKey> &entrances) {
+const RouteEntry *homeEntry(const RouteSample &routes, std::span<const EntityKey> entrances) {
   const RouteEntry *nearest = nullptr;
   // Sources come in ascending key order, so keeping only a strictly less distance breaks ties
   // to the lower key.
@@ -98,7 +89,7 @@ const RouteEntry *homeEntry(const RouteSample &routes, const std::vector<EntityK
 // What every guest's step reads from the park and the clock: the entrance keys ascending, heading
 // home's closing term, and whether the clock has just passed the closing or the opening time.
 struct ParkMoment {
-  std::vector<EntityKey> Entrances;
+  std::span<const EntityKey> Entrances;
   double Closing = 0.0;
   bool Closes = false;
   bool Opens = false;
@@ -122,11 +113,18 @@ double closingTerm(const OpeningHours &hours, uint64_t second) {
          static_cast<double>(CLOSING_LEAD);
 }
 
-// The park's moment at the world's tick, judged by its current hours. The clock passes a time when
-// the park is open at one tick and not the tick before, or the other way round.
-ParkMoment parkMoment(const World &world) {
+// The park's moment at the world's tick, judged by its current hours, with its entrances read into
+// the two lists, which it clears first. The clock passes a time when the park is open at one tick
+// and not the tick before, or the other way round.
+ParkMoment parkMoment(const World &world, std::vector<ParkEntrance> &entrances,
+                      std::vector<EntityKey> &keys) {
+  parkEntrances(world, entrances);
+  keys.clear();
+  for (const ParkEntrance &entrance : entrances) {
+    keys.push_back(entrance.Key);
+  }
   ParkMoment moment;
-  moment.Entrances = entranceKeys(world);
+  moment.Entrances = keys;
   const OpeningHours hours = parkHours(world);
   moment.Closing = closingTerm(hours, parkTime(world.Tick).Second);
   if (world.Tick > 0) {
@@ -229,14 +227,36 @@ std::optional<OfferEntry> needOffer(const World &world, const Network &network, 
   return offer;
 }
 
-// Lists walking reuses from guest to guest within a step, so it allocates nothing per guest once
-// they have grown.
+// The options a guest weighs where it stands, scored as a choice scores them, and each offer's
+// relief by option index, for the serving it would give.
+struct ScoredOptions {
+  std::vector<ChoiceOption> Options;
+  std::vector<double> Reliefs;
+  // The segment that lays each seat's piece by option index, and NULL_KEY for other options.
+  std::vector<EntityKey> Owners;
+};
+
+// Lists walking and choosing reuse from guest to guest and from tick to tick, so they allocate
+// nothing once they have grown.
 struct WalkLists {
   RouteAhead Route;
   std::vector<RouteStep> Steps;
   std::vector<uint64_t> Weights;
   std::vector<GroundSample<Stride>> Near;
   SeatSample Seats;
+  FieldSample<RouteEntry> Routes;
+  ScoredOptions Scored;
+  // The softmax weights of a choice, apart from the wander picks' Weights.
+  std::vector<double> ChoiceWeights;
+};
+
+// The lists stepGuests keeps in the buffers from tick to tick.
+struct GuestTickLists {
+  std::vector<EntityKey> Guests;
+  std::vector<EntityKey> Leaving;
+  std::vector<ParkEntrance> EntranceValues;
+  std::vector<EntityKey> Entrances;
+  WalkLists Walk;
 };
 
 // Whether the guest remembers the piece as full at the tick.
@@ -338,19 +358,11 @@ RouteStep pickTurn(const World &world, EntityKey key, const Network &network, ui
   if (lists.Steps.empty()) {
     return back;
   }
-  lists.Weights.assign(lists.Steps.size(), 1);
+  lists.Weights.clear();
+  lists.Weights.resize(lists.Steps.size(), 1);
   return lists.Steps[drawPick(drawKey(world, key, hashName("guest-wander"), picks++),
                               std::span<const uint64_t>(lists.Weights))];
 }
-
-// The options a guest weighs where it stands, scored as a choice scores them, and each offer's
-// relief by option index, for the serving it would give.
-struct ScoredOptions {
-  std::vector<ChoiceOption> Options;
-  std::vector<double> Reliefs;
-  // The segment that lays each seat's piece by option index, and NULL_KEY for other options.
-  std::vector<EntityKey> Owners;
-};
 
 // Appends an option for each piece the use's field, best rest seats or best meal seats, gives at
 // the guest's place, other than the pieces it remembers as full, with the piece's relief for the
@@ -404,13 +416,15 @@ ChoiceOption headHomeOption(const Guest &guest, const ParkMoment &moment) {
   return headHome;
 }
 
-// The options a guest weighs where it stands. While it carries food, they are its meal seats and
-// eating now. Otherwise they are its offers, its rest seats, carrying on, and heading home when an
-// entrance is reachable.
-ScoredOptions scoreOptions(const World &world, const Guest &guest, const Network &network,
-                           const RouteSample &routes, const ParkMoment &moment, bool carrying,
-                           WalkLists &lists) {
-  ScoredOptions scored;
+// Fills scored, which it clears first, with the options a guest weighs where it stands. While it
+// carries food, they are its meal seats and eating now. Otherwise they are its offers, its rest
+// seats, carrying on, and heading home when an entrance is reachable.
+void scoreOptions(const World &world, const Guest &guest, const Network &network,
+                  const RouteSample &routes, const ParkMoment &moment, bool carrying,
+                  WalkLists &lists, ScoredOptions &scored) {
+  scored.Options.clear();
+  scored.Reliefs.clear();
+  scored.Owners.clear();
   if (carrying) {
     appendSeatOptions(world, guest, network, SeatUse::Meal, lists, scored);
     ChoiceOption eatNow;
@@ -421,7 +435,7 @@ ScoredOptions scoreOptions(const World &world, const Guest &guest, const Network
     scored.Options.push_back(eatNow);
     scored.Reliefs.push_back(STANDING_MEAL_RELIEF);
     scored.Owners.push_back(NULL_KEY);
-    return scored;
+    return;
   }
   for (const SampledEntry<RouteEntry> &entry : routes) {
     const std::optional<uint32_t> anchor = network.firstAnchoredNode(entry.Source);
@@ -457,12 +471,11 @@ ScoredOptions scoreOptions(const World &world, const Guest &guest, const Network
   if (homeEntry(routes, moment.Entrances) != nullptr) {
     scored.Options.push_back(headHomeOption(guest, moment));
   }
-  return scored;
 }
 
-// Sets each option's softmax probability and gives the weights they came from. Throws
-// std::invalid_argument for no options or a score that is not finite.
-std::vector<double> softmaxWeights(std::span<ChoiceOption> options) {
+// Sets each option's softmax probability and fills weights, which it clears first, with the weights
+// they came from. Throws std::invalid_argument for no options or a score that is not finite.
+void softmaxWeights(std::span<ChoiceOption> options, std::vector<double> &weights) {
   if (options.empty()) {
     throw std::invalid_argument("a choice needs at least one option");
   }
@@ -475,7 +488,7 @@ std::vector<double> softmaxWeights(std::span<ChoiceOption> options) {
   }
   // Scores are shifted so the greatest weighs exactly 1: no weight overflows, and the total is at
   // least 1.
-  std::vector<double> weights;
+  weights.clear();
   double total = 0.0;
   for (const ChoiceOption &option : options) {
     weights.push_back(simExp((option.Score - greatest) / CHOICE_TEMPERATURE));
@@ -484,7 +497,6 @@ std::vector<double> softmaxWeights(std::span<ChoiceOption> options) {
   for (size_t i = 0; i < options.size(); ++i) {
     options[i].Probability = weights[i] / total;
   }
-  return weights;
 }
 
 // The rest relief the piece's seat offer gives, or 0 when it offers none.
@@ -497,11 +509,13 @@ double seatRestRelief(const World &world, EntityKey piece) {
 // and takes it up. A guest that picks eating now eats its meal at once.
 void choose(World &world, EntityKey key, Guest &guest, const Network &network,
             const ParkMoment &moment, uint64_t &choices, WalkLists &lists) {
-  const RouteSample routes = sampleField<GuestRouteDistance>(world, network, guest.At);
-  ScoredOptions scored = scoreOptions(world, guest, network, routes, moment,
-                                      unitsHeld<Meals>(world, key, key) > 0, lists);
-  const size_t picked =
-      softmaxPick(drawKey(world, key, hashName("guest-choice"), choices++), scored.Options);
+  sampleField<GuestRouteDistance>(world, network, guest.At, lists.Routes);
+  const RouteSample &routes = lists.Routes.Entries;
+  ScoredOptions &scored = lists.Scored;
+  scoreOptions(world, guest, network, routes, moment, unitsHeld<Meals>(world, key, key) > 0, lists,
+               scored);
+  const size_t picked = softmaxPick(drawKey(world, key, hashName("guest-choice"), choices++),
+                                    scored.Options, lists.ChoiceWeights);
   const ChoiceOption &option = scored.Options[picked];
   guest.Target = NULL_KEY;
   guest.TargetOwner = NULL_KEY;
@@ -561,7 +575,7 @@ struct Heading {
 };
 
 Heading headingOf(const World &world, Guest &guest, const Network &network,
-                  const std::vector<EntityKey> &entrances, WalkLists &lists) {
+                  std::span<const EntityKey> entrances, WalkLists &lists) {
   Heading heading;
   if (guest.Activity == GuestActivity::HeadingToSeat) {
     heading.Seat = seatEntryAt(world, network, guest.At, seatUseOf(guest), guest.Target, lists);
@@ -691,7 +705,7 @@ Pass walkPass(Guest &guest, EntityKey key, const GuestGround &ground, uint32_t g
 // wandering on from its first wander step with its turn.
 void traceGuestRoute(const World &world, const Guest &guest, const Network &network,
                      const NetworkPosition &position, const Heading &heading,
-                     const std::vector<EntityKey> &entrances, WalkLists &lists) {
+                     std::span<const EntityKey> entrances, WalkLists &lists) {
   RouteAhead &route = lists.Route;
   if (heading.Seat) {
     traceSeatRoute(world, network, guest.At, heading.Seat->Next, seatUseOf(guest), guest.Target,
@@ -864,21 +878,22 @@ double guestDraw(const World &world, EntityKey guest, const char *purpose, uint6
   return drawUniform(drawKey(world, guest, hashName(purpose), index));
 }
 
-// Each entrance with a guest connector admits a guest through addGuest when its draw for the tick
-// falls below the chance of an arrival in a tick at arrivalCurve's rate.
-void admitGuests(World &world, const Network &network) {
+// Each entrance with a guest connector, in ascending key order, admits a guest through addGuest at
+// its lowest anchored node when its draw for the tick falls below the chance of an arrival in a
+// tick at arrivalCurve's rate.
+void admitGuests(World &world, const Network &network, std::span<const EntityKey> entrances) {
   const double rate = arrivalCurve(world, parkTime(world.Tick).Second);
   if (rate <= 0.0) {
     return;
   }
   const double chance = rate * static_cast<double>(GAME_SECONDS_PER_TICK) / HOUR_SECONDS;
-  for (const ParkEntrance &entrance : parkEntrances(world)) {
-    const std::vector<uint32_t> anchored = network.anchoredNodes(entrance.Key);
-    if (anchored.empty()) {
+  for (const EntityKey entrance : entrances) {
+    const std::optional<uint32_t> anchored = network.firstAnchoredNode(entrance);
+    if (!anchored) {
       continue;
     }
-    if (drawUniform(drawKey(world, entrance.Key, ARRIVAL_PURPOSE, 0)) < chance) {
-      addGuest(world, network.nodePlace(anchored.front()));
+    if (drawUniform(drawKey(world, entrance, ARRIVAL_PURPOSE, 0)) < chance) {
+      addGuest(world, network.nodePlace(*anchored));
     }
   }
 }
@@ -980,14 +995,17 @@ void tire(Guest &guest, GroundPoint stood) {
 // Those that walked out of an entrance are counted in the departure tally by their reason, which
 // starts again from 0 in the tick the clock passes the opening time. Then the entrances admit new
 // ones.
-void stepGuests(World &world) {
+void stepGuests(World &world, TickBuffers &buffers) {
+  GuestTickLists &kept = buffers.get<GuestTickLists>();
   const Network &network = parkNetwork(world, PathKind::Guest);
   const GuestGround &ground = guestGround(world);
-  const ParkMoment moment = parkMoment(world);
-  std::vector<EntityKey> leaving;
+  const ParkMoment moment = parkMoment(world, kept.EntranceValues, kept.Entrances);
+  std::vector<EntityKey> &leaving = kept.Leaving;
+  leaving.clear();
   std::array<uint64_t, HOME_REASONS.size()> walkedOut{};
-  WalkLists lists;
-  for (const EntityKey key : parkGuests(world)) {
+  WalkLists &lists = kept.Walk;
+  world.keysWith<Guest>(kept.Guests);
+  for (const EntityKey key : kept.Guests) {
     Guest &guest = world.get<Guest>(key);
     if (!network.resolve(guest.At)) {
       leaving.push_back(key);
@@ -1034,7 +1052,7 @@ void stepGuests(World &world) {
     dropGroundEntry<GuestPresence>(world, key);
     world.destroyEntity(key);
   }
-  admitGuests(world, network);
+  admitGuests(world, network, moment.Entrances);
 }
 
 // Turns the guest about when the carrier its place is carried to runs against the one it stood
@@ -1215,9 +1233,13 @@ std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, Entity
   }
   const RouteSample routes = sampleField<GuestRouteDistance>(world, network, state->At);
   WalkLists lists;
-  ScoredOptions scored = scoreOptions(world, *state, network, routes, parkMoment(world),
-                                      unitsHeld<Meals>(world, guest, guest) > 0, lists);
-  softmaxWeights(scored.Options);
+  std::vector<ParkEntrance> entrances;
+  std::vector<EntityKey> keys;
+  ScoredOptions scored;
+  scoreOptions(world, *state, network, routes, parkMoment(world, entrances, keys),
+               unitsHeld<Meals>(world, guest, guest) > 0, lists, scored);
+  std::vector<double> weights;
+  softmaxWeights(scored.Options, weights);
   return std::move(scored.Options);
 }
 
@@ -1271,8 +1293,9 @@ double arrivalCurve(const World &world, uint64_t second) {
   return curveAt(ARRIVAL_CURVE, static_cast<double>(passed) / static_cast<double>(span));
 }
 
-size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options) {
-  const std::vector<double> weights = softmaxWeights(options);
+size_t softmaxPick(const DrawKey &key, std::span<ChoiceOption> options,
+                   std::vector<double> &weights) {
+  softmaxWeights(options, weights);
   return drawPick(key, std::span<const double>(weights));
 }
 

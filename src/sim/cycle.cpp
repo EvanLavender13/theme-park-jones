@@ -53,7 +53,7 @@ void resolveWorld(World &world) {
   world.ResolvePending = false;
 }
 
-void stepWorld(World &world, CommandQueue &commands) {
+void stepWorld(World &world, CommandQueue &commands, TickBuffers &buffers) {
   TPJ_PROFILE_ZONE();
   requireRegistered(world, commands);
   if (world.ResolvePending) {
@@ -61,8 +61,8 @@ void stepWorld(World &world, CommandQueue &commands) {
   }
   world.Stepping = true;
   try {
-    for (const WorldFunction step : world.schema().systems()) {
-      step(world);
+    for (const StepFunction step : world.schema().systems()) {
+      step(world, buffers);
     }
   } catch (...) {
     world.Stepping = false;
@@ -70,8 +70,8 @@ void stepWorld(World &world, CommandQueue &commands) {
   }
   world.Stepping = false;
   ++world.Tick;
-  for (const WorldFunction swap : world.schema().swaps()) {
-    swap(world);
+  for (const StepFunction swap : world.schema().swaps()) {
+    swap(world, buffers);
   }
   if (!commands.empty()) {
     applyCommands(world, commands);
@@ -83,9 +83,19 @@ void stepWorld(World &world, CommandQueue &commands) {
   }
 }
 
-void stepWorld(World &world) {
+void stepWorld(World &world, TickBuffers &buffers) {
   CommandQueue none;
-  stepWorld(world, none);
+  stepWorld(world, none, buffers);
+}
+
+void stepWorld(World &world, CommandQueue &commands) {
+  TickBuffers buffers;
+  stepWorld(world, commands, buffers);
+}
+
+void stepWorld(World &world) {
+  TickBuffers buffers;
+  stepWorld(world, buffers);
 }
 
 World makeCandidate(const World &world, const CommandQueue &commands) {

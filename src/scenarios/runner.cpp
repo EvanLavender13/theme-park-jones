@@ -64,12 +64,13 @@ void runScenario(const Scenario &scenario, uint64_t ticks, std::ostream &out) {
   scenario.Populate(world);
   resolveWorld(world);
   writeHashLine(out, "scenario", scenario.Name, world);
+  CommandQueue commands;
+  TickBuffers buffers;
   for (uint64_t i = 0; i < ticks; ++i) {
-    CommandQueue commands;
     if (scenario.QueueCommands != nullptr) {
       scenario.QueueCommands(world, commands);
     }
-    stepWorld(world, commands);
+    stepWorld(world, commands, buffers);
     writeHashLine(out, "scenario", scenario.Name, world);
   }
 }
@@ -79,8 +80,9 @@ void runSave(std::string_view label, std::shared_ptr<const WorldSchema> schema,
   World world = loadWorld(std::move(schema), text);
   resolveWorld(world);
   writeHashLine(out, "file", label, world);
+  TickBuffers buffers;
   for (uint64_t i = 0; i < ticks; ++i) {
-    stepWorld(world);
+    stepWorld(world, buffers);
     writeHashLine(out, "file", label, world);
   }
 }

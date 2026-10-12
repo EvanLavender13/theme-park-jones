@@ -23,6 +23,7 @@
 namespace tpj {
 
 class World;
+class TickBuffers;
 
 // What a registered component is to the save (principle 1): intent the player authored, state the
 // simulation changes, or data derived from those, which is never saved.
@@ -73,9 +74,14 @@ struct ComponentType {
   std::unique_ptr<ComponentStore> (*MakeStore)() = nullptr;
 };
 
-// A system, swap function, or resolver. It takes only the world, so it can hold no state outside
-// it (principle 10).
+// A resolver or finisher. It takes only the world, so it can hold no state outside it (principle
+// 10).
 using WorldFunction = void (*)(World &world);
+
+// A system or swap. It takes the world and the stepping caller's buffers. It holds no state outside
+// the world, and clears a buffer before reading it, so its result depends on the world alone
+// (principle 10).
+using StepFunction = void (*)(World &world, TickBuffers &buffers);
 
 struct ResolverType {
   std::string Name;
@@ -103,8 +109,8 @@ public:
   // for a malformed or repeated name, or for a type already registered.
   template <typename T> void addComponent(std::string_view name, DataKind kind);
   // Every cycle steps the systems, and runs the swap functions, in registration order.
-  void addSystem(WorldFunction step);
-  void addSwap(WorldFunction swap);
+  void addSystem(StepFunction step);
+  void addSwap(StepFunction swap);
   // Registers a resolver after the resolvers it depends on. Throws std::invalid_argument for a
   // malformed or repeated name, or for a dependency that is not an already registered resolver.
   void addResolver(std::string_view name, WorldFunction resolve,
@@ -120,8 +126,8 @@ public:
   // True when both list the same names, kinds, and types in the same order.
   [[nodiscard]] bool sameComponents(const WorldSchema &other) const;
 
-  [[nodiscard]] const std::vector<WorldFunction> &systems() const { return Systems; }
-  [[nodiscard]] const std::vector<WorldFunction> &swaps() const { return Swaps; }
+  [[nodiscard]] const std::vector<StepFunction> &systems() const { return Systems; }
+  [[nodiscard]] const std::vector<StepFunction> &swaps() const { return Swaps; }
   [[nodiscard]] const std::vector<ResolverType> &resolvers() const { return Resolvers; }
   [[nodiscard]] const std::vector<WorldFunction> &finishers() const { return Finishers; }
   [[nodiscard]] const std::vector<CommandType> &commands() const { return Commands; }
@@ -133,15 +139,16 @@ private:
 
   std::vector<ComponentType> Components;
   std::unordered_map<TypeId, size_t> IndexById;
-  std::vector<WorldFunction> Systems;
-  std::vector<WorldFunction> Swaps;
+  std::vector<StepFunction> Systems;
+  std::vector<StepFunction> Swaps;
   std::vector<ResolverType> Resolvers;
   std::vector<WorldFunction> Finishers;
   std::vector<CommandType> Commands;
 };
 
-// Field types: bool, integers, double, EntityKey, enums, std::vector of a field type (not bool),
-// and structs with their own visitFields. Integers are widened to 64 bits, doubles pass their bits.
+// Field types: bool, integers, double, EntityKey, enums, std::vector or FixedList of a field type
+// (not bool), and structs with their own visitFields. Integers are widened to 64 bits, doubles pass
+// their bits.
 template <typename Field> void emitField(WordSink &sink, std::string_view name, Field &value) {
   if constexpr (std::is_same_v<Field, bool>) {
     sink.word(value ? 1U : 0U);
@@ -156,7 +163,7 @@ template <typename Field> void emitField(WordSink &sink, std::string_view name, 
     sink.word(static_cast<uint64_t>(static_cast<int64_t>(value)));
   } else if constexpr (std::is_integral_v<Field>) {
     sink.word(static_cast<uint64_t>(value));
-  } else if constexpr (IsVector<Field>::value) {
+  } else if constexpr (IsList<Field>::value) {
     sink.word(value.size());
     // A std::vector<bool> element is a proxy, which falls through to the static_assert below.
     for (auto &&element : value) {
@@ -189,7 +196,30 @@ public:
     }
     return result;
   }
-  void erase(EntityKey key) override { Items.erase(key); }
+  // Removes the key's component, keeping its node for a later add. When Spare is full, it makes
+  // room for every node the store holds, so it grows again only after every component held then
+  // has been removed.
+  void erase(EntityKey key) override {
+    auto node = Items.extract(key);
+    if (node) {
+      if (Spare.size() == Spare.capacity()) {
+        Spare.reserve(Items.size() + Spare.size() + 1);
+      }
+      Spare.push_back(std::move(node));
+    }
+  }
+  // Adds the component under the key, which must hold none, made from the arguments. Reuses a
+  // removed component's node when there is one.
+  template <typename... Args> T &add(EntityKey key, Args &&...args) {
+    if (Spare.empty()) {
+      return Items.try_emplace(key, std::forward<Args>(args)...).first->second;
+    }
+    auto node = std::move(Spare.back());
+    Spare.pop_back();
+    node.key() = key;
+    node.mapped() = T(std::forward<Args>(args)...);
+    return Items.insert(std::move(node)).position->second;
+  }
   void emit(EntityKey key, WordSink &sink) const override {
     if constexpr (!std::is_empty_v<T>) {
       // visitFields takes a mutable reference so that one function can also decode. Emitting only
@@ -215,6 +245,8 @@ public:
   }
 
   std::map<EntityKey, T> Items;
+  // Nodes of removed components, kept for later adds. Never copied, walked, or saved.
+  std::vector<typename std::map<EntityKey, T>::node_type> Spare;
 };
 
 template <typename T> void WorldSchema::addComponent(std::string_view name, DataKind kind) {

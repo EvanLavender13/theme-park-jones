@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -134,11 +135,12 @@ void ledgerConsume(const World &world, Ledger &ledger, std::string_view kind, En
   addConsumed(ledger, hashName(cause), units);
 }
 
-void ledgerSwap(const World &world, Ledger &ledger) {
+void ledgerSwap(const World &world, Ledger &ledger, LedgerSwapLists &lists) {
   // Packets are ordered by arrival first, so the due ones lead.
   const auto due = std::ranges::find_if(
       ledger.Packets, [&world](const FlowPacket &packet) { return packet.Arrival > world.Tick; });
-  const std::vector<FlowPacket> arriving(ledger.Packets.begin(), due);
+  std::vector<FlowPacket> &arriving = lists.Arriving;
+  copyGrowing(arriving, std::span<const FlowPacket>(ledger.Packets.begin(), due));
   ledger.Packets.erase(ledger.Packets.begin(), due);
   for (const FlowPacket &packet : arriving) {
     if (isLive(world, packet.To)) {
@@ -155,7 +157,8 @@ void ledgerSwap(const World &world, Ledger &ledger) {
       addConsumed(ledger, hashName(UNDELIVERABLE_CAUSE), packet.Units);
     }
   }
-  std::vector<FlowStock> orphaned;
+  std::vector<FlowStock> &orphaned = lists.Orphaned;
+  orphaned.clear();
   std::erase_if(ledger.Stocks, [&world, &orphaned](const FlowStock &stock) {
     if (isLive(world, stock.Endpoint)) {
       return false;

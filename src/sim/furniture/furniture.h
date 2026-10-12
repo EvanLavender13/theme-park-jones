@@ -35,6 +35,12 @@ constexpr uint32_t furnitureSeats(FurnitureKind kind) {
   return 2;
 }
 
+// The most seats any furniture kind has.
+inline constexpr uint32_t MOST_FURNITURE_SEATS = 4;
+static_assert(furnitureSeats(FurnitureKind::Bench) <= MOST_FURNITURE_SEATS &&
+                  furnitureSeats(FurnitureKind::Table) <= MOST_FURNITURE_SEATS,
+              "MOST_FURNITURE_SEATS holds every kind's seats");
+
 // The pose of the seat at the index of a piece of the kind standing at the pose. A bench's two
 // seats lie side by side along it, 0.45 m either side of its middle, facing as the bench faces. A
 // table's four seats lie in pairs on its two long sides, 0.45 m either side of its middle along it

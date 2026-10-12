@@ -68,6 +68,12 @@ using KeyCounts = std::vector<std::pair<EntityKey, int64_t>>;
 
 // The lists stepFacilities reuses for every facility, so its loop allocates only while they grow.
 struct FacilityBuffers {
+  // Every box, ascending, read once a tick.
+  std::vector<ParkBox> Boxes;
+  // A copy of the stock entries being consumed from.
+  std::vector<FlowStock> Held;
+  // The nodes an offer's entries are placed at.
+  std::vector<uint32_t> Nodes;
   // The facility's queue as it is being served.
   std::vector<EntityKey> Queue;
   // The tick each of its taken places frees, ascending.
@@ -98,23 +104,26 @@ template <typename K> std::span<const FlowStock> stocksAt(const World &world, En
 bool isLive(const World &world, EntityKey key) { return key != NULL_KEY && world.isLive(key); }
 
 // Consumes, as abandoned, every serving of the kind the facility holds, which only a gone guest's
-// returned serving gives it, and every visit it holds for a guest that is gone.
-template <BoxKind K> void abandonGone(World &world, EntityKey facility) {
+// returned serving gives it, and every visit it holds for a guest that is gone. Copies each stock
+// into held before consuming from it.
+template <BoxKind K>
+void abandonGone(World &world, EntityKey facility, std::vector<FlowStock> &held) {
   using Visits = typename FacilityKinds<K>::Visits;
   using Servings = typename FacilityKinds<K>::Servings;
-  if (!stocksAt<Servings>(world, facility).empty()) {
-    for (const FlowHolding &held : stockOf<Servings>(world, facility)) {
-      consumeUnits<Servings>(world, facility, held.Handle, held.Units, ABANDONED_CAUSE);
-    }
+  const std::span<const FlowStock> servings = stocksAt<Servings>(world, facility);
+  copyGrowing(held, servings);
+  for (const FlowStock &serving : held) {
+    consumeUnits<Servings>(world, facility, serving.Handle, serving.Units, ABANDONED_CAUSE);
   }
   const std::span<const FlowStock> visits = stocksAt<Visits>(world, facility);
-  if (std::ranges::all_of(visits,
-                          [&world](const FlowStock &held) { return isLive(world, held.Handle); })) {
+  if (std::ranges::all_of(
+          visits, [&world](const FlowStock &visit) { return isLive(world, visit.Handle); })) {
     return;
   }
-  for (const FlowHolding &held : stockOf<Visits>(world, facility)) {
-    if (!isLive(world, held.Handle)) {
-      consumeUnits<Visits>(world, facility, held.Handle, held.Units, ABANDONED_CAUSE);
+  copyGrowing(held, visits);
+  for (const FlowStock &visit : held) {
+    if (!isLive(world, visit.Handle)) {
+      consumeUnits<Visits>(world, facility, visit.Handle, visit.Units, ABANDONED_CAUSE);
     }
   }
 }
@@ -172,13 +181,13 @@ template <BoxKind K> void seatGuests(World &world, EntityKey facility, FacilityB
 // ticks in the buffers.
 template <BoxKind K>
 void serveFacility(World &world, EntityKey facility, FacilityBuffers &buffers) {
-  abandonGone<K>(world, facility);
+  abandonGone<K>(world, facility, buffers.Held);
   FacilityService *stored = world.tryGet<FacilityService>(facility);
   reconcileQueue<K>(world, facility, stored, buffers);
   seatGuests<K>(world, facility, buffers);
   if (stored != nullptr) {
-    stored->Queue.assign(buffers.Queue.begin(), buffers.Queue.end());
-    stored->FreeAt.assign(buffers.FreeAt.begin(), buffers.FreeAt.end());
+    copyGrowing(stored->Queue, std::span<const EntityKey>(buffers.Queue));
+    copyGrowing(stored->FreeAt, std::span<const uint64_t>(buffers.FreeAt));
   } else if (!buffers.Queue.empty() || !buffers.FreeAt.empty()) {
     world.emplace<FacilityService>(facility, FacilityService{buffers.Queue, buffers.FreeAt});
   }
@@ -209,19 +218,21 @@ uint64_t facilityWait(uint64_t from, std::span<const uint64_t> freeAt, size_t qu
 // Publishes the facility's offer for the next visit to arrive, from its queue and taken places
 // after serving.
 template <BoxKind K>
-void publishFacilityOffer(World &world, EntityKey facility, const FacilityBuffers &buffers) {
+void publishFacilityOffer(World &world, EntityKey facility, FacilityBuffers &buffers) {
   using Kinds = FacilityKinds<K>;
   const OfferEntry offer{.Relief = Kinds::Relief,
                          .Wait = facilityWait(world.Tick + 1, buffers.FreeAt, buffers.Queue.size(),
                                               Kinds::Places, Kinds::Time),
                          .Supplied = true};
-  publishStepped<typename Kinds::Offer>(world, facility, offerEntries(world, facility, offer));
+  fillOfferEntries(world, facility, offer, buffers.Nodes,
+                   publishStepped<typename Kinds::Offer>(world, facility));
 }
 
 // Each bench and toilet block, in ascending key order, serves its guests and publishes its offer.
-void stepFacilities(World &world) {
-  FacilityBuffers buffers;
-  for (const ParkBox &box : parkBoxes(world)) {
+void stepFacilities(World &world, TickBuffers &tick) {
+  FacilityBuffers &buffers = tick.get<FacilityBuffers>();
+  parkBoxes(world, buffers.Boxes);
+  for (const ParkBox &box : buffers.Boxes) {
     forEachFacility([&]<BoxKind K>() {
       if (box.Kind == K) {
         serveFacility<K>(world, box.Key, buffers);

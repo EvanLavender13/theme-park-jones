@@ -29,7 +29,7 @@ The constructor refuses a malformed network with std::invalid_argument, which me
 
 The order carriers and anchors are given in makes no difference. The default network is empty.
 
-edges() lists the edges, each with its carrier, its two end nodes, and their distances along the carrier. nodePlace, nodeAnchor, anchoredNodes, firstAnchoredNode, stopPlaces, and edgeEnds give what a holder needs to know about a node or an entity: where a node is, which entity anchors it, which nodes an entity anchors, and which places and edge ends meet a node. If a node is not below the node count, it is refused with std::out_of_range. firstAnchoredNode allocates nothing, so callers on the tick path can use it.
+edges() lists the edges, each with its carrier, its two end nodes, and their distances along the carrier. nodePlace, nodeAnchor, anchoredNodes, firstAnchoredNode, stopPlaces, and edgeEnds give what a holder needs to know about a node or an entity: where a node is, which entity anchors it, which nodes an entity anchors, and which places and edge ends meet a node. If a node is not below the node count, it is refused with std::out_of_range. firstAnchoredNode allocates nothing, so callers on the tick path can use it. anchoredNodes can also put an entity's nodes in a list the caller keeps, clearing it first, and then allocates nothing once the list has grown.
 
 ## Places
 
@@ -54,13 +54,17 @@ A field is a set of entries published at places. Each entry is attributed to the
 A field has two layers:
 
 - Resolved entries are derived data (principle 1). Resolvers publish them with publishResolved, and they are readable at once. Every resolution replaces every source's entries in full.
-- Stepped entries are state that saves hold. Systems publish them with publishStepped while stepping. They become readable at the swap that ends the tick, and replace that field's previous stepped entries.
+- Stepped entries are state that saves hold. Systems publish them with publishStepped while stepping, which gives the source's entries for the tick as an empty list for the system to fill. They become readable at the swap that ends the tick, and replace that field's previous stepped entries.
 
 Each source publishes into a field at most once per resolution or per tick. If a publish comes outside the right stage, from the null source, or twice, it is refused and changes nothing.
 
 If a source has readable stepped entries, sampling reads them; otherwise it reads the source's resolved entries. When a command changes a source's resolved entries, its stepped entries are cleared, so the tick after a command sees every change the command made. The owner may give the field a rule, keepStepped, that keeps a source's stepped entries through that change. If the rule keeps them, they stay as they were. Loading the save of a resolved world and resolving gives the world saved.
 
+A field keeps the memory of the stepped entries each swap replaces, and the next tick's publishes reuse it. Once a field has held as many entries as it holds, publishing every tick allocates nothing.
+
 sampleField gives a field's entries at a place on a network, each with its source, in ascending source order. At a node it gives each source's entries at that node, whatever carrier they name. Strictly inside an edge it gives the entries at exactly that place, or what the field's sampleEdge makes of the entries at and between the edge's ends. If a place doesn't resolve, sampling it gives nothing, which is a legitimate sample (principle 2). fieldValue sums a scalar field's entries at a place, giving 0.0 where it has none. sampleResolvedField samples the resolved layer alone. It is for resolvers, since stepped entries are state. resolvedSlots gives every source's resolved entries of a field, sources ascending. It is for resolvers that derive entries from all of another field's.
+
+sampleField can also fill a FieldSample that the caller keeps. The sample holds sampleField's working lists and the entries it gives, and it allocates nothing once those lists have grown. Kept fields have no such form.
 
 sampleFieldAtPlaces gives a field's entries at each of a list of places in one call. They are exactly the entries sampleField gives at each place. It hands the visitor one entry at a time, with its place's index. Each place's entries arrive in the order sampleField gives them, but along one edge the places' entries interleave, one source at a time. A place with no entries gets no call. This holds for every field, resolved, stepped, or kept, with or without its own rules. sampleFieldAtPlaces keeps nothing after it returns.
 
@@ -100,6 +104,6 @@ When a system acts for an endpoint, it changes only that endpoint's stock, while
 
 Operations for different endpoints give the same ledger in any order. If an operation runs outside stepping, names an unregistered kind, or asks for more units than the stock holds, it is refused and changes nothing.
 
-At each tick's swap, each packet that is due arrives in its destination's stock. Units sent with delay d arrive exactly d ticks later, and no sooner. If a packet's destination is gone, the packet returns to its sender after the same delay. If units have nowhere to go, they are consumed with the cause undeliverable. When an endpoint is gone, its stock passes to each handle's entity, or is consumed with the cause discarded. The ledger never reads a network, so nothing done to the networks changes when a packet arrives.
+At each tick's swap, each packet that is due arrives in its destination's stock. Units sent with delay d arrive exactly d ticks later, and no sooner. If a packet's destination is gone, the packet returns to its sender after the same delay. If units have nowhere to go, they are consumed with the cause undeliverable. When an endpoint is gone, its stock passes to each handle's entity, or is consumed with the cause discarded. The ledger never reads a network, so nothing done to the networks changes when a packet arrives. A swap allocates nothing once the lists it keeps have grown, apart from a ledger's own lists growing.
 
 The queries take the world by const reference. For a kind with no ledger, they give 0 or an empty list. unitsHeld, stockOf, and addressedTo give an endpoint's holdings and the units in stocks and packets addressed to an entity. unitsInTransit, unitsCreated, and unitsConsumed give the kind's totals. unitsConsumed with a cause gives the units consumed with that cause.

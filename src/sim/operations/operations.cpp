@@ -42,13 +42,15 @@ std::vector<EntityKey> boxKeys(const World &world, BoxKind kind) {
 // resolver must.
 enum class Layers : uint8_t { Both, Resolved };
 
+// A source and its route length.
+using RouteLength = std::pair<EntityKey, double>;
+
 // Each backstage route distance entry sampled from the layers at the nodes anchored to the entity,
 // as its source and distance, in node order and then source order.
-std::vector<std::pair<EntityKey, double>> routeLengthsAt(const World &world, EntityKey at,
-                                                         Layers layers) {
+std::vector<RouteLength> routeLengthsAt(const World &world, EntityKey at, Layers layers) {
   using Field = RouteDistance<PathKind::Backstage>;
   const Network &network = parkNetwork(world, PathKind::Backstage);
-  std::vector<std::pair<EntityKey, double>> lengths;
+  std::vector<RouteLength> lengths;
   for (const uint32_t node : network.anchoredNodes(at)) {
     const Place place = network.nodePlace(node);
     for (const SampledEntry<RouteEntry> &entry :
@@ -60,11 +62,32 @@ std::vector<std::pair<EntityKey, double>> routeLengthsAt(const World &world, Ent
   return lengths;
 }
 
-// The least route length from the nodes anchored to at to the source, sampled from the layers.
-std::optional<double> routeLengthBy(const World &world, EntityKey at, EntityKey source,
-                                    Layers layers) {
+// The lists that reading route lengths at the tick reuses, and the lengths it gives.
+struct RouteLengths {
+  std::vector<uint32_t> Nodes;
+  FieldSample<RouteEntry> Sample;
+  std::vector<RouteLength> Lengths;
+};
+
+// Fills lengths.Lengths with what routeLengthsAt gives from both layers. Allocates nothing once the
+// lists have grown.
+void routeLengthsAt(const World &world, EntityKey at, RouteLengths &lengths) {
+  using Field = RouteDistance<PathKind::Backstage>;
+  const Network &network = parkNetwork(world, PathKind::Backstage);
+  lengths.Lengths.clear();
+  network.anchoredNodes(at, lengths.Nodes);
+  for (const uint32_t node : lengths.Nodes) {
+    sampleField<Field>(world, network, network.nodePlace(node), lengths.Sample);
+    for (const SampledEntry<RouteEntry> &entry : lengths.Sample.Entries) {
+      lengths.Lengths.emplace_back(entry.Source, entry.Value.Distance);
+    }
+  }
+}
+
+// The least of the lengths to the source.
+std::optional<double> leastLengthTo(std::span<const RouteLength> lengths, EntityKey source) {
   std::optional<double> least;
-  for (const auto &[from, distance] : routeLengthsAt(world, at, layers)) {
+  for (const auto &[from, distance] : lengths) {
     if (from == source && (!least || distance < *least)) {
       least = distance;
     }
@@ -72,11 +95,24 @@ std::optional<double> routeLengthBy(const World &world, EntityKey at, EntityKey 
   return least;
 }
 
-// The shop's nearest depot, sampled from the layers.
-std::optional<DepotRoute> depotRouteBy(const World &world, EntityKey shop, Layers layers) {
-  const std::vector<EntityKey> depots = boxKeys(world, BoxKind::Depot);
+// The least route length from the nodes anchored to at to the source, sampled from the layers.
+std::optional<double> routeLengthBy(const World &world, EntityKey at, EntityKey source,
+                                    Layers layers) {
+  return leastLengthTo(routeLengthsAt(world, at, layers), source);
+}
+
+// The same from both layers, read through the kept lists.
+std::optional<double> routeLengthBy(const World &world, EntityKey at, EntityKey source,
+                                    RouteLengths &lengths) {
+  routeLengthsAt(world, at, lengths);
+  return leastLengthTo(lengths.Lengths, source);
+}
+
+// The nearest of the depots, whose keys are ascending, among the lengths.
+std::optional<DepotRoute> nearestDepotIn(std::span<const RouteLength> lengths,
+                                         std::span<const EntityKey> depots) {
   std::optional<DepotRoute> nearest;
-  for (const auto &[source, distance] : routeLengthsAt(world, shop, layers)) {
+  for (const auto &[source, distance] : lengths) {
     if (!std::ranges::binary_search(depots, source)) {
       continue;
     }
@@ -86,6 +122,19 @@ std::optional<DepotRoute> depotRouteBy(const World &world, EntityKey shop, Layer
     }
   }
   return nearest;
+}
+
+// The shop's nearest depot, sampled from the layers.
+std::optional<DepotRoute> depotRouteBy(const World &world, EntityKey shop, Layers layers) {
+  return nearestDepotIn(routeLengthsAt(world, shop, layers), boxKeys(world, BoxKind::Depot));
+}
+
+// The same from both layers, among the depots, whose keys are ascending, read through the kept
+// lists.
+std::optional<DepotRoute> depotRouteBy(const World &world, EntityKey shop,
+                                       std::span<const EntityKey> depots, RouteLengths &lengths) {
+  routeLengthsAt(world, shop, lengths);
+  return nearestDepotIn(lengths.Lengths, depots);
 }
 
 constexpr size_t goodIndex(Good good) { return static_cast<size_t>(good); }
@@ -146,8 +195,14 @@ using KeyCounts = std::vector<std::pair<EntityKey, int64_t>>;
 
 // The lists stepShops reuses for every shop, so its loop allocates only while they grow.
 struct ShopBuffers {
+  // Every box, ascending, read once a tick.
+  std::vector<ParkBox> Boxes;
   // The depot boxes' keys, ascending, the same for every shop in a tick.
   std::vector<EntityKey> Depots;
+  // A copy of the stock entries being consumed from.
+  std::vector<FlowStock> Held;
+  // The nodes an offer's entries are placed at.
+  std::vector<uint32_t> Nodes;
   // The shop's queue as it is being served.
   std::vector<EntityKey> Queue;
   // The good of each entry of Queue.
@@ -242,24 +297,27 @@ void orderSupplies(World &world, EntityKey shop, const std::optional<DepotRoute>
 bool isLive(const World &world, EntityKey key) { return key != NULL_KEY && world.isLive(key); }
 
 // Consumes, as abandoned, every serving the shop holds, which only a gone guest's returned serving
-// gives it, and every visit it holds for a guest that is gone.
-void abandonGone(World &world, EntityKey shop) {
+// gives it, and every visit it holds for a guest that is gone. Copies each stock into held before
+// consuming from it.
+void abandonGone(World &world, EntityKey shop, std::vector<FlowStock> &held) {
   forEachGood([&]<Good G>() {
     using Kinds = GoodKinds<G>;
-    if (!stocksAt<typename Kinds::Servings>(world, shop).empty()) {
-      for (const FlowHolding &held : stockOf<typename Kinds::Servings>(world, shop)) {
-        consumeUnits<typename Kinds::Servings>(world, shop, held.Handle, held.Units,
-                                               ABANDONED_CAUSE);
-      }
+    const std::span<const FlowStock> servings = stocksAt<typename Kinds::Servings>(world, shop);
+    copyGrowing(held, servings);
+    for (const FlowStock &serving : held) {
+      consumeUnits<typename Kinds::Servings>(world, shop, serving.Handle, serving.Units,
+                                             ABANDONED_CAUSE);
     }
     const std::span<const FlowStock> visits = stocksAt<typename Kinds::Visits>(world, shop);
     if (std::ranges::all_of(
-            visits, [&world](const FlowStock &held) { return isLive(world, held.Handle); })) {
+            visits, [&world](const FlowStock &visit) { return isLive(world, visit.Handle); })) {
       return;
     }
-    for (const FlowHolding &held : stockOf<typename Kinds::Visits>(world, shop)) {
-      if (!isLive(world, held.Handle)) {
-        consumeUnits<typename Kinds::Visits>(world, shop, held.Handle, held.Units, ABANDONED_CAUSE);
+    copyGrowing(held, visits);
+    for (const FlowStock &visit : held) {
+      if (!isLive(world, visit.Handle)) {
+        consumeUnits<typename Kinds::Visits>(world, shop, visit.Handle, visit.Units,
+                                             ABANDONED_CAUSE);
       }
     }
   });
@@ -415,7 +473,7 @@ void serveFront(World &world, EntityKey shop, std::vector<EntityKey> &queue, uin
 // first tick at which the shop may serve again.
 uint64_t serveGuests(World &world, EntityKey shop, ShopStock stock, bool supplied,
                      ShopBuffers &buffers) {
-  abandonGone(world, shop);
+  abandonGone(world, shop, buffers.Held);
   ShopService *stored = world.tryGet<ShopService>(shop);
   static const std::vector<EntityKey> NONE;
   reconcileQueue(world, shop, stored == nullptr ? NONE : stored->Queue, buffers);
@@ -427,7 +485,7 @@ uint64_t serveGuests(World &world, EntityKey shop, ShopStock stock, bool supplie
   uint64_t freeAt = stored == nullptr ? 0 : stored->FreeAt;
   serveFront(world, shop, buffers.Queue, freeAt);
   if (stored != nullptr) {
-    stored->Queue.assign(buffers.Queue.begin(), buffers.Queue.end());
+    copyGrowing(stored->Queue, std::span<const EntityKey>(buffers.Queue));
     stored->FreeAt = freeAt;
   } else if (!buffers.Queue.empty() || freeAt != 0) {
     world.emplace<ShopService>(shop, ShopService{buffers.Queue, freeAt});
@@ -439,6 +497,12 @@ uint64_t serveGuests(World &world, EntityKey shop, ShopStock stock, bool supplie
 // length, the one it ships by, or by the shop's when the depot has none.
 uint64_t deliveryDelay(const World &world, const DepotRoute &route, EntityKey shop, Layers layers) {
   return shipmentDelay(routeLengthBy(world, route.Depot, shop, layers).value_or(route.Distance));
+}
+
+// The same from both layers, read through the kept lists.
+uint64_t deliveryDelay(const World &world, const DepotRoute &route, EntityKey shop,
+                       RouteLengths &lengths) {
+  return shipmentDelay(routeLengthBy(world, route.Depot, shop, lengths).value_or(route.Distance));
 }
 
 // Publishes the offer of the good of each shop box that sells it, as for a shop that has not
@@ -516,9 +580,8 @@ std::optional<uint64_t> nextWait(uint64_t from, uint64_t freeAt, const std::vect
 // Fills the buffers' supply with what the shop can serve each good from after serving, ordering
 // each good it sells by the route's depot.
 void fillSupply(const World &world, EntityKey shop, ShopStock stock, const DepotRoute &route,
-                ShopBuffers &buffers) {
-  const uint64_t ordered =
-      world.Tick + ORDER_DELAY + deliveryDelay(world, route, shop, Layers::Both);
+                RouteLengths &lengths, ShopBuffers &buffers) {
+  const uint64_t ordered = world.Tick + ORDER_DELAY + deliveryDelay(world, route, shop, lengths);
   forEachGood([&]<Good G>() {
     using Stock = typename GoodKinds<G>::Stock;
     GoodSupply &good = buffers.Supply[goodIndex(G)];
@@ -543,7 +606,7 @@ void fillSupply(const World &world, EntityKey shop, ShopStock stock, const Depot
 // from. A shop that doesn't sell the good and neither holds nor awaits any publishes nothing.
 template <Good G>
 void publishOffer(World &world, EntityKey shop, bool selling, uint64_t freeAt, bool supplied,
-                  const ShopBuffers &buffers) {
+                  ShopBuffers &buffers) {
   if (!selling && positionOf<G>(world, shop, buffers.Depots) == 0) {
     return;
   }
@@ -554,27 +617,37 @@ void publishOffer(World &world, EntityKey shop, bool selling, uint64_t freeAt, b
       offer = OfferEntry{.Relief = GoodKinds<G>::Relief, .Wait = *wait, .Supplied = true};
     }
   }
-  publishStepped<typename GoodKinds<G>::Offer>(world, shop, offerEntries(world, shop, offer));
+  fillOfferEntries(world, shop, offer, buffers.Nodes,
+                   publishStepped<typename GoodKinds<G>::Offer>(world, shop));
 }
 
 // Each shop, in ascending key order, orders each good, serves its guests, and publishes its offer
 // of each good.
-void stepShops(World &world) {
-  ShopBuffers buffers;
-  buffers.Depots = boxKeys(world, BoxKind::Depot);
-  for (const ParkBox &box : parkBoxes(world)) {
+void stepShops(World &world, TickBuffers &tick) {
+  ShopBuffers &buffers = tick.get<ShopBuffers>();
+  // Shared with stepDepots, which samples the same field, so that its lists have grown whenever a
+  // depot ships.
+  RouteLengths &lengths = tick.get<RouteLengths>();
+  parkBoxes(world, buffers.Boxes);
+  buffers.Depots.clear();
+  for (const ParkBox &box : buffers.Boxes) {
+    if (box.Kind == BoxKind::Depot) {
+      buffers.Depots.push_back(box.Key);
+    }
+  }
+  for (const ParkBox &box : buffers.Boxes) {
     if (box.Kind != BoxKind::Shop) {
       continue;
     }
     const EntityKey shop = box.Key;
-    const std::optional<DepotRoute> route = nearestDepot(world, shop);
+    const std::optional<DepotRoute> route = depotRouteBy(world, shop, buffers.Depots, lengths);
     forEachGood([&]<Good G>() {
       orderSupplies<G>(world, shop, route, sells(box.Stock, G), buffers.Depots);
     });
     const uint64_t freeAt = serveGuests(world, shop, box.Stock, route.has_value(), buffers);
     fillQueueGoods(world, shop, buffers);
     if (route) {
-      fillSupply(world, shop, box.Stock, *route, buffers);
+      fillSupply(world, shop, box.Stock, *route, lengths, buffers);
     }
     forEachGood([&]<Good G>() {
       publishOffer<G>(world, shop, sells(box.Stock, G), freeAt, route.has_value(), buffers);
@@ -585,20 +658,34 @@ void stepShops(World &world) {
 // The depot takes back the supplies of the good returned to it, and then, for each shop it holds
 // orders for the good for, cancels them when the shop is gone, sends them back when it cannot
 // reach the shop, and otherwise ships as many supplies over the backstage route.
+// The lists stepDepots reuses from tick to tick.
+struct DepotBuffers {
+  std::vector<ParkBox> Boxes;
+  // The shop and depot boxes' keys, ascending.
+  std::vector<EntityKey> Shops;
+  std::vector<EntityKey> Depots;
+  // A copy of the stock entries being consumed from.
+  std::vector<FlowStock> Held;
+};
+
 template <Good G>
-void shipGood(World &world, EntityKey depot, const std::vector<EntityKey> &shops) {
+void shipGood(World &world, EntityKey depot, DepotBuffers &buffers, RouteLengths &lengths) {
   using Orders = typename GoodKinds<G>::Orders;
   using Stock = typename GoodKinds<G>::Stock;
-  for (const FlowHolding &held : stockOf<Stock>(world, depot)) {
+  const std::span<const FlowStock> returned = stocksAt<Stock>(world, depot);
+  copyGrowing(buffers.Held, returned);
+  for (const FlowStock &held : buffers.Held) {
     consumeUnits<Stock>(world, depot, held.Handle, held.Units, RETURNED_CAUSE);
   }
-  for (const FlowHolding &held : stockOf<Orders>(world, depot)) {
+  const std::span<const FlowStock> orders = stocksAt<Orders>(world, depot);
+  copyGrowing(buffers.Held, orders);
+  for (const FlowStock &held : buffers.Held) {
     const EntityKey shop = held.Handle;
-    if (!std::ranges::binary_search(shops, shop)) {
+    if (!std::ranges::binary_search(buffers.Shops, shop)) {
       consumeUnits<Orders>(world, depot, shop, held.Units, CANCELLED_CAUSE);
       continue;
     }
-    const std::optional<double> length = supplyRouteLength(world, depot, shop);
+    const std::optional<double> length = routeLengthBy(world, depot, shop, lengths);
     if (!length) {
       sendUnits<Orders>(world, depot, shop, shop, held.Units, ORDER_DELAY);
       continue;
@@ -610,10 +697,21 @@ void shipGood(World &world, EntityKey depot, const std::vector<EntityKey> &shops
 }
 
 // Each depot, in ascending key order, handles each good's returned supplies and orders.
-void stepDepots(World &world) {
-  const std::vector<EntityKey> shops = boxKeys(world, BoxKind::Shop);
-  for (const EntityKey depot : boxKeys(world, BoxKind::Depot)) {
-    forEachGood([&]<Good G>() { shipGood<G>(world, depot, shops); });
+void stepDepots(World &world, TickBuffers &tick) {
+  DepotBuffers &buffers = tick.get<DepotBuffers>();
+  RouteLengths &lengths = tick.get<RouteLengths>();
+  parkBoxes(world, buffers.Boxes);
+  buffers.Shops.clear();
+  buffers.Depots.clear();
+  for (const ParkBox &box : buffers.Boxes) {
+    if (box.Kind == BoxKind::Shop) {
+      buffers.Shops.push_back(box.Key);
+    } else if (box.Kind == BoxKind::Depot) {
+      buffers.Depots.push_back(box.Key);
+    }
+  }
+  for (const EntityKey depot : buffers.Depots) {
+    forEachGood([&]<Good G>() { shipGood<G>(world, depot, buffers, lengths); });
   }
 }
 
@@ -621,12 +719,19 @@ void stepDepots(World &world) {
 
 std::vector<PlacedEntry<OfferEntry>> offerEntries(const World &world, EntityKey source,
                                                   const OfferEntry &offer) {
-  const Network &network = parkNetwork(world, PathKind::Guest);
+  std::vector<uint32_t> nodes;
   std::vector<PlacedEntry<OfferEntry>> entries;
-  for (const uint32_t node : network.anchoredNodes(source)) {
+  fillOfferEntries(world, source, offer, nodes, entries);
+  return entries;
+}
+
+void fillOfferEntries(const World &world, EntityKey source, const OfferEntry &offer,
+                      std::vector<uint32_t> &nodes, std::vector<PlacedEntry<OfferEntry>> &entries) {
+  const Network &network = parkNetwork(world, PathKind::Guest);
+  network.anchoredNodes(source, nodes);
+  for (const uint32_t node : nodes) {
     entries.push_back({network.nodePlace(node), offer});
   }
-  return entries;
 }
 
 std::optional<double> supplyRouteLength(const World &world, EntityKey at, EntityKey source) {

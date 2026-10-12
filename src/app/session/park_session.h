@@ -77,6 +77,8 @@ private:
 
   World Current;
   CommandQueue Commands;
+  // The lists the world's systems reuse from tick to tick. Replacing the world keeps them.
+  TickBuffers Buffers;
   EditHistory History;
   // The undo's or redo's command waiting to apply alone in the next cycle.
   std::optional<RestoreIntent> Restore;

@@ -73,7 +73,7 @@ void resolveGlows(World &world) {
 }
 
 // Adds this tick's glow to the tally, summed in key order.
-void tallyGlows(World &world) {
+void tallyGlows(World &world, TickBuffers & /*buffers*/) {
   double sum = 0.0;
   uint64_t count = 0;
   Tally *tally = nullptr;

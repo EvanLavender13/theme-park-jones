@@ -135,10 +135,17 @@ void ledgerSend(const World &world, Ledger &ledger, std::string_view kind, Entit
                 EntityKey to, EntityKey handle, int64_t units, uint32_t delay);
 void ledgerConsume(const World &world, Ledger &ledger, std::string_view kind, EntityKey endpoint,
                    EntityKey handle, int64_t units, std::string_view cause);
+// The lists ledgerSwap reuses.
+struct LedgerSwapLists {
+  std::vector<FlowPacket> Arriving;
+  std::vector<FlowStock> Orphaned;
+};
+
 // Delivers due packets, returns those whose destination is gone, and consumes as undeliverable
 // those whose sender is gone too. Then moves each gone endpoint's units to its handle's entity, or
 // consumes them as discarded when that is gone as well. World::Tick is the tick just reached.
-void ledgerSwap(const World &world, Ledger &ledger);
+// Allocates nothing once the lists, and the ledger's own, have grown.
+void ledgerSwap(const World &world, Ledger &ledger, LedgerSwapLists &lists);
 [[nodiscard]] int64_t ledgerHeld(const Ledger &ledger, EntityKey endpoint, EntityKey handle);
 
 // The kind's ledger, or null when the world holds none.
@@ -167,10 +174,10 @@ template <FlowDefinition K> void ensureLedger(World &world) {
 }
 
 // The kind's swap: delivers, returns, and settles, as ledgerSwap does.
-template <FlowDefinition K> void swapLedger(World &world) {
+template <FlowDefinition K> void swapLedger(World &world, TickBuffers &buffers) {
   auto *ledger = world.tryGet<FlowLedger<K>>(flowKey(K::Name));
   if (ledger != nullptr) {
-    ledgerSwap(world, *ledger);
+    ledgerSwap(world, *ledger, buffers.get<LedgerSwapLists>());
   }
 }
 

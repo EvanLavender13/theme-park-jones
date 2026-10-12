@@ -87,7 +87,7 @@ void sendVisit(World &world, EntityKey key, const ParkBox &target, uint32_t walk
 // Guests whose visit has come back consume it, with any serving, and leave, and guests out of
 // patience leave without it. Then a guest may appear and send a visit to a drawn shop, bench, or
 // toilet block.
-void stepGuests(World &world) {
+void stepGuests(World &world, TickBuffers & /*buffers*/) {
   std::vector<EntityKey> leaving;
   for (const EntityKey key : world.keys()) {
     const auto *guest = world.tryGet<SyntheticGuest>(key);
