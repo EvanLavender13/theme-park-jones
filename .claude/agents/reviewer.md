@@ -34,6 +34,8 @@ Use this severity scale. Drop anything below Minor.
 - Major: The artifact will produce wrong or unsafe results unless changed. Fixable later but cheaper now.
 - Minor: The artifact has a real defect with a concrete failure case, but the failure is bounded.
 
+If the artifact breaks a rule that docs/conventions.md states, rate it Blocker. For example, it allocates inside a loop in per-tick or per-frame code, or it declares a private helper in a public header. The rules are written down so that such a break never ships, so don't treat its failure as bounded.
+
 ## What to drop
 
 - Style, naming, formatting, organization preferences.
