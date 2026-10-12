@@ -11,6 +11,7 @@ sim/park
 sim/routes
 sim/furniture
 sim/operations
+sim/wayfinding
 sim/guests
 sim/park_schema
 tools render legible scenarios
