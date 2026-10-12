@@ -1,7 +1,7 @@
 tpj-park 1
 seed 1
 tick 0
-next-key 20
+next-key 19
 
 [entrance]
 1 x=0 z=126.5 facing-x=0 facing-z=-1
@@ -24,10 +24,16 @@ next-key 20
 15 kind=shop x=-44 z=94.5 facing-x=0 facing-z=1
 16 kind=shop x=44 z=94.5 facing-x=0 facing-z=1
 17 kind=depot x=0 z=84 facing-x=0 facing-z=1
-18 kind=bench x=3 z=113 facing-x=-1 facing-z=0
 
 [shop-stock]
 16 stock=drink
+
+[left-furnishing]
+10 kind=table spacing=6
+
+[right-furnishing]
+7 kind=bench spacing=10
+10 kind=table spacing=6
 
 [guest-route-distance-stepped]
 15522747434582363266 readable=[] pending=[]

@@ -21,6 +21,7 @@ In tests/sim/park_world_checks_test.cpp:
 
 - Remove seat-service from UNHELD_TYPES. noon.park holds a guest seated at furniture, so a checked world holds a piece's seat service.
 - Add a chosen edit of tests/parks/noon.park to noonChosenEdits, made from noon.park opened and stepped one cycle, as the other noon.park edits are. It places a shop with AddBox at Pose{6.5, 106.8, -1.0, 0.0}, facing the guest path in from the entrance from the side its benches stand on. Require that the world accepts it. Require that the pieces of furniture on that guest segment differ between the world before and the candidate, by key or pose, so the edit displaces benches. Like the other chosen edits, its candidate must equal the world that queuing it for that cycle gives and the world that committing it while paused gives, and it joins the two-runs checks.
+  Spec decision from the test pass: the edit finds the path in as the guest segment with the path point nearest the park's first entrance. day.park's layout keeps that segment the path in.
 - Keep furnishingLongestGuestSegmentUnderGuests. noon.park now holds furniture of its own, so reword its comment: the edit lays furniture again under guests in the park, some of them seated or heading to a piece.
 
 ## Medium

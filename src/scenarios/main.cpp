@@ -4,7 +4,7 @@
 //   tpj_scenarios [--ticks N] [FILE...]
 //   tpj_scenarios --compare LEFT RIGHT
 //   tpj_scenarios --slice-parks FED WARM CUT MAIN_STREET WARM_MAIN_STREET FACILITIES STOCKED DAY
-//     NO_TOILET NOON EVENING
+//     NO_TOILET NOON EVENING FAR_TABLES UNFURNISHED
 //
 // Timings go to standard error, so they never enter the compared output.
 
@@ -124,11 +124,11 @@ bool writeFile(const std::string &path, const std::string &text) {
 // Makes the slice's parks from FED's text and writes them to FED, WARM, and CUT, makes the warm
 // main street park from MAIN_STREET's text and writes it to WARM_MAIN_STREET, and makes the stocked
 // park from FACILITIES' text and writes it to STOCKED, and makes the day parks and writes them to
-// DAY, NO_TOILET, NOON, and EVENING. It never writes MAIN_STREET or FACILITIES, and it writes no
-// file until every park is made.
+// DAY, NO_TOILET, NOON, EVENING, FAR_TABLES, and UNFURNISHED. It never writes MAIN_STREET or
+// FACILITIES, and it writes no file until every park is made.
 int writeSliceParks(const std::vector<std::string> &arguments) {
-  if (arguments.size() != 12) {
-    std::cerr << "tpj_scenarios: --slice-parks takes eleven files\n";
+  if (arguments.size() != 14) {
+    std::cerr << "tpj_scenarios: --slice-parks takes thirteen files\n";
     return 1;
   }
   const std::string &fedPath = arguments[1];
@@ -179,15 +179,18 @@ int writeSliceParks(const std::vector<std::string> &arguments) {
   }
   // Each written park's text, by its argument's index. MAIN_STREET and FACILITIES, at 4 and 6, are
   // only read.
-  const std::array<std::pair<size_t, const std::string *>, 9> written{{{1, &parks.Fed},
-                                                                       {2, &parks.Warm},
-                                                                       {3, &parks.Cut},
-                                                                       {5, &warmMainStreet},
-                                                                       {7, &stocked},
-                                                                       {8, &dayParks.Day},
-                                                                       {9, &dayParks.NoToilet},
-                                                                       {10, &dayParks.Noon},
-                                                                       {11, &dayParks.Evening}}};
+  const std::array<std::pair<size_t, const std::string *>, 11> written{
+      {{1, &parks.Fed},
+       {2, &parks.Warm},
+       {3, &parks.Cut},
+       {5, &warmMainStreet},
+       {7, &stocked},
+       {8, &dayParks.Day},
+       {9, &dayParks.NoToilet},
+       {10, &dayParks.Noon},
+       {11, &dayParks.Evening},
+       {12, &dayParks.FarTables},
+       {13, &dayParks.Unfurnished}}};
   for (const auto &[index, text] : written) {
     const std::string &path = arguments[index];
     if (!writeFile(path, *text)) {

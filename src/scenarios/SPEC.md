@@ -36,18 +36,22 @@ tpj_scenarios --compare left right exits with status 0 when the two outputs hold
 
 ## Slice parks
 
-tpj_scenarios --slice-parks fed warm cut main-street warm-main-street facilities stocked day no-toilet noon evening makes the boxes-and-tubes slice's parks from fed, the good-paths slice's warm park from main-street, the day-at-the-park slice's stocked park from facilities, and the day-at-the-park slice's four day parks:
+tpj_scenarios --slice-parks fed warm cut main-street warm-main-street facilities stocked day no-toilet noon evening far-tables unfurnished makes the boxes-and-tubes slice's parks from fed, the good-paths slice's warm park from main-street, the day-at-the-park slice's stocked park from facilities, the day-at-the-park slice's four day parks, and the somewhere-to-sit slice's two parks that move or remove day's furniture:
 
 - warm is the park after WARM_TICKS cycles, which is long enough for a guest to be waiting at the shop and a shipment to be in transit.
 - cut is warm one cycle later with its backstage paths deleted, so the shop's supply is gone from the first tick.
 - warm-main-street is main-street after MAIN_STREET_WARM_TICKS cycles, long enough that guests fill the park in every activity, some of them heading home. main-street and facilities are read and never written.
 - stocked is facilities with a depot and a backstage path added, stepped until a shop holds food, a shop holds drink, and drink is still on its way. If that doesn't happen within STOCKED_LIMIT_TICKS cycles, it fails.
-- day is a T of guest path from the entrance, with a food shop at one end of the T's arms and a drink shop at the other, a bench and a toilet block on the path in, and a depot on a backstage path behind both shops. Every facility is within about an hour's walk of the entrance. It has the default hours and starts at 9:00 with no guests. If a shop would be starved, or a shop, bench, or toilet block would have no guest connector, it fails.
-- no-toilet is day with its toilet block deleted. Every other entity keeps its key, so both parks admit the same guests with the same needs.
+- day is a T of guest path from the entrance, with a food shop at one end of the T's arms and a drink shop at the other, a toilet block on the path in, and a depot on a backstage path behind both shops. The arm toward the food shop has tables on both sides, every 6 m, and the path in has benches every 10 m on the side away from the toilet block. Every facility is within about an hour's walk of the entrance. It has the default hours and starts at 9:00 with no guests. If a shop would be starved, or a shop or toilet block would have no guest connector, it fails.
+- no-toilet is day with its toilet block deleted.
 - noon is day at 12:00, NOON_TICKS cycles later, with guests in the park.
 - evening is day at 20:30, EVENING_TICKS cycles later, so a run of tpj_scenarios's default 3,000 ticks crosses closing.
+- far-tables is day with the arm toward the food shop unfurnished and the arm toward the drink shop holding tables on both sides, every 6 m. The benches stay.
+- unfurnished is day with no furniture.
 
-tests/parks/fed.park, warm.park, cut.park, warm-main-street.park, stocked.park, day.park, no-toilet.park, noon.park, and evening.park are its output. If the simulation's rules change, running it again remakes the parks under the new rules. It writes no file when it fails.
+In no-toilet, far-tables, and unfurnished, each box, path, and entrance keeps the key it has in day, so all four parks admit the same guests with the same needs.
+
+tests/parks/fed.park, warm.park, cut.park, warm-main-street.park, stocked.park, day.park, no-toilet.park, noon.park, evening.park, far-tables.park, and unfurnished.park are its output. If the simulation's rules change, running it again remakes the parks under the new rules. It writes no file when it fails.
 
 ## The full park
 
