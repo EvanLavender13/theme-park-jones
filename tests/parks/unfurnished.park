@@ -1,0 +1,108 @@
+tpj-park 1
+seed 1
+tick 0
+next-key 19
+
+[entrance]
+1 x=0 z=126.5 facing-x=0 facing-z=-1
+
+[path-point]
+5 x=0 z=123 radius=0 taper=0
+6 x=0 z=100 radius=0 taper=0
+8 x=-50 z=100 radius=0 taper=0
+9 x=50 z=100 radius=0 taper=0
+12 x=-50 z=90 radius=0 taper=0
+13 x=50 z=90 radius=0 taper=0
+
+[path-segment]
+7 kind=guest from=5 to=6 width=3 from-edge-radius=0 to-edge-radius=0
+10 kind=guest from=8 to=6 width=3 from-edge-radius=0 to-edge-radius=0
+11 kind=guest from=6 to=9 width=3 from-edge-radius=0 to-edge-radius=0
+14 kind=backstage from=12 to=13 width=2 from-edge-radius=0 to-edge-radius=0
+
+[box]
+15 kind=shop x=-44 z=94.5 facing-x=0 facing-z=1
+16 kind=shop x=44 z=94.5 facing-x=0 facing-z=1
+17 kind=depot x=0 z=84 facing-x=0 facing-z=1
+18 kind=toilet-block x=-5 z=113 facing-x=1 facing-z=0
+
+[shop-stock]
+16 stock=drink
+
+[guest-route-distance-stepped]
+15522747434582363266 readable=[] pending=[]
+
+[backstage-route-distance-stepped]
+17417963796302803443 readable=[] pending=[]
+
+[seat-places-stepped]
+16151389547449749861 readable=[] pending=[]
+
+[supply-orders-ledger]
+10571414569661708045 packets=[] stocks=[] created=0 consumed=[]
+
+[supplies-ledger]
+9330130345797689738 packets=[] stocks=[] created=0 consumed=[]
+
+[guest-visits-ledger]
+9337894828722460918 packets=[] stocks=[] created=0 consumed=[]
+
+[meals-ledger]
+10950212800986056559 packets=[] stocks=[] created=0 consumed=[]
+
+[drink-orders-ledger]
+12663080230615486240 packets=[] stocks=[] created=0 consumed=[]
+
+[drink-supplies-ledger]
+13571596180258588924 packets=[] stocks=[] created=0 consumed=[]
+
+[drink-visits-ledger]
+13165361045825805991 packets=[] stocks=[] created=0 consumed=[]
+
+[drinks-ledger]
+14728062094526143130 packets=[] stocks=[] created=0 consumed=[]
+
+[food-offer-stepped]
+12622604716256766672 readable=[] pending=[]
+
+[drink-offer-stepped]
+13200854312701984269 readable=[] pending=[]
+
+[rest-visits-ledger]
+14970986777255639189 packets=[] stocks=[] created=0 consumed=[]
+
+[rests-ledger]
+11905221482445396353 packets=[] stocks=[] created=0 consumed=[]
+
+[toilet-visits-ledger]
+16408065207052359706 packets=[] stocks=[] created=0 consumed=[]
+
+[toilet-uses-ledger]
+10989479341532649621 packets=[] stocks=[] created=0 consumed=[]
+
+[rest-offer-stepped]
+13155209037867564218 readable=[] pending=[]
+
+[toilet-offer-stepped]
+16819719754544225480 readable=[] pending=[]
+
+[seat-visits-ledger]
+17070384855899578509 packets=[] stocks=[] created=0 consumed=[]
+
+[seat-offers-stepped]
+14613874420873433981 readable=[] pending=[]
+
+[best-rest-seats-stepped]
+18432772136236652292 readable=[] pending=[]
+
+[best-meal-seats-stepped]
+10675303501572075337 readable=[] pending=[]
+
+[departure-tally]
+11521130776157876789 hunger=0 thirst=0 tiredness=0 toilet=0 closing=0
+
+[guest-presence-ground]
+12974152610777186460 readable=[] next=[] changing=false
+
+[hungry-footfall-kept]
+11741940842860801778 slots=[] pending=[]

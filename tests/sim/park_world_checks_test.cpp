@@ -55,9 +55,6 @@ constexpr std::array UNHELD_TYPES{
     UnheldType{"previous-network",
                "no resolution ends holding a previous network, so no world between cycles, its "
                "copies and saves, or any candidate holds one"},
-    UnheldType{"seat-service",
-               "no park holds a guest seated at furniture until believable-guests' seated-meals "
-               "remakes the day parks with guests who sit"},
 };
 
 // A second shop beside warm.park's shop, facing the guest segments along x = 0 and backing onto
@@ -69,6 +66,10 @@ constexpr Pose SECOND_SHOP{6.5, 106.8, -1.0, 0.0};
 
 // A second toilet block in noon.park, beside the guest path in from the entrance and facing it.
 constexpr Pose SECOND_TOILET_BLOCK{5.5, 106.0, -1.0, 0.0};
+
+// A shop in noon.park on the benched side of the guest path in from the entrance, facing the path.
+// Its front, at x = 3.5, stands where the benches beside the path stand, so they yield to it.
+constexpr Pose SHOP_FACING_BENCHES{6.5, 106.8, -1.0, 0.0};
 
 struct ParkFile {
   std::string Name;
@@ -722,8 +723,8 @@ EntityKey longestGuestSegment(const World &world) {
 }
 
 // The longest guest segment takes benches on its left side and its right side while guests are in
-// the park, so the save holds a furnishing line for each side and the resolution lays furniture
-// pieces along the segment.
+// the park, so the resolution lays furniture again under guests, some of them seated or heading to
+// a piece.
 ChosenEdit furnishingLongestGuestSegmentUnderGuests(const World &before) {
   REQUIRE_FALSE(parkGuests(before).empty());
   const EntityKey segmentKey = longestGuestSegment(before);
@@ -732,8 +733,8 @@ ChosenEdit furnishingLongestGuestSegmentUnderGuests(const World &before) {
   const Furnishing bothSides{benches, benches};
   const SetFurnishing set{segmentKey, bothSides};
   REQUIRE(isAccepted(before, ParkEdit{set}));
-  // Without each side's furnishing held on the segment and pieces laid for it, the checked worlds
-  // would hold neither side's furnishing intent nor the furniture-piece type.
+  // Without each side's furnishing held on the segment and pieces laid for it, this edit would
+  // leave the world's furniture as it was.
   const World candidate = makeCandidate(before, queueOf(ParkEdit{set}));
   REQUIRE(segmentWithKey(candidate, segmentKey).Furnished == bothSides);
   REQUIRE_FALSE(parkFurniture(candidate).empty());
@@ -742,14 +743,63 @@ ChosenEdit furnishingLongestGuestSegmentUnderGuests(const World &before) {
           set};
 }
 
+// The guest segment with the path point nearest the park's first entrance: the path in.
+EntityKey guestPathInFromEntrance(const World &world) {
+  const std::vector<ParkEntrance> entrances = parkEntrances(world);
+  REQUIRE_FALSE(entrances.empty());
+  const Pose entrance = entrances.front().At;
+  EntityKey nearest = NULL_KEY;
+  double nearestDistance = 0.0;
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Kind != PathKind::Guest) {
+      continue;
+    }
+    for (const EntityKey end : {segment.From, segment.To}) {
+      const ParkPoint at = pointPosition(world, end);
+      const double distance = std::hypot(at.X - entrance.X, at.Z - entrance.Z);
+      if (nearest == NULL_KEY || distance < nearestDistance) {
+        nearest = segment.Key;
+        nearestDistance = distance;
+      }
+    }
+  }
+  return nearest;
+}
+
+// The world's pieces of furniture on the segment, in key order.
+std::vector<FurniturePiece> furnitureOn(const World &world, EntityKey segment) {
+  std::vector<FurniturePiece> pieces;
+  for (const FurniturePiece &piece : parkFurniture(world)) {
+    if (piece.Segment == segment) {
+      pieces.push_back(piece);
+    }
+  }
+  return pieces;
+}
+
+// A new shop takes the place of benches beside the path in while guests are in the park, so the
+// pieces there yield to the box and the guests' seat service and choices take in the change.
+ChosenEdit addingShopFacingBenches(const World &before) {
+  const AddBox add{BoxKind::Shop, SHOP_FACING_BENCHES};
+  REQUIRE(isAccepted(before, ParkEdit{add}));
+  const EntityKey segment = guestPathInFromEntrance(before);
+  REQUIRE(segment != NULL_KEY);
+  // Without the benches beside the path changing, the shop would displace nothing.
+  const World candidate = makeCandidate(before, queueOf(ParkEdit{add}));
+  REQUIRE(furnitureOn(candidate, segment) != furnitureOn(before, segment));
+  return {"adding a shop facing the guest path in from the entrance on the side its benches stand "
+          "on, displacing benches",
+          add};
+}
+
 // The edits of noon.park, made from the world as a cycle leaves it. Each requires the state it was
 // chosen for, so a change to noon.park that loses that state fails here rather than quietly
 // checking less.
 std::vector<ChosenEdit> noonChosenEdits(const World &before) {
-  std::vector<ChosenEdit> edits{addingToiletBlock(before),
-                                settingDrinkShopToBothUnderGuests(before),
-                                settingOpeningHoursEarlierUnderGuests(before),
-                                furnishingLongestGuestSegmentUnderGuests(before)};
+  std::vector<ChosenEdit> edits{
+      addingToiletBlock(before), settingDrinkShopToBothUnderGuests(before),
+      settingOpeningHoursEarlierUnderGuests(before),
+      furnishingLongestGuestSegmentUnderGuests(before), addingShopFacingBenches(before)};
   for (const ChosenEdit &chosen : edits) {
     INFO(chosen.Name);
     REQUIRE(isAccepted(before, chosen.Edit));
