@@ -12,6 +12,7 @@ WorldMeshes SceneSync::syncWorld(const World &world, uint64_t generation) {
     GuestTick.reset();
     Kept = {};
     Shaped.reset();
+    Seated = {};
     meshes.FrameCamera = true;
   }
   DrawnIntent current{parkEntrances(world), parkPathPoints(world), parkSegments(world),
@@ -27,6 +28,10 @@ WorldMeshes SceneSync::syncWorld(const World &world, uint64_t generation) {
     GuestTick = world.Tick;
     meshes.Guests = true;
   }
+  if (meshes.Guests) {
+    Seated.update(world);
+  }
+  GuestsRebuilt = meshes.Guests;
   return meshes;
 }
 
@@ -36,7 +41,9 @@ bool SceneSync::syncPreview(const World &world, const std::optional<ParkEdit> &e
 }
 
 bool SceneSync::syncLook(bool remade, const PreviewLook &look) {
-  if (!remade && Look == look) {
+  const bool guestMoved =
+      GuestsRebuilt && look.Inspected && look.Inspected->Kind == SubjectKind::Guest;
+  if (!remade && Look == look && !guestMoved) {
     return false;
   }
   Look = look;

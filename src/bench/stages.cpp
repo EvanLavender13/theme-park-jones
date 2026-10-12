@@ -114,7 +114,11 @@ std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
   stages.push_back(
       StageResult{"food-overlay", shades.Times, ResultKind::Values, shades.Last.Knots.size()});
   stages.push_back(meshStage("park-mesh", park, buildParkMesh));
-  stages.push_back(meshStage("guest-mesh", park, buildGuestMesh));
+  stages.push_back(meshStage("guest-mesh", park, [](const World &world) {
+    SeatedGuests seated;
+    seated.update(world);
+    return buildGuestMesh(world, seated);
+  }));
 
   World stepped = copyWorld(park);
   std::vector<int64_t> tickTimes;

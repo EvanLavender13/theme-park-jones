@@ -36,6 +36,9 @@ next-key 20
 [backstage-route-distance-stepped]
 17417963796302803443 readable=[] pending=[]
 
+[seat-places-stepped]
+16151389547449749861 readable=[] pending=[]
+
 [supply-orders-ledger]
 10571414569661708045 packets=[] stocks=[] created=0 consumed=[]
 
@@ -83,6 +86,18 @@ next-key 20
 
 [toilet-offer-stepped]
 16819719754544225480 readable=[] pending=[]
+
+[seat-visits-ledger]
+17070384855899578509 packets=[] stocks=[] created=0 consumed=[]
+
+[seat-offers-stepped]
+14613874420873433981 readable=[] pending=[]
+
+[best-rest-seats-stepped]
+18432772136236652292 readable=[] pending=[]
+
+[best-meal-seats-stepped]
+10675303501572075337 readable=[] pending=[]
 
 [departure-tally]
 11521130776157876789 hunger=0 thirst=0 tiredness=0 toilet=0 closing=0

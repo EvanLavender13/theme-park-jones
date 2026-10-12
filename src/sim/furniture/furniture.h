@@ -35,6 +35,14 @@ constexpr uint32_t furnitureSeats(FurnitureKind kind) {
   return 2;
 }
 
+// The pose of the seat at the index of a piece of the kind standing at the pose. A bench's two
+// seats lie side by side along it, 0.45 m either side of its middle, facing as the bench faces. A
+// table's four seats lie in pairs on its two long sides, 0.45 m either side of its middle along it
+// and 0.5 m from its middle across it, each facing the middle. Seats are numbered from the left,
+// seen from the paving, and a table's paving side comes first. Throws std::out_of_range for a seat
+// not below furnitureSeats(kind).
+Pose seatPose(FurnitureKind kind, const Pose &piece, uint32_t seat);
+
 // A piece of furniture as other modules read it: its key, its segment, the side it stands on, Left
 // or Right, its kind, and its pose, facing the paving.
 struct FurniturePiece {

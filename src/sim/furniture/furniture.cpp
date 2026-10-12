@@ -16,7 +16,9 @@
 #include <set>
 #include <span>
 #include <stddef.h>
+#include <stdexcept>
 #include <stdint.h>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -1048,7 +1050,35 @@ void layFurniture(World &world) {
   publishSeatPlaces(world);
 }
 
+// Meters a seat lies from a piece's middle along it, and a table's from its middle across it.
+constexpr double SEAT_ALONG = 0.45;
+constexpr double TABLE_SEAT_ACROSS = 0.5;
+
 } // namespace
+
+Pose seatPose(FurnitureKind kind, const Pose &piece, uint32_t seat) {
+  if (seat >= furnitureSeats(kind)) {
+    throw std::out_of_range("seatPose: the piece has no seat " + std::to_string(seat));
+  }
+  const double length =
+      std::sqrt((piece.FacingX * piece.FacingX) + (piece.FacingZ * piece.FacingZ));
+  // Toward the paving, and the piece's left seen from the paving: leftOf the way a guest on the
+  // paving looks at it.
+  const double towardX = length > 0.0 ? piece.FacingX / length : 0.0;
+  const double towardZ = length > 0.0 ? piece.FacingZ / length : 0.0;
+  const double leftX = -towardZ;
+  const double leftZ = towardX;
+  const double along = seat % 2 == 0 ? SEAT_ALONG : -SEAT_ALONG;
+  double across = 0.0;
+  double facing = 1.0;
+  if (kind == FurnitureKind::Table) {
+    // The paving side's pair faces away from the paving, toward the table's middle.
+    across = seat < 2 ? TABLE_SEAT_ACROSS : -TABLE_SEAT_ACROSS;
+    facing = seat < 2 ? -1.0 : 1.0;
+  }
+  return {piece.X + (leftX * along) + (towardX * across),
+          piece.Z + (leftZ * along) + (towardZ * across), towardX * facing, towardZ * facing};
+}
 
 void addFurniture(WorldSchema &schema) {
   schema.addComponent<FurniturePieceState>("furniture-piece", DataKind::Derived);

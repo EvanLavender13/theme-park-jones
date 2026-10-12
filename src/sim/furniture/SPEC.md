@@ -4,7 +4,7 @@ This module serves the effortless-building capability (plans/effortless-building
 
 ## Boundary
 
-furniture reads intent only through parkSegments, parkPathPoints, parkBoxes, parkEntrances, and footprintOf (sim/park/SPEC.md), and doors, walkways, and the paved surface with its walkways only through routes' parkDoors, keyedWalkways, and walkedSurface (sim/routes/SPEC.md). It reads the guest network through routes' parkNetwork. addFurniture registers the derived types furniture-piece and laid-furniture, the field seat places, and the furniture resolver. addPark calls it after addRoutes. Other modules read the furniture through parkFurniture and furnitureSize, and its seats through the seat places field and furnitureSeats.
+furniture reads intent only through parkSegments, parkPathPoints, parkBoxes, parkEntrances, and footprintOf (sim/park/SPEC.md), and doors, walkways, and the paved surface with its walkways only through routes' parkDoors, keyedWalkways, and walkedSurface (sim/routes/SPEC.md). It reads the guest network through routes' parkNetwork. addFurniture registers the derived types furniture-piece and laid-furniture, the field seat places, and the furniture resolver. addPark calls it after addRoutes. Other modules read the furniture through parkFurniture and furnitureSize, and its seats through the seat places field, furnitureSeats, and seatPose.
 
 ## Pieces
 
@@ -27,3 +27,5 @@ If an edit leaves a stretch and everything that blocks it as they were, the stre
 ## Seat places
 
 Seat places is a resolved entry field on the guest network, named seat-places. Each furnished guest segment is the source of one entry for each piece it lays, in key order of the pieces. The entry lies at the place on the segment's ground line nearest the piece's position. A SeatPlace holds the piece's key, its pose, its kind, its number of seats, and its segment. furnitureSeats gives a kind's number of seats: 2 for a bench and 4 for a table. If the guest network has no carrier for a piece's segment, the piece has no entry. A segment that lays no piece publishes nothing.
+
+seatPose(kind, pose, seat) gives the pose of a seat of a piece of the kind standing at the pose. A bench's two seats lie side by side along it, 0.45 m either side of its middle, facing as the bench faces. A table's four seats lie in pairs on its two long sides, 0.45 m either side of its middle along it and 0.5 m from its middle across it, each facing the middle. Seats are numbered from the left, seen from the paving, and a table's paving side comes first.

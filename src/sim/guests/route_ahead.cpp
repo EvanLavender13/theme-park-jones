@@ -4,6 +4,7 @@
 #include "sim/guests/internal/ground.h"
 #include "sim/park/intent.h"
 #include "sim/routes/route_distance.h"
+#include "sim/wayfinding/best_seats.h"
 #include "sim/world.h"
 
 #include <algorithm>
@@ -208,9 +209,13 @@ bool startsAt(const Network &network, const RouteStep &step, uint32_t node) {
   return at != nullptr && at->Node == node;
 }
 
-void traceRoute(const World &world, const Network &network, const Place &place,
-                const RouteStep &first, std::span<const EntityKey> sources, const RouteStep &turn,
-                RouteAhead &route) {
+namespace {
+
+// Fills the route from the place along the first step, until AIM_LOOKAHEAD along it, going on from
+// the end of each step by the step on(step) gives, until it gives none.
+template <typename On>
+void traceAlong(const Network &network, const Place &place, const RouteStep &first,
+                RouteAhead &route, On on) {
   route.Points.clear();
   route.Ends = false;
   const std::optional<GroundPoint> start = network.groundPoint(place);
@@ -229,15 +234,12 @@ void traceRoute(const World &world, const Network &network, const Place &place,
   // Inside an edge a step names the whole edge, so the first stretch starts where the guest is.
   double from = first.Carrier == place.Carrier ? place.Distance : first.From;
   RouteStep step = first;
-  bool turned = false;
   for (;;) {
     const double startedAt = walked;
     if (!walkStep(network, step, from, walked, route)) {
       return;
     }
-    const std::optional<RouteStep> next = sources.empty()
-                                              ? wanderOn(network, step, turn, turned, route)
-                                              : routeOn(world, network, step, sources, route);
+    const std::optional<RouteStep> next = on(step);
     // A step that walks nowhere would never end the loop.
     if (!next || (walked == startedAt && next->From == next->To)) {
       return;
@@ -245,6 +247,44 @@ void traceRoute(const World &world, const Network &network, const Place &place,
     step = *next;
     from = step.From;
   }
+}
+
+// The step a route toward the piece takes on from the end of the step: its entry's next step in the
+// use's best seats field there. None where the field doesn't give the piece, and Ends set where it
+// has arrived.
+std::optional<RouteStep> seatOn(const World &world, const Network &network, const RouteStep &step,
+                                SeatUse use, EntityKey piece, SeatSample &sample,
+                                RouteAhead &route) {
+  bestSeatsAt(world, network, {step.Carrier, step.To}, use, sample.Scratch, sample.Places);
+  const auto found = std::ranges::find(sample.Places, piece, &BestPlace::Key);
+  if (found == sample.Places.end()) {
+    return std::nullopt;
+  }
+  if (found->Next.Carrier == NULL_KEY) {
+    route.Ends = true;
+    return std::nullopt;
+  }
+  return found->Next;
+}
+
+} // namespace
+
+void traceRoute(const World &world, const Network &network, const Place &place,
+                const RouteStep &first, std::span<const EntityKey> sources, const RouteStep &turn,
+                RouteAhead &route) {
+  bool turned = false;
+  traceAlong(network, place, first, route, [&](const RouteStep &step) {
+    return sources.empty() ? wanderOn(network, step, turn, turned, route)
+                           : routeOn(world, network, step, sources, route);
+  });
+}
+
+void traceSeatRoute(const World &world, const Network &network, const Place &place,
+                    const RouteStep &first, SeatUse use, EntityKey piece, SeatSample &sample,
+                    RouteAhead &route) {
+  traceAlong(network, place, first, route, [&](const RouteStep &step) {
+    return seatOn(world, network, step, use, piece, sample, route);
+  });
 }
 
 void moveToSide(double side, RouteAhead &route) {

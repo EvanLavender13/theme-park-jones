@@ -232,6 +232,8 @@ Step 2: Confirm criterion 6.
 Run: `for f in tests/parks/*.park; do git show HEAD:$f | cmp -s - <(sed -E 's/ target-owner=.*$//' $f) || echo $f; done`
 Expected: no output.
 
+(Deviation, minor: the remade parks also gain five empty sections every resolved world holds, seat-places-stepped, seat-visits-ledger, seat-offers-stepped, best-rest-seats-stepped, and best-meal-seats-stepped, which the slice's earlier members added without remaking the parks. With those sections also stripped, the command prints nothing.)
+
 Step 3: Remake full.park.
 
 Run: `cmake.exe --build --preset windows-release --target tpj_bench > /dev/null 2>&1; build/windows-release/tpj_bench.exe --full-park tests/parks/stress/full.park; echo $?`

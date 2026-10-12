@@ -2,8 +2,11 @@
 #define TPJ_SIM_GUESTS_INTERNAL_ROUTE_AHEAD_H
 
 #include "sim/entity_key.h"
+#include "sim/medium/field.h"
 #include "sim/medium/network.h"
+#include "sim/routes/best_places.h"
 #include "sim/routes/route_distance.h"
+#include "sim/wayfinding/best_seats.h"
 
 #include <optional>
 #include <span>
@@ -77,6 +80,19 @@ bool startsAt(const Network &network, const RouteStep &step, uint32_t node);
 void traceRoute(const World &world, const Network &network, const Place &place,
                 const RouteStep &first, std::span<const EntityKey> sources, const RouteStep &turn,
                 RouteAhead &route);
+// The lists a guest reuses to sample a best seats field: bestSeatsAt's scratch and the entries it
+// gives.
+struct SeatSample {
+  SampleScratch<BestPlace> Scratch;
+  std::vector<BestPlace> Places;
+};
+
+// Fills the route as traceRoute does, going on from each step's end by the piece's entry in the
+// use's best seats field there. It ends where that entry has arrived, and stops where the field
+// doesn't give the piece. Allocates nothing once the sample's lists have grown.
+void traceSeatRoute(const World &world, const Network &network, const Place &place,
+                    const RouteStep &first, SeatUse use, EntityKey piece, SeatSample &sample,
+                    RouteAhead &route);
 // Sets each point's Shift to the guest's side, from 0 at the left to 1 at the right of the width a
 // guest's box can use there, seen the way the route runs into the point. The first point is seen
 // the way the route runs out of it, and a stretch with no length on the ground the way the nearest
