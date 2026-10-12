@@ -74,7 +74,7 @@ Both inspectors read only inspection records and intent (decision 0025). A click
 
 This capability produces nothing that the simulation uses. It samples and reads:
 
-- The need offers from plausible-operations (food-offer, drink-offer, rest-offer, and toilet-offer), route distance from navigable-networks, and hungry footfall from believable-guests. It reads them through shared-medium's field interface, in committed or candidate worlds.
+- The need offers from plausible-operations (food-offer, drink-offer, and toilet-offer), seat offers and their seat places, route distance and the best rest seats and best meal seats from navigable-networks, and hungry footfall from believable-guests. It reads them through shared-medium's field interface, in committed or candidate worlds.
 - Candidate worlds from deterministic-simulation. navigable-networks and plausible-operations resolve them from the tentative intent that effortless-building's ghost supplies (decision 0025). This capability doesn't call another capability's derivation directly.
 - Inspection records from believable-guests and plausible-operations (decision 0025). The guests' records include each guest's ground position, for picking.
 - Park intent from effortless-building. It uses the paved surface of guest paths to place the overlay, and box kinds and poses to pick shops and find depots. It also reads the tentative edits, placements and deletions, that previews resolve.
@@ -115,6 +115,7 @@ It is useful for development too. Every other capability's behavior becomes obse
 1. `explained-food`: the food-availability library with exact attribution, and the food overlay with hover attribution and the --overlay option. Previews of placements and deletions run on candidate worlds rebuilt each tick, and a shop ghost shows its context. Guests and shops get inspectors. Member of the boxes-and-tubes slice. Depends on: every other member milestone of the slice.
 2. `wide-overlay`: the food overlay shades the guest paving itself, across every width, with the hover over the shaded paving. Member of the good-paths slice. Depends on: navigable-networks' wide-routes.
 3. `explained-needs`: an overlay for each of the guests' four needs, faded by one curve in game minutes, with nothing shown as the ramp's worst color, with hover attribution and previews; bench and toilet block inspectors and a guest choice table of one row per need; the departures panel and the Hours panel's arrival curve. Member of the day-at-the-park slice. Depends on: every other member milestone of the slice.
+4. `explained-seating`: the Rest overlay read from the best rest seats and a Meal seats overlay from the best meal seats, each the sum of the few best seats' terms, with hover naming each piece and its segment and previews of furnishing settings; the guest Inspector's seated or standing meal with the relief lost compared with a table. Member of the somewhere-to-sit slice. Depends on: every other member milestone of the slice.
 
 Later milestones are drawn from the deepening candidates once the slice has been played.
 
