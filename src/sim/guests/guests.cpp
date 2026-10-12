@@ -262,6 +262,18 @@ void rememberFull(Guest &guest, EntityKey piece, uint64_t tick) {
   *slot = {piece, tick};
 }
 
+// The guest eats the meal it carries: it consumes the meal with EATEN_CAUSE, its hunger falls by
+// the relief, not below 0, its bladder fills by BLADDER_PER_MEAL, and it records the meal.
+void eatMeal(World &world, EntityKey key, Guest &guest, double relief, bool seated) {
+  const int64_t meals = unitsHeld<Meals>(world, key, key);
+  consumeUnits<Meals>(world, key, key, meals, EATEN_CAUSE);
+  const double before = guest.Hunger;
+  guest.Hunger = std::max(0.0, before - relief);
+  guest.Bladder = std::min(1.0, guest.Bladder + (BLADDER_PER_MEAL * static_cast<double>(meals)));
+  ++guest.MealsEaten;
+  guest.LastMeal = {world.Tick, before, guest.Hunger, seated};
+}
+
 // The piece's entry in the use's best seats field at the place, or none.
 std::optional<BestPlace> seatEntryAt(const World &world, const Network &network, const Place &place,
                                      SeatUse use, EntityKey piece, WalkLists &lists) {
@@ -340,11 +352,13 @@ struct ScoredOptions {
   std::vector<EntityKey> Owners;
 };
 
-// Appends an option for each piece best rest seats gives at the guest's place, other than the
-// pieces it remembers as full, with the piece's rest relief and segment.
-void appendSeatOptions(const World &world, const Guest &guest, const Network &network,
+// Appends an option for each piece the use's field, best rest seats or best meal seats, gives at
+// the guest's place, other than the pieces it remembers as full, with the piece's relief for the
+// use and its segment. A rest seat answers tiredness, and a meal seat hunger.
+void appendSeatOptions(const World &world, const Guest &guest, const Network &network, SeatUse use,
                        WalkLists &lists, ScoredOptions &scored) {
-  bestSeatsAt(world, network, guest.At, SeatUse::Rest, lists.Seats.Scratch, lists.Seats.Places);
+  const GuestNeed need = use == SeatUse::Meal ? GuestNeed::Hunger : GuestNeed::Tiredness;
+  bestSeatsAt(world, network, guest.At, use, lists.Seats.Scratch, lists.Seats.Places);
   for (const BestPlace &seat : lists.Seats.Places) {
     if (remembersFull(guest, seat.Key, world.Tick)) {
       continue;
@@ -352,8 +366,8 @@ void appendSeatOptions(const World &world, const Guest &guest, const Network &ne
     ChoiceOption option;
     option.Kind = ChoiceKind::Seat;
     option.Facility = seat.Key;
-    option.Need = GuestNeed::Tiredness;
-    option.Relief = RELIEF_WEIGHT * needCurve(guest.Tiredness) * seat.Value;
+    option.Need = need;
+    option.Relief = RELIEF_WEIGHT * needCurve(needLevel(guest, need)) * seat.Value;
     option.Distance = DISTANCE_WEIGHT * seat.Distance;
     option.Commitment = guest.Activity == GuestActivity::HeadingToSeat && seat.Key == guest.Target
                             ? COMMITMENT_BONUS
@@ -390,9 +404,25 @@ ChoiceOption headHomeOption(const Guest &guest, const ParkMoment &moment) {
   return headHome;
 }
 
+// The options a guest weighs where it stands. While it carries food, they are its meal seats and
+// eating now. Otherwise they are its offers, its rest seats, carrying on, and heading home when an
+// entrance is reachable.
 ScoredOptions scoreOptions(const World &world, const Guest &guest, const Network &network,
-                           const RouteSample &routes, const ParkMoment &moment, WalkLists &lists) {
+                           const RouteSample &routes, const ParkMoment &moment, bool carrying,
+                           WalkLists &lists) {
   ScoredOptions scored;
+  if (carrying) {
+    appendSeatOptions(world, guest, network, SeatUse::Meal, lists, scored);
+    ChoiceOption eatNow;
+    eatNow.Kind = ChoiceKind::EatNow;
+    eatNow.Need = GuestNeed::Hunger;
+    eatNow.Relief = RELIEF_WEIGHT * needCurve(guest.Hunger) * STANDING_MEAL_RELIEF;
+    eatNow.Score = eatNow.Relief;
+    scored.Options.push_back(eatNow);
+    scored.Reliefs.push_back(STANDING_MEAL_RELIEF);
+    scored.Owners.push_back(NULL_KEY);
+    return scored;
+  }
   for (const SampledEntry<RouteEntry> &entry : routes) {
     const std::optional<uint32_t> anchor = network.firstAnchoredNode(entry.Source);
     if (!anchor) {
@@ -419,7 +449,7 @@ ScoredOptions scoreOptions(const World &world, const Guest &guest, const Network
       scored.Owners.push_back(NULL_KEY);
     });
   }
-  appendSeatOptions(world, guest, network, lists, scored);
+  appendSeatOptions(world, guest, network, SeatUse::Rest, lists, scored);
   ChoiceOption carryOn;
   carryOn.Kind = ChoiceKind::CarryOn;
   carryOn.Score = CARRY_ON_SCORE;
@@ -457,12 +487,19 @@ std::vector<double> softmaxWeights(std::span<ChoiceOption> options) {
   return weights;
 }
 
+// The rest relief the piece's seat offer gives, or 0 when it offers none.
+double seatRestRelief(const World &world, EntityKey piece) {
+  const FieldSlot<SeatOffer> *slot = sourceSlot<SeatOffers>(world, piece);
+  return slot != nullptr && !slot->Entries.empty() ? slot->Entries.front().Value.RestRelief : 0.0;
+}
+
 // Samples route distance where the guest stands, scores its options there, picks one by softmax,
-// and takes it up.
-void choose(const World &world, EntityKey key, Guest &guest, const Network &network,
+// and takes it up. A guest that picks eating now eats its meal at once.
+void choose(World &world, EntityKey key, Guest &guest, const Network &network,
             const ParkMoment &moment, uint64_t &choices, WalkLists &lists) {
   const RouteSample routes = sampleField<GuestRouteDistance>(world, network, guest.At);
-  ScoredOptions scored = scoreOptions(world, guest, network, routes, moment, lists);
+  ScoredOptions scored = scoreOptions(world, guest, network, routes, moment,
+                                      unitsHeld<Meals>(world, key, key) > 0, lists);
   const size_t picked =
       softmaxPick(drawKey(world, key, hashName("guest-choice"), choices++), scored.Options);
   const ChoiceOption &option = scored.Options[picked];
@@ -474,6 +511,12 @@ void choose(const World &world, EntityKey key, Guest &guest, const Network &netw
     guest.TargetNeed = option.Need;
     guest.ServingRelief = scored.Reliefs[picked];
     guest.TargetOwner = scored.Owners[picked];
+    if (option.Need == GuestNeed::Hunger) {
+      guest.SeatRestRelief = seatRestRelief(world, option.Facility);
+    }
+  } else if (option.Kind == ChoiceKind::EatNow) {
+    eatMeal(world, key, guest, STANDING_MEAL_RELIEF, false);
+    guest.Activity = GuestActivity::Wandering;
   } else if (option.Kind == ChoiceKind::Offer) {
     guest.Activity = GuestActivity::HeadingToFacility;
     guest.Target = option.Facility;
@@ -499,11 +542,17 @@ void sendVisit(World &world, EntityKey key, EntityKey facility, GuestNeed need) 
   });
 }
 
+// The field a guest heading to a piece found it in: best meal seats when it goes there to eat, and
+// best rest seats when it goes to rest.
+SeatUse seatUseOf(const Guest &guest) {
+  return guest.TargetNeed == GuestNeed::Hunger ? SeatUse::Meal : SeatUse::Rest;
+}
+
 // Where the guest's heading takes it from its place: its target shop's route entry, its target
-// piece's entry in best rest seats, or the least entrance entry, whichever it heads for. A guest
-// heading to a shop whose offer it can no longer reach, or to a piece the field at its place no
-// longer gives, drops the target, and one heading home with no entrance entry stops, each becoming
-// wandering; Dropped says it must choose.
+// piece's entry in the field it chose the piece from, or the least entrance entry, whichever it
+// heads for. A guest heading to a shop whose offer it can no longer reach, or to a piece the field
+// at its place no longer gives, drops the target, and one heading home with no entrance entry
+// stops, each becoming wandering; Dropped says it must choose.
 struct Heading {
   std::optional<RouteEntry> Target;
   std::optional<BestPlace> Seat;
@@ -515,7 +564,7 @@ Heading headingOf(const World &world, Guest &guest, const Network &network,
                   const std::vector<EntityKey> &entrances, WalkLists &lists) {
   Heading heading;
   if (guest.Activity == GuestActivity::HeadingToSeat) {
-    heading.Seat = seatEntryAt(world, network, guest.At, SeatUse::Rest, guest.Target, lists);
+    heading.Seat = seatEntryAt(world, network, guest.At, seatUseOf(guest), guest.Target, lists);
     if (!heading.Seat) {
       guest.Activity = GuestActivity::Wandering;
       guest.Target = NULL_KEY;
@@ -638,14 +687,14 @@ Pass walkPass(Guest &guest, EntityKey key, const GuestGround &ground, uint32_t g
 }
 
 // Traces the guest's route ahead: by its target's entries toward its shop, by its piece's entries
-// in best rest seats toward its seat place, by the entrances' toward home, or wandering on from
-// its first wander step with its turn.
+// in the field it chose the piece from toward its seat place, by the entrances' toward home, or
+// wandering on from its first wander step with its turn.
 void traceGuestRoute(const World &world, const Guest &guest, const Network &network,
                      const NetworkPosition &position, const Heading &heading,
                      const std::vector<EntityKey> &entrances, WalkLists &lists) {
   RouteAhead &route = lists.Route;
   if (heading.Seat) {
-    traceSeatRoute(world, network, guest.At, heading.Seat->Next, SeatUse::Rest, guest.Target,
+    traceSeatRoute(world, network, guest.At, heading.Seat->Next, seatUseOf(guest), guest.Target,
                    lists.Seats, route);
   } else if (heading.Target) {
     traceRoute(world, network, guest.At, heading.Target->Next,
@@ -835,8 +884,9 @@ void admitGuests(World &world, const Network &network) {
 }
 
 // Takes back the guest's visit for the need when it holds it: it finishes the visit, and takes any
-// serving that came with it, which lowers the need by the offer's relief and fills the bladder by
-// the need's fill. A meal is also counted and recorded. Returns whether the visit was back.
+// drink, rest, or toilet use that came with it, which lowers the need by the offer's relief and
+// fills the bladder by the need's fill. A meal stays in its stock, and it carries the meal. Returns
+// whether the visit was back.
 template <GuestNeed N> bool takeVisit(World &world, EntityKey key, Guest &guest) {
   using Kinds = NeedKinds<N>;
   const int64_t visits = unitsHeld<typename Kinds::Visits>(world, key, key);
@@ -844,26 +894,27 @@ template <GuestNeed N> bool takeVisit(World &world, EntityKey key, Guest &guest)
     return false;
   }
   consumeUnits<typename Kinds::Visits>(world, key, key, visits, FINISHED_CAUSE);
-  const int64_t servings = unitsHeld<typename Kinds::Servings>(world, key, key);
-  if (servings > 0) {
-    consumeUnits<typename Kinds::Servings>(world, key, key, servings, Kinds::Cause);
-    double &level = needLevel(guest, N);
-    const double before = level;
-    level = std::max(0.0, before - guest.ServingRelief);
-    guest.Bladder =
-        std::min(1.0, guest.Bladder + (Kinds::BladderFill * static_cast<double>(servings)));
-    if constexpr (N == GuestNeed::Hunger) {
-      ++guest.MealsEaten;
-      guest.LastMeal = {world.Tick, before, level};
+  if constexpr (N != GuestNeed::Hunger) {
+    const int64_t servings = unitsHeld<typename Kinds::Servings>(world, key, key);
+    if (servings > 0) {
+      consumeUnits<typename Kinds::Servings>(world, key, key, servings, Kinds::Cause);
+      double &level = needLevel(guest, N);
+      level = std::max(0.0, level - guest.ServingRelief);
+      guest.Bladder =
+          std::min(1.0, guest.Bladder + (Kinds::BladderFill * static_cast<double>(servings)));
     }
   }
   return true;
 }
 
+// What awaiting a visit found: the guest still waits, its visit came back, or its visit came back
+// and it must choose now.
+enum class VisitWait : uint8_t { Waiting, Back, Choose };
+
 // A waiting guest's visit has come back when it holds the visit for the need it went for: it takes
 // the visit and any serving, and stops waiting. It forgets any choice it made at the facility's
-// door, so it chooses again there. Returns whether it is still waiting.
-bool awaitVisit(World &world, EntityKey key, Guest &guest) {
+// door, so it chooses again there. A guest that now carries a meal must choose at once.
+VisitWait awaitVisit(World &world, EntityKey key, Guest &guest) {
   bool back = false;
   forEachNeed([&]<GuestNeed N>() {
     if (N == guest.TargetNeed) {
@@ -871,36 +922,38 @@ bool awaitVisit(World &world, EntityKey key, Guest &guest) {
     }
   });
   if (!back) {
-    return true;
+    return VisitWait::Waiting;
   }
   guest.Activity = GuestActivity::Wandering;
   guest.Target = NULL_KEY;
   guest.Turn = {};
-  return false;
+  return unitsHeld<Meals>(world, key, key) > 0 ? VisitWait::Choose : VisitWait::Back;
 }
-
-// What awaiting a seat visit found: the guest still waits, or its visit came back and it must
-// choose.
-enum class SeatWait : uint8_t { Waiting, Back };
 
 // A guest waiting at a piece of furniture is seated once its visit hasn't come back within the
 // turn-away time. When the visit comes back, it takes the visit and any rest, which lowers
-// tiredness by the seat's rest relief. A visit back with no rest means the piece was full, and the
-// guest remembers it. Either way it stops waiting and must choose.
-SeatWait awaitSeat(World &world, EntityKey key, Guest &guest) {
+// tiredness by the seat's rest relief, and a guest that came to eat eats its meal by the seat's
+// meal relief. A visit back with no rest means the piece was full, and the guest remembers it.
+// Either way it stops waiting and must choose.
+VisitWait awaitSeat(World &world, EntityKey key, Guest &guest) {
   const int64_t visits = unitsHeld<SeatVisits>(world, key, key);
   if (visits == 0) {
     if (guest.Activity == GuestActivity::Waiting &&
         world.Tick >= guest.Sent + VISIT_DELAY + RETURN_DELAY) {
       guest.Activity = GuestActivity::Seated;
     }
-    return SeatWait::Waiting;
+    return VisitWait::Waiting;
   }
   consumeUnits<SeatVisits>(world, key, key, visits, FINISHED_CAUSE);
   const int64_t rests = unitsHeld<Rests>(world, key, key);
   if (rests > 0) {
     consumeUnits<Rests>(world, key, key, rests, RESTED_CAUSE);
-    guest.Tiredness = std::max(0.0, guest.Tiredness - guest.ServingRelief);
+    if (guest.TargetNeed == GuestNeed::Hunger) {
+      eatMeal(world, key, guest, guest.ServingRelief, true);
+      guest.Tiredness = std::max(0.0, guest.Tiredness - guest.SeatRestRelief);
+    } else {
+      guest.Tiredness = std::max(0.0, guest.Tiredness - guest.ServingRelief);
+    }
   } else {
     rememberFull(guest, guest.Target, world.Tick);
   }
@@ -908,7 +961,7 @@ SeatWait awaitSeat(World &world, EntityKey key, Guest &guest) {
   guest.Target = NULL_KEY;
   guest.TargetOwner = NULL_KEY;
   guest.Turn = {};
-  return SeatWait::Back;
+  return VisitWait::Choose;
 }
 
 // Tires the guest by its rate for each meter between where it stood and where it stands.
@@ -942,19 +995,17 @@ void stepGuests(World &world) {
     }
     guest.Hunger = std::min(1.0, guest.Hunger + guest.HungerRate);
     guest.Thirst = std::min(1.0, guest.Thirst + guest.ThirstRate);
-    bool seatBack = false;
+    bool mustChoose = false;
     if (guest.Activity == GuestActivity::Waiting || guest.Activity == GuestActivity::Seated) {
-      if (guest.TargetOwner != NULL_KEY) {
-        if (awaitSeat(world, key, guest) == SeatWait::Waiting) {
-          continue;
-        }
-        seatBack = true;
-      } else if (awaitVisit(world, key, guest)) {
+      const VisitWait wait = guest.TargetOwner != NULL_KEY ? awaitSeat(world, key, guest)
+                                                           : awaitVisit(world, key, guest);
+      if (wait == VisitWait::Waiting) {
         continue;
       }
+      mustChoose = wait == VisitWait::Choose;
     }
     const GroundPoint stood = guest.Ground;
-    const WalkEnd end = walk(world, key, guest, network, ground, moment, seatBack, lists);
+    const WalkEnd end = walk(world, key, guest, network, ground, moment, mustChoose, lists);
     if (end == WalkEnd::WalkedOut) {
       ++walkedOut[static_cast<size_t>(guest.Reason)];
     }
@@ -1134,6 +1185,7 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
   record.Target = state->Target;
   record.TargetNeed = state->TargetNeed;
   record.Reason = state->Reason;
+  record.Carrying = unitsHeld<Meals>(world, guest, guest) > 0;
   if (state->Activity == GuestActivity::Seated) {
     if (const SeatPlace *seat = seatPlaceOf(world, state->TargetOwner, state->Target)) {
       record.Seat = *seat;
@@ -1163,7 +1215,8 @@ std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, Entity
   }
   const RouteSample routes = sampleField<GuestRouteDistance>(world, network, state->At);
   WalkLists lists;
-  ScoredOptions scored = scoreOptions(world, *state, network, routes, parkMoment(world), lists);
+  ScoredOptions scored = scoreOptions(world, *state, network, routes, parkMoment(world),
+                                      unitsHeld<Meals>(world, guest, guest) > 0, lists);
   softmaxWeights(scored.Options);
   return std::move(scored.Options);
 }

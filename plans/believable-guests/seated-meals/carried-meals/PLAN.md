@@ -136,7 +136,9 @@ Step 2: choiceRows takes `bool carrying`, and inspectSubject passes `record->Car
 
 Step 3: Build.
 
-Run: `cmake.exe --build --preset windows-debug --target ThemeParkJones`
+Run: `cmake.exe --build --preset windows-debug`
+
+(Deviation, minor: the app has no target named ThemeParkJones, so this step builds the whole preset.)
 Expected: the build ends with no warnings and no errors.
 
 ### Task 10: Remake the parks
@@ -148,6 +150,8 @@ Step 1: Remake the slice parks.
 
 Run: `build/windows-debug/tpj_scenarios.exe --slice-parks tests/parks/fed.park tests/parks/warm.park tests/parks/cut.park tests/parks/main-street.park tests/parks/warm-main-street.park tests/parks/facilities.park tests/parks/stocked.park tests/parks/day.park tests/parks/no-toilet.park tests/parks/noon.park tests/parks/evening.park; echo $?; git status --short tests/parks`
 Expected: `0`, then ` M` lines for cut.park, evening.park, noon.park, warm-main-street.park, and warm.park, and no others.
+
+(Deviation, minor: after this remake, warm.park held only one guest heading to the shop, on a segment that refuses a path crossing its middle, so three park world checks failed. Guests eat more often now, because a meal eaten standing relieves less. src/scenarios/slice_parks.h's WARM_TICKS goes from 4600 to 4320, inside the range from 4213 to 4434 where warm.park holds a guest heading to the shop on a crossable segment, a guest waiting at the shop, and supplies in transit, as build/carried-meals/warmticks.cpp found. Then this step runs again. The supply-route integration test also failed with the 4600 warm-up, cut's mean hunger 0.284 against warm's 0.292, and passes with 4320.)
 
 Step 2: Remake full.park.
 

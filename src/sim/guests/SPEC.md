@@ -11,8 +11,9 @@ A guest reads the park only through the medium and intent:
 - the guest network (parkNetwork, previousNetwork);
 - guest route distance;
 - the need offer fields food-offer, drink-offer, rest-offer, and toilet-offer;
-- the best rest seats field, through bestSeatsAt;
+- the best rest seats and best meal seats fields, through bestSeatsAt;
 - the seat places field, for the pose of the piece the guest heads to or sits at;
+- the seat offers field, for the rest relief of a piece a guest picks to eat at;
 - its own stocks of each need's visits and servings: guest-visits and meals, drink-visits and drinks, rest-visits and rests, toilet-visits and toilet-uses, and seat-visits and rests;
 - parkEntrances, and the opening hours through parkHours and isOpenAt (decision 0025);
 - the park's clock, parkTime;
@@ -35,18 +36,20 @@ addGuest(world, place) is the only way a guest comes into being. Arrivals use it
 
 A guest has four needs: hunger, thirst, tiredness, and bladder. Each runs from 0 to 1. Hunger and thirst rise each tick at the guest's own rates. Tiredness rises with each meter the guest walks across the ground, at its own rate, so it doesn't rise while the guest waits. Each meal the guest eats fills its bladder by BLADDER_PER_MEAL, and each drink by BLADDER_PER_DRINK. No need rises past 1.
 
-A serving relieves the need it answers by the relief the facility offered when the guest chose it: a meal relieves hunger, a drink thirst, a rest tiredness, and a toilet use the bladder. No need falls below 0, and a serving relieves no other need.
+A drink, a rest, or a toilet use relieves the need it answers by the relief the facility or piece offered when the guest chose it: a drink relieves thirst, a rest tiredness, and a toilet use the bladder. A meal relieves hunger when the guest eats it, by a relief that depends on where it eats (Meals). No need falls below 0, and a serving relieves no other need.
 
 ## Choosing
 
-A guest chooses what to do by scoring its options and picking one at random, weighted by score (decision 0019). Its options are:
+A guest chooses what to do by scoring its options and picking one at random, weighted by score (decision 0019). Unless it is carrying food, its options are:
 
 - each offer it can reach: one for each need a facility offers, so a shop that sells both goods gives two;
 - each piece that best rest seats gives at its place, other than the pieces it remembers as full (Seats);
 - carrying on as it is;
 - heading home, whenever an entrance is reachable.
 
-An offer scores higher the greater the need it answers. It scores lower the farther away it is and the longer its wait. If the guest is already heading to a facility, that facility's offer for the same need scores a little higher, so guests don't flip between facilities. A seat scores as an offer does, with the piece's rest relief and no wait. If the guest is heading to a piece, that piece's option scores a little higher. If one option scores higher than another, it is never less likely to be picked. If two options score the same, they are equally likely. While the park is closed, heading home outweighs every other option.
+While it carries food, its only options are eating now and each piece that best meal seats gives at its place, other than the pieces it remembers as full (Meals).
+
+An offer scores higher the greater the need it answers. It scores lower the farther away it is and the longer its wait. If the guest is already heading to a facility, that facility's offer for the same need scores a little higher, so guests don't flip between facilities. A seat scores as an offer does, with no wait: a rest seat by tiredness and the piece's rest relief, and a meal seat by hunger and the piece's meal relief. Eating now scores only by hunger, with STANDING_MEAL_RELIEF as its relief. If the guest is heading to a piece, that piece's option scores a little higher. If one option scores higher than another, it is never less likely to be picked. If two options score the same, they are equally likely. While the park is closed, heading home outweighs every other option. A guest carrying food eats before it can head home.
 
 A guest finds offers only through route distance and the four need offer fields. If it can't walk to a facility, or the facility's entry in a need's field doesn't say it can serve, that need's offer there is never an option. An entrance is never an option for any need.
 
@@ -77,7 +80,7 @@ A guest stands at a ground position of its own on the guest paving, and saves ho
 
 The network chooses a guest's route. When a guest heads to a facility or home, its route follows route distance there, node after node. When it wanders, its route runs through shaping points to the next node it chooses for. When it makes that choice and carries on wandering, it picks at random among the ways leading out of the node, and its route runs on along the way it picked, through shaping points, to the node after. It never picks the way it arrives by unless there is no other way, as at a path's end. If it picks that way, its route stops at the node, so it walks to the end before it turns.
 
-When a guest heads to a piece of furniture, its route follows the best rest seats field's next steps to the piece's seat place, which may lie inside an edge. Over the route's last stretch, the guest moves toward the piece's side of the paving, as far as its box fits, instead of to its own side. So it stops on the paving's edge beside the piece.
+When a guest heads to a piece of furniture, its route follows the next steps of the field it found the piece in, best rest seats or best meal seats, to the piece's seat place, which may lie inside an edge. Over the route's last stretch, the guest moves toward the piece's side of the paving, as far as its box fits, instead of to its own side. So it stops on the paving's edge beside the piece.
 
 A guest walks straight toward its aim at its own speed. Its aim is the farthest point of its route, moved to the guest's side and looking at most AIM_LOOKAHEAD along it, that a straight line reaches with the guest's box on the paving. The aim never moves back along the route until the route changes. The box is on the paving while the guest keeps at least GUEST_CLEARANCE, half the diagonal of its box, from every line that bounds it. If the guest stands nearer a line than that, as at the entrance's door it arrives through, it never comes nearer that line and never crosses it. So a guest heading for a facility across a wide street walks straight to its door, and at a bend it cuts the inside without leaving the paving. Walking anywhere on its route's paving travels that route, so route distance still measures how far it goes (principle 4, decision 0038). The work of walking a guest depends on the paving near it and its route ahead, not on the size of the park.
 
@@ -89,13 +92,19 @@ A guest's place on the network is the point of its route, between its place and 
 
 ## Visits and servings
 
-When a guest arrives at its target facility, it sends the facility a visit for the need it chose: guest-visits for hunger, drink-visits for thirst, rest-visits for tiredness, and toilet-visits for the bladder. It then waits there until the visit comes back, whatever else changes. If the visit comes back with that need's serving, a meal, a drink, a rest, or a toilet use, the guest was served, and that need falls. A guest that eats a meal also records it. If the visit comes back without a serving, the guest was turned away. Either way, it then chooses what to do next. A guest has at most one visit outstanding. It consumes returned visits with FINISHED_CAUSE, meals with EATEN_CAUSE, drinks with DRUNK_CAUSE, rests with RESTED_CAUSE, and toilet uses with USED_CAUSE, which other modules count.
+When a guest arrives at its target facility, it sends the facility a visit for the need it chose: guest-visits for hunger, drink-visits for thirst, rest-visits for tiredness, and toilet-visits for the bladder. It then waits there until the visit comes back, whatever else changes. If the visit comes back with that need's serving, a meal, a drink, a rest, or a toilet use, the guest was served. A drink, a rest, or a toilet use relieves its need at once, and the guest carries a meal (Meals). If the visit comes back without a serving, the guest was turned away. Either way, it then chooses what to do next. A guest has at most one visit outstanding. It consumes returned visits with FINISHED_CAUSE, meals with EATEN_CAUSE, drinks with DRUNK_CAUSE, rests with RESTED_CAUSE, and toilet uses with USED_CAUSE, which other modules count.
 
 ## Seats
 
-When a guest reaches the seat place of the piece it heads to, it sends the piece one seat visit and waits. If the visit hasn't come back VISIT_DELAY plus RETURN_DELAY ticks after it was sent, the piece has seated the guest, and the guest is seated until the visit comes back. When the visit comes back with a rest, tiredness falls by the rest relief the piece offered when the guest chose it. If it comes back with nothing, the piece was full. The guest remembers it, with the tick it found it full, and chooses in that same tick, wherever it stands. Either way, the guest chooses again at once. It consumes the returned visit with FINISHED_CAUSE and the rest with RESTED_CAUSE.
+When a guest reaches the seat place of the piece it heads to, it sends the piece one seat visit and waits. If the visit hasn't come back VISIT_DELAY plus RETURN_DELAY ticks after it was sent, the piece has seated the guest, and the guest is seated until the visit comes back. When the visit comes back with a rest, tiredness falls by the rest relief the piece offered when the guest chose it, and a guest that came to eat eats its meal (Meals). If it comes back with nothing, the piece was full. The guest remembers it, with the tick it found it full, and chooses in that same tick, wherever it stands. Either way, the guest chooses again at once. It consumes the returned visit with FINISHED_CAUSE and the rest with RESTED_CAUSE.
 
 A guest remembers a piece as full for FULL_MEMORY_TIME ticks after it found it full, and remembers at most SEAT_CHOICES pieces. If it finds one more piece full while it remembers that many, it forgets the one it found full first. While it remembers a piece, that piece is never one of its options.
+
+## Meals
+
+When a guest's visit to a shop comes back with a meal, the guest holds the meal and is carrying food until it eats it. It chooses in that same tick. If it picks eating now, it eats the meal at once, hunger falls by STANDING_MEAL_RELIEF, and it walks on. If it picks a meal seat, it walks to the piece and visits it as Seats says. When the visit comes back with a rest, the guest eats the meal there. Hunger falls by the meal relief, and tiredness by the rest relief, that the piece offered when the guest chose it, even if an edit has removed the piece since. If the piece was full, the guest still carries its meal when it chooses again.
+
+When a guest eats a meal, it consumes it with EATEN_CAUSE and records it, with whether it ate seated. If a guest leaves the park while it carries food, the ledger consumes the meal as discarded (sim/medium/SPEC.md).
 
 ## Carrying across an edit
 
@@ -116,8 +125,8 @@ Across an edit:
 
 ## Inspection
 
-guestRecord(world, key) returns a guest's inspection record for display (decision 0025). The record holds its activity, its place, the ground position it stands on, its four needs, the tick it arrived, its target and the need it heads there for, the reason it last recorded for heading home, while it is seated and its piece is still laid, the seat place of the piece it sits at, and the pieces it remembers as full, each with the tick it found it full, meals eaten, and last meal.
+guestRecord(world, key) returns a guest's inspection record for display (decision 0025). The record holds its activity, its place, the ground position it stands on, its four needs, the tick it arrived, its target and the need it heads there for, the reason it last recorded for heading home, whether it is carrying food, while it is seated and its piece is still laid, the seat place of the piece it sits at, and the pieces it remembers as full, each with the tick it found it full, meals eaten, and last meal, with whether it was eaten seated.
 
-guestOptions(world, key) returns the options the guest would weigh if it chose now. Each option has its kind, the facility and need of an offer, its terms, heading home's reason, its Score, and its Probability. An offer's terms are Relief, Distance, Wait, and Commitment, added in that order. A seat's terms are Relief, Distance, and Commitment, added in that order. Heading home's are Base, a term in Reasons for each of HOME_REASONS, and Commitment, added as Going home gives. Every other term is 0. The Score is exactly the sum of the terms.
+guestOptions(world, key) returns the options the guest would weigh if it chose now. Each option has its kind, the facility and need of an offer, its terms, heading home's reason, its Score, and its Probability. An offer's terms are Relief, Distance, Wait, and Commitment, added in that order. A seat's terms are Relief, Distance, and Commitment, added in that order. Eating now's only term is Relief. Heading home's are Base, a term in Reasons for each of HOME_REASONS, and Commitment, added as Going home gives. Every other term is 0. The Score is exactly the sum of the terms.
 
 Neither function changes the world or draws, and neither adds to a save. guestOptions costs as much as one choice, so call it for a guest being inspected, not for every guest in a frame.

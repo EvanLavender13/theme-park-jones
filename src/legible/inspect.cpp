@@ -86,6 +86,7 @@ std::vector<InspectorRow> guestRows(const World &world, const GuestRecord &recor
   } else {
     rows.push_back({"Target", "none"});
   }
+  rows.push_back({"Carrying", record.Carrying ? "food" : "nothing"});
   rows.push_back({"Meals eaten", std::format("{}", record.MealsEaten)});
   if (const std::optional<GuestMeal> &meal = record.LastMeal) {
     rows.push_back({"Last meal", std::format("{} s ago, hunger {:.2f} to {:.2f}",
@@ -106,18 +107,26 @@ std::string capitalized(std::string name) {
   return name;
 }
 
-// The guest's choices as six rows: each need's best offer or seat and the chance of any of them,
-// then carrying on and heading home.
-std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOption> &options) {
+// The guest's choices as six rows: each need's best offer, seat, or eating now and the chance of
+// any of them, then carrying on and heading home. While the guest carries food, every row but
+// hunger's says so.
+std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOption> &options,
+                                  bool carrying) {
   std::vector<ChoiceRow> rows;
   for (const GuestNeed need : NEEDS) {
     // HomeReason lists the needs in NEEDS order, so its names give "toilet" for the bladder.
     ChoiceRow row;
     row.Choice = capitalized(displayName(static_cast<HomeReason>(need)));
+    if (carrying && need != GuestNeed::Hunger) {
+      row.Target = "carrying food";
+      rows.push_back(std::move(row));
+      continue;
+    }
     const ChoiceOption *best = nullptr;
     double probability = 0.0;
     for (const ChoiceOption &option : options) {
-      if ((option.Kind == ChoiceKind::Offer || option.Kind == ChoiceKind::Seat) &&
+      if ((option.Kind == ChoiceKind::Offer || option.Kind == ChoiceKind::Seat ||
+           option.Kind == ChoiceKind::EatNow) &&
           option.Need == need) {
         probability += option.Probability;
         if (best == nullptr || option.Score > best->Score) {
@@ -128,7 +137,7 @@ std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOp
     if (best == nullptr) {
       row.Target = "no offer";
     } else {
-      row.Target = boxText(world, best->Facility);
+      row.Target = best->Kind == ChoiceKind::EatNow ? "eat now" : boxText(world, best->Facility);
       row.Relief = twoDecimals(best->Relief);
       row.Distance = twoDecimals(best->Distance);
       row.Wait = twoDecimals(best->Wait);
@@ -140,6 +149,9 @@ std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOp
   }
   ChoiceRow carryOn;
   carryOn.Choice = capitalized(displayName(ChoiceKind::CarryOn));
+  if (carrying) {
+    carryOn.Target = "carrying food";
+  }
   const auto carry = std::ranges::find(options, ChoiceKind::CarryOn, &ChoiceOption::Kind);
   if (carry != options.end()) {
     carryOn.Score = twoDecimals(carry->Score);
@@ -155,7 +167,7 @@ std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOp
     headHome.Score = twoDecimals(home->Score);
     headHome.Probability = twoDecimals(home->Probability);
   } else {
-    headHome.Target = "no route home";
+    headHome.Target = carrying ? "carrying food" : "no route home";
   }
   rows.push_back(std::move(headHome));
   return rows;
@@ -238,7 +250,7 @@ Inspection inspectSubject(const World &world, const InspectorSubject &subject) {
       inspection.Rows = guestRows(world, *record);
       if (const std::optional<std::vector<ChoiceOption>> options =
               guestOptions(world, subject.Key)) {
-        inspection.Choices = choiceRows(world, *options);
+        inspection.Choices = choiceRows(world, *options, record->Carrying);
         inspection.HomeTerms = homeTerms(*options);
       }
     }

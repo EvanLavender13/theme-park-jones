@@ -7,9 +7,9 @@
 
 namespace tpj {
 
-// The warm-up tests/parks/warm.park takes from fed.park: about 2.6 game hours, long enough that
+// The warm-up tests/parks/warm.park takes from fed.park: about 2.4 game hours, long enough that
 // cutting its backstage segment strands a waiting guest and a shipment in transit.
-inline constexpr uint64_t WARM_TICKS = 4600;
+inline constexpr uint64_t WARM_TICKS = 4320;
 // The warm-up tests/parks/warm-main-street.park takes from main-street.park: about 2.5 game hours,
 // long enough that guests fill the park in every activity, some of them heading home.
 inline constexpr uint64_t MAIN_STREET_WARM_TICKS = 4530;

@@ -62,19 +62,19 @@ inline constexpr std::array<HomeReason, 5> HOME_REASONS{HomeReason::Hunger, Home
                                                         HomeReason::Tiredness, HomeReason::Toilet,
                                                         HomeReason::Closing};
 
-// What a choice's option does: go to a shop for its offer, carry on wandering, head home, or go to
-// a piece of furniture to sit.
-enum class ChoiceKind : uint8_t { Offer, CarryOn, HeadHome, Seat };
+// What a choice's option does: go to a shop for its offer, carry on wandering, head home, go to a
+// piece of furniture to sit, or eat the meal it carries now.
+enum class ChoiceKind : uint8_t { Offer, CarryOn, HeadHome, Seat, EatNow };
 
-constexpr std::array<std::string_view, 4> enumNames(ChoiceKind /*value*/) {
-  return {"offer", "carry-on", "head-home", "seat"};
+constexpr std::array<std::string_view, 5> enumNames(ChoiceKind /*value*/) {
+  return {"offer", "carry-on", "head-home", "seat", "eat-now"};
 }
 
 // One option of a choice: its kind, the facility and need for an offer, or the piece and need for a
 // seat, its terms, its score, and the probability the softmax gave it. An offer's terms are Relief,
 // Distance, Wait, and Commitment. A seat's are Relief, Distance, and Commitment. Heading home's are
-// Base, Reasons, and Commitment, and its reason is the first largest of Reasons. Carrying on has no
-// terms.
+// Base, Reasons, and Commitment, and its reason is the first largest of Reasons. Eating now's only
+// term is Relief. Carrying on has no terms.
 struct ChoiceOption {
   ChoiceKind Kind = ChoiceKind::CarryOn;
   EntityKey Facility = NULL_KEY;
@@ -92,11 +92,12 @@ struct ChoiceOption {
   bool operator==(const ChoiceOption &) const = default;
 };
 
-// A meal a guest ate: the tick, and its hunger before and after.
+// A meal a guest ate: the tick, its hunger before and after, and whether it ate seated.
 struct GuestMeal {
   uint64_t Tick = 0;
   double Before = 0.0;
   double After = 0.0;
+  bool Seated = false;
 
   bool operator==(const GuestMeal &) const = default;
 };
@@ -105,6 +106,7 @@ template <typename Visitor> void visitFields(Visitor &visitor, GuestMeal &meal) 
   visitor.field("tick", meal.Tick);
   visitor.field("before", meal.Before);
   visitor.field("after", meal.After);
+  visitor.field("seated", meal.Seated);
 }
 
 // A piece of furniture a guest found full, and the tick it found it full. An empty one has Piece
@@ -138,10 +140,10 @@ struct CurvePoint {
 // What a guest publishes about itself for display and tests (decision 0025): what it is doing,
 // its place on the guest network, the ground position it stands on, its four needs, the tick it
 // arrived, the facility or piece it is heading to or waiting at and the need it goes there for,
-// the reason it last recorded for heading home, the seat place of the piece it sits at while it is
-// seated there and the piece is still laid, the pieces it remembers as full, with empty entries
-// where it remembers none, and the meals it has eaten and the last of them. Nothing in the park
-// reads it.
+// the reason it last recorded for heading home, whether it is carrying food, the seat place of the
+// piece it sits at while it is seated there and the piece is still laid, the pieces it remembers as
+// full, with empty entries where it remembers none, and the meals it has eaten and the last of
+// them. Nothing in the park reads it.
 struct GuestRecord {
   GuestActivity Activity = GuestActivity::Wandering;
   Place At;
@@ -154,6 +156,7 @@ struct GuestRecord {
   EntityKey Target = NULL_KEY;
   GuestNeed TargetNeed = GuestNeed::Hunger;
   HomeReason Reason = HomeReason::Hunger;
+  bool Carrying = false;
   std::optional<SeatPlace> Seat;
   std::array<FullPiece, SEAT_CHOICES> FullPieces{};
   uint64_t MealsEaten = 0;
@@ -228,6 +231,8 @@ inline constexpr uint64_t CLOSING_LEAD = 3600;
 inline constexpr double CLOSING_SCORE = 10.0;
 // The softmax temperature: lower picks the best option more surely.
 inline constexpr double CHOICE_TEMPERATURE = 0.25;
+// The hunger a meal relieves when a guest eats it now, standing.
+inline constexpr double STANDING_MEAL_RELIEF = 0.25;
 // Ticks a guest remembers a piece of furniture as full.
 inline constexpr uint64_t FULL_MEMORY_TIME = 900;
 // Ticks a visit takes from the guest at a shop's anchor to the shop.
