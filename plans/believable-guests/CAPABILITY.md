@@ -110,6 +110,8 @@ This is the smallest version in which the park's layout visibly matters to someo
 
 3. `a-day-out`: guests arrive by an authored curve over the opening hours and carry four needs: hunger, thirst, tiredness, and bladder. They weigh food, drink, rest, and toilet offers, and going home is a scored option that replaces the fixed stay. Each departure is tallied by its reason. Member of the day-at-the-park slice. Depends on: deterministic-simulation's park-clock, effortless-building's facilities-and-hours, and plausible-operations' served-needs.
 
+4. `seated-meals`: tired guests weigh the best rest seats and sit at furniture. Guests carry the food they buy and weigh the best meal seats against eating now, which relieves less. A guest turned away from a full piece remembers it and moves on to the next best. Seated guests are drawn on the piece's seats. The day parks gain furniture and lose their bench box. Member of the somewhere-to-sit slice. Depends on: a-day-out, effortless-building's furnished-paths, plausible-operations' served-seats, and navigable-networks' best-seats.
+
 Later milestones come from the deepening candidates once the slice has been played.
 
 ## Deepening candidates
