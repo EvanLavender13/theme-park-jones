@@ -40,7 +40,7 @@ If the artifact breaks a rule that docs/conventions.md states, rate it Blocker. 
 
 - Style, naming, formatting, organization preferences.
 - Speculation about future changes ("if someone later removes this guard...").
-- Feature requests or enhancements dressed as defects.
+- Feature requests or enhancements dressed as defects. A cost finding under the Cost lens is not an enhancement.
 - Restatements of what the artifact says.
 - Anything you cannot back with evidence from the artifact or project.
 - Any finding you would have to qualify with "might," "could," or "potentially" because you did not verify it.
@@ -75,6 +75,20 @@ Read docs/principles.md and docs/exceptions.md first. Rate a principle violation
   - uninitialized state.
 - An outcome that cannot be traced to its causes, or a change that cannot be previewed, where the artifact claims or needs it (principle 8).
 - A plan brief with no Medium section, or a Medium section that omits an interaction the plan describes.
+
+### Cost (plans and code)
+
+Read docs/conventions.md's Memory in loops and Growth with the park first. For each piece of work a plan or change adds or changes on the tick or frame path, find what it does at every tick or frame, and how its cost grows with the park's counts: guests, shops, facilities, pieces of furniture, and the guest network's edges. full.park holds about 2,000 guests, 30 shops, and about 4 km of guest path with about 100 junctions.
+
+- If it allocates in per-tick or per-frame work, rate it Blocker. This includes a buffer made at the start of each tick or call, a copy, and a list returned new at every tick or frame.
+- If its cost or its state grows with a product of counts, such as guests times shops, rate it Blocker.
+- If it repeats work at every tick or frame whose inputs haven't changed, rate it Major.
+
+A cost finding is proven when it names the work, the path from the tick or the frame to it, and what it does at full.park's size. It needs no measurement.
+
+### Mechanisms (plans)
+
+For each acceptance criterion and each check a task runs, trace whether its method can show what it claims. Name what it runs on, and what it would report if the property it checks were broken. If the method can't fail when the property is broken, or fails when the property holds, rate it Blocker. For example, a check that finds churn by repeating work from a restored save also counts the world's storage that loading the save makes again, so it fails on correct code.
 
 ### Slices (`SLICE.md`)
 
