@@ -4,7 +4,7 @@ This module serves the navigable-networks capability (plans/navigable-networks).
 
 ## Boundary
 
-routes reads intent only through parkSegments, parkEntrances, parkBoxes, footprintOf, parkSurface, resolvedSurface, and pieceDistance (sim/park/SPEC.md, decision 0025). It publishes networks in the medium's Network type and route distance in the medium's fields (sim/medium/SPEC.md). Other modules read both through parkNetwork, previousNetwork, the Network type's queries, sampleField, and routeEntryAt, and the doors connectors start from through parkDoors, and their walkways through connectorWalkways and keyedWalkways, and the paved surface with every walkway through walkedSurface, not through how they were derived.
+routes reads intent only through parkSegments, parkEntrances, parkBoxes, footprintOf, parkSurface, resolvedSurface, and pieceDistance (sim/park/SPEC.md, decision 0025). It publishes networks in the medium's Network type and route distance in the medium's fields (sim/medium/SPEC.md). Other modules read both through parkNetwork, previousNetwork, the Network type's queries, sampleField, and routeEntryAt, the best places search through bestPlaces and sampleBestPlaceEdge, and the doors connectors start from through parkDoors, and their walkways through connectorWalkways and keyedWalkways, and the paved surface with every walkway through walkedSurface, not through how they were derived.
 
 addRoutes registers the derived type PreviousNetwork, the resolver path-networks, and route distance's two fields and its resolver. makeParkSchema calls it after addParkEdits. addDropPreviousNetworks registers the finisher that removes the previous networks. addPark calls it after every finisher that reads them.
 
@@ -59,3 +59,17 @@ At a place inside an edge, a source's entry is the better of the edge's two ends
 routeEntryAt(world, kind, network, place, source) returns exactly the entry sampleField gives that source at the place, or none. If a mover follows one source, it pays for that source alone, because routeEntryAt reads only that source's entries and allocates nothing except the slot's order by place, on its first read.
 
 Suppose a mover samples at a place, walks Next along Next's carrier to Next.To, and samples again there. Doing this repeatedly, it arrives at the source's node. The lengths it walks add up exactly to the distance it first sampled.
+
+## Best places
+
+bestPlaces finds the best few of many seeds from every node of a network, in one search. A PlaceSeed has a key, an owner, a place on the network, and a value, where a higher value is better. If a seed's place doesn't resolve, it is left out. If two seeds share a key, bestPlaces throws std::invalid_argument.
+
+A seed's distance from a place is the least length of a route along edges from that place to the seed's place, added from the seed's end, as route distance's are (principle 4). From a place, one seed dominates another when its distance there is no longer, its value is no lower, and it comes first in order of distance, then higher value, then lower key. At each node, bestPlaces gives the seeds that fewer than a given number of other seeds dominate there, in that order. Each comes as a BestPlace: the seed's key, owner, place, and value, its distance, and the next step toward it. A node's entries are at its nodePlace. A seed whose place lies strictly inside an edge also gets one entry at its own place. Where a seed's place lies, its entry has distance 0 and a Next with carrier NULL_KEY, to show the route has arrived.
+
+A next step follows an edge as route distance's does, except that a step into the edge holding the seed's place ends at that place. Of the steps that achieve a node's distance, the one first by route distance's rule is taken, so the result depends only on the network and the seeds (principle 10).
+
+Every node a next step leads to also gives that seed. Suppose a mover starts at a node, walks Next along its carrier to Next.To, and samples there. Repeating this, it reaches the seed's place, and the lengths it walks add up exactly to the distance it first sampled. Rounding can make routes of different lengths equal. A node then gives the seeds the search keeps by the order above, which can differ slightly from what a separate search for each seed would find.
+
+sampleBestPlaceEdge is the rule for a place strictly inside an edge, for a field whose entries bestPlaces made. A seed's distance there is the least of three walks: to the edge's From end plus the seed's distance there, to its To end plus the seed's distance there, and, if the seed's place lies on the edge, along the edge to it. The rule gives the seeds that fewer than the given number of others dominate there, in the same order, each with the next step of its least walk. A mover that follows them reaches the seed, and the lengths it walks add up to the distance it sampled, allowing for rounding. The rule allocates nothing but out's growth, so movers can sample on the tick path.
+
+bestPlaces' work grows with the network's edges times the number it keeps times the number of different values among the seeds. It doesn't grow with the seeds times the network.

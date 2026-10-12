@@ -25,11 +25,13 @@ add_library(tpj_sim STATIC
     park/meetings.cpp
     park/surface.cpp
     park_schema.cpp
+    routes/best_places.cpp
     routes/networks.cpp
     routes/route_distance.cpp
     save.cpp
     schema.cpp
     walk.cpp
+    wayfinding/best_seats.cpp
     world.cpp)
 target_include_directories(tpj_sim PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tpj_sim PUBLIC tpj_core)

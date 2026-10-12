@@ -1,5 +1,6 @@
 #include "sim/routes/route_distance.h"
 
+#include "sim/routes/internal/route_steps.h"
 #include "sim/routes/networks.h"
 #include "sim/schema.h"
 #include "sim/world.h"
@@ -35,20 +36,6 @@ std::vector<std::vector<Leaving>> leavingSteps(const Network &network) {
         {{edge.Carrier, edge.ToDistance, edge.FromDistance}, edge.From, edge.length()});
   }
   return leaving;
-}
-
-// Whether a step comes before another among those achieving a node's distance: the lower carrier
-// key, then toward lower distances, then the lower From.
-bool isPreferred(const RouteStep &step, const RouteStep &other) {
-  if (step.Carrier != other.Carrier) {
-    return step.Carrier < other.Carrier;
-  }
-  const bool isDown = step.To < step.From;
-  const bool isOtherDown = other.To < other.From;
-  if (isDown != isOtherDown) {
-    return isDown;
-  }
-  return step.From < other.From;
 }
 
 // Publishes each entity anchoring a node of the kind's network, in ascending key order, with its
@@ -201,7 +188,7 @@ std::vector<std::optional<RouteEntry>> routeEntries(const Network &network, Enti
     for (const Leaving &step : leaving[node]) {
       const std::optional<RouteEntry> &far = entries[step.Arrives];
       if (far && far->Distance + step.Length == entry->Distance &&
-          (!next || isPreferred(step.Step, *next))) {
+          (!next || isPreferredStep(step.Step, *next))) {
         next = step.Step;
       }
     }
