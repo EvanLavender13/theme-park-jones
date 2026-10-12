@@ -114,7 +114,7 @@ Unordered pool this capability draws later milestones from.
 - Instanced guests: draw every guest from one shared mesh with a small per-guest instance buffer, instead of rebuilding and re-uploading a mesh of all guests every tick. Gated on: the report showing the guest mesh and its upload as a real share of the app's frame after indexed-sampling, or guests being drawn as models instead of simple shapes.
 - Ground field lookup by bucket: a ground field's by-cell lookup is rebuilt after each swap by sorting every entry, about 160 µs a tick for guest presence on the full park. Group entries into their cells in one pass instead.
 - Faster component store: replace keyed-storage's first store with one that keeps key order but iterates densely, such as a key-sorted array with a key-to-index map, or a B-tree (decision 0039). Gated on: keyed-storage merged, and the report showing component lookup or iteration as a real share of a tick.
-- Guests found by type: parkGuests walks every live key and checks each one for a guest, twice a tick and again in each resolution. Iterate the guest store in key order instead. Gated on: keyed-storage merged.
+- Depot routes kept per resolution: stepShops finds each shop's nearest depot and its delivery delay by sampling backstage route distance at every tick, though route distance changes only at a resolution. Derive them once per resolution instead.
 - full.park holds its crowd through hours of play: its 30 counters serve about 600 meals and drinks a game hour, well below what its 2,000 guests want, so thirst sends them home within a few game hours. Give it enough counters for its guests. Gated on: a run long enough to show it, such as play or a longer runtime report.
 
 ## Open questions
