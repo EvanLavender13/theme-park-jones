@@ -66,7 +66,7 @@ When a shop is deleted, the guests waiting at it get their visits back with no s
 
 Each shop publishes what it offers to guests: food in the entry field food-offer, and drink in drink-offer. In each, it publishes one OfferEntry at its guest anchor, holding:
 
-- the need a serving relieves, on a scale from 0 to 1: MEAL_RELIEF for food and DRINK_RELIEF for drink;
+- the need a serving relieves, on a scale from 0 to 1: MEAL_RELIEF for food and DRINK_RELIEF for drink. Guests weigh this relief when they choose the shop. A drink relieves thirst by it, but the hunger a meal relieves depends on where the guest eats it (sim/guests/SPEC.md, Meals);
 - the ticks the next guest to arrive for the good would wait to be served;
 - whether it has the good at all.
 

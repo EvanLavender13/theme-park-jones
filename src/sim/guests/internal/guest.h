@@ -24,7 +24,8 @@ namespace tpj {
 // heading to or waiting at and the need it goes there for, the relief of the offer it last picked,
 // the reason it last recorded for heading home, the meals it has eaten and the last of them, the
 // segment that lays the piece of furniture it heads to or sits at, or NULL_KEY when its target
-// isn't a piece, the tick it sent its last seat visit, and the pieces it remembers as full.
+// isn't a piece, the tick it sent its last seat visit, the pieces it remembers as full, and the
+// rest relief of the piece it heads to or sits at to eat.
 struct Guest {
   Place At;
   GroundPoint Ground;
@@ -51,6 +52,7 @@ struct Guest {
   EntityKey TargetOwner = NULL_KEY;
   uint64_t Sent = 0;
   std::array<FullPiece, SEAT_CHOICES> Full{};
+  double SeatRestRelief = 0.0;
 };
 
 // The names a guest's remembered full pieces are saved under.
@@ -87,6 +89,7 @@ template <typename Visitor> void visitFields(Visitor &visitor, Guest &guest) {
   for (size_t i = 0; i < FULL_PIECE_NAMES.size(); ++i) {
     visitor.field(FULL_PIECE_NAMES[i], guest.Full[i]);
   }
+  visitor.field("seat-rest-relief", guest.SeatRestRelief);
 }
 
 } // namespace tpj
