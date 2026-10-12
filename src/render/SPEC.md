@@ -10,7 +10,7 @@ render reads:
 - the networks through parkNetwork, connectorWalkways, and the Network type's queries
 - guests through parkGuests and guestRecord
 - shops through shopRecord
-- the furniture through parkFurniture
+- the furniture through parkFurniture and seatPose
 - the time of day through parkTime
 
 It depends on no module but sim and core. The paving overlay shades by values it is given, and views supplies them.
@@ -19,7 +19,7 @@ The app calls these headers:
 
 - renderer.h to create the renderer, upload meshes, and draw frames
 - park_mesh.h for buildParkMesh, buildGhostMesh, GhostMesh, appendEntity, appendHandle, appendSides, meshBounds, HIGHLIGHT_TINT, HANDLE_COLOR, EDGE_HANDLE_COLOR, and TAPER_HANDLE_COLOR
-- guest_mesh.h for buildGuestMesh and appendGuestEntity
+- guest_mesh.h for buildGuestMesh, appendGuestEntity, and SeatedGuests
 - day_light.h for DayLight, dayLightAt, and dayLightOf
 - graph_overlay.h for buildGraphOverlay, graphColor, and the GRAPH_ drawing constants
 - paving_overlay.h for buildOverlayShape, overlayPlace, and OVERLAY_HEIGHT
@@ -76,7 +76,9 @@ appendHandle adds a radius, edge, or taper handle as a flat disc of RADIUS_HANDL
 
 ## Guests
 
-buildGuestMesh draws each guest that has a position as an upright box where it stands. The box is shaded from blue when every need of the guest is at 0 to pink when its most pressing need is at 1. appendGuestEntity adds one guest's box, where buildGuestMesh draws it, in a given color. It adds nothing when the guest has no position. The light dims a guest's box but never changes its hue (The light).
+buildGuestMesh draws each guest that has a position. A guest is drawn as an upright box where it stands, or a box GUEST_SEATED_HEIGHT tall on its seat while it is seated. The box is shaded from blue when every need of the guest is at 0 to pink when its most pressing need is at 1. appendGuestEntity adds one guest's box, where buildGuestMesh draws it, in a given color. It adds nothing when the guest has no position. The light dims a guest's box but never changes its hue (The light).
+
+SeatedGuests keeps the seat each seated guest is drawn on, from one update to the next. A guest is drawn seated when its record gives a seat place. It keeps its seat while it stays seated at the same piece, whoever else sits down or stands up there. Guests newly seated take the lowest free seat of their piece, in key order, with the seats seatPose gives. If no seat of its piece is free, a guest is drawn standing. The seats are drawing only, and no save holds them. After a park opens, its first update seats guests in key order.
 
 ## Paving overlay
 
@@ -94,7 +96,7 @@ groundAtCursor gives the point on the ground under a cursor for a camera view. I
 
 pointAtCursor gives the point at a height above the ground under a cursor, where its ray meets that level. It gives none when the eye is not above that level or the ray does not descend. groundAtCursor is pointAtCursor at height 0.
 
-entityAtCursor gives the key of the nearest entrance, box, or guest that the cursor's ray meets, or none. It uses the shapes the park and guest meshes draw. Paths, walkways, and starved marks do not stop the ray, so a click meets what stands on the ground.
+entityAtCursor gives the key of the nearest entrance, box, or guest that the cursor's ray meets, or none. It uses the shapes the park and guest meshes draw, with the same seated guests. Paths, walkways, and starved marks do not stop the ray, so a click meets what stands on the ground.
 
 ## Graph overlay
 

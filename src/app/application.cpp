@@ -72,9 +72,9 @@ bool Application::runFrames() {
     // press picks from the view on screen, before the camera moves.
     Interactions.useButtons(Session.world(), Session.commands(), input.Buttons);
     if (Interactions.picks(input.Buttons)) {
-      Interactions.pick(
-          Session.world(),
-          entityUnderCursor(Session.world(), readCursor(Window.get()), orbitCameraView(Camera)));
+      Interactions.pick(Session.world(),
+                        entityUnderCursor(Session.world(), Scene.seated(), readCursor(Window.get()),
+                                          orbitCameraView(Camera)));
     }
 
     // The simulation advances in fixed ticks regardless of frame rate, as many as the speed asks,
@@ -90,8 +90,8 @@ bool Application::runFrames() {
     if (Ui.speed().paused()) {
       Session.applyWithoutTick();
     }
-    if (!uploadWorldMeshes(renderer, Session.world(),
-                           Scene.syncWorld(Session.world(), Session.generation()), Camera)) {
+    const WorldMeshes meshes = Scene.syncWorld(Session.world(), Session.generation());
+    if (!uploadWorldMeshes(renderer, Session.world(), meshes, Scene.seated(), Camera)) {
       return false;
     }
 
@@ -132,7 +132,7 @@ bool Application::runFrames() {
                            Interactions.hoveredHandle(Session.world())};
     const bool lookChanged = Scene.syncLook(remade, look);
     if (((lookChanged || shapeChanged) &&
-         !uploadPreviewMeshes(renderer, Session.world(), Scene.preview(), look,
+         !uploadPreviewMeshes(renderer, Session.world(), Scene.preview(), look, Scene.seated(),
                               Scene.overlayShape(), shapeChanged)) ||
         !drawFrame(renderer, view, light, drawData, lastFrame ? CapturePath : nullptr)) {
       return false;

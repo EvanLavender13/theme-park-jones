@@ -1,6 +1,7 @@
 #include "legible/inspect.h"
 
 #include "sim/clock.h"
+#include "sim/furniture/furniture.h"
 #include "sim/guests/guests.h"
 #include "sim/operations/facilities.h"
 #include "sim/operations/operations.h"
@@ -35,14 +36,36 @@ template <typename Enum> std::string displayName(Enum value) {
   return name;
 }
 
-// The box's kind and key, such as "bench 5", or "box <key>" when no box has the key.
+// The box's or piece of furniture's kind and key, such as "bench 5" or "table 9", or "box <key>"
+// when neither has the key.
 std::string boxText(const World &world, EntityKey key) {
   for (const ParkBox &box : parkBoxes(world)) {
     if (box.Key == key) {
       return displayName(box.Kind) + " " + keyText(key);
     }
   }
+  for (const FurniturePiece &piece : parkFurniture(world)) {
+    if (piece.Key == key) {
+      return displayName(piece.Kind) + " " + keyText(key);
+    }
+  }
   return "box " + keyText(key);
+}
+
+// The pieces the guest remembers as full, each with how long ago it found it full, or "none".
+std::string fullPiecesText(const World &world, const GuestRecord &record) {
+  std::string text;
+  for (const FullPiece &full : record.FullPieces) {
+    if (full.Piece == NULL_KEY) {
+      continue;
+    }
+    if (!text.empty()) {
+      text += "; ";
+    }
+    text += std::format("{} {} s ago", boxText(world, full.Piece),
+                        seconds(ticksSince(world, full.Found)));
+  }
+  return text.empty() ? "none" : text;
 }
 
 std::vector<InspectorRow> guestRows(const World &world, const GuestRecord &record) {
@@ -71,6 +94,7 @@ std::vector<InspectorRow> guestRows(const World &world, const GuestRecord &recor
   } else {
     rows.push_back({"Last meal", "none"});
   }
+  rows.push_back({"Full pieces", fullPiecesText(world, record)});
   return rows;
 }
 
@@ -82,8 +106,8 @@ std::string capitalized(std::string name) {
   return name;
 }
 
-// The guest's choices as six rows: each need's best offer and the chance of any offer of it, then
-// carrying on and heading home.
+// The guest's choices as six rows: each need's best offer or seat and the chance of any of them,
+// then carrying on and heading home.
 std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOption> &options) {
   std::vector<ChoiceRow> rows;
   for (const GuestNeed need : NEEDS) {
@@ -93,7 +117,8 @@ std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOp
     const ChoiceOption *best = nullptr;
     double probability = 0.0;
     for (const ChoiceOption &option : options) {
-      if (option.Kind == ChoiceKind::Offer && option.Need == need) {
+      if ((option.Kind == ChoiceKind::Offer || option.Kind == ChoiceKind::Seat) &&
+          option.Need == need) {
         probability += option.Probability;
         if (best == nullptr || option.Score > best->Score) {
           best = &option;

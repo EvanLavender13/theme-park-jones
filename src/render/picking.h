@@ -1,6 +1,7 @@
 #ifndef TPJ_RENDER_PICKING_H
 #define TPJ_RENDER_PICKING_H
 
+#include "render/guest_mesh.h"
 #include "render/math.h"
 #include "render/renderer.h"
 #include "sim/entity_key.h"
@@ -37,9 +38,10 @@ std::optional<double> rayEntry(const CursorRay &ray, const Pose &pose, Footprint
                                float height);
 
 // The entrance, box, or guest the cursor's ray first meets, as the park and guest meshes draw
-// them, or none when it meets none.
-std::optional<EntityKey> entityAtCursor(const World &world, const CameraView &view, float aspect,
-                                        float ndcX, float ndcY);
+// them with the seated guests, or none when it meets none.
+std::optional<EntityKey> entityAtCursor(const World &world, const SeatedGuests &seated,
+                                        const CameraView &view, float aspect, float ndcX,
+                                        float ndcY);
 
 } // namespace tpj
 

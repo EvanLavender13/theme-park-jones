@@ -57,8 +57,10 @@ An inspector explains one guest, shop, bench, or toilet block from what it publi
 
 inspectSubject reads the subject's record afresh at each call, so if an inspector is shown every frame, it follows every tick. It says when the subject is gone. For a guest it shows:
 
-- its activity, its four needs, when it arrived, its target and the need it heads there for, or while it heads home the reason it heads home for, meals eaten, and last meal
+- its activity, its four needs, when it arrived, its target and the need it heads there for, or while it heads home the reason it heads home for, meals eaten, last meal, and the pieces it remembers as full, each with how long ago it found it full
 - a table of six rows, one for each of hunger, thirst, tiredness, and the toilet, then carrying on and heading home (principle 8). A need's row shows the facility of the guest's highest-scoring offer of that need, each term of that offer's score, and its score, and the probability that the guest picks any of its offers of that need. If the guest has no offer of that need, the row says so. Heading home's row shows the reason it would head home for, its commitment, its score, and its probability, or says that there is no route home. Carrying on's row shows its score and its probability. Below the table is a table of heading home's base and reason terms when heading home is an option.
+
+Wherever the inspector names a target or a facility that is a piece of furniture, it names it as a bench or a table with its key. A need's row counts seat options as offers of that need.
 
 For a shop it shows its stock and units on order of each good, its queue, what limits it, and whether it is starved.
 

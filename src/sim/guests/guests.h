@@ -3,7 +3,9 @@
 
 #include "sim/draw.h"
 #include "sim/entity_key.h"
+#include "sim/furniture/furniture.h"
 #include "sim/medium/network.h"
+#include "sim/wayfinding/best_seats.h"
 
 #include <array>
 #include <optional>
@@ -19,11 +21,20 @@ class World;
 class WorldSchema;
 
 // What a guest is doing: wandering the paths, heading to a shop, bench, or toilet block, waiting
-// there for its visit to come back, or heading home.
-enum class GuestActivity : uint8_t { Wandering, HeadingToFacility, Waiting, HeadingHome };
+// there or at a piece of furniture for its visit to come back, heading home, heading to a piece of
+// furniture, or seated there.
+enum class GuestActivity : uint8_t {
+  Wandering,
+  HeadingToFacility,
+  Waiting,
+  HeadingHome,
+  HeadingToSeat,
+  Seated
+};
 
-constexpr std::array<std::string_view, 4> enumNames(GuestActivity /*value*/) {
-  return {"wandering", "heading-to-facility", "waiting", "heading-home"};
+constexpr std::array<std::string_view, 6> enumNames(GuestActivity /*value*/) {
+  return {"wandering",    "heading-to-facility", "waiting",
+          "heading-home", "heading-to-seat",     "seated"};
 }
 
 // A need a guest has, which one kind of offer answers: hunger by meals, thirst by drinks,
@@ -51,17 +62,19 @@ inline constexpr std::array<HomeReason, 5> HOME_REASONS{HomeReason::Hunger, Home
                                                         HomeReason::Tiredness, HomeReason::Toilet,
                                                         HomeReason::Closing};
 
-// What a choice's option does: go to a shop for its offer, carry on wandering, or head home.
-enum class ChoiceKind : uint8_t { Offer, CarryOn, HeadHome };
+// What a choice's option does: go to a shop for its offer, carry on wandering, head home, or go to
+// a piece of furniture to sit.
+enum class ChoiceKind : uint8_t { Offer, CarryOn, HeadHome, Seat };
 
-constexpr std::array<std::string_view, 3> enumNames(ChoiceKind /*value*/) {
-  return {"offer", "carry-on", "head-home"};
+constexpr std::array<std::string_view, 4> enumNames(ChoiceKind /*value*/) {
+  return {"offer", "carry-on", "head-home", "seat"};
 }
 
-// One option of a choice: its kind, the facility and need for an offer, its terms, its score, and
-// the probability the softmax gave it. An offer's terms are Relief, Distance, Wait, and
-// Commitment. Heading home's are Base, Reasons, and Commitment, and its reason is the first
-// largest of Reasons. Carrying on has no terms.
+// One option of a choice: its kind, the facility and need for an offer, or the piece and need for a
+// seat, its terms, its score, and the probability the softmax gave it. An offer's terms are Relief,
+// Distance, Wait, and Commitment. A seat's are Relief, Distance, and Commitment. Heading home's are
+// Base, Reasons, and Commitment, and its reason is the first largest of Reasons. Carrying on has no
+// terms.
 struct ChoiceOption {
   ChoiceKind Kind = ChoiceKind::CarryOn;
   EntityKey Facility = NULL_KEY;
@@ -94,6 +107,20 @@ template <typename Visitor> void visitFields(Visitor &visitor, GuestMeal &meal) 
   visitor.field("after", meal.After);
 }
 
+// A piece of furniture a guest found full, and the tick it found it full. An empty one has Piece
+// NULL_KEY.
+struct FullPiece {
+  EntityKey Piece = NULL_KEY;
+  uint64_t Found = 0;
+
+  bool operator==(const FullPiece &) const = default;
+};
+
+template <typename Visitor> void visitFields(Visitor &visitor, FullPiece &piece) {
+  visitor.field("piece", piece.Piece);
+  visitor.field("found", piece.Found);
+}
+
 // How many guests have walked out of an entrance since the park last opened, by the reason they
 // left, in HOME_REASONS order.
 struct DepartureTally {
@@ -110,9 +137,11 @@ struct CurvePoint {
 
 // What a guest publishes about itself for display and tests (decision 0025): what it is doing,
 // its place on the guest network, the ground position it stands on, its four needs, the tick it
-// arrived, the facility it is heading to or waiting at and the need it goes there for, the reason
-// it last recorded for heading home, and the meals it has eaten and the last of them. Nothing in
-// the park reads it.
+// arrived, the facility or piece it is heading to or waiting at and the need it goes there for,
+// the reason it last recorded for heading home, the seat place of the piece it sits at while it is
+// seated there and the piece is still laid, the pieces it remembers as full, with empty entries
+// where it remembers none, and the meals it has eaten and the last of them. Nothing in the park
+// reads it.
 struct GuestRecord {
   GuestActivity Activity = GuestActivity::Wandering;
   Place At;
@@ -125,6 +154,8 @@ struct GuestRecord {
   EntityKey Target = NULL_KEY;
   GuestNeed TargetNeed = GuestNeed::Hunger;
   HomeReason Reason = HomeReason::Hunger;
+  std::optional<SeatPlace> Seat;
+  std::array<FullPiece, SEAT_CHOICES> FullPieces{};
   uint64_t MealsEaten = 0;
   std::optional<GuestMeal> LastMeal;
 
@@ -197,6 +228,8 @@ inline constexpr uint64_t CLOSING_LEAD = 3600;
 inline constexpr double CLOSING_SCORE = 10.0;
 // The softmax temperature: lower picks the best option more surely.
 inline constexpr double CHOICE_TEMPERATURE = 0.25;
+// Ticks a guest remembers a piece of furniture as full.
+inline constexpr uint64_t FULL_MEMORY_TIME = 900;
 // Ticks a visit takes from the guest at a shop's anchor to the shop.
 inline constexpr uint32_t VISIT_DELAY = 1;
 // The causes a guest consumes its returned visit and each serving with.

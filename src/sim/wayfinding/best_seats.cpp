@@ -3,6 +3,7 @@
 #include "sim/entity_key.h"
 #include "sim/furniture/furniture.h"
 #include "sim/medium/field.h"
+#include "sim/medium/network.h"
 #include "sim/operations/seats.h"
 #include "sim/park/intent.h"
 #include "sim/routes/best_places.h"
@@ -11,8 +12,11 @@
 #include "sim/world.h"
 
 #include <algorithm>
+#include <optional>
+#include <stdint.h>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace tpj {
@@ -65,7 +69,48 @@ void resolveBestSeats(World &world) {
   publishBestSeats<BestMealSeats>(world, network, meal);
 }
 
+// The use's field's entries at the place, as bestSeatsAt gives them.
+template <typename F>
+void sampleBestSeats(const World &world, const Network &network, const Place &place,
+                     SampleScratch<BestPlace> &scratch, std::vector<BestPlace> &out) {
+  const FieldSlot<BestPlace> *slot = sourceSlot<F>(world, fieldKey(F::Name));
+  if (slot == nullptr) {
+    return;
+  }
+  const std::optional<NetworkPosition> position = network.resolve(place);
+  if (!position) {
+    return;
+  }
+  // As sampleField reads a node: the slot's entries at the node's stop places.
+  if (const auto *node = std::get_if<NodePosition>(&*position)) {
+    positionsAtAny(*slot, network.stopPlaces(node->Node), scratch.Positions);
+    for (const uint32_t i : scratch.Positions) {
+      out.push_back(slot->Entries[i].Value);
+    }
+    return;
+  }
+  // As sampleField reads a place inside an edge: the field's rule over the entries at the edge's
+  // ends and along it.
+  const auto &inside = std::get<EdgePosition>(*position);
+  const auto read = [slot](uint32_t i) { return slot->Entries[i].Value; };
+  if (gatherEdgeSample(network, *slot, network.edges()[inside.Edge], scratch, read)) {
+    scratch.Edge.FromOffset = inside.FromOffset;
+    scratch.Edge.ToOffset = inside.ToOffset;
+    sampleBestPlaceEdge(scratch.Edge, SEAT_CHOICES, out);
+  }
+}
+
 } // namespace
+
+void bestSeatsAt(const World &world, const Network &network, const Place &place, SeatUse use,
+                 SampleScratch<BestPlace> &scratch, std::vector<BestPlace> &out) {
+  out.clear();
+  if (use == SeatUse::Rest) {
+    sampleBestSeats<BestRestSeats>(world, network, place, scratch, out);
+  } else {
+    sampleBestSeats<BestMealSeats>(world, network, place, scratch, out);
+  }
+}
 
 void BestRestSeats::sampleEdge(const EdgeSample<BestPlace> &sample, std::vector<BestPlace> &out) {
   sampleBestPlaceEdge(sample, SEAT_CHOICES, out);

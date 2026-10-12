@@ -2,6 +2,7 @@
 #define TPJ_SIM_WAYFINDING_BEST_SEATS_H
 
 #include "sim/medium/field.h"
+#include "sim/medium/network.h"
 #include "sim/routes/best_places.h"
 
 #include <stdint.h>
@@ -10,6 +11,7 @@
 
 namespace tpj {
 
+class World;
 class WorldSchema;
 
 // The pieces each best seats field keeps at a place: those fewer than this many others beat.
@@ -32,6 +34,15 @@ struct BestMealSeats {
 
   static void sampleEdge(const EdgeSample<BestPlace> &sample, std::vector<BestPlace> &out);
 };
+
+// Which best seats field a reader samples: best rest seats or best meal seats.
+enum class SeatUse : uint8_t { Rest, Meal };
+
+// Fills out with the use's field's entries at the place, exactly the values sampleField gives there
+// and in its order, or none where the place doesn't resolve. Reuses out and the scratch's lists,
+// so it allocates only while they grow.
+void bestSeatsAt(const World &world, const Network &network, const Place &place, SeatUse use,
+                 SampleScratch<BestPlace> &scratch, std::vector<BestPlace> &out);
 
 // Registers the best rest seats and best meal seats fields, then the resolver best-seats.
 // addPark calls it after addOperations.

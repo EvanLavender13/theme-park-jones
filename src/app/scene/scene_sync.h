@@ -3,6 +3,7 @@
 
 #include "legible/inspect.h"
 #include "legible/preview.h"
+#include "render/guest_mesh.h"
 #include "render/paving_overlay.h"
 #include "sim/guests/guests.h"
 #include "sim/park/edits.h"
@@ -50,15 +51,19 @@ public:
   // camera framed, and the kept preview is emptied. Otherwise the park mesh when the world's intent
   // differs from the last call's, and the guest mesh when its intent or its tick does. When the
   // intent differs, the kept preview is emptied, so an edit applied without a tick is previewed
-  // afresh.
+  // afresh. Whenever the guest mesh is needed, the seated guests are brought up to date first, and
+  // a new generation starts them afresh.
   WorldMeshes syncWorld(const World &world, uint64_t generation);
+  // The seat each seated guest is drawn on, as the last syncWorld left them.
+  [[nodiscard]] const SeatedGuests &seated() const { return Seated; }
   // After the pointer moves: keeps the preview of the edit as keepPreview does, following ticks
   // when asked, returning whether it was made again.
   bool syncPreview(const World &world, const std::optional<ParkEdit> &edit, bool followTicks);
   [[nodiscard]] const Preview &preview() const { return Kept.Made; }
   // After the panels: whether the ghost and overlay meshes need building, which they do at the
-  // first call, when the preview was just made again, or when the look differs from the last
-  // call's. Remembers the look.
+  // first call, when the preview was just made again, when the look differs from the last call's,
+  // or, while the Inspector's subject is a guest, when the last syncWorld rebuilt the guests, so
+  // the guest's mark follows it. Remembers the look.
   bool syncLook(bool remade, const PreviewLook &look);
   // Keeps the overlay's shape for the previewed world: while shown, built again when the
   // world's path points or segments differ from those it was last built from, and while not
@@ -82,6 +87,9 @@ private:
   std::optional<uint64_t> Generation;
   std::optional<DrawnIntent> Intent;
   std::optional<uint64_t> GuestTick;
+  SeatedGuests Seated;
+  // Whether the last syncWorld rebuilt the guests.
+  bool GuestsRebuilt = false;
   KeptPreview Kept;
   std::optional<PreviewLook> Look;
   // The path points and segments the overlay's shape was built from, while it is shown.

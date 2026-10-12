@@ -2,6 +2,7 @@
 
 #include "sim/clock.h"
 #include "sim/draw.h"
+#include "sim/furniture/furniture.h"
 #include "sim/guests/internal/departures.h"
 #include "sim/guests/internal/footfall.h"
 #include "sim/guests/internal/ground.h"
@@ -15,11 +16,13 @@
 #include "sim/mix.h"
 #include "sim/operations/facilities.h"
 #include "sim/operations/operations.h"
+#include "sim/operations/seats.h"
 #include "sim/park/intent.h"
 #include "sim/routes/networks.h"
 #include "sim/routes/route_distance.h"
 #include "sim/schema.h"
 #include "sim/sim_math.h"
+#include "sim/wayfinding/best_seats.h"
 #include "sim/world.h"
 
 #include <algorithm>
@@ -233,7 +236,57 @@ struct WalkLists {
   std::vector<RouteStep> Steps;
   std::vector<uint64_t> Weights;
   std::vector<GroundSample<Stride>> Near;
+  SeatSample Seats;
 };
+
+// Whether the guest remembers the piece as full at the tick.
+bool remembersFull(const Guest &guest, EntityKey piece, uint64_t tick) {
+  return std::ranges::any_of(guest.Full, [piece, tick](const FullPiece &full) {
+    return full.Piece == piece && tick < full.Found + FULL_MEMORY_TIME;
+  });
+}
+
+// Remembers the piece as full from the tick, in the first entry that is empty or has expired, or
+// else in place of the one found full first.
+void rememberFull(Guest &guest, EntityKey piece, uint64_t tick) {
+  FullPiece *slot = &guest.Full.front();
+  for (FullPiece &full : guest.Full) {
+    if (full.Piece == NULL_KEY || tick >= full.Found + FULL_MEMORY_TIME) {
+      slot = &full;
+      break;
+    }
+    if (full.Found < slot->Found) {
+      slot = &full;
+    }
+  }
+  *slot = {piece, tick};
+}
+
+// The piece's entry in the use's best seats field at the place, or none.
+std::optional<BestPlace> seatEntryAt(const World &world, const Network &network, const Place &place,
+                                     SeatUse use, EntityKey piece, WalkLists &lists) {
+  bestSeatsAt(world, network, place, use, lists.Seats.Scratch, lists.Seats.Places);
+  const auto found = std::ranges::find(lists.Seats.Places, piece, &BestPlace::Key);
+  if (found == lists.Seats.Places.end()) {
+    return std::nullopt;
+  }
+  return *found;
+}
+
+// The piece's seat place, from its segment's seat places, or none when the segment no longer lays
+// it.
+const SeatPlace *seatPlaceOf(const World &world, EntityKey segment, EntityKey piece) {
+  const FieldSlot<SeatPlace> *slot = sourceSlot<SeatPlaces>(world, segment);
+  if (slot == nullptr) {
+    return nullptr;
+  }
+  for (const PlacedEntry<SeatPlace> &entry : slot->Entries) {
+    if (entry.Value.Piece == piece) {
+      return &entry.Value;
+    }
+  }
+  return nullptr;
+}
 
 // A wandering guest's first step, which draws nothing: inside an edge, on to the stop ahead; at a
 // node, its turn when the turn starts there, or on through a shaping point; at any other node, a
@@ -283,10 +336,62 @@ RouteStep pickTurn(const World &world, EntityKey key, const Network &network, ui
 struct ScoredOptions {
   std::vector<ChoiceOption> Options;
   std::vector<double> Reliefs;
+  // The segment that lays each seat's piece by option index, and NULL_KEY for other options.
+  std::vector<EntityKey> Owners;
 };
 
+// Appends an option for each piece best rest seats gives at the guest's place, other than the
+// pieces it remembers as full, with the piece's rest relief and segment.
+void appendSeatOptions(const World &world, const Guest &guest, const Network &network,
+                       WalkLists &lists, ScoredOptions &scored) {
+  bestSeatsAt(world, network, guest.At, SeatUse::Rest, lists.Seats.Scratch, lists.Seats.Places);
+  for (const BestPlace &seat : lists.Seats.Places) {
+    if (remembersFull(guest, seat.Key, world.Tick)) {
+      continue;
+    }
+    ChoiceOption option;
+    option.Kind = ChoiceKind::Seat;
+    option.Facility = seat.Key;
+    option.Need = GuestNeed::Tiredness;
+    option.Relief = RELIEF_WEIGHT * needCurve(guest.Tiredness) * seat.Value;
+    option.Distance = DISTANCE_WEIGHT * seat.Distance;
+    option.Commitment = guest.Activity == GuestActivity::HeadingToSeat && seat.Key == guest.Target
+                            ? COMMITMENT_BONUS
+                            : 0.0;
+    option.Score = option.Relief + option.Distance + option.Commitment;
+    scored.Options.push_back(option);
+    scored.Reliefs.push_back(seat.Value);
+    scored.Owners.push_back(seat.Owner);
+  }
+}
+
+// Heading home's option: its base, each reason's term, and its commitment, with the first largest
+// reason as its reason.
+ChoiceOption headHomeOption(const Guest &guest, const ParkMoment &moment) {
+  ChoiceOption headHome;
+  headHome.Kind = ChoiceKind::HeadHome;
+  headHome.Base = HOME_BASE;
+  // HomeReason lists the needs in NEEDS order, so a need's index is its reason's.
+  forEachNeed([&]<GuestNeed N>() {
+    headHome.Reasons[static_cast<size_t>(N)] = HOME_NEED_WEIGHT * needCurve(needLevel(guest, N));
+  });
+  headHome.Reasons[static_cast<size_t>(HomeReason::Closing)] = moment.Closing;
+  headHome.Commitment = guest.Activity == GuestActivity::HeadingHome ? COMMITMENT_BONUS : 0.0;
+  headHome.Score = headHome.Base;
+  size_t largest = 0;
+  for (size_t i = 0; i < headHome.Reasons.size(); ++i) {
+    headHome.Score += headHome.Reasons[i];
+    if (headHome.Reasons[i] > headHome.Reasons[largest]) {
+      largest = i;
+    }
+  }
+  headHome.Score += headHome.Commitment;
+  headHome.Reason = HOME_REASONS[largest];
+  return headHome;
+}
+
 ScoredOptions scoreOptions(const World &world, const Guest &guest, const Network &network,
-                           const RouteSample &routes, const ParkMoment &moment) {
+                           const RouteSample &routes, const ParkMoment &moment, WalkLists &lists) {
   ScoredOptions scored;
   for (const SampledEntry<RouteEntry> &entry : routes) {
     const std::optional<uint32_t> anchor = network.firstAnchoredNode(entry.Source);
@@ -311,33 +416,16 @@ ScoredOptions scoreOptions(const World &world, const Guest &guest, const Network
       option.Score = option.Relief + option.Distance + option.Wait + option.Commitment;
       scored.Options.push_back(option);
       scored.Reliefs.push_back(offer->Relief);
+      scored.Owners.push_back(NULL_KEY);
     });
   }
+  appendSeatOptions(world, guest, network, lists, scored);
   ChoiceOption carryOn;
   carryOn.Kind = ChoiceKind::CarryOn;
   carryOn.Score = CARRY_ON_SCORE;
   scored.Options.push_back(carryOn);
   if (homeEntry(routes, moment.Entrances) != nullptr) {
-    ChoiceOption headHome;
-    headHome.Kind = ChoiceKind::HeadHome;
-    headHome.Base = HOME_BASE;
-    // HomeReason lists the needs in NEEDS order, so a need's index is its reason's.
-    forEachNeed([&]<GuestNeed N>() {
-      headHome.Reasons[static_cast<size_t>(N)] = HOME_NEED_WEIGHT * needCurve(needLevel(guest, N));
-    });
-    headHome.Reasons[static_cast<size_t>(HomeReason::Closing)] = moment.Closing;
-    headHome.Commitment = guest.Activity == GuestActivity::HeadingHome ? COMMITMENT_BONUS : 0.0;
-    headHome.Score = headHome.Base;
-    size_t largest = 0;
-    for (size_t i = 0; i < headHome.Reasons.size(); ++i) {
-      headHome.Score += headHome.Reasons[i];
-      if (headHome.Reasons[i] > headHome.Reasons[largest]) {
-        largest = i;
-      }
-    }
-    headHome.Score += headHome.Commitment;
-    headHome.Reason = HOME_REASONS[largest];
-    scored.Options.push_back(headHome);
+    scored.Options.push_back(headHomeOption(guest, moment));
   }
   return scored;
 }
@@ -372,14 +460,21 @@ std::vector<double> softmaxWeights(std::span<ChoiceOption> options) {
 // Samples route distance where the guest stands, scores its options there, picks one by softmax,
 // and takes it up.
 void choose(const World &world, EntityKey key, Guest &guest, const Network &network,
-            const ParkMoment &moment, uint64_t &choices) {
+            const ParkMoment &moment, uint64_t &choices, WalkLists &lists) {
   const RouteSample routes = sampleField<GuestRouteDistance>(world, network, guest.At);
-  ScoredOptions scored = scoreOptions(world, guest, network, routes, moment);
+  ScoredOptions scored = scoreOptions(world, guest, network, routes, moment, lists);
   const size_t picked =
       softmaxPick(drawKey(world, key, hashName("guest-choice"), choices++), scored.Options);
   const ChoiceOption &option = scored.Options[picked];
   guest.Target = NULL_KEY;
-  if (option.Kind == ChoiceKind::Offer) {
+  guest.TargetOwner = NULL_KEY;
+  if (option.Kind == ChoiceKind::Seat) {
+    guest.Activity = GuestActivity::HeadingToSeat;
+    guest.Target = option.Facility;
+    guest.TargetNeed = option.Need;
+    guest.ServingRelief = scored.Reliefs[picked];
+    guest.TargetOwner = scored.Owners[picked];
+  } else if (option.Kind == ChoiceKind::Offer) {
     guest.Activity = GuestActivity::HeadingToFacility;
     guest.Target = option.Facility;
     guest.TargetNeed = option.Need;
@@ -404,19 +499,30 @@ void sendVisit(World &world, EntityKey key, EntityKey facility, GuestNeed need) 
   });
 }
 
-// Where the guest's heading takes it from its place: its target shop's route entry or the least
-// entrance entry, whichever it heads for. A guest heading to a shop whose offer it can no longer
-// reach drops the target, and one heading home with no entrance entry stops, each becoming
+// Where the guest's heading takes it from its place: its target shop's route entry, its target
+// piece's entry in best rest seats, or the least entrance entry, whichever it heads for. A guest
+// heading to a shop whose offer it can no longer reach, or to a piece the field at its place no
+// longer gives, drops the target, and one heading home with no entrance entry stops, each becoming
 // wandering; Dropped says it must choose.
 struct Heading {
   std::optional<RouteEntry> Target;
+  std::optional<BestPlace> Seat;
   std::optional<RouteEntry> Home;
   bool Dropped = false;
 };
 
 Heading headingOf(const World &world, Guest &guest, const Network &network,
-                  const std::vector<EntityKey> &entrances) {
+                  const std::vector<EntityKey> &entrances, WalkLists &lists) {
   Heading heading;
+  if (guest.Activity == GuestActivity::HeadingToSeat) {
+    heading.Seat = seatEntryAt(world, network, guest.At, SeatUse::Rest, guest.Target, lists);
+    if (!heading.Seat) {
+      guest.Activity = GuestActivity::Wandering;
+      guest.Target = NULL_KEY;
+      guest.TargetOwner = NULL_KEY;
+      heading.Dropped = true;
+    }
+  }
   if (guest.Activity == GuestActivity::HeadingToFacility) {
     heading.Target = routeEntryAt(world, PathKind::Guest, network, guest.At, guest.Target);
     if (!heading.Target || !needOffer(world, network, guest.Target, guest.TargetNeed)) {
@@ -531,12 +637,17 @@ Pass walkPass(Guest &guest, EntityKey key, const GuestGround &ground, uint32_t g
   return guest.Ground != stood ? Pass::GroundMoved : Pass::Stayed;
 }
 
-// Traces the guest's route ahead: by its target's entries toward its shop, by the entrances' toward
-// home, or wandering on from its first wander step with its turn.
+// Traces the guest's route ahead: by its target's entries toward its shop, by its piece's entries
+// in best rest seats toward its seat place, by the entrances' toward home, or wandering on from
+// its first wander step with its turn.
 void traceGuestRoute(const World &world, const Guest &guest, const Network &network,
                      const NetworkPosition &position, const Heading &heading,
-                     const std::vector<EntityKey> &entrances, RouteAhead &route) {
-  if (heading.Target) {
+                     const std::vector<EntityKey> &entrances, WalkLists &lists) {
+  RouteAhead &route = lists.Route;
+  if (heading.Seat) {
+    traceSeatRoute(world, network, guest.At, heading.Seat->Next, SeatUse::Rest, guest.Target,
+                   lists.Seats, route);
+  } else if (heading.Target) {
     traceRoute(world, network, guest.At, heading.Target->Next,
                std::span<const EntityKey>(&guest.Target, 1), guest.Turn, route);
   } else if (heading.Home) {
@@ -545,6 +656,26 @@ void traceGuestRoute(const World &world, const Guest &guest, const Network &netw
     traceRoute(world, network, guest.At, firstWanderStep(guest, network, position), {}, guest.Turn,
                route);
   }
+}
+
+// Moves the last stretch of a route that ends at the guest's target piece's seat place toward the
+// piece, so the guest stops on the paving's edge beside it: by half the stretch's width less
+// GUEST_CLEARANCE, across from the seat place toward the piece. Changes nothing when the piece is
+// no longer laid, the route is the place alone, or the stretch is too narrow.
+void shiftTowardPiece(const World &world, const Guest &guest, RouteAhead &route) {
+  const SeatPlace *seat = seatPlaceOf(world, guest.TargetOwner, guest.Target);
+  if (seat == nullptr || route.Points.size() < 2) {
+    return;
+  }
+  RoutePoint &last = route.Points.back();
+  const double x = seat->At.X - last.At.X;
+  const double z = seat->At.Z - last.At.Z;
+  const double length = std::sqrt((x * x) + (z * z));
+  const double reach = (0.5 * last.Width) - GUEST_CLEARANCE;
+  if (length == 0.0 || reach <= 0.0) {
+    return;
+  }
+  last.Shift = {x / length * reach, z / length * reach};
 }
 
 // How a guest's walk in a step ended: still in the park, out of an entrance heading home, or lost
@@ -562,6 +693,28 @@ struct WalkProgress {
   bool MustChoose = false;
 };
 
+// When the guest has arrived where its heading ends, sends its visit to its facility or piece and
+// starts it waiting, or walks it out of the entrance, and gives how its walk ends. None when it
+// hasn't arrived.
+std::optional<WalkEnd> arrive(World &world, EntityKey key, Guest &guest, const Heading &heading) {
+  if (heading.Target && heading.Target->Next.Carrier == NULL_KEY) {
+    sendVisit(world, key, guest.Target, guest.TargetNeed);
+    guest.Activity = GuestActivity::Waiting;
+    return WalkEnd::Stays;
+  }
+  if (heading.Seat && heading.Seat->Next.Carrier == NULL_KEY) {
+    createUnits<SeatVisits>(world, key, key, 1);
+    sendUnits<SeatVisits>(world, key, guest.Target, key, 1, VISIT_DELAY);
+    guest.Sent = world.Tick;
+    guest.Activity = GuestActivity::Waiting;
+    return WalkEnd::Stays;
+  }
+  if (heading.Home && heading.Home->Next.Carrier == NULL_KEY) {
+    return WalkEnd::WalkedOut;
+  }
+  return std::nullopt;
+}
+
 // Makes the guest's choice for the route's node at the index. It chooses unless it has since its
 // place last moved, and then its aim starts again from its place. It then sets its turn out of the
 // node: a wanderer's pick, or for any other guest the empty step at the node.
@@ -572,7 +725,7 @@ void chooseFor(World &world, EntityKey key, Guest &guest, const Network &network
   const bool forward = index == 0 ? guest.Forward : point.To > point.From;
   const uint32_t node = point.NodeIndex;
   if (!progress.Chosen) {
-    choose(world, key, guest, network, moment, progress.Choices);
+    choose(world, key, guest, network, moment, progress.Choices, lists);
     progress.Chosen = true;
     guest.Aim = guest.At;
   }
@@ -589,22 +742,23 @@ void chooseFor(World &world, EntityKey key, Guest &guest, const Network &network
 // moves, and it must choose when the clock passes the closing time. Its turn clears once its place
 // passes the turn's node.
 WalkEnd walk(World &world, EntityKey key, Guest &guest, const Network &network,
-             const GuestGround &ground, const ParkMoment &moment, WalkLists &lists) {
+             const GuestGround &ground, const ParkMoment &moment, bool mustChoose,
+             WalkLists &lists) {
   WalkProgress progress;
   progress.Left = guest.Speed * SIM_TICK_SECONDS;
-  progress.MustChoose = moment.Closes;
+  progress.MustChoose = moment.Closes || mustChoose;
   sampleGroundField<GuestPresence>(world, guest.Ground, SIDESTEP_RADIUS, lists.Near);
   for (;;) {
     const std::optional<NetworkPosition> position = network.resolve(guest.At);
     if (!position) {
       return WalkEnd::Lost;
     }
-    const Heading heading = headingOf(world, guest, network, moment.Entrances);
+    const Heading heading = headingOf(world, guest, network, moment.Entrances, lists);
     progress.MustChoose = progress.MustChoose || heading.Dropped;
     // Before arriving, so a guest at its facility's door or its entrance as the park closes still
     // chooses first.
     if (!progress.Chosen && progress.MustChoose) {
-      choose(world, key, guest, network, moment, progress.Choices);
+      choose(world, key, guest, network, moment, progress.Choices, lists);
       progress.Chosen = true;
       progress.MustChoose = false;
       // A new choice can change the route, so the aim starts again from the place.
@@ -612,13 +766,8 @@ WalkEnd walk(World &world, EntityKey key, Guest &guest, const Network &network,
       guest.Turn = {};
       continue;
     }
-    if (heading.Target && heading.Target->Next.Carrier == NULL_KEY) {
-      sendVisit(world, key, guest.Target, guest.TargetNeed);
-      guest.Activity = GuestActivity::Waiting;
-      return WalkEnd::Stays;
-    }
-    if (heading.Home && heading.Home->Next.Carrier == NULL_KEY) {
-      return WalkEnd::WalkedOut;
+    if (const std::optional<WalkEnd> end = arrive(world, key, guest, heading)) {
+      return *end;
     }
     if (progress.Left <= 0.0) {
       return WalkEnd::Stays;
@@ -627,14 +776,17 @@ WalkEnd walk(World &world, EntityKey key, Guest &guest, const Network &network,
     if (!group) {
       return WalkEnd::Stays;
     }
-    traceGuestRoute(world, guest, network, *position, heading, moment.Entrances, lists.Route);
+    traceGuestRoute(world, guest, network, *position, heading, moment.Entrances, lists);
     moveToSide(SIDE_BIAS + ((1.0 - SIDE_BIAS) * guest.Share), lists.Route);
+    if (heading.Seat && lists.Route.Ends) {
+      shiftTowardPiece(world, guest, lists.Route);
+    }
     const RouteAhead &route = lists.Route;
     if (route.Points.empty()) {
       return WalkEnd::Stays;
     }
-    const std::optional<size_t> node =
-        turnNode(route, heading.Target.has_value() || heading.Home.has_value());
+    const std::optional<size_t> node = turnNode(
+        route, heading.Target.has_value() || heading.Seat.has_value() || heading.Home.has_value());
     if (node && !startsAt(network, guest.Turn, route.Points[*node].NodeIndex)) {
       chooseFor(world, key, guest, network, moment, *node, progress, lists);
       continue;
@@ -727,6 +879,38 @@ bool awaitVisit(World &world, EntityKey key, Guest &guest) {
   return false;
 }
 
+// What awaiting a seat visit found: the guest still waits, or its visit came back and it must
+// choose.
+enum class SeatWait : uint8_t { Waiting, Back };
+
+// A guest waiting at a piece of furniture is seated once its visit hasn't come back within the
+// turn-away time. When the visit comes back, it takes the visit and any rest, which lowers
+// tiredness by the seat's rest relief. A visit back with no rest means the piece was full, and the
+// guest remembers it. Either way it stops waiting and must choose.
+SeatWait awaitSeat(World &world, EntityKey key, Guest &guest) {
+  const int64_t visits = unitsHeld<SeatVisits>(world, key, key);
+  if (visits == 0) {
+    if (guest.Activity == GuestActivity::Waiting &&
+        world.Tick >= guest.Sent + VISIT_DELAY + RETURN_DELAY) {
+      guest.Activity = GuestActivity::Seated;
+    }
+    return SeatWait::Waiting;
+  }
+  consumeUnits<SeatVisits>(world, key, key, visits, FINISHED_CAUSE);
+  const int64_t rests = unitsHeld<Rests>(world, key, key);
+  if (rests > 0) {
+    consumeUnits<Rests>(world, key, key, rests, RESTED_CAUSE);
+    guest.Tiredness = std::max(0.0, guest.Tiredness - guest.ServingRelief);
+  } else {
+    rememberFull(guest, guest.Target, world.Tick);
+  }
+  guest.Activity = GuestActivity::Wandering;
+  guest.Target = NULL_KEY;
+  guest.TargetOwner = NULL_KEY;
+  guest.Turn = {};
+  return SeatWait::Back;
+}
+
 // Tires the guest by its rate for each meter between where it stood and where it stands.
 void tire(Guest &guest, GroundPoint stood) {
   const double x = guest.Ground.X - stood.X;
@@ -758,11 +942,19 @@ void stepGuests(World &world) {
     }
     guest.Hunger = std::min(1.0, guest.Hunger + guest.HungerRate);
     guest.Thirst = std::min(1.0, guest.Thirst + guest.ThirstRate);
-    if (guest.Activity == GuestActivity::Waiting && awaitVisit(world, key, guest)) {
-      continue;
+    bool seatBack = false;
+    if (guest.Activity == GuestActivity::Waiting || guest.Activity == GuestActivity::Seated) {
+      if (guest.TargetOwner != NULL_KEY) {
+        if (awaitSeat(world, key, guest) == SeatWait::Waiting) {
+          continue;
+        }
+        seatBack = true;
+      } else if (awaitVisit(world, key, guest)) {
+        continue;
+      }
     }
     const GroundPoint stood = guest.Ground;
-    const WalkEnd end = walk(world, key, guest, network, ground, moment, lists);
+    const WalkEnd end = walk(world, key, guest, network, ground, moment, seatBack, lists);
     if (end == WalkEnd::WalkedOut) {
       ++walkedOut[static_cast<size_t>(guest.Reason)];
     }
@@ -942,6 +1134,17 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
   record.Target = state->Target;
   record.TargetNeed = state->TargetNeed;
   record.Reason = state->Reason;
+  if (state->Activity == GuestActivity::Seated) {
+    if (const SeatPlace *seat = seatPlaceOf(world, state->TargetOwner, state->Target)) {
+      record.Seat = *seat;
+    }
+  }
+  for (size_t i = 0; i < state->Full.size(); ++i) {
+    const FullPiece &full = state->Full[i];
+    if (full.Piece != NULL_KEY && world.Tick < full.Found + FULL_MEMORY_TIME) {
+      record.FullPieces[i] = full;
+    }
+  }
   record.MealsEaten = state->MealsEaten;
   if (state->MealsEaten > 0) {
     record.LastMeal = state->LastMeal;
@@ -959,7 +1162,8 @@ std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, Entity
     return std::nullopt;
   }
   const RouteSample routes = sampleField<GuestRouteDistance>(world, network, state->At);
-  ScoredOptions scored = scoreOptions(world, *state, network, routes, parkMoment(world));
+  WalkLists lists;
+  ScoredOptions scored = scoreOptions(world, *state, network, routes, parkMoment(world), lists);
   softmaxWeights(scored.Options);
   return std::move(scored.Options);
 }

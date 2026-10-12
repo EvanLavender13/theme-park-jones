@@ -1,6 +1,7 @@
 #ifndef TPJ_APP_INPUT_CURSOR_H
 #define TPJ_APP_INPUT_CURSOR_H
 
+#include "render/guest_mesh.h"
 #include "render/renderer.h"
 #include "sim/entity_key.h"
 #include "sim/park/intent.h"
@@ -38,9 +39,9 @@ std::optional<ParkPoint> pointUnderCursor(const std::optional<CursorNdc> &cursor
 // those that exists. None without a cursor, or when there is no ground under it or beside it.
 std::optional<double> groundPerPixel(const std::optional<CursorNdc> &cursor,
                                      const CameraView &view);
-// The entity the cursor's ray first meets, as entityAtCursor gives it for the world and the view,
-// or none without a cursor.
-std::optional<EntityKey> entityUnderCursor(const World &world,
+// The entity the cursor's ray first meets, as entityAtCursor gives it for the world, the seated
+// guests, and the view, or none without a cursor.
+std::optional<EntityKey> entityUnderCursor(const World &world, const SeatedGuests &seated,
                                            const std::optional<CursorNdc> &cursor,
                                            const CameraView &view);
 
