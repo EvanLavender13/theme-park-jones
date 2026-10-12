@@ -80,6 +80,8 @@ buildGuestMesh draws each guest that has a position. A guest is drawn as an upri
 
 SeatedGuests keeps the seat each seated guest is drawn on, from one update to the next. A guest is drawn seated when its record gives a seat place. It keeps its seat while it stays seated at the same piece, whoever else sits down or stands up there. Guests newly seated take the lowest free seat of their piece, in key order, with the seats seatPose gives. If no seat of its piece is free, a guest is drawn standing. The seats are drawing only, and no save holds them. After a park opens, its first update seats guests in key order.
 
+buildGuestMesh can also fill a GuestMeshLists that the caller keeps. It clears the lists first, and allocates nothing once they have grown. Bringing SeatedGuests up to date allocates nothing once its own lists have grown.
+
 ## Paving overlay
 
 buildOverlayShape(world) gives the guest paving's overlay shape: each piece of the paved surface that belongs to a guest segment or to a point where guest segments meet, without door walkways, the lines of the guest segments, and which pieces of different owners overlap. It depends only on the park's path points and segments, so it changes only when they do.

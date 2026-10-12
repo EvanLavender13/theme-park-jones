@@ -23,6 +23,7 @@ struct Noted {
   const void *Address = nullptr;
   size_t Size = 0;
   uint64_t Tick = 0;
+  const char *Work = "";
 };
 
 // Static storage, so noting a block allocates nothing. A null address marks an empty entry.
@@ -33,6 +34,7 @@ size_t FreedCount = 0;
 bool Watching = false;
 bool Overflowed = false;
 uint64_t Tick = 0;
+const char *Work = "";
 // The block the last heap call allocated while watching, or a null address when the last call
 // freed one.
 Noted LastAllocated{};
@@ -56,7 +58,7 @@ void note(void *block, size_t size) {
   while (Table[at].Address != nullptr) {
     at = (at + 1) & (TRACKED_BLOCKS - 1);
   }
-  Table[at] = Noted{block, size, Tick};
+  Table[at] = Noted{block, size, Tick, Work};
   ++NotedCount;
   LastAllocated = Table[at];
 }
@@ -129,7 +131,7 @@ void forget(void *block) {
       if (movesToLarger(last, noted)) {
         return;
       }
-      const FreedBlock freed{noted.Size, noted.Tick, Tick};
+      const FreedBlock freed{noted.Size, noted.Tick, Tick, noted.Work, Work};
       if (FreedCount < REPORTED_BLOCKS) {
         Reported[FreedCount] = freed;
       }
@@ -192,6 +194,8 @@ void startWatching(uint64_t tick) {
 }
 
 void watchTick(uint64_t tick) { Tick = tick; }
+
+void watchWork(const char *work) { Work = work; }
 
 void stopWatching() { Watching = false; }
 

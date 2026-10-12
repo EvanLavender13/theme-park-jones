@@ -62,7 +62,7 @@ GhostMesh ghostMesh(const World &world, const Preview &preview, const PreviewLoo
 } // namespace
 
 bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes &meshes,
-                       const SeatedGuests &seated, OrbitCamera &camera) {
+                       const ParkMesh &guests, OrbitCamera &camera) {
   if (meshes.Park) {
     const ParkMesh mesh = buildParkMesh(world);
     if (meshes.FrameCamera) {
@@ -74,7 +74,7 @@ bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes
       return false;
     }
   }
-  return !meshes.Guests || setGuestMesh(renderer, buildGuestMesh(world, seated));
+  return !meshes.Guests || setGuestMesh(renderer, guests);
 }
 
 bool uploadPreviewMeshes(Renderer &renderer, const World &world, const Preview &preview,

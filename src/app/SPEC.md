@@ -24,7 +24,7 @@ If the main loop throws, for example when one of the simulation's world invarian
 
 ## The scene
 
-The park's walkways and shop marks are rebuilt whenever the park's intent changes or a park is opened. The guests are rebuilt whenever the world ticks or the park's intent changes, as an edit applied while paused changes it. Each seated guest keeps its seat from one rebuild to the next, and a click picks guests where they are drawn. The scene always shows the current world. When a world first has something to show, the camera frames the whole park. The scene is lit by the light at the world's time of day (render/SPEC.md, The light), unless the Light panel previews another time.
+The park's walkways and shop marks are rebuilt whenever an edit, an undo, or a redo applies, or a park is opened. The guests are rebuilt whenever the world ticks or an edit, an undo, or a redo applies, as one applied while paused may move them. Each seated guest keeps its seat from one rebuild to the next, and a click picks guests where they are drawn. Once its lists have grown, keeping the scene up to date frees no memory it allocated, whether or not the world ticked. That covers finding whether intent changed, the seated guests, and the guest mesh. The allocation check holds a stretch of full.park's ticks to it. The scene always shows the current world. When a world first has something to show, the camera frames the whole park. The scene is lit by the light at the world's time of day (render/SPEC.md, The light), unless the Light panel previews another time.
 
 ## Tools and the ghost
 

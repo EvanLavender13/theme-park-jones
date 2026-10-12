@@ -1,8 +1,11 @@
 // The allocation check (decision 0041): the work the app repeats in steady play, repeated on
-// full.park after a warm-up, must free no heap block it allocated while it repeats.
+// full.park after a warm-up, must free no heap block it allocated while it repeats. Each tick is
+// followed by the scene's sync, as the app runs it: once for the frame with the tick, and once for
+// a frame without one.
 
 #include "watch.h"
 
+#include "app/scene/scene_sync.h"
 #include "app/session/park_session.h"
 #include "sim/park_schema.h"
 #include "sim/save.h"
@@ -33,15 +36,27 @@ std::string readText(const char *path) {
   return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
-// Steps the park through the app's own session and reports the blocks the watched ticks freed.
+// The scene's sync after a frame, as the app runs it.
+void syncScene(tpj::SceneSync &scene, const tpj::ParkSession &session) {
+  scene.syncWorld(session.world(), session.generation(), session.edits());
+}
+
+// Steps the park through the app's own session, syncing the scene after each tick, and reports
+// the blocks the watched ticks freed.
 int checkTicks(tpj::ParkSession &session) {
+  tpj::SceneSync scene;
   for (uint64_t tick = 0; tick < WARM_TICKS; ++tick) {
     session.step();
+    syncScene(scene, session);
   }
   tpj::check::startWatching(session.world().Tick);
   for (uint64_t tick = 0; tick < WATCHED_TICKS; ++tick) {
     tpj::check::watchTick(session.world().Tick);
+    tpj::check::watchWork("the tick");
     session.step();
+    tpj::check::watchWork("the scene's sync");
+    syncScene(scene, session);
+    syncScene(scene, session);
   }
   tpj::check::stopWatching();
   if (tpj::check::tableOverflowed()) {
@@ -52,13 +67,14 @@ int checkTicks(tpj::ParkSession &session) {
     std::cout << "allocation check: " << tpj::check::freedCount()
               << " blocks were allocated and freed during the watched ticks\n";
     for (const tpj::check::FreedBlock &block : tpj::check::freedBlocks()) {
-      std::cout << "allocation check: tick freed a " << block.Size << "-byte block at tick "
-                << block.Freed << " that it allocated at tick " << block.Allocated << '\n';
+      std::cout << "allocation check: " << block.FreedBy << " freed a " << block.Size
+                << "-byte block at tick " << block.Freed << " that " << block.AllocatedBy
+                << " allocated at tick " << block.Allocated << '\n';
     }
     return 1;
   }
   std::cout << "allocation check: " << WATCHED_TICKS
-            << " ticks of full.park freed no block they allocated\n";
+            << " ticks of full.park and the scene's sync freed no block they allocated\n";
   return 0;
 }
 

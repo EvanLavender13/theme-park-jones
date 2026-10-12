@@ -10,11 +10,14 @@
 // sees every allocation in the program.
 namespace tpj::check {
 
-// A block allocated and freed while watching, with the ticks the watch was at for each.
+// A block allocated and freed while watching, with the ticks the watch was at for each, and the
+// work that allocated it and the work that freed it.
 struct FreedBlock {
   size_t Size = 0;
   uint64_t Allocated = 0;
   uint64_t Freed = 0;
+  const char *AllocatedBy = "";
+  const char *FreedBy = "";
 };
 
 inline constexpr size_t REPORTED_BLOCKS = 20;
@@ -23,6 +26,9 @@ inline constexpr size_t REPORTED_BLOCKS = 20;
 void startWatching(uint64_t tick);
 // The tick the next allocations and frees are counted at.
 void watchTick(uint64_t tick);
+// The work the next allocations and frees are counted against. The name must outlive the watch, as
+// a string literal does.
+void watchWork(const char *work);
 void stopWatching();
 // How many noted blocks were freed while watching, and the first REPORTED_BLOCKS of them.
 size_t freedCount();
