@@ -3,12 +3,14 @@
 
 #include "render/park_mesh.h"
 #include "sim/entity_key.h"
+#include "sim/furniture/furniture.h"
 #include "sim/medium/network.h"
 #include "sim/park/intent.h"
 #include "sim/world.h"
 
 #include <optional>
 #include <stdint.h>
+#include <utility>
 #include <vector>
 
 namespace tpj {
@@ -28,7 +30,8 @@ inline constexpr Rgba GUEST_DISTRESSED_COLOR{0.95f, 0.20f, 0.50f, 1.0f};
 // standing. Drawing only: no save holds it.
 class SeatedGuests {
 public:
-  // Brings the seats up to date with the world's guests.
+  // Brings the seats up to date with the world's guests. Allocates nothing once its lists have
+  // grown.
   void update(const World &world);
   // The pose of the guest's seat, or none when it isn't drawn seated.
   [[nodiscard]] std::optional<Pose> seatOf(EntityKey guest) const;
@@ -44,6 +47,11 @@ private:
 
   // Ascending by guest.
   std::vector<Taken> Seats;
+  // Used only during update: the world's guests, the seats being made, and the guests newly
+  // seated.
+  std::vector<EntityKey> Guests;
+  std::vector<Taken> Next;
+  std::vector<std::pair<EntityKey, SeatPlace>> Newcomers;
 };
 
 // The sated color moved toward the distressed one by the need, clamped to [0, 1].
@@ -58,6 +66,14 @@ void appendGuestEntity(ParkMesh &mesh, const World &world, const SeatedGuests &s
                        EntityKey key, Rgba color);
 // Every guest that has a position, in key order: on its seat while seated, else standing.
 ParkMesh buildGuestMesh(const World &world, const SeatedGuests &seated);
+// The lists building the guest mesh reuses: the guests' keys and the mesh.
+struct GuestMeshLists {
+  std::vector<EntityKey> Guests;
+  ParkMesh Mesh;
+};
+// As buildGuestMesh, into lists the caller keeps, which it clears first. Allocates nothing once
+// they have grown.
+void buildGuestMesh(const World &world, const SeatedGuests &seated, GuestMeshLists &lists);
 
 } // namespace tpj
 

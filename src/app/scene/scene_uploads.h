@@ -11,11 +11,11 @@
 
 namespace tpj {
 
-// Builds the park and guest meshes the frame needs, the guests on the seated guests' seats, and
-// gives them to the renderer, framing the camera on the park mesh's bounds when asked and the mesh
-// has vertices. False if an upload failed.
+// Gives the renderer the meshes the frame needs: the park mesh, built from the world, and the
+// guest mesh, as the scene's sync built it. Frames the camera on the park mesh's bounds when asked
+// and the mesh has vertices. False if an upload failed.
 bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes &meshes,
-                       const SeatedGuests &seated, OrbitCamera &camera);
+                       const ParkMesh &guests, OrbitCamera &camera);
 // Builds the ghost, meaning the preview's edit with its candidate's walkways and starved marks,
 // then the look's highlight, then its inspected guest's or box's mark, and gives it to the
 // renderer, with the overlay's shape when it changed, and while the look shows a need's overlay,

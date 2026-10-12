@@ -246,6 +246,9 @@ inline constexpr std::string_view USED_CAUSE = "used";
 
 // The keys of every guest, ascending.
 std::vector<EntityKey> parkGuests(const World &world);
+// As parkGuests, into a list the caller keeps, which it clears first. Allocates nothing once the
+// list has grown.
+void parkGuests(const World &world, std::vector<EntityKey> &guests);
 // The guest's inspection record, or none when the key holds no guest.
 std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest);
 // The options the guest would weigh if it chose now, each with its terms, score, and softmax

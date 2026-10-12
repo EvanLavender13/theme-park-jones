@@ -40,12 +40,14 @@ void ParkSession::step() {
     Restore.reset();
     stepWorld(Current, alone, Buffers);
     noteEdits(History, Current);
+    ++Edits;
     return;
   }
   const bool edited = !Commands.empty();
   stepWorld(Current, Commands, Buffers);
   if (edited) {
     noteEdits(History, Current);
+    ++Edits;
   }
 }
 
@@ -56,6 +58,7 @@ void ParkSession::applyWithoutTick() {
     Restore.reset();
     commitCommands(Current, alone);
     noteEdits(History, Current);
+    ++Edits;
     return;
   }
   if (Commands.empty()) {
@@ -63,6 +66,7 @@ void ParkSession::applyWithoutTick() {
   }
   commitCommands(Current, Commands);
   noteEdits(History, Current);
+  ++Edits;
 }
 
 void ParkSession::undo() {

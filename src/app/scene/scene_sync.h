@@ -47,15 +47,18 @@ struct PreviewLook {
 class SceneSync {
 public:
   // After the frame's ticks: which of the park and guest meshes the world needs, remembering it as
-  // drawn. For a generation other than the last one it saw, as at the first call, both, with the
-  // camera framed, and the kept preview is emptied. Otherwise the park mesh when the world's intent
-  // differs from the last call's, and the guest mesh when its intent or its tick does. When the
-  // intent differs, the kept preview is emptied, so an edit applied without a tick is previewed
-  // afresh. Whenever the guest mesh is needed, the seated guests are brought up to date first, and
-  // a new generation starts them afresh.
-  WorldMeshes syncWorld(const World &world, uint64_t generation);
+  // drawn. The edit count is ParkSession::edits(). For a generation other than the last one it
+  // saw, as at the first call, both, with the camera framed, and the kept preview is emptied.
+  // Otherwise the park mesh when the edit count differs from the last call's, and the guest mesh
+  // when the edit count or the world's tick does. When the edit count differs, the kept preview is
+  // emptied, so an edit applied without a tick is previewed afresh. Whenever the guest mesh is
+  // needed, the seated guests are brought up to date, starting afresh at a new generation, and the
+  // guest mesh is built from them. Once its lists have grown, a call frees no memory it allocated.
+  WorldMeshes syncWorld(const World &world, uint64_t generation, uint64_t edits);
   // The seat each seated guest is drawn on, as the last syncWorld left them.
   [[nodiscard]] const SeatedGuests &seated() const { return Seated; }
+  // The guests as the last syncWorld that needed them drew them.
+  [[nodiscard]] const ParkMesh &guestMesh() const { return GuestLists.Mesh; }
   // After the pointer moves: keeps the preview of the edit as keepPreview does, following ticks
   // when asked, returning whether it was made again.
   bool syncPreview(const World &world, const std::optional<ParkEdit> &edit, bool followTicks);
@@ -72,22 +75,12 @@ public:
   [[nodiscard]] const OverlayShape &overlayShape() const { return Shape; }
 
 private:
-  // The intent a park mesh was built from, and the opening hours, so a change of them while paused
-  // also empties the kept preview.
-  struct DrawnIntent {
-    std::vector<ParkEntrance> Entrances;
-    std::vector<ParkPathPoint> Points;
-    std::vector<ParkSegment> Segments;
-    std::vector<ParkBox> Boxes;
-    OpeningHours Hours;
-
-    bool operator==(const DrawnIntent &) const = default;
-  };
-
   std::optional<uint64_t> Generation;
-  std::optional<DrawnIntent> Intent;
+  // The edit count the park mesh was last built at.
+  std::optional<uint64_t> Edits;
   std::optional<uint64_t> GuestTick;
   SeatedGuests Seated;
+  GuestMeshLists GuestLists;
   // Whether the last syncWorld rebuilt the guests.
   bool GuestsRebuilt = false;
   KeptPreview Kept;

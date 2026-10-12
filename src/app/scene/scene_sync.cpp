@@ -4,21 +4,19 @@
 
 namespace tpj {
 
-WorldMeshes SceneSync::syncWorld(const World &world, uint64_t generation) {
+WorldMeshes SceneSync::syncWorld(const World &world, uint64_t generation, uint64_t edits) {
   WorldMeshes meshes;
   if (Generation != generation) {
     Generation = generation;
-    Intent.reset();
+    Edits.reset();
     GuestTick.reset();
     Kept = {};
     Shaped.reset();
     Seated = {};
     meshes.FrameCamera = true;
   }
-  DrawnIntent current{parkEntrances(world), parkPathPoints(world), parkSegments(world),
-                      parkBoxes(world), parkHours(world)};
-  if (Intent != current) {
-    Intent = std::move(current);
+  if (Edits != edits) {
+    Edits = edits;
     meshes.Park = true;
     // An edit applied while paused changes the world without a tick, and may move guests.
     meshes.Guests = true;
@@ -30,6 +28,7 @@ WorldMeshes SceneSync::syncWorld(const World &world, uint64_t generation) {
   }
   if (meshes.Guests) {
     Seated.update(world);
+    buildGuestMesh(world, Seated, GuestLists);
   }
   GuestsRebuilt = meshes.Guests;
   return meshes;

@@ -24,6 +24,8 @@ A guest visits facilities, which are shops, benches, and toilet blocks, and rece
 
 Other modules call guests.h (parkGuests, addGuest, guestRecord, guestOptions, departureTally, and arrivalCurve) and footfall.h (the HungryFootfall field).
 
+parkGuests can also put the keys in a list the caller keeps, clearing it first, and then allocates nothing once the list has grown.
+
 ## Arriving and leaving
 
 Guests arrive at random at each entrance connected to the guest network, at the rate the arrival curve gives for the time of day. In each tick, each such entrance admits at most one guest, by a draw keyed on the entrance and the tick, so the same world and seed always admit the same guests (principle 8). If an entrance has no connection, it admits no one, and that is a legitimate state (principle 2). A guest leaves the park when it walks out of an entrance heading home. It also leaves when no guest paving is left for it to stand on. A guest that leaves drops its entry in guest presence.

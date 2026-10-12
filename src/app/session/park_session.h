@@ -49,6 +49,9 @@ public:
   [[nodiscard]] CommandQueue &commands() { return Commands; }
   // Changes exactly when the world is replaced, to a value it has not had.
   [[nodiscard]] uint64_t generation() const { return Generation; }
+  // Counts the cycles and commits that applied queued commands, an undo, or a redo. It only grows,
+  // and replacing the world keeps it.
+  [[nodiscard]] uint64_t edits() const { return Edits; }
 
   // One cycle with the waiting undo or redo alone, when one waits, or else with the queued
   // commands, which it empties. Either way, the history then notes what the cycle changed.
@@ -83,6 +86,7 @@ private:
   // The undo's or redo's command waiting to apply alone in the next cycle.
   std::optional<RestoreIntent> Restore;
   uint64_t Generation = 0;
+  uint64_t Edits = 0;
 };
 
 } // namespace tpj

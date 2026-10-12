@@ -90,8 +90,9 @@ bool Application::runFrames() {
     if (Ui.speed().paused()) {
       Session.applyWithoutTick();
     }
-    const WorldMeshes meshes = Scene.syncWorld(Session.world(), Session.generation());
-    if (!uploadWorldMeshes(renderer, Session.world(), meshes, Scene.seated(), Camera)) {
+    const WorldMeshes meshes =
+        Scene.syncWorld(Session.world(), Session.generation(), Session.edits());
+    if (!uploadWorldMeshes(renderer, Session.world(), meshes, Scene.guestMesh(), Camera)) {
       return false;
     }
 

@@ -1186,6 +1186,10 @@ void ensureDepartures(World &world) {
 
 std::vector<EntityKey> parkGuests(const World &world) { return world.keysWith<Guest>(); }
 
+void parkGuests(const World &world, std::vector<EntityKey> &guests) {
+  world.keysWith<Guest>(guests);
+}
+
 std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
   const Guest *state = world.tryGet<Guest>(guest);
   if (state == nullptr) {
