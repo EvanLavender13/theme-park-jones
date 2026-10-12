@@ -98,6 +98,8 @@ After the foundation, the tick comes next, because a profile of the full park fo
 2. `indexed-sampling`: the report steps through minutes of play, marks every stage that goes over its budget, and times the app's frames. Walking guests read only the route distance entry they are following between choices, without allocating. With this, the full park runs one tick per frame in the app on windows-release. Depends on: milestone 1, and a Windows profile that put four fifths of a full-park tick in guests' route distance samples.
 3. `following-footfall`: the shared medium gets kept entries. A system changes a kept entry at one place, and the entry stays readable until it changes again. Hungry footfall moves onto kept entries, so its tick work grows with the number of guests instead of the size of the guest network (decision 0031). Depends on: milestone 2. Lands before paths-and-plazas grows the guest network.
 4. `affordable-overlay`: the report times the app's frames with the food overlay shown. An availability overlay, starting with food's, finds each source's offer once per build. It reads route distance with the shared medium's sample at many places, which shares each source's lookups among the places on one edge. A build's cost no longer grows with samples times shops, and a later overlay of the same kind, such as thirst, gets both speedups. Depends on: milestones 2 and 3, and the report after following-footfall still showing the overlay costly on windows-release on the full park, at 37.4 ms.
+5. `allocation-free-loops`: the allocation check of decision 0041 in tests/checks, covering the work the app repeats in steady play, and the fixes that make that work reuse its memory: the world's storage, the tick, the scene's sync, the kept preview, the tools, and the panels. Depends on: milestone 1.
+6. `changing-previews`: previews of an edit that changes every frame, such as dragging a path, stop allocating. Resolution reuses its storage, or resolves only what the edit touches. Depends on: milestone 5.
 
 ## Deepening candidates
 
@@ -105,10 +107,7 @@ Unordered pool this capability draws later milestones from.
 
 - Overlay kept between builds: rebuild the overlay only when the guest network, route distance, or a reachable source's offer changes, compared by content, so a quiet park rebuilds nothing. Gated on: the report showing that rebuilding every tick is still costly after affordable-overlay.
 - Overlay rebuilt by region: when one shop's offer changes, rebuild only the band within the route distance where that shop's term falls to zero, and keep the mesh in chunks. Then a park with many busy shops doesn't rebuild everything every tick. Gated on: the report showing whole rebuilds costly on the full park after affordable-overlay.
-- Incremental resolution: run only the resolvers an applied command affects, in dependency order, so a candidate costs only what its edit touches. Gated on: the report showing candidates costly on the full park.
 - Candidates off the frame's thread: copy the world on the main thread, resolve the candidate on a worker, and show the last finished one. Gated on: incremental resolution still leaving a candidate too slow for a frame.
-- No allocation in the tick path: guests' choices allocate inside per-guest loops. sampleField returns a new list for each choice, and scoreOptions and softmaxWeights build lists. Profile ticks on the full park and remove these allocations (docs/conventions.md, Memory in loops).
-- Debug panel summary once per tick: the panel calls summarizePark every frame, which costs about 3 ms a frame on the full park, because shopRecord scans every box for each shop. Compute the summary once per tick, or look up each shop's box directly.
 - Drawing measured: measure the GPU's share of a frame from the app's --frames runs. Gated on: a slow frame that the CPU stages don't explain.
 - Faster stepping: run systems in parallel or in batches, with bit-identical results. Gated on: the report showing ticks costly on the full park.
 - Resolution across cores: derive each source's route distance in parallel, with results identical to deriving them one after another. Gated on: the report showing resolution, and with it candidates, costly on a park with plazas.
@@ -117,7 +116,6 @@ Unordered pool this capability draws later milestones from.
 - Faster component store: replace keyed-storage's first store with one that keeps key order but iterates densely, such as a key-sorted array with a key-to-index map, or a B-tree (decision 0039). Gated on: keyed-storage merged, and the report showing component lookup or iteration as a real share of a tick.
 - Guests found by type: parkGuests walks every live key and checks each one for a guest, twice a tick and again in each resolution. Iterate the guest store in key order instead. Gated on: keyed-storage merged.
 - full.park holds its crowd through hours of play: its 30 counters serve about 600 meals and drinks a game hour, well below what its 2,000 guests want, so thirst sends them home within a few game hours. Give it enough counters for its guests. Gated on: a run long enough to show it, such as play or a longer runtime report.
-- Guest choices without allocation: a guest's choice samples route distance with sampleField, which builds a new list and its working lists on each call. A sampler that reuses the caller's lists, as wayfinding's bestSeatsAt does for best seats, would take allocation out of the per-tick guest loop.
 
 ## Open questions
 
