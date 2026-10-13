@@ -48,7 +48,10 @@ Close a milestone when every feature in its Features list has merged into main.
 
 1. Confirm that the windows-debug build has no warnings, `ctest.exe --preset windows-debug` passes, and `scripts/tidy.sh` is clean.
 2. Play the milestone's acceptance criteria in the app, or check each one by the means it names. Report what you saw to the user.
-3. Set the MILESTONE.md's Status to complete, and commit with `commit-hygiene`.
+3. Add a `## Leftovers` section to MILESTONE.md. List everything the milestone left outside its criteria and checks: each exclusion its checks make, each Out of scope item in its features, and each place its research named but no feature changed. Read the code of each one. For each item, give either the code that shows it follows docs/conventions.md and docs/principles.md, or the milestone or feature that owns it. If you find a broken rule, treat it as a Blocker. Fix it before closing, or reopen the milestone with a feature for it.
+4. Dispatch the reviewer with `reviewing` on the Leftovers section, with docs/conventions.md and docs/principles.md as context. Ask it to read the code of each item. Fix what it finds before closing.
+5. Tell the user what Leftovers lists, starting with anything that is still wrong. Don't present a gap as minor.
+6. Set the MILESTONE.md's Status to complete, and commit with `commit-hygiene`. The pre-commit hook refuses a milestone set to complete without a Leftovers section.
 
 ## Process notes
 

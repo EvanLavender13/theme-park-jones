@@ -1,6 +1,6 @@
 #!/bin/bash
-# pre-commit: refuse a new PLAN.md with no Placement section (decision 0027), then clang-format
-# staged C/C++ files (decision 0021).
+# pre-commit: refuse a new PLAN.md with no Placement section (decision 0027) and a milestone set
+# to complete with no Leftovers section, then clang-format staged C/C++ files (decision 0021).
 # clang-tidy runs in scripts/tidy.sh, which the pre-push hook gates.
 # Activate once per clone: git config core.hooksPath .githooks
 #
@@ -28,6 +28,22 @@ if [ ${#PLANS[@]} -gt 0 ]; then
         exit 1
     fi
 fi
+
+# A milestone the commit sets to complete needs a Leftovers section (planning-milestones, Closing a
+# milestone). Milestones already complete are left alone, so their pools can still grow.
+while IFS= read -r -d '' MILESTONE; do
+    if ! git show ":$MILESTONE" | grep -q '^Status: complete'; then
+        continue
+    fi
+    if git cat-file -e "HEAD:$MILESTONE" 2> /dev/null &&
+            git show "HEAD:$MILESTONE" | grep -q '^Status: complete'; then
+        continue
+    fi
+    if ! git show ":$MILESTONE" | grep -q '^## Leftovers[[:space:]]*$'; then
+        echo "pre-commit: $MILESTONE is set to complete with no Leftovers section; commit aborted."
+        exit 1
+    fi
+done < <(git diff --cached --name-only --diff-filter=AM -z -- ':(glob)plans/**/MILESTONE.md')
 
 if command -v clang-format &> /dev/null; then
     CLANG_FORMAT="clang-format"
