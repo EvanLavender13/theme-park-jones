@@ -2,6 +2,8 @@
 
 #include "sim/park/geometry.h"
 #include "sim/routes/networks.h"
+#include "sim/tick_buffers.h"
+#include "tools/internal/tool_lists.h"
 
 #include <algorithm>
 #include <array>
@@ -86,7 +88,7 @@ std::optional<StraightPart> straightPart(const std::vector<ParkCorner> &corners,
 }
 
 // Whether the point is the kind's: some segment uses it, and every one that does has the kind.
-bool isKindsPoint(const std::vector<ParkSegment> &segments, EntityKey point, PathKind kind) {
+bool isKindsPoint(std::span<const ParkSegment> segments, EntityKey point, PathKind kind) {
   bool used = false;
   for (const ParkSegment &segment : segments) {
     if (segment.From == point || segment.To == point) {
@@ -115,16 +117,16 @@ PathStop pointOfDrawn(std::span<const PathStop> drawn, size_t stop) {
   return RepeatStop{stop};
 }
 
-// What one findSnap call reads, built once: the query, the park's points, segments, and corners,
-// the drawn stops' positions, and which segments and drawn segments are left out.
+// What one findSnap call reads: the query, the park's points, segments, corners, and the doors
+// serving the query's kind, and the lists it fills: the drawn stops' positions, which segments and
+// drawn segments are left out, the anchors, and the guides.
 struct SnapScene {
   SnapQuery Query;
-  std::vector<ParkPathPoint> Points;
-  std::vector<ParkSegment> Segments;
-  std::vector<ParkCorner> Corners;
-  std::vector<ParkPoint> Drawn;
-  std::vector<bool> LeftOut;
-  std::vector<bool> DrawnLeftOut;
+  std::span<const ParkPathPoint> Points;
+  std::span<const ParkSegment> Segments;
+  const std::vector<ParkCorner> &Corners;
+  std::span<const ParkDoor> Doors;
+  SnapLists &Lists;
 };
 
 std::optional<ParkPoint> positionOf(const SnapScene &scene, EntityKey key) {
@@ -142,27 +144,35 @@ double reachFor(const SnapScene &scene, std::span<const SnapHold> holds) {
   return held ? scene.Query.ReleaseReach : scene.Query.CatchReach;
 }
 
-SnapScene makeScene(const World &world, const SnapQuery &query) {
-  SnapScene scene{query, parkPathPoints(world), parkSegments(world), parkCorners(world), {}, {},
-                  {}};
-  if (!query.Drawn.empty()) {
-    const AddPath path{query.Kind, std::vector<PathStop>(query.Drawn.begin(), query.Drawn.end())};
-    scene.Drawn = stopPositions(world, path).value_or(std::vector<ParkPoint>{});
+// The scene for the query, filling the park's snapping lists: the drawn stops' positions, or none
+// when a stop has no position, and which segments and drawn segments are left out.
+SnapScene makeScene(const World &world, ToolPark &park, const SnapQuery &query) {
+  SnapLists &lists = park.Lists->Snapping;
+  const std::vector<ParkDoor> &doors =
+      query.Kind == PathKind::Guest ? park.GuestDoors : park.BackstageDoors;
+  SnapScene scene{query, park.Points, park.Segments, park.Corners, doors, lists};
+  std::vector<ParkPoint> &drawn = lists.Drawn;
+  drawn.clear();
+  for (const PathStop &stop : query.Drawn) {
+    if (!appendStopPosition(world, park.Corners, stop, drawn)) {
+      drawn.clear();
+      break;
+    }
   }
-  scene.LeftOut.assign(scene.Segments.size(), false);
+  fillGrowing(lists.LeftOut, scene.Segments.size(), false);
   for (size_t s = 0; s < scene.Segments.size(); ++s) {
     const ParkSegment &segment = scene.Segments[s];
     if (query.Dragged != NULL_KEY) {
-      scene.LeftOut[s] = uses(segment, query.Dragged);
-    } else if (!scene.Drawn.empty() && segment.Line.size() >= 2) {
-      scene.LeftOut[s] = lineDistance(scene.Drawn.back(), segment.Line) <= MIN_SEGMENT_LENGTH;
+      lists.LeftOut[s] = uses(segment, query.Dragged);
+    } else if (!drawn.empty() && segment.Line.size() >= 2) {
+      lists.LeftOut[s] = lineDistance(drawn.back(), segment.Line) <= MIN_SEGMENT_LENGTH;
     }
   }
-  const size_t drawnSegments = scene.Drawn.empty() ? 0 : scene.Drawn.size() - 1;
-  scene.DrawnLeftOut.assign(drawnSegments, false);
+  const size_t drawnSegments = drawn.empty() ? 0 : drawn.size() - 1;
+  fillGrowing(lists.DrawnLeftOut, drawnSegments, false);
   for (size_t k = 0; k < drawnSegments; ++k) {
-    scene.DrawnLeftOut[k] = distanceToLine(scene.Drawn.back(), scene.Drawn[k],
-                                           scene.Drawn[k + 1]) <= MIN_SEGMENT_LENGTH;
+    lists.DrawnLeftOut[k] =
+        distanceToLine(drawn.back(), drawn[k], drawn[k + 1]) <= MIN_SEGMENT_LENGTH;
   }
   return scene;
 }
@@ -203,7 +213,7 @@ bool onPaving(const SnapScene &scene, ParkPoint place) {
 // Whether any segment at the point is left out.
 bool anyLeftOutAt(const SnapScene &scene, EntityKey point) {
   for (size_t s = 0; s < scene.Segments.size(); ++s) {
-    if (scene.LeftOut[s] && uses(scene.Segments[s], point)) {
+    if (scene.Lists.LeftOut[s] && uses(scene.Segments[s], point)) {
       return true;
     }
   }
@@ -224,7 +234,7 @@ std::pair<ParkPoint, PathStop> pointTarget(const SnapScene &scene, const ParkPat
 
 // The nearest point target within reach: a path point of the kind, a point a drawn stop makes
 // other than the last, or a door's target. An earlier one wins a tie.
-std::optional<Snap> pointSnap(const World &world, const SnapScene &scene) {
+std::optional<Snap> pointSnap(const SnapScene &scene) {
   const SnapQuery &query = scene.Query;
   std::optional<Snap> nearest;
   // A rounded corner's arc lies between its point and its center, so a corner within the release
@@ -245,19 +255,19 @@ std::optional<Snap> pointSnap(const World &world, const SnapScene &scene) {
              makeSnap(stop, distanceBetween(query.Pointer, at), at, {{GuideKind::Point, at, at}},
                       {{HoldKind::Point, point.Key, 0}}));
   }
-  for (size_t i = 0; i + 1 < scene.Drawn.size(); ++i) {
+  for (size_t i = 0; i + 1 < scene.Lists.Drawn.size(); ++i) {
     const PathStop &stop = query.Drawn[i];
     const bool made =
         !std::holds_alternative<OnPoint>(stop) && !std::holds_alternative<RepeatStop>(stop);
     if (made) {
-      const ParkPoint at = scene.Drawn[i];
+      const ParkPoint at = scene.Lists.Drawn[i];
       consider(scene, nearest,
                makeSnap(RepeatStop{i}, distanceBetween(query.Pointer, at), at,
                         {{GuideKind::Point, at, at}}, {{HoldKind::DrawnStop, NULL_KEY, i}}));
     }
   }
   const double clearance = doorHalfWidth(scene) + DOOR_CLEARANCE;
-  for (const ParkDoor &door : parkDoors(world, query.Kind)) {
+  for (const ParkDoor &door : scene.Doors) {
     const ParkPoint target = offset(door.At, door.Out, clearance);
     const double distance = distanceToLine(query.Pointer, door.At, target);
     if (distance > query.ReleaseReach || onPaving(scene, target)) {
@@ -270,34 +280,45 @@ std::optional<Snap> pointSnap(const World &world, const SnapScene &scene) {
   return nearest;
 }
 
-// An anchor guides run from, and the unit directions in which segments arrive at it.
-struct Anchor {
-  ParkPoint At;
-  std::vector<ParkPoint> Arrivals;
-};
+// An anchor being built: its arrivals are the end of the list, from its First.
+Anchor startAnchor(SnapLists &lists, ParkPoint at) { return {at, lists.Arrivals.size(), 0}; }
 
-void addArrival(Anchor &anchor, ParkPoint vector) {
+void addArrival(SnapLists &lists, Anchor &anchor, ParkPoint vector) {
   const std::optional<ParkPoint> direction = unitOf(vector);
   if (!direction) {
     return;
   }
-  const bool listed = std::ranges::any_of(anchor.Arrivals, [&](ParkPoint arrival) {
+  const std::span<const ParkPoint> arrivals =
+      std::span(lists.Arrivals).subspan(anchor.First, anchor.Count);
+  const bool listed = std::ranges::any_of(arrivals, [&](ParkPoint arrival) {
     return fabs(arrival.X - direction->X) < 1e-9 && fabs(arrival.Z - direction->Z) < 1e-9;
   });
   if (!listed) {
-    anchor.Arrivals.push_back(*direction);
+    lists.Arrivals.push_back(*direction);
+    ++anchor.Count;
   }
 }
 
 // Adds both ways along the direction.
-void addBothWays(Anchor &anchor, ParkPoint vector) {
-  addArrival(anchor, vector);
-  addArrival(anchor, {-vector.X, -vector.Z});
+void addBothWays(SnapLists &lists, Anchor &anchor, ParkPoint vector) {
+  addArrival(lists, anchor, vector);
+  addArrival(lists, anchor, {-vector.X, -vector.Z});
+}
+
+// Lists the anchor, giving it the world's axes when no segment arrives at it.
+void finishAnchor(SnapLists &lists, Anchor anchor) {
+  if (anchor.Count == 0) {
+    lists.Arrivals.push_back({1.0, 0.0});
+    lists.Arrivals.push_back({0.0, 1.0});
+    anchor.Count = 2;
+  }
+  lists.Anchors.push_back(anchor);
 }
 
 // Adds the arrivals of the place the drawn stop names: each segment of the kind at its point, both
 // ways along the segment, arc, or drawn segment it lies on.
 void addPlaceArrivals(const SnapScene &scene, size_t stop, Anchor &anchor) {
+  SnapLists &lists = scene.Lists;
   size_t named = stop;
   while (const auto *repeat = std::get_if<RepeatStop>(&scene.Query.Drawn[named])) {
     if (repeat->Stop >= named) {
@@ -311,7 +332,7 @@ void addPlaceArrivals(const SnapScene &scene, size_t stop, Anchor &anchor) {
       if (segment.Kind == scene.Query.Kind && uses(segment, onPoint->Point)) {
         const EntityKey other = segment.From == onPoint->Point ? segment.To : segment.From;
         if (const std::optional<ParkPoint> at = positionOf(scene, other)) {
-          addArrival(anchor, difference(anchor.At, *at));
+          addArrival(lists, anchor, difference(anchor.At, *at));
         }
       }
     }
@@ -321,39 +342,45 @@ void addPlaceArrivals(const SnapScene &scene, size_t stop, Anchor &anchor) {
       const std::optional<ParkPoint> from = positionOf(scene, found->From);
       const std::optional<ParkPoint> to = positionOf(scene, found->To);
       if (from && to) {
-        addBothWays(anchor, difference(*to, *from));
+        addBothWays(lists, anchor, difference(*to, *from));
       }
     }
   } else if (const auto *onBend = std::get_if<OnBend>(&place)) {
     if (const ParkCorner *corner = roundedAt(scene.Corners, onBend->Point)) {
       const ParkPoint radial = difference(anchor.At, arcOf(*corner).Center);
-      addBothWays(anchor, {-radial.Z, radial.X});
+      addBothWays(lists, anchor, {-radial.Z, radial.X});
     }
   } else if (const auto *onDrawn = std::get_if<OnDrawnSegment>(&place)) {
-    if (onDrawn->Stop + 1 < scene.Drawn.size()) {
-      addBothWays(anchor, difference(scene.Drawn[onDrawn->Stop + 1], scene.Drawn[onDrawn->Stop]));
+    if (onDrawn->Stop + 1 < scene.Lists.Drawn.size()) {
+      addBothWays(
+          lists, anchor,
+          difference(scene.Lists.Drawn[onDrawn->Stop + 1], scene.Lists.Drawn[onDrawn->Stop]));
     }
   }
 }
 
-// The anchor a drawn stop makes: its position, the drawn segments at it, and the place it names.
-Anchor drawnAnchor(const SnapScene &scene, size_t stop) {
-  Anchor anchor{scene.Drawn[stop], {}};
+// Lists the anchor a drawn stop makes: its position, the drawn segments at it, and the place it
+// names.
+void addDrawnAnchor(const SnapScene &scene, size_t stop) {
+  SnapLists &lists = scene.Lists;
+  Anchor anchor = startAnchor(lists, lists.Drawn[stop]);
   if (stop > 0) {
-    addArrival(anchor, difference(anchor.At, scene.Drawn[stop - 1]));
+    addArrival(lists, anchor, difference(anchor.At, lists.Drawn[stop - 1]));
   }
-  if (stop + 1 < scene.Drawn.size()) {
-    addArrival(anchor, difference(anchor.At, scene.Drawn[stop + 1]));
+  if (stop + 1 < lists.Drawn.size()) {
+    addArrival(lists, anchor, difference(anchor.At, lists.Drawn[stop + 1]));
   }
   addPlaceArrivals(scene, stop, anchor);
-  return anchor;
+  finishAnchor(lists, anchor);
 }
 
 // The anchors: the last stop and, once two are drawn, the first, while drawing; the other end of
 // each segment at the dragged point, in key order of the segment, while dragging. An anchor no
-// segment arrives at takes the world's axes.
-std::vector<Anchor> anchorsOf(const SnapScene &scene) {
-  std::vector<Anchor> anchors;
+// segment arrives at takes the world's axes. Fills the scene's anchors and arrivals.
+void addAnchors(const SnapScene &scene) {
+  SnapLists &lists = scene.Lists;
+  lists.Anchors.clear();
+  lists.Arrivals.clear();
   if (scene.Query.Dragged != NULL_KEY) {
     for (const ParkSegment &segment : scene.Segments) {
       if (!uses(segment, scene.Query.Dragged)) {
@@ -365,41 +392,29 @@ std::vector<Anchor> anchorsOf(const SnapScene &scene) {
         continue;
       }
       const ParkPoint at = *found;
-      Anchor anchor{at, {}};
+      Anchor anchor = startAnchor(lists, at);
       for (const ParkSegment &other : scene.Segments) {
         if (uses(other, end) && !uses(other, scene.Query.Dragged)) {
           const EntityKey far = other.From == end ? other.To : other.From;
           if (const std::optional<ParkPoint> from = positionOf(scene, far)) {
-            addArrival(anchor, difference(at, *from));
+            addArrival(lists, anchor, difference(at, *from));
           }
         }
       }
-      anchors.push_back(std::move(anchor));
+      finishAnchor(lists, anchor);
     }
-  } else if (!scene.Drawn.empty()) {
-    anchors.push_back(drawnAnchor(scene, scene.Drawn.size() - 1));
-    if (scene.Drawn.size() >= 2) {
-      anchors.push_back(drawnAnchor(scene, 0));
-    }
-  }
-  for (Anchor &anchor : anchors) {
-    if (anchor.Arrivals.empty()) {
-      anchor.Arrivals = {{1.0, 0.0}, {0.0, 1.0}};
+  } else if (!lists.Drawn.empty()) {
+    addDrawnAnchor(scene, lists.Drawn.size() - 1);
+    if (lists.Drawn.size() >= 2) {
+      addDrawnAnchor(scene, 0);
     }
   }
-  return anchors;
 }
 
-// A ray guides run along: its anchor's index and position, and its unit direction.
-struct Guide {
-  size_t Anchor = 0;
-  ParkPoint From;
-  ParkPoint Direction;
-};
-
 // From each anchor, the rays straight on, at 45°, 90°, and 135° either way from each arrival,
-// leaving out a direction already listed for the anchor.
-std::vector<Guide> guidesFrom(const std::vector<Anchor> &anchors) {
+// leaving out a direction already listed for the anchor. Fills the scene's guides from its anchors.
+void addGuides(const SnapScene &scene) {
+  const std::vector<Anchor> &anchors = scene.Lists.Anchors;
   const double half = sqrt(0.5);
   const std::array<ParkPoint, 7> turns{{{1.0, 0.0},
                                         {half, half},
@@ -408,15 +423,12 @@ std::vector<Guide> guidesFrom(const std::vector<Anchor> &anchors) {
                                         {0.0, -1.0},
                                         {-half, half},
                                         {-half, -half}}};
-  std::vector<Guide> guides;
-  size_t arrivals = 0;
-  for (const Anchor &anchor : anchors) {
-    arrivals += anchor.Arrivals.size();
-  }
-  guides.reserve(arrivals * turns.size());
+  std::vector<Guide> &guides = scene.Lists.Guides;
+  guides.clear();
   for (size_t a = 0; a < anchors.size(); ++a) {
     const size_t first = guides.size();
-    for (const ParkPoint arrival : anchors[a].Arrivals) {
+    for (const ParkPoint arrival :
+         std::span(scene.Lists.Arrivals).subspan(anchors[a].First, anchors[a].Count)) {
       for (const ParkPoint turn : turns) {
         const ParkPoint direction{arrival.X * turn.X - arrival.Z * turn.Z,
                                   arrival.X * turn.Z + arrival.Z * turn.X};
@@ -431,7 +443,6 @@ std::vector<Guide> guidesFrom(const std::vector<Anchor> &anchors) {
       }
     }
   }
-  return guides;
 }
 
 SnapHold guideHold(size_t guide) { return {HoldKind::Guide, NULL_KEY, guide}; }
@@ -471,8 +482,8 @@ std::optional<Snap> segmentCrossing(const SnapScene &scene, const std::vector<Gu
     const ParkSegment &segment = scene.Segments[s];
     const std::optional<ParkPoint> from = positionOf(scene, segment.From);
     const std::optional<ParkPoint> to = positionOf(scene, segment.To);
-    if (segment.Kind != scene.Query.Kind || segment.Line.empty() || scene.LeftOut[s] || !from ||
-        !to) {
+    if (segment.Kind != scene.Query.Kind || segment.Line.empty() || scene.Lists.LeftOut[s] ||
+        !from || !to) {
       continue;
     }
     const std::optional<StraightPart> found = straightPart(scene.Corners, segment, *from, *to);
@@ -522,8 +533,8 @@ std::optional<Snap> straightSnap(const SnapScene &scene) {
     const ParkSegment &segment = scene.Segments[s];
     const std::optional<ParkPoint> from = positionOf(scene, segment.From);
     const std::optional<ParkPoint> to = positionOf(scene, segment.To);
-    if (segment.Kind != scene.Query.Kind || segment.Line.empty() || scene.LeftOut[s] || !from ||
-        !to) {
+    if (segment.Kind != scene.Query.Kind || segment.Line.empty() || scene.Lists.LeftOut[s] ||
+        !from || !to) {
       continue;
     }
     const std::optional<StraightPart> part = straightPart(scene.Corners, segment, *from, *to);
@@ -565,7 +576,7 @@ std::optional<Snap> bendSnap(const SnapScene &scene) {
       if (!uses(segment, corner.Point)) {
         continue;
       }
-      fits = fits && segment.Kind == scene.Query.Kind && !scene.LeftOut[s];
+      fits = fits && segment.Kind == scene.Query.Kind && !scene.Lists.LeftOut[s];
       narrowest = any ? std::min(narrowest, segment.Width) : segment.Width;
       any = true;
     }
@@ -590,11 +601,11 @@ std::optional<Snap> bendSnap(const SnapScene &scene) {
 // reach, or the point at its end when that place lies within MIN_SEGMENT_LENGTH of it.
 std::optional<Snap> drawnSegmentSnap(const SnapScene &scene) {
   std::optional<Snap> nearest;
-  for (size_t k = 0; k + 1 < scene.Drawn.size(); ++k) {
-    const ParkPoint from = scene.Drawn[k];
-    const ParkPoint to = scene.Drawn[k + 1];
+  for (size_t k = 0; k + 1 < scene.Lists.Drawn.size(); ++k) {
+    const ParkPoint from = scene.Lists.Drawn[k];
+    const ParkPoint to = scene.Lists.Drawn[k + 1];
     const double length = distanceBetween(from, to);
-    if (scene.DrawnLeftOut[k] || length < MIN_SEGMENT_LENGTH) {
+    if (scene.Lists.DrawnLeftOut[k] || length < MIN_SEGMENT_LENGTH) {
       continue;
     }
     const double t = alongSegment(scene.Query.Pointer, from, to);
@@ -743,11 +754,13 @@ std::optional<Snap> bendPlaceNear(const ParkCorner &corner, ParkPoint point) {
   return makeSnap(OnBend{corner.Point, along}, distanceBetween(point, place), place, {}, {});
 }
 
-PointerSnap findSnap(const World &world, const SnapQuery &query) {
-  const SnapScene scene = makeScene(world, query);
-  std::optional<Snap> snap = pointSnap(world, scene);
+PointerSnap findSnap(const World &world, ToolPark &park, const SnapQuery &query) {
+  const SnapScene scene = makeScene(world, park, query);
+  std::optional<Snap> snap = pointSnap(scene);
   if (!snap) {
-    const std::vector<Guide> guides = guidesFrom(anchorsOf(scene));
+    addAnchors(scene);
+    addGuides(scene);
+    const std::vector<Guide> &guides = scene.Lists.Guides;
     snap = guideCrossing(scene, guides);
     const std::optional<Snap> onSegment = segmentCrossing(scene, guides);
     if (onSegment && (!snap || onSegment->Distance < snap->Distance)) {
@@ -761,12 +774,10 @@ PointerSnap findSnap(const World &world, const SnapQuery &query) {
     }
   }
   if (!snap) {
-    return PointerSnap{query.Pointer, NewPoint{query.Pointer}, {}, {}};
+    return PointerSnap{query.Pointer, NewPoint{query.Pointer}};
   }
-  const auto guides = std::span(snap->Guides).first(snap->GuideCount);
-  const auto holds = std::span(snap->Holds).first(snap->HoldCount);
-  return PointerSnap{snap->At, snap->Stop, std::vector<SnapGuide>(guides.begin(), guides.end()),
-                     std::vector<SnapHold>(holds.begin(), holds.end())};
+  return PointerSnap{snap->At,         snap->Stop,  snap->Guides,
+                     snap->GuideCount, snap->Holds, snap->HoldCount};
 }
 
 } // namespace tpj

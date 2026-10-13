@@ -1621,7 +1621,13 @@ void addParkEdits(WorldSchema &schema) {
   schema.addCommand<RestoreIntent>();
 }
 
-std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop) {
+namespace {
+
+// The stop's ground position, as stopPosition gives it, finding an OnBend's corner with the corner
+// finder, which gives the rounded corner at a point or none.
+template <typename FindCorner>
+std::optional<ParkPoint> positionWith(const World &world, const PathStop &stop,
+                                      FindCorner findCorner) {
   if (const auto *at = std::get_if<NewPoint>(&stop)) {
     return at->At;
   }
@@ -1630,7 +1636,7 @@ std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop) 
     return point == nullptr ? std::nullopt : std::optional<ParkPoint>(point->At);
   }
   if (const auto *on = std::get_if<OnBend>(&stop)) {
-    const std::optional<ParkCorner> corner = roundedCorner(world, on->Point);
+    const std::optional<ParkCorner> corner = findCorner(on->Point);
     if (!corner || !std::isfinite(on->Along) || on->Along <= 0.0 || on->Along >= 1.0) {
       return std::nullopt;
     }
@@ -1653,31 +1659,59 @@ std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop) 
                    from->At.Z + on.Along * (to->At.Z - from->At.Z)};
 }
 
+} // namespace
+
+std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop) {
+  return positionWith(world, stop,
+                      [&world](EntityKey point) { return roundedCorner(world, point); });
+}
+
+bool appendStopPosition(const World &world, std::span<const ParkCorner> corners,
+                        const PathStop &stop, std::vector<ParkPoint> &positions) {
+  if (const auto *repeat = std::get_if<RepeatStop>(&stop)) {
+    if (repeat->Stop >= positions.size()) {
+      return false;
+    }
+    positions.push_back(positions[repeat->Stop]);
+    return true;
+  }
+  if (const auto *on = std::get_if<OnDrawnSegment>(&stop)) {
+    if (on->Stop + 1 >= positions.size()) {
+      return false;
+    }
+    const ParkPoint &from = positions[on->Stop];
+    const ParkPoint &to = positions[on->Stop + 1];
+    positions.push_back(
+        ParkPoint{from.X + on->Along * (to.X - from.X), from.Z + on->Along * (to.Z - from.Z)});
+    return true;
+  }
+  const std::optional<ParkPoint> position =
+      positionWith(world, stop, [corners](EntityKey point) -> std::optional<ParkCorner> {
+        const auto found = std::ranges::lower_bound(corners, point, {}, &ParkCorner::Point);
+        if (found == corners.end() || found->Point != point || !(found->Radius > 0.0)) {
+          return std::nullopt;
+        }
+        return *found;
+      });
+  if (!position) {
+    return false;
+  }
+  positions.push_back(*position);
+  return true;
+}
+
 std::optional<std::vector<ParkPoint>> stopPositions(const World &world, const AddPath &path) {
+  // The corners are derived only for a path with an OnBend stop.
+  std::vector<ParkCorner> corners;
+  if (std::ranges::any_of(
+          path.Stops, [](const PathStop &stop) { return std::holds_alternative<OnBend>(stop); })) {
+    corners = parkCorners(world);
+  }
   std::vector<ParkPoint> positions;
   for (const PathStop &stop : path.Stops) {
-    if (const auto *repeat = std::get_if<RepeatStop>(&stop)) {
-      if (repeat->Stop >= positions.size()) {
-        return std::nullopt;
-      }
-      positions.push_back(positions[repeat->Stop]);
-      continue;
-    }
-    if (const auto *on = std::get_if<OnDrawnSegment>(&stop)) {
-      if (on->Stop + 1 >= positions.size()) {
-        return std::nullopt;
-      }
-      const ParkPoint &from = positions[on->Stop];
-      const ParkPoint &to = positions[on->Stop + 1];
-      positions.push_back(
-          ParkPoint{from.X + on->Along * (to.X - from.X), from.Z + on->Along * (to.Z - from.Z)});
-      continue;
-    }
-    const std::optional<ParkPoint> position = stopPosition(world, stop);
-    if (!position) {
+    if (!appendStopPosition(world, corners, stop, positions)) {
       return std::nullopt;
     }
-    positions.push_back(*position);
   }
   return positions;
 }

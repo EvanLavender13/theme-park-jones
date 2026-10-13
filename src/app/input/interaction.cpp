@@ -4,8 +4,8 @@ namespace tpj {
 namespace {
 
 // The stock of the shop box the key holds, or none when it holds no shop.
-std::optional<ShopStock> shopStockOf(const World &world, EntityKey key) {
-  for (const ParkBox &box : parkBoxes(world)) {
+std::optional<ShopStock> shopStockOf(const ToolPark &park, EntityKey key) {
+  for (const ParkBox &box : park.Boxes) {
     if (box.Key == key && box.Kind == BoxKind::Shop) {
       return box.Stock;
     }
@@ -15,24 +15,33 @@ std::optional<ShopStock> shopStockOf(const World &world, EntityKey key) {
 
 } // namespace
 
-void Interaction::follow(uint64_t generation) {
-  if (generation == Generation) {
+Interaction::Interaction(const World &world, uint64_t generation, uint64_t edits)
+    : Generation(generation), Edits(edits) {
+  keepToolPark(world, Park);
+}
+
+void Interaction::follow(const World &world, uint64_t generation, uint64_t edits) {
+  if (generation == Generation && edits == Edits) {
     return;
   }
+  if (generation != Generation) {
+    tpj::selectTool(Tool, Tool.Kind);
+    Subject.reset();
+    StockChoice.reset();
+    HoursChoice.reset();
+  }
   Generation = generation;
-  tpj::selectTool(Tool, Tool.Kind);
-  Subject.reset();
-  StockChoice.reset();
-  HoursChoice.reset();
+  Edits = edits;
+  keepToolPark(world, Park);
 }
 
 void Interaction::useButtons(const World &world, CommandQueue &commands,
                              const PointerButtons &buttons) {
   if (buttons.Pressed) {
-    pressPointer(Tool, world);
+    pressPointer(Tool, Park, world);
   }
   if (buttons.Released) {
-    if (const std::optional<ParkEdit> edit = releasePointer(Tool, world)) {
+    if (const std::optional<ParkEdit> edit = releasePointer(Tool, Park, world)) {
       queueEdit(commands, *edit);
     }
   }
@@ -61,8 +70,8 @@ void Interaction::applyStock(CommandQueue &commands) const {
   }
 }
 
-void Interaction::settleStock(const World &world) {
-  if (Subject && StockChoice && shopStockOf(world, Subject->Key) == StockChoice) {
+void Interaction::settleStock() {
+  if (Subject && StockChoice && shopStockOf(Park, Subject->Key) == StockChoice) {
     StockChoice.reset();
   }
 }
@@ -92,49 +101,52 @@ bool Interaction::dropHeld() {
 }
 
 void Interaction::movePointer(const World &world, const PointerSample &pointer) {
-  tpj::movePointer(Tool, world, pointer);
+  tpj::movePointer(Tool, Park, world, pointer);
 }
 
-std::optional<ParkEdit> Interaction::tentativeEdit(const World &world) const {
-  if (std::optional<ParkEdit> edit = tpj::tentativeEdit(Tool, world)) {
-    return edit;
+const std::optional<ParkEdit> &Interaction::tentativeEdit(const World &world) {
+  tpj::tentativeEdit(Tool, Park, world, Edit);
+  if (Edit) {
+    return Edit;
   }
   if (Subject && Subject->Kind == SubjectKind::Shop && StockChoice) {
-    const std::optional<ShopStock> stock = shopStockOf(world, Subject->Key);
+    const std::optional<ShopStock> stock = shopStockOf(Park, Subject->Key);
     if (stock && *stock != *StockChoice) {
-      return SetShopStock{Subject->Key, *StockChoice};
+      Edit = SetShopStock{Subject->Key, *StockChoice};
+      return Edit;
     }
   }
   if (HoursChoice && *HoursChoice != parkHours(world)) {
-    return SetOpeningHours{*HoursChoice};
+    Edit = SetOpeningHours{*HoursChoice};
   }
-  return std::nullopt;
+  return Edit;
 }
 
 std::optional<EntityKey> Interaction::highlighted(const World &world) const {
-  return highlightedEntity(Tool, world);
+  return highlightedEntity(Tool, Park, world);
 }
 
-std::optional<PathStart> Interaction::pathStart(const World &world) const {
-  return tpj::pathStart(Tool, world);
+std::optional<PathStart> Interaction::pathStart(const World &world) {
+  return tpj::pathStart(Tool, Park, world);
 }
 
-std::optional<ParkPoint> Interaction::pathFinish(const World &world) const {
-  return tpj::pathFinish(Tool, world);
+std::optional<ParkPoint> Interaction::pathFinish(const World &world) {
+  return tpj::pathFinish(Tool, Park, world);
 }
 
-std::vector<EditHandle> Interaction::editHandles(const World &world) const {
-  return tpj::editHandles(Tool, world);
+void Interaction::editHandles(std::vector<EditHandle> &handles) const {
+  tpj::editHandles(Tool, Park, handles);
 }
 
-std::optional<EditHandle> Interaction::hoveredHandle(const World &world) const {
-  return tpj::hoveredHandle(Tool, world);
+std::optional<EditHandle> Interaction::hoveredHandle() const {
+  return tpj::hoveredHandle(Tool, Park);
 }
 
-std::vector<SnapGuide> Interaction::snapGuides() const { return tpj::snapGuides(Tool); }
+std::span<const SnapGuide> Interaction::snapGuides() const { return tpj::snapGuides(Tool); }
 
-std::vector<MeasuredLength> Interaction::measuredLengths(const World &world) const {
-  return tpj::measuredLengths(Tool, world);
+std::span<const MeasuredLength> Interaction::measuredLengths(const World &world) {
+  tpj::measuredLengths(Tool, Park, world, Lengths);
+  return Lengths;
 }
 
 } // namespace tpj

@@ -41,6 +41,8 @@ private:
   OrbitCamera Camera;
   SceneSync Scene;
   Interaction Interactions;
+  // The frame's look, kept so its lists keep their memory.
+  PreviewLook Look;
   ToolingUi Ui;
   FrameClock Clock;
   ParkDialogs Dialogs;

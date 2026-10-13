@@ -4,6 +4,8 @@
 #include "sim/park/geometry.h"
 #include "sim/park/intent.h"
 #include "sim/park/surface.h"
+#include "tools/internal/frontage.h"
+#include "tools/internal/tool_lists.h"
 
 #include <algorithm>
 #include <array>
@@ -28,37 +30,6 @@ constexpr double SAME_PLACE = 1e-6;
 // How far below 0 the dot product of two directions a quarter turn apart may fall by rounding.
 constexpr double QUARTER_TURN_SLACK = 1e-9;
 
-// A step of an edge line: where it starts, its unit direction, its length, and the unit direction
-// away from the paving, which lies on its left.
-struct EdgeStep {
-  ParkPoint From;
-  ParkPoint Along;
-  double Length = 0.0;
-  ParkPoint Out;
-};
-
-// The steps of the surface's edge lines of the kind, in the surface's order, leaving out each
-// shorter than MIN_SEGMENT_LENGTH.
-std::vector<EdgeStep> edgeSteps(const PavedSurface &surface, PathKind kind) {
-  std::vector<EdgeStep> steps;
-  for (const EdgeLine &edge : surface.Edges) {
-    if (edge.Kind != kind) {
-      continue;
-    }
-    const std::span<const ParkPoint> points = edgePoints(surface, edge);
-    for (size_t i = 0; i + 1 < points.size(); ++i) {
-      const ParkPoint way = minus(points[i + 1], points[i]);
-      const double length = lengthOf(way);
-      if (length < MIN_SEGMENT_LENGTH) {
-        continue;
-      }
-      const ParkPoint along = scaled(way, 1.0 / length);
-      steps.push_back({points[i], along, length, {-along.Z, along.X}});
-    }
-  }
-  return steps;
-}
-
 // The place on the step nearest the point.
 ParkPoint nearestOn(const EdgeStep &step, ParkPoint point) {
   const double t = std::clamp(dot(minus(point, step.From), step.Along), 0.0, step.Length);
@@ -71,18 +42,6 @@ Pose poseFronting(ParkPoint at, ParkPoint out, FootprintSize size) {
   return Pose{center.X, center.Z, -out.X, -out.Z};
 }
 
-// A rectangle on the ground, its sides along the axes.
-struct Bounds {
-  double MinX = 0.0;
-  double MinZ = 0.0;
-  double MaxX = 0.0;
-  double MaxZ = 0.0;
-
-  bool overlaps(const Bounds &other) const {
-    return MinX <= other.MaxX && other.MinX <= MaxX && MinZ <= other.MaxZ && other.MinZ <= MaxZ;
-  }
-};
-
 template <typename Points> Bounds boundsOf(const Points &points) {
   Bounds bounds{points[0].X, points[0].Z, points[0].X, points[0].Z};
   for (const ParkPoint &at : points) {
@@ -93,12 +52,6 @@ template <typename Points> Bounds boundsOf(const Points &points) {
   }
   return bounds;
 }
-
-// A piece of paving and the rectangle that bounds it.
-struct NearPiece {
-  const SurfacePiece *Piece = nullptr;
-  Bounds Around;
-};
 
 // The least and greatest projections of the corners onto the axis.
 template <typename Points>
@@ -137,7 +90,7 @@ bool overlapsPiece(const std::array<ParkPoint, 4> &rect, ParkPoint forward, Park
 
 // The paving near where a box is placed, and the kind its front door serves.
 struct Room {
-  std::vector<NearPiece> Pieces;
+  const std::vector<NearPiece> &Pieces;
   PathKind Served = PathKind::Guest;
 };
 
@@ -238,24 +191,14 @@ std::optional<Pose> slidToFit(ParkPoint at, ParkPoint out, FootprintSize size, c
   return slid(*least);
 }
 
-// A place a box might front: where it lies, the outward direction there, its distance from the
-// pointer, and the order it was found in.
-struct Candidate {
-  ParkPoint At;
-  ParkPoint Out;
-  double Distance = 0.0;
-  size_t Order = 0;
-  size_t Step = 0;
-};
-
 // The pieces any place within reach of the place could put a box of the size over.
-std::vector<NearPiece> piecesNear(const PavedSurface &surface, ParkPoint at, double reach,
-                                  FootprintSize size) {
+void piecesNear(const PavedSurface &surface, ParkPoint at, double reach, FootprintSize size,
+                std::vector<NearPiece> &near) {
   const double diagonal =
       std::hypot(size.Width + 2.0 * FRONTAGE_SETBACK, size.Depth + FRONTAGE_SETBACK);
   const double grow = reach + FRONTAGE_PUSH + diagonal;
   const Bounds searched{at.X - grow, at.Z - grow, at.X + grow, at.Z + grow};
-  std::vector<NearPiece> near;
+  near.clear();
   for (const SurfacePiece &piece : surface.Pieces) {
     const std::span<const ParkPoint> corners = pieceCorners(piece);
     if (corners.empty()) {
@@ -266,15 +209,14 @@ std::vector<NearPiece> piecesNear(const PavedSurface &surface, ParkPoint at, dou
       near.push_back({&piece, around});
     }
   }
-  return near;
 }
 
 // Places every FRONTAGE_STEP along the steps within reach of the first place, on steps whose
 // outward direction lies within a quarter turn of its own, so the box never jumps across a path,
 // nearest the pointer first.
-std::vector<Candidate> candidatesNear(const std::vector<EdgeStep> &steps, ParkPoint at,
-                                      ParkPoint out, double reach, ParkPoint point) {
-  std::vector<Candidate> candidates;
+void candidatesNear(const std::vector<EdgeStep> &steps, ParkPoint at, ParkPoint out, double reach,
+                    ParkPoint point, std::vector<Candidate> &candidates) {
+  candidates.clear();
   for (size_t index = 0; index < steps.size(); ++index) {
     const EdgeStep &step = steps[index];
     if (dot(step.Out, out) < -QUARTER_TURN_SLACK) {
@@ -312,7 +254,6 @@ std::vector<Candidate> candidatesNear(const std::vector<EdgeStep> &steps, ParkPo
   std::ranges::sort(candidates, [](const Candidate &a, const Candidate &b) {
     return a.Distance != b.Distance ? a.Distance < b.Distance : a.Order < b.Order;
   });
-  return candidates;
 }
 
 // The place on the steps nearest the point, its distance, and the index of its step. The first
@@ -444,11 +385,39 @@ Fronting frontingFor(const std::vector<EdgeStep> &steps, const NearestPlace &nea
 
 } // namespace
 
+void edgeSteps(const PavedSurface &surface, PathKind kind, std::vector<EdgeStep> &steps) {
+  steps.clear();
+  for (const EdgeLine &edge : surface.Edges) {
+    if (edge.Kind != kind) {
+      continue;
+    }
+    const std::span<const ParkPoint> points = edgePoints(surface, edge);
+    for (size_t i = 0; i + 1 < points.size(); ++i) {
+      const ParkPoint way = minus(points[i + 1], points[i]);
+      const double length = lengthOf(way);
+      if (length < MIN_SEGMENT_LENGTH) {
+        continue;
+      }
+      const ParkPoint along = scaled(way, 1.0 / length);
+      steps.push_back({points[i], along, length, {-along.Z, along.X}});
+    }
+  }
+}
+
 std::optional<Pose> frontagePose(const World &world, BoxKind kind, ParkPoint point) {
+  ToolPark park;
+  keepToolPark(world, park);
+  return frontagePose(world, park, kind, point);
+}
+
+std::optional<Pose> frontagePose(const World &world, ToolPark &park, BoxKind kind,
+                                 ParkPoint point) {
   const PathKind served = kind == BoxKind::Depot ? PathKind::Backstage : PathKind::Guest;
   const FootprintSize size = boxSize(kind);
   const PavedSurface &surface = resolvedSurface(world);
-  const std::vector<EdgeStep> steps = edgeSteps(surface, served);
+  FrontageLists &lists = park.Lists->Frontage;
+  const std::vector<EdgeStep> &steps =
+      served == PathKind::Guest ? lists.GuestSteps : lists.BackstageSteps;
   if (steps.empty()) {
     return std::nullopt;
   }
@@ -466,7 +435,8 @@ std::optional<Pose> frontagePose(const World &world, BoxKind kind, ParkPoint poi
   const Fronting fronting = frontingFor(steps, nearest, point);
   const ParkPoint out = fronting.Out;
   const double reach = 2.0 * size.Width;
-  const Room near{piecesNear(surface, fronting.At, reach, size), served};
+  piecesNear(surface, fronting.At, reach, size, lists.Near);
+  const Room near{lists.Near, served};
   const Pose first = poseFronting(fronting.At, out, size);
   if (fits(first, size, near)) {
     return first;
@@ -485,7 +455,8 @@ std::optional<Pose> frontagePose(const World &world, BoxKind kind, ParkPoint poi
   }
   // Each place tried faces as a pointer the same distance straight out from it would make it face,
   // so the box turns smoothly between places along a curve, or else square to its own step.
-  for (const Candidate &candidate : candidatesNear(steps, fronting.At, out, reach, point)) {
+  candidatesNear(steps, fronting.At, out, reach, point, lists.Candidates);
+  for (const Candidate &candidate : lists.Candidates) {
     const ParkPoint standing = plus(candidate.At, scaled(candidate.Out, nearest.Distance));
     const Fronting there =
         frontingFor(steps, NearestPlace{candidate.At, nearest.Distance, candidate.Step}, standing);

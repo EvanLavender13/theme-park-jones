@@ -9,6 +9,7 @@
 #include "sim/world.h"
 
 #include <optional>
+#include <span>
 #include <stddef.h>
 #include <variant>
 #include <vector>
@@ -248,6 +249,12 @@ std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop);
 // OnDrawnSegment's the place Along of the way between its two stops. None when a stop has none, or
 // a RepeatStop or an OnDrawnSegment names a stop that is not earlier.
 std::optional<std::vector<ParkPoint>> stopPositions(const World &world, const AddPath &path);
+// Appends the stop's ground position to the positions of the path's earlier stops, which positions
+// holds, as stopPositions gives it, reading the corners from a list as parkCorners gives them.
+// Gives false and appends nothing where stopPositions gives none. Allocates nothing once the list
+// has grown.
+bool appendStopPosition(const World &world, std::span<const ParkCorner> corners,
+                        const PathStop &stop, std::vector<ParkPoint> &positions);
 // The ground position of each point where the path splits a segment of its kind, or one of its
 // own segments, because the two meet: a new point where they cross, or an end of one lying on the
 // other, or a split of a corner where the path meets its arc. Leaves out the points of OnSegment,

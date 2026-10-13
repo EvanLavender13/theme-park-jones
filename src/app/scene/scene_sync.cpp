@@ -2,6 +2,7 @@
 
 #include "legible/needs.h"
 
+#include <span>
 #include <utility>
 
 namespace tpj {
@@ -55,7 +56,16 @@ void clearMesh(ParkMesh &mesh) {
 // its join mark in Marks, then where a click would finish it, the highlight, the point markers,
 // Edit path's radius and edge handles, the handle or sides under the pointer, and an inspected
 // shop, bench, or toilet block's mark.
-void buildLookMarks(GhostMesh &marks, const World &world, const PreviewLook &look) {
+// The boxes, path points, and segments the look's marks read, as parkBoxes, parkPathPoints, and
+// parkSegments give them.
+struct LookPark {
+  std::span<const ParkBox> Boxes;
+  std::span<const ParkPathPoint> Points;
+  std::span<const ParkSegment> Segments;
+};
+
+void buildLookMarks(GhostMesh &marks, const World &world, const LookPark &park,
+                    const PreviewLook &look) {
   clearMesh(marks.Lit);
   clearMesh(marks.Marks);
   if (look.Start) {
@@ -68,7 +78,7 @@ void buildLookMarks(GhostMesh &marks, const World &world, const PreviewLook &loo
     appendFinishMark(marks.Marks, *look.Finish);
   }
   if (look.Highlight) {
-    appendEntity(marks.Marks, world, *look.Highlight, HIGHLIGHT_TINT);
+    appendEntity(marks.Marks, world, park.Boxes, park.Points, *look.Highlight, HIGHLIGHT_TINT);
   }
   for (const EditHandle &handle : look.Handles) {
     if (handle.Kind == HandleKind::Point) {
@@ -84,14 +94,25 @@ void buildLookMarks(GhostMesh &marks, const World &world, const PreviewLook &loo
   if (look.Hovered && look.Hovered->Kind != HandleKind::Side) {
     appendHandle(marks.Marks, look.Hovered->At, HIGHLIGHT_TINT);
   } else if (look.Hovered) {
-    appendSides(marks.Marks, world, look.Hovered->Key, HIGHLIGHT_TINT);
+    appendSides(marks.Marks, park.Segments, look.Hovered->Key, HIGHLIGHT_TINT);
   }
   if (look.Inspected && look.Inspected->Kind != SubjectKind::Guest) {
-    appendEntity(marks.Marks, world, look.Inspected->Key, HIGHLIGHT_TINT);
+    appendEntity(marks.Marks, world, park.Boxes, park.Points, look.Inspected->Key, HIGHLIGHT_TINT);
   }
 }
 
 } // namespace
+
+void fillLook(Interaction &interaction, const World &world, std::optional<GuestNeed> overlay,
+              PreviewLook &look) {
+  look.Highlight = interaction.highlighted(world);
+  look.Inspected = interaction.subject();
+  look.Overlay = overlay;
+  look.Start = interaction.pathStart(world);
+  look.Finish = interaction.pathFinish(world);
+  interaction.editHandles(look.Handles);
+  look.Hovered = interaction.hoveredHandle();
+}
 
 PreviewMeshes SceneSync::syncLook(const World &world, bool remade, const PreviewLook &look,
                                   bool shapeChanged) {
@@ -110,7 +131,12 @@ PreviewMeshes SceneSync::syncLook(const World &world, bool remade, const Preview
   }
   const bool lookBuilt = first || *Look != look || LookEdits != Edits;
   if (lookBuilt) {
-    buildLookMarks(LookMarks, world, look);
+    if (LookEdits != Edits) {
+      parkBoxes(world, LookBoxes);
+      LookPoints = parkPathPoints(world);
+      LookSegments = parkSegments(world);
+    }
+    buildLookMarks(LookMarks, world, {LookBoxes, LookPoints, LookSegments}, look);
     LookEdits = Edits;
   }
   const bool guest = look.Inspected && look.Inspected->Kind == SubjectKind::Guest;
