@@ -4,6 +4,7 @@
 #include "sim/entity_key.h"
 #include "sim/medium/field.h"
 #include "sim/park/intent.h"
+#include "sim/tick_buffers.h"
 
 #include <array>
 #include <optional>
@@ -173,6 +174,9 @@ int64_t inventoryPosition(const World &world, EntityKey shop, Good good);
 // The shop box's inspection record in the world as it stands, or none when the key is not a shop
 // box.
 std::optional<ShopRecord> shopRecord(const World &world, EntityKey shop);
+// As the returning form, keeping the lists it works with in the buffers. Allocates nothing once
+// they have grown.
+std::optional<ShopRecord> shopRecord(const World &world, EntityKey shop, TickBuffers &buffers);
 // The factor's name for display: "demand", "supply", "service rate", or "no supply route".
 std::string_view limitingFactorName(LimitingFactor factor);
 // Registers the flow kinds supply-orders, supplies, guest-visits, meals, drink-orders,

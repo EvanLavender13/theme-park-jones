@@ -83,6 +83,15 @@ void parkBoxes(const World &world, std::vector<ParkBox> &boxes) {
   });
 }
 
+std::optional<ParkBox> parkBox(const World &world, EntityKey key) {
+  const BoxIntent *box = world.tryGet<BoxIntent>(key);
+  if (box == nullptr) {
+    return std::nullopt;
+  }
+  const ShopStockIntent *stock = world.tryGet<ShopStockIntent>(key);
+  return ParkBox{key, box->Kind, box->At, stock != nullptr ? stock->Stock : ShopStock::Food};
+}
+
 void parkSegmentKeys(const World &world, PathKind kind, std::vector<EntityKey> &keys) {
   keys.clear();
   world.forEachWith<PathSegmentIntent>(

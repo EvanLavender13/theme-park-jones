@@ -5,6 +5,7 @@
 #include "sim/entity_key.h"
 #include "sim/furniture/furniture.h"
 #include "sim/medium/network.h"
+#include "sim/tick_buffers.h"
 #include "sim/wayfinding/best_seats.h"
 
 #include <array>
@@ -251,10 +252,13 @@ std::vector<EntityKey> parkGuests(const World &world);
 void parkGuests(const World &world, std::vector<EntityKey> &guests);
 // The guest's inspection record, or none when the key holds no guest.
 std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest);
-// The options the guest would weigh if it chose now, each with its terms, score, and softmax
-// probability, or none when the key holds no guest or its place does not resolve on the guest
-// network. Draws nothing and changes nothing; it costs one choice, so call it for one guest.
-std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, EntityKey guest);
+// Fills options, which it clears first, with the options the guest would weigh if it chose now,
+// each with its terms, score, and softmax probability, and returns true. False, with options empty,
+// when the key holds no guest or its place does not resolve on the guest network. Keeps the lists
+// it works with in the buffers, and allocates nothing once they have grown. Draws nothing and
+// changes nothing; it costs one choice, so call it for one guest.
+bool guestOptions(const World &world, EntityKey guest, TickBuffers &buffers,
+                  std::vector<ChoiceOption> &options);
 // The park's departure tally, or 0 for every reason before the park is first resolved.
 DepartureTally departureTally(const World &world);
 // The rate, in guests per game hour, at which each entrance connected to the guest network admits

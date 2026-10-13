@@ -1,8 +1,6 @@
 #include "app/ui/need_tooltip.h"
 
-#include "legible/availability.h"
 #include "legible/needs.h"
-#include "render/paving_overlay.h"
 
 #include <imgui.h>
 
@@ -10,16 +8,10 @@
 
 namespace tpj {
 
-void drawNeedTooltip(const World &world, GuestNeed need, const OverlayShape &shape,
-                     std::optional<ParkPoint> point) {
-  if (!point) {
+void drawNeedTooltip(GuestNeed need, const Availability &availability) {
+  if (!ImGui::BeginTooltip()) {
     return;
   }
-  const std::optional<Place> place = overlayPlace(shape, GroundPoint{point->X, point->Z});
-  if (!place || !ImGui::BeginTooltip()) {
-    return;
-  }
-  const Availability availability = availabilityAt(world, needAvailability(need), *place);
   const std::string_view name = needAvailabilityName(need);
   ImGui::Text("%.*s %.3f", static_cast<int>(name.size()), name.data(), availability.Value);
   if (availability.Contributions.empty()) {

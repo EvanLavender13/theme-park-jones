@@ -1,5 +1,4 @@
 #include "app/ui/graph_view.h"
-#include "render/graph_overlay.h"
 
 #include <imgui.h>
 
@@ -12,9 +11,7 @@ ImU32 imColor(Rgba color) {
 
 } // namespace
 
-void drawGraphView(const World &world, const CameraView &view) {
-  const ImVec2 size = ImGui::GetIO().DisplaySize;
-  const GraphOverlay overlay = buildGraphOverlay(world, view, size.x, size.y);
+void drawGraphView(const GraphOverlay &overlay) {
   ImDrawList *drawList = ImGui::GetBackgroundDrawList();
   for (const GraphLine &line : overlay.Lines) {
     const Rgba color = line.Connector ? GRAPH_CONNECTOR_COLOR : graphColor(line.Kind);

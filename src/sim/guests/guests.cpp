@@ -259,6 +259,13 @@ struct GuestTickLists {
   WalkLists Walk;
 };
 
+// The lists guestOptions keeps in the buffers from call to call.
+struct GuestOptionLists {
+  std::vector<ParkEntrance> EntranceValues;
+  std::vector<EntityKey> Entrances;
+  WalkLists Walk;
+};
+
 // Whether the guest remembers the piece as full at the tick.
 bool remembersFull(const Guest &guest, EntityKey piece, uint64_t tick) {
   return std::ranges::any_of(guest.Full, [piece, tick](const FullPiece &full) {
@@ -1226,25 +1233,26 @@ std::optional<GuestRecord> guestRecord(const World &world, EntityKey guest) {
   return record;
 }
 
-std::optional<std::vector<ChoiceOption>> guestOptions(const World &world, EntityKey guest) {
+bool guestOptions(const World &world, EntityKey guest, TickBuffers &buffers,
+                  std::vector<ChoiceOption> &options) {
+  options.clear();
   const Guest *state = world.tryGet<Guest>(guest);
   if (state == nullptr) {
-    return std::nullopt;
+    return false;
   }
   const Network &network = parkNetwork(world, PathKind::Guest);
   if (!network.resolve(state->At)) {
-    return std::nullopt;
+    return false;
   }
-  const RouteSample routes = sampleField<GuestRouteDistance>(world, network, state->At);
-  WalkLists lists;
-  std::vector<ParkEntrance> entrances;
-  std::vector<EntityKey> keys;
-  ScoredOptions scored;
-  scoreOptions(world, *state, network, routes, parkMoment(world, entrances, keys),
-               unitsHeld<Meals>(world, guest, guest) > 0, lists, scored);
-  std::vector<double> weights;
-  softmaxWeights(scored.Options, weights);
-  return std::move(scored.Options);
+  GuestOptionLists &kept = buffers.get<GuestOptionLists>();
+  WalkLists &lists = kept.Walk;
+  sampleField<GuestRouteDistance>(world, network, state->At, lists.Routes);
+  scoreOptions(world, *state, network, lists.Routes.Entries,
+               parkMoment(world, kept.EntranceValues, kept.Entrances),
+               unitsHeld<Meals>(world, guest, guest) > 0, lists, lists.Scored);
+  softmaxWeights(lists.Scored.Options, lists.ChoiceWeights);
+  copyGrowing(options, std::span<const ChoiceOption>(lists.Scored.Options));
+  return true;
 }
 
 EntityKey addGuest(World &world, const Place &place) {
@@ -1278,11 +1286,13 @@ EntityKey addGuest(World &world, const Place &place) {
 double needCurve(double level) { return curveAt(NEED_CURVE, level); }
 
 DepartureTally departureTally(const World &world) {
-  const std::vector<EntityKey> keys = world.keysWith<Departures>();
-  if (keys.empty()) {
-    return DepartureTally{};
-  }
-  return DepartureTally{world.get<Departures>(keys.front()).ByReason};
+  std::optional<DepartureTally> tally;
+  world.forEachWith<Departures>([&tally](EntityKey /*key*/, const Departures &departures) {
+    if (!tally) {
+      tally = DepartureTally{departures.ByReason};
+    }
+  });
+  return tally.value_or(DepartureTally{});
 }
 
 double arrivalCurve(const World &world, uint64_t second) {

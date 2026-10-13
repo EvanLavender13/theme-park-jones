@@ -78,11 +78,13 @@ The Graph checkbox draws the networks' lines and nodes over the scene and behind
 
 The Inspector shows its subject's title and rows. For a guest, it also shows the guest's choices, one row for each need and one each for carrying on and heading home, with their chances, and heading home's terms (legible/SPEC.md, Inspectors). It says when the subject has left the park. It updates every tick, stays open when the tool changes, and closes with its close button. With no saved layout it starts at the window's bottom left.
 
+Once their lists have grown, the panels' data frees no memory it allocated from frame to frame: the guest count, the departure tally, the arrival curve, the Inspector's inspection and a shop's stock setting, the need tooltip's availability, and the Graph view's lines and nodes. That holds for each kind of subject. Drawing the panels with ImGui is outside it. The allocation check holds a stretch of full.park's ticks to it, with a guest, a shop, a bench, and a toilet block inspected.
+
 ## Command line
 
 - --frames N exits after N frames.
 - --capture PATH writes the last frame to PATH as a BMP and exits. It exits after 3 frames unless --frames says otherwise.
-- --frame-times, with a positive --frames, writes one line at exit. The line is `frame-times`, then the duration in nanoseconds of each frame from the second to the next to last, each after a single space. With N frames, the line holds N - 2 durations, and neither loading nor the first frame's one-off work is among them. scripts/runtime-report.sh times the app with it (bench/SPEC.md).
+- --frame-times, with a positive --frames, writes one line at exit. The line is `frame-times`, then the duration in nanoseconds of each frame from the second to the next to last, each after a single space. With N frames, the line holds N - 2 durations, and neither loading nor the first frame's one-off work is among them. scripts/runtime-report.sh times the app with it (bench/SPEC.md). Without --frame-times, the app keeps no frame times.
 
 With --capture or --frame-times, the window is hidden. It never shows or takes focus, and every frame is still drawn at the window's size, so captures and timings run while the player uses the computer. A hidden window's frames don't wait for the screen, so --frame-times then gives what each frame costs the app, not the display's refresh.
 - --graph checks the Graph checkbox at start, and --overlay food, drink, rest, or toilet chooses that need's overlay at start, so a capture shows them.

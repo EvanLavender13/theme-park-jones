@@ -30,12 +30,12 @@ namespace {
 // undoing or redoing as the panel or the keys ask, unless the tool drops a hold or a drawn path
 // instead.
 void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &camera,
-                ShownViews &shown, Interaction &interaction, GameSpeed &speed,
-                KeptArrivalDay &arrivals, HistoryAction keys) {
+                ShownViews &shown, Interaction &interaction, GameSpeed &speed, PanelData &panels,
+                HistoryAction keys) {
   const World &world = session.world();
   DebugStats stats;
   stats.SimTick = world.Tick;
-  stats.Guests = parkGuests(world).size();
+  stats.Guests = panels.guestCount(world);
   stats.Focus = camera.Focus;
   stats.Distance = camera.Distance;
   drawDebugPanel(stats, shown.Graph, shown.Overlay);
@@ -43,9 +43,9 @@ void drawPanels(ParkDialogs &dialogs, ParkSession &session, const OrbitCamera &c
   interaction.settleHours(world);
   const OpeningHours hours = parkHours(world);
   const OpeningHours shownHours = interaction.hoursChoice().value_or(hours);
-  keepArrivalDay(arrivals, world, shownHours);
   const HoursUse hoursUse =
-      drawHoursPanel(HoursControls{hours, shownHours}, arrivals.Day, parkTime(world.Tick).Second);
+      drawHoursPanel(HoursControls{hours, shownHours}, panels.arrivalDay(world, shownHours),
+                     parkTime(world.Tick).Second);
   if (hoursUse.Chosen) {
     interaction.chooseHours(*hoursUse.Chosen);
   }
@@ -84,20 +84,18 @@ ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, ParkSessi
   beginUiFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
-  drawPanels(dialogs, session, camera, Shown, interaction, Speed, Arrivals, keys);
+  drawPanels(dialogs, session, camera, Shown, interaction, Speed, Panels, keys);
   drawLightPanel(parkTime(session.world().Tick).Second, Light);
   const World &world = session.world();
   interaction.settleStock();
   if (const std::optional<InspectorSubject> subject = interaction.subject()) {
     std::optional<StockControls> stock;
     if (subject->Kind == SubjectKind::Shop) {
-      for (const ParkBox &box : parkBoxes(world)) {
-        if (box.Key == subject->Key) {
-          stock = StockControls{box.Stock, interaction.stockChoice().value_or(box.Stock)};
-        }
+      if (const std::optional<ShopStock> current = PanelData::shopStock(world, subject->Key)) {
+        stock = StockControls{*current, interaction.stockChoice().value_or(*current)};
       }
     }
-    const InspectorUse use = drawInspector(inspectSubject(world, *subject), stock);
+    const InspectorUse use = drawInspector(Panels.inspection(world, *subject), stock);
     if (!use.Open) {
       interaction.forgetSubject();
     } else {
@@ -110,12 +108,16 @@ ImDrawData *ToolingUi::build(SDL_Window *window, ParkDialogs &dialogs, ParkSessi
     }
   }
   if (Shown.Graph) {
-    drawGraphView(world, view);
+    const ImVec2 size = ImGui::GetIO().DisplaySize;
+    drawGraphView(Panels.graph(world, view, size.x, size.y));
   }
   drawSnapGuides(interaction.snapGuides(), interaction.measuredLengths(world), view);
   if (Shown.Overlay) {
-    drawNeedTooltip(previewedWorld(world, preview), *Shown.Overlay, overlayShape,
-                    pointUnderCursor(readCursor(window), view, OVERLAY_HEIGHT));
+    if (const Availability *availability = Panels.tooltipAvailability(
+            previewedWorld(world, preview), *Shown.Overlay, overlayShape,
+            pointUnderCursor(readCursor(window), view, OVERLAY_HEIGHT))) {
+      drawNeedTooltip(*Shown.Overlay, *availability);
+    }
   }
   if (preview.Shop) {
     drawShopContextTooltip(*preview.Shop);

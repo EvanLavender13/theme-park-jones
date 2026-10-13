@@ -783,29 +783,53 @@ int64_t inventoryPosition(const World &world, EntityKey shop, Good good) {
   return position;
 }
 
+// The lists shopRecord keeps in the buffers from call to call.
+struct ShopRecordLists {
+  std::vector<ParkBox> Boxes;
+  // The depot boxes' keys, ascending.
+  std::vector<EntityKey> Depots;
+  RouteLengths Lengths;
+};
+
 std::optional<ShopRecord> shopRecord(const World &world, EntityKey shop) {
-  const std::vector<EntityKey> shops = boxKeys(world, BoxKind::Shop);
-  if (std::ranges::find(shops, shop) == shops.end()) {
+  TickBuffers buffers;
+  return shopRecord(world, shop, buffers);
+}
+
+std::optional<ShopRecord> shopRecord(const World &world, EntityKey shop, TickBuffers &buffers) {
+  const std::optional<ParkBox> box = parkBox(world, shop);
+  if (!box || box->Kind != BoxKind::Shop) {
     return std::nullopt;
   }
-  const std::vector<EntityKey> depots = boxKeys(world, BoxKind::Depot);
+  ShopRecordLists &lists = buffers.get<ShopRecordLists>();
+  parkBoxes(world, lists.Boxes);
+  lists.Depots.clear();
+  for (const ParkBox &depot : lists.Boxes) {
+    if (depot.Kind == BoxKind::Depot) {
+      lists.Depots.push_back(depot.Key);
+    }
+  }
   ShopRecord record;
   bool shortOfAGood = false;
   forEachGood([&]<Good G>() {
     using Kinds = GoodKinds<G>;
     GoodRecord &good = record.Goods[goodIndex(G)];
     good.Stock = unitsHeld<typename Kinds::Stock>(world, shop, shop);
-    good.OnOrder = positionOf<G>(world, shop, depots) - good.Stock;
+    good.OnOrder = positionOf<G>(world, shop, lists.Depots) - good.Stock;
     int64_t queued = 0;
-    for (const FlowHolding &held : stockOf<typename Kinds::Visits>(world, shop)) {
-      if (isLive(world, held.Handle)) {
-        queued += held.Units;
+    if (const Ledger *visits = ledgerOf<typename Kinds::Visits>(world)) {
+      const auto [first, last] =
+          std::ranges::equal_range(visits->Stocks, shop, {}, &FlowStock::Endpoint);
+      for (const FlowStock &held : std::span<const FlowStock>(first, last)) {
+        if (isLive(world, held.Handle)) {
+          queued += held.Units;
+        }
       }
     }
     record.Queue += queued;
     shortOfAGood = shortOfAGood || good.Stock < queued;
   });
-  record.Starved = !nearestDepot(world, shop).has_value();
+  record.Starved = !depotRouteBy(world, shop, lists.Depots, lists.Lengths).has_value();
   if (record.Starved) {
     record.Limit = LimitingFactor::NoSupplyRoute;
   } else if (record.Queue == 0) {

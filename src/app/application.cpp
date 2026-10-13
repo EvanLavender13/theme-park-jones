@@ -66,7 +66,10 @@ bool Application::runFrames() {
     Interactions.follow(Session.world(), Session.generation(), Session.edits());
 
     const FrameStep step = Clock.advance(SDL_GetPerformanceCounter(), Ui.speed().multiplier());
-    Frames.add(step.Nanoseconds);
+    // Kept only when asked for, so ordinary play keeps no list that grows every frame.
+    if (WriteFrameTimes) {
+      Frames.add(step.Nanoseconds);
+    }
 
     // The buttons act on the world and pointer the ghost on screen was built from, and a Look
     // press picks from the view on screen, before the camera moves.

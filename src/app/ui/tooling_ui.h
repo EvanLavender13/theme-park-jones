@@ -8,7 +8,7 @@
 #include "app/session/park_dialogs.h"
 #include "app/session/park_session.h"
 #include "app/ui/light_panel.h"
-#include "legible/arrivals.h"
+#include "app/ui/panel_data.h"
 #include "legible/preview.h"
 #include "render/paving_overlay.h"
 #include "sim/guests/guests.h"
@@ -49,7 +49,7 @@ public:
   // it when closed, whose stock controls set the interaction's chosen stock and apply it; the graph
   // over the scene while it is shown; the snap's guides and the measured lengths; the shown need's
   // tooltip at the cursor while an overlay is, on the preview's candidate when it has one, over the
-  // overlay's shape; and a shop ghost's context.
+  // overlay's shape; and a shop ghost's context. The panels' data comes from the kept PanelData.
   [[nodiscard]] ImDrawData *build(SDL_Window *window, ParkDialogs &dialogs, ParkSession &session,
                                   const OrbitCamera &camera, Interaction &interaction,
                                   const Preview &preview, const OverlayShape &overlayShape,
@@ -59,7 +59,7 @@ private:
   ShownViews Shown;
   GameSpeed Speed;
   LightPreview Light;
-  KeptArrivalDay Arrivals;
+  PanelData Panels;
 };
 
 } // namespace tpj

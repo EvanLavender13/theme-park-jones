@@ -67,12 +67,6 @@ struct Availability {
   bool operator==(const Availability &) const = default;
 };
 
-// The availability at a place on the world's guest network: each reachable source whose offer says
-// it is supplied contributes its relief discounted by its effective time, and the value is their
-// terms added in order. Changes nothing.
-Availability availabilityAt(const World &world, const AvailabilityDefinition &definition,
-                            const Place &place);
-
 // The lists availabilityBends and availabilityValues reuse. Keep one to compute availabilities many
 // times without allocating once its lists have grown.
 struct AvailabilityLists {
@@ -96,6 +90,13 @@ struct AvailabilityLists {
   // Each place's last counted source.
   std::vector<EntityKey> Counted;
 };
+
+// Fills availability, which the caller keeps, with the availability at a place on the world's guest
+// network: each reachable source whose offer says it is supplied contributes its relief discounted
+// by its effective time, and the value is their terms added in order. Uses lists the caller keeps,
+// and allocates nothing once they have grown. Changes nothing.
+void availabilityAt(const World &world, const AvailabilityDefinition &definition,
+                    const Place &place, AvailabilityLists &lists, Availability &availability);
 
 // The value availabilityAt gives at each of the places, in order, finding each source's offer once
 // in the call.

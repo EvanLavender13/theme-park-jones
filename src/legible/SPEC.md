@@ -29,7 +29,7 @@ An availability at a place is how well one need is served by the sources a guest
 
 An AvailabilityDefinition in availability.h says which need. It gives the offer its sources publish, the curve that discounts a relief by time, and Half, the value an overlay of it shades halfway up its ramp. Every need of a guest has one.
 
-availabilityAt(world, definition, place) gives the value and each source's contribution: its relief, route distance, wait and effective time in game minutes, and term. The terms add up to the value exactly, so the value is attributed to its sources (principle 8). Sources' offers are found the same way guests find them.
+availabilityAt(world, definition, place, lists, availability) fills an Availability the caller keeps with the value and each source's contribution: its relief, route distance, wait and effective time in game minutes, and term. The terms add up to the value exactly, so the value is attributed to its sources (principle 8). Sources' offers are found the same way guests find them. It uses AvailabilityLists the caller keeps, and allocates nothing once they have grown.
 
 availabilityValues(world, definition, places) gives the value at each of many places in one call. Each value is exactly what availabilityAt gives at that place, so a shade and the tooltip over it agree. It finds each source's offer once per call, however many of the places reach the source. It keeps nothing after it returns. availabilityValues and availabilityBends can also use AvailabilityLists that the caller keeps, and then allocate nothing once its lists have grown.
 
@@ -55,7 +55,7 @@ A preview of adding or moving a shop also tells what the shop would find:
 
 An inspector explains one guest, shop, bench, or toilet block from what it publishes about itself (decision 0025). pickSubject replaces the subject when the player picks one of these. It keeps the subject when they pick anything else or nothing. The subject is kept after its entity is gone, so the inspector can say what it was.
 
-inspectSubject reads the subject's record afresh at each call, so if an inspector is shown every frame, it follows every tick. It says when the subject is gone. For a guest it shows:
+inspectSubject reads the subject's record afresh at each call, so if an inspector is shown every frame, it follows every tick. It says when the subject is gone. It fills an Inspection the caller keeps, using InspectLists the caller keeps. Once they have grown, filling it again for the same subject allocates nothing while the park only ticks. For a guest it shows:
 
 - its activity, its four needs, when it arrived, its target and the need it heads there for, or while it heads home the reason it heads home for, whether it is carrying food, meals eaten, last meal, and the pieces it remembers as full, each with how long ago it found it full
 - a table of six rows, one for each of hunger, thirst, tiredness, and the toilet, then carrying on and heading home (principle 8). A need's row shows the facility of the guest's highest-scoring offer of that need, each term of that offer's score, and its score, and the probability that the guest picks any of its offers of that need. If the guest has no offer of that need, the row says so. Heading home's row shows the reason it would head home for, its commitment, its score, and its probability, or says that there is no route home. Carrying on's row shows its score and its probability. Below the table is a table of heading home's base and reason terms when heading home is an option.

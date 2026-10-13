@@ -40,7 +40,7 @@ If a file is in no unit, it fails the check. Add each new module or test directo
 
 ## Memory in loops
 
-Don't allocate inside loops in per-tick or per-frame code. Allocate buffers once and reuse them. The tick and the frame are loops too, so a buffer made at the start of each tick or each call breaks this rule. So does a copy, a rebuild, or a new list returned at every tick or frame. Keep each buffer where it outlives the call: the caller owns it and passes it in. A buffer may grow while it is smaller than the largest item so far. If you find an allocation in such a loop, fix it now; don't defer it. The allocation check in tests/checks enforces this rule for the tick and the display work repeated every tick (decision 0041).
+Don't allocate inside loops in per-tick or per-frame code. Allocate buffers once and reuse them. The tick and the frame are loops too, so a buffer made at the start of each tick or each call breaks this rule. So does a copy, a rebuild, or a new list returned at every tick or frame. Keep each buffer where it outlives the call: the caller owns it and passes it in. A buffer may grow while it is smaller than the largest item so far. If you find an allocation in such a loop, fix it now; don't defer it. The allocation check in tests/checks enforces this rule for all the work the app repeats in steady play. Only uploading meshes, drawing, ImGui's own drawing, and previews that resolve a new world stay outside it (decision 0041).
 
 ## Growth with the park
 

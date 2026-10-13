@@ -78,6 +78,8 @@ The wait is exact under two assumptions: no other visit arrives, and supplies co
 
 shopRecord(world, key) returns a shop's inspection record for display (decision 0025). The record holds its stock and what it has on order of each good, its queue of guests for either good, whether it is starved, and its limiting factor. The record is computed, not stored, so it adds nothing to a save, and a candidate's shops have theirs at once.
 
+shopRecord can also keep the lists it works with in TickBuffers the caller keeps, and then allocates nothing once they have grown.
+
 The limiting factor is NoSupplyRoute for a starved shop. Otherwise it is:
 
 - Demand when no one is queued;
@@ -96,7 +98,7 @@ When a facility is deleted, the guests waiting at its door get their visits back
 
 Each bench publishes its offer in the entry field rest-offer, and each toilet block in toilet-offer. It publishes one OfferEntry at its guest anchor, holding REST_RELIEF or TOILET_RELIEF, the ticks the next guest to arrive would wait for a place, and that it has places. The wait is exact if no other visit arrives. If a facility is newly placed, or is in a candidate, it offers a wait of 0 at once, before it has stepped. If a facility has no guest connection, it publishes nothing.
 
-facilityRecord(world, key) returns a facility's inspection record for display (decision 0025). The record holds its places, how many of them are taken, and how many guests wait at its door. It is computed from the facility's state, not stored, so it adds nothing to a save. For a key that is not a bench or toilet block box, it returns none.
+facilityRecord(world, key) returns a facility's inspection record for display (decision 0025). The record holds its places, how many of them are taken, and how many guests wait at its door. It is computed from the facility's state, not stored, so it adds nothing to a save. For a key that is not a bench or toilet block box, it returns none. It allocates nothing.
 
 ## Seats
 

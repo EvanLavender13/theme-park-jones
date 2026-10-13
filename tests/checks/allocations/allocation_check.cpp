@@ -5,14 +5,18 @@
 // look, synced as the app's frame syncs its preview, twice. At every 60th tick come the overlays:
 // each need's with no edit, and food's with a guest path the world refuses, also synced twice.
 // Last come the tools: each tool's frame work with the pointer held still, and the look's marks
-// built again for a look that changes at each tick, as a moving pointer changes it. Before all of
-// that, the check adds guest paths with a rounded corner and a taper, which full.park lacks.
+// built again for a look that changes at each tick, as a moving pointer changes it. Then come the
+// panels' data, with a guest, a shop, a bench, and a toilet block inspected. Before all of that,
+// the check adds guest paths with a rounded corner and a taper, which full.park lacks.
 
 #include "watch.h"
 
 #include "app/input/interaction.h"
+#include "app/input/orbit_camera.h"
 #include "app/scene/scene_sync.h"
 #include "app/session/park_session.h"
+#include "app/ui/panel_data.h"
+#include "legible/arrivals.h"
 #include "legible/inspect.h"
 #include "legible/preview.h"
 #include "sim/entity_key.h"
@@ -404,8 +408,68 @@ std::array<tpj::PreviewLook, 2> movingLooks(const tpj::World &world) {
   throw std::runtime_error("full.park holds no shop");
 }
 
+// A panel's data held still: the subject it inspects and the hours its arrival day asks for.
+struct HeldPanel {
+  tpj::PanelData Data;
+  tpj::InspectorSubject Subject;
+  tpj::OpeningHours Hours;
+};
+
+// The first box of the kind.
+tpj::EntityKey firstBox(const tpj::World &world, tpj::BoxKind kind, const char *name) {
+  for (const tpj::ParkBox &box : tpj::parkBoxes(world)) {
+    if (box.Kind == kind) {
+      return box.Key;
+    }
+  }
+  throw std::runtime_error(std::string("full.park holds no ") + name);
+}
+
+// The held panels: the guest in the middle of the park's guests, the first shop, the first bench,
+// and the first toilet block. The guest's and the bench's arrival days ask for the park's hours,
+// and the shop's and the toilet block's for hours that open an hour later.
+void holdPanels(std::vector<HeldPanel> &panels, const tpj::World &world) {
+  const std::vector<tpj::EntityKey> guests = tpj::parkGuests(world);
+  if (guests.empty()) {
+    throw std::runtime_error("full.park holds no guest");
+  }
+  const tpj::OpeningHours hours = tpj::parkHours(world);
+  const tpj::OpeningHours later{hours.Opening + 3600, hours.Closing};
+  panels[0].Subject = {guests[guests.size() / 2], tpj::SubjectKind::Guest};
+  panels[0].Hours = hours;
+  panels[1].Subject = {firstBox(world, tpj::BoxKind::Shop, "shop"), tpj::SubjectKind::Shop};
+  panels[1].Hours = later;
+  panels[2].Subject = {firstBox(world, tpj::BoxKind::Bench, "bench"), tpj::SubjectKind::Bench};
+  panels[2].Hours = hours;
+  panels[3].Subject = {firstBox(world, tpj::BoxKind::ToiletBlock, "toilet block"),
+                       tpj::SubjectKind::ToiletBlock};
+  panels[3].Hours = later;
+}
+
+// Where the panels look: the food overlay's shape, the place the need tooltips are read at, and
+// the camera's view the Graph view is built for.
+struct PanelPlaces {
+  const tpj::OverlayShape *Shape = nullptr;
+  tpj::ParkPoint Tooltip;
+  tpj::CameraView View;
+};
+
+// A panel's data as the app works it out in a frame.
+void panelFrame(HeldPanel &held, const tpj::ParkSession &session, const PanelPlaces &places) {
+  const tpj::World &world = session.world();
+  static_cast<void>(held.Data.guestCount(world));
+  static_cast<void>(tpj::departureTally(world));
+  static_cast<void>(held.Data.arrivalDay(world, held.Hours));
+  static_cast<void>(held.Data.inspection(world, held.Subject));
+  static_cast<void>(tpj::PanelData::shopStock(world, held.Subject.Key));
+  for (const tpj::GuestNeed need : tpj::NEEDS) {
+    static_cast<void>(held.Data.tooltipAvailability(world, need, *places.Shape, places.Tooltip));
+  }
+  static_cast<void>(held.Data.graph(world, places.View, 1280.0f, 720.0f));
+}
+
 // The scene and the previews steady play keeps, each synced after every tick as the app syncs it,
-// and the held tools.
+// the held tools, and the held panels.
 struct SteadyPlay {
   tpj::SceneSync Scene;
   std::vector<HeldPreview> Held = std::vector<HeldPreview>(2);
@@ -413,7 +477,33 @@ struct SteadyPlay {
   std::vector<HeldTool> Tools;
   HeldPreview Moving;
   std::array<tpj::PreviewLook, 2> MovingLooks;
+  std::vector<HeldPanel> Panels = std::vector<HeldPanel>(4);
+  PanelPlaces Places;
 };
+
+// Throws when the held panels would check nothing: the guest shows no choices, the tooltip's
+// point has no overlay place, or the Graph view draws no line.
+void requireShownPanels(SteadyPlay &play, const tpj::ParkSession &session) {
+  const tpj::World &world = session.world();
+  HeldPanel &guest = play.Panels[0];
+  if (guest.Data.inspection(world, guest.Subject).Choices.empty()) {
+    throw std::runtime_error("the held guest shows no choices");
+  }
+  if (guest.Data.tooltipAvailability(world, tpj::GuestNeed::Hunger, *play.Places.Shape,
+                                     play.Places.Tooltip) == nullptr) {
+    throw std::runtime_error("the held tooltip's point has no overlay place");
+  }
+  if (guest.Data.graph(world, play.Places.View, 1280.0f, 720.0f).Lines.empty()) {
+    throw std::runtime_error("the held Graph view draws no line");
+  }
+}
+
+// Each held panel's data after a tick.
+void syncPanels(SteadyPlay &play, const tpj::ParkSession &session) {
+  for (HeldPanel &held : play.Panels) {
+    panelFrame(held, session, play.Places);
+  }
+}
 
 // The tools' work after a tick: each held tool's frame, and the moving look synced with the look
 // for the tick.
@@ -426,7 +516,8 @@ void syncTools(SteadyPlay &play, const tpj::ParkSession &session) {
 }
 
 // Steps the park through the warm-up, syncing as the watched ticks do, so the kept lists grow to
-// what the park needs. Throws when the held shop move shows no connected shop context.
+// what the park needs. Throws when the held shop move shows no connected shop context, or the held
+// panels would check nothing.
 void warmUp(SteadyPlay &play, tpj::ParkSession &session) {
   for (uint64_t tick = 0; tick < WARM_TICKS; ++tick) {
     session.step();
@@ -446,6 +537,10 @@ void warmUp(SteadyPlay &play, tpj::ParkSession &session) {
       }
     }
     syncTools(play, session);
+    syncPanels(play, session);
+    if (tick == 0) {
+      requireShownPanels(play, session);
+    }
   }
 }
 
@@ -467,8 +562,8 @@ int report() {
   }
   std::cout
       << "allocation check: " << WATCHED_TICKS
-      << " ticks of full.park, the scene's sync, the preview, the overlays, and the tools freed no "
-         "block they allocated\n";
+      << " ticks of full.park, the scene's sync, the preview, the overlays, the tools, and the "
+         "panels freed no block they allocated\n";
   return 0;
 }
 
@@ -481,6 +576,10 @@ int checkTicks(tpj::ParkSession &session) {
   holdOverlays(play.Overlays, session.world());
   holdTools(play.Tools, session);
   play.MovingLooks = movingLooks(session.world());
+  holdPanels(play.Panels, session.world());
+  play.Places = {&play.Overlays[0].Scene.overlayShape(),
+                 segmentPlaces(session.world(), tpj::PathKind::Guest).Middle,
+                 tpj::orbitCameraView(tpj::OrbitCamera{})};
   warmUp(play, session);
   tpj::check::startWatching(session.world().Tick);
   for (uint64_t tick = 0; tick < WATCHED_TICKS; ++tick) {
@@ -504,6 +603,8 @@ int checkTicks(tpj::ParkSession &session) {
     }
     tpj::check::watchWork("the tools");
     syncTools(play, session);
+    tpj::check::watchWork("the panels");
+    syncPanels(play, session);
   }
   tpj::check::stopWatching();
   return report();
