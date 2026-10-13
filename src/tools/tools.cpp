@@ -148,22 +148,35 @@ bool acceptsStop(const ToolState &tool, const World &world, const PathStop &next
   return isAccepted(world, path);
 }
 
-// A path tool's edit: the stops so far, followed by the next stop while not holding. Refills an
-// AddPath the edit holds in place.
-void pathEdit(const ToolState &tool, ToolPark &park, const World &world,
-              std::optional<ParkEdit> &edit) {
+// Makes the kept edit an AddPath, giving it the stops of the last path it held, and gives it.
+AddPath &keptPath(KeptEdit &kept) {
+  if (!kept.Edit || !std::holds_alternative<AddPath>(*kept.Edit)) {
+    kept.Edit = AddPath{};
+    std::swap(std::get<AddPath>(*kept.Edit).Stops, kept.SpareStops);
+  }
+  return std::get<AddPath>(*kept.Edit);
+}
+
+// Puts the edit, or none, in the kept edit. A path it held keeps its stops in SpareStops.
+void keepEdit(KeptEdit &kept, std::optional<ParkEdit> edit) {
+  if (kept.Edit && std::holds_alternative<AddPath>(*kept.Edit)) {
+    std::swap(std::get<AddPath>(*kept.Edit).Stops, kept.SpareStops);
+  }
+  kept.Edit = std::move(edit);
+}
+
+// A path tool's edit: the stops so far, followed by the next stop while not holding, refilled in
+// the stops the kept edit holds.
+void pathEdit(const ToolState &tool, ToolPark &park, const World &world, KeptEdit &kept) {
   std::optional<PathStop> next;
   if (!tool.Holding && !tool.Drawn.empty()) {
     next = nextStop(tool, park, world);
   }
   if (tool.Drawn.size() + (next ? 1 : 0) < 2) {
-    edit.reset();
+    keepEdit(kept, std::nullopt);
     return;
   }
-  if (!edit || !std::holds_alternative<AddPath>(*edit)) {
-    edit = AddPath{};
-  }
-  auto &path = std::get<AddPath>(*edit);
+  AddPath &path = keptPath(kept);
   path.Kind = drawnKind(tool.Kind);
   copyGrowing(path.Stops, std::span<const PathStop>(tool.Drawn));
   if (next) {
@@ -499,14 +512,15 @@ ToolPark::ToolPark(ToolPark &&) noexcept = default;
 ToolPark &ToolPark::operator=(ToolPark &&) noexcept = default;
 
 void keepToolPark(const World &world, ToolPark &park) {
-  park.Points = parkPathPoints(world);
-  park.Segments = parkSegments(world);
-  park.Corners = parkCorners(world);
-  park.Edges = parkEdges(world);
-  park.Tapers = parkTapers(world);
+  TickBuffers &buffers = park.Lists->Buffers;
+  parkPathPoints(world, park.Points);
+  parkSegments(world, park.Segments, buffers);
+  parkCorners(world, park.Corners, buffers);
+  parkEdges(world, park.Edges, buffers);
+  parkTapers(world, park.Tapers, buffers);
   parkBoxes(world, park.Boxes);
-  park.GuestDoors = parkDoors(world, PathKind::Guest);
-  park.BackstageDoors = parkDoors(world, PathKind::Backstage);
+  parkDoors(world, PathKind::Guest, park.GuestDoors, buffers);
+  parkDoors(world, PathKind::Backstage, park.BackstageDoors, buffers);
   const PavedSurface &surface = resolvedSurface(world);
   edgeSteps(surface, PathKind::Guest, park.Lists->Frontage.GuestSteps);
   edgeSteps(surface, PathKind::Backstage, park.Lists->Frontage.BackstageSteps);
@@ -588,11 +602,12 @@ void pressPointer(ToolState &tool, ToolPark &park, const World &world) {
   resnap(tool, park, world, false);
 }
 
-std::optional<ParkEdit> releasePointer(ToolState &tool, ToolPark &park, const World &world) {
+void releasePointer(ToolState &tool, ToolPark &park, const World &world, KeptEdit &kept) {
   if (!tool.Holding) {
-    return std::nullopt;
+    keepEdit(kept, std::nullopt);
+    return;
   }
-  std::optional<ParkEdit> edit = tentativeEdit(tool, park, world);
+  tentativeEdit(tool, park, world, kept);
   if (isPlaceTool(tool.Kind)) {
     tool.FacingX = tool.Landing.FacingX;
     tool.FacingZ = tool.Landing.FacingZ;
@@ -606,7 +621,6 @@ std::optional<ParkEdit> releasePointer(ToolState &tool, ToolPark &park, const Wo
   tool.Inserting.reset();
   tool.Grabbed.reset();
   resnap(tool, park, world, false);
-  return edit;
 }
 
 namespace {
@@ -657,19 +671,18 @@ std::optional<ParkEdit> otherEdit(const ToolState &tool, const ToolPark &park, c
 
 } // namespace
 
-void tentativeEdit(const ToolState &tool, ToolPark &park, const World &world,
-                   std::optional<ParkEdit> &edit) {
+void tentativeEdit(const ToolState &tool, ToolPark &park, const World &world, KeptEdit &kept) {
   if (isPathTool(tool.Kind)) {
-    pathEdit(tool, park, world, edit);
+    pathEdit(tool, park, world, kept);
     return;
   }
-  edit = otherEdit(tool, park, world);
+  keepEdit(kept, otherEdit(tool, park, world));
 }
 
 std::optional<ParkEdit> tentativeEdit(const ToolState &tool, ToolPark &park, const World &world) {
-  std::optional<ParkEdit> edit;
-  tentativeEdit(tool, park, world, edit);
-  return edit;
+  KeptEdit kept;
+  tentativeEdit(tool, park, world, kept);
+  return std::move(kept.Edit);
 }
 
 std::optional<PathStart> pathStart(const ToolState &tool, ToolPark &park, const World &world) {

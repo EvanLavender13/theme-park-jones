@@ -75,9 +75,8 @@ bool Application::runFrames() {
     // press picks from the view on screen, before the camera moves.
     Interactions.useButtons(Session.world(), Session.commands(), input.Buttons);
     if (Interactions.picks(input.Buttons)) {
-      Interactions.pick(Session.world(),
-                        entityUnderCursor(Session.world(), Scene.seated(), readCursor(Window.get()),
-                                          orbitCameraView(Camera)));
+      Interactions.pick(Session.world(), Scene.seated(), readCursor(Window.get()),
+                        orbitCameraView(Camera));
     }
 
     // The simulation advances in fixed ticks regardless of frame rate, as many as the speed asks,
@@ -97,7 +96,7 @@ bool Application::runFrames() {
     Interactions.follow(Session.world(), Session.generation(), Session.edits());
     const WorldMeshes meshes =
         Scene.syncWorld(Session.world(), Session.generation(), Session.edits());
-    if (!uploadWorldMeshes(renderer, Session.world(), meshes, Scene.guestMesh(), Camera)) {
+    if (!uploadWorldMeshes(renderer, Scene, meshes, Camera)) {
       return false;
     }
 
@@ -131,7 +130,8 @@ bool Application::runFrames() {
     const DayLight light = preview.On ? dayLightAt(preview.Second) : dayLightOf(Session.world());
     // The meshes are updated after the panels, so a change of the Overlay row shows in this frame.
     fillLook(Interactions, Session.world(), Ui.shown().Overlay, Look);
-    const PreviewMeshes previewMeshes = Scene.syncLook(Session.world(), remade, Look, shapeChanged);
+    const PreviewMeshes previewMeshes =
+        Scene.syncLook(Session.world(), Interactions.park(), remade, Look, shapeChanged);
     if (!uploadPreviewMeshes(renderer, Scene, previewMeshes, shapeChanged) ||
         !drawFrame(renderer, view, light, drawData, lastFrame ? CapturePath : nullptr)) {
       return false;

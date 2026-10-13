@@ -32,6 +32,8 @@ size_t NotedCount = 0;
 std::array<FreedBlock, REPORTED_BLOCKS> Reported{};
 size_t FreedCount = 0;
 bool Watching = false;
+// While paused, no block is noted, and a noted block freed loses its note without a finding.
+bool Paused = false;
 bool Overflowed = false;
 uint64_t Tick = 0;
 const char *Work = "";
@@ -47,7 +49,7 @@ size_t homeOf(const void *block) {
 }
 
 void note(void *block, size_t size) {
-  if (!Watching || block == nullptr) {
+  if (!Watching || Paused || block == nullptr) {
     return;
   }
   if (NotedCount + 1 >= TRACKED_BLOCKS) {
@@ -114,8 +116,14 @@ bool movesToLarger(const Noted &last, const Noted &freed) {
                     static_cast<const unsigned char *>(last.Address), last.Size);
 }
 
+void moved(void *block);
+
 void forget(void *block) {
   if (!Watching || block == nullptr) {
+    return;
+  }
+  if (Paused) {
+    moved(block);
     return;
   }
   const Noted last = LastAllocated;
@@ -235,13 +243,27 @@ void startWatching(uint64_t tick) {
   LastAllocated = Noted{};
   Tick = tick;
   Watching = true;
+  Paused = false;
 }
 
 void watchTick(uint64_t tick) { Tick = tick; }
 
 void watchWork(const char *work) { Work = work; }
 
-void stopWatching() { Watching = false; }
+void stopWatching() {
+  Watching = false;
+  Paused = false;
+}
+
+void pauseWatching() {
+  Paused = true;
+  LastAllocated = Noted{};
+}
+
+void resumeWatching() {
+  Paused = false;
+  LastAllocated = Noted{};
+}
 
 size_t freedCount() { return FreedCount; }
 

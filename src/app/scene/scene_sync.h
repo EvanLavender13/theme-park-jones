@@ -66,15 +66,18 @@ public:
   // drawn. The edit count is ParkSession::edits(). For a generation other than the last one it
   // saw, as at the first call, both, with the camera framed, and the kept preview is emptied.
   // Otherwise the park mesh when the edit count differs from the last call's, and the guest mesh
-  // when the edit count or the world's tick does. When the edit count differs, the kept preview is
-  // emptied, so an edit applied without a tick is previewed afresh. Whenever the guest mesh is
-  // needed, the seated guests are brought up to date, starting afresh at a new generation, and the
-  // guest mesh is built from them. Once its lists have grown, a call frees no memory it allocated.
+  // when the edit count or the world's tick does. When the edit count differs, the kept preview's
+  // tick is cleared, so an edit applied without a tick is previewed afresh. Whenever the park mesh
+  // is needed, it is built. Whenever the guest mesh is needed, the seated guests are brought up to
+  // date, starting afresh at a new generation, and the guest mesh is built from them. Once its
+  // lists have grown, a call frees no memory it allocated.
   WorldMeshes syncWorld(const World &world, uint64_t generation, uint64_t edits);
   // The seat each seated guest is drawn on, as the last syncWorld left them.
   [[nodiscard]] const SeatedGuests &seated() const { return Seated; }
   // The guests as the last syncWorld that needed them drew them.
   [[nodiscard]] const ParkMesh &guestMesh() const { return GuestLists.Mesh; }
+  // The park as the last syncWorld that needed it drew it.
+  [[nodiscard]] const ParkMesh &parkMesh() const { return ParkLists.Mesh; }
   // After the pointer moves: keeps the preview of the edit as keepPreview does, following ticks
   // when asked, returning whether it was made again.
   bool syncPreview(const World &world, const std::optional<ParkEdit> &edit, bool followTicks);
@@ -91,10 +94,11 @@ public:
   // part is built, the ghost is put together from them in that order. While the look shows a need's
   // overlay, the shades are the previewed world's availability of that need over the overlay's
   // shape, built again when the preview was just made again, the shape changed, or the need or the
-  // previewed world's tick differs from those they were built for. Remembers the look. Once its
-  // lists have grown, a call frees no memory it allocated.
-  PreviewMeshes syncLook(const World &world, bool remade, const PreviewLook &look,
-                         bool shapeChanged);
+  // previewed world's tick differs from those they were built for. Remembers the look. The look's
+  // marks read the park as the tools read it, which the caller keeps filled from the same world.
+  // Once its lists have grown, a call frees no memory it allocated.
+  PreviewMeshes syncLook(const World &world, const ToolPark &park, bool remade,
+                         const PreviewLook &look, bool shapeChanged);
   [[nodiscard]] const GhostMesh &ghost() const { return Ghost; }
   [[nodiscard]] const OverlayShades &shades() const { return ShadeLists.Shades; }
   // Keeps the overlay's shape for the previewed world: while shown, built again when the edit
@@ -102,7 +106,7 @@ public:
   // preview holds a candidate of an edit that can change paths. These fix the previewed world's
   // path points and segments. While not shown, it is empty. Returns whether the shape changed.
   bool syncOverlayShape(const World &previewed, bool shown);
-  [[nodiscard]] const OverlayShape &overlayShape() const { return Shape; }
+  [[nodiscard]] const OverlayShape &overlayShape() const { return ShapeLists.Shape; }
 
 private:
   std::optional<uint64_t> Generation;
@@ -111,16 +115,13 @@ private:
   std::optional<uint64_t> GuestTick;
   SeatedGuests Seated;
   GuestMeshLists GuestLists;
+  ParkMeshLists ParkLists;
   // Whether the last syncWorld rebuilt the guests.
   bool GuestsRebuilt = false;
   KeptPreview Kept;
   std::optional<PreviewLook> Look;
-  // The edit count the look's marks were built at, and the boxes, path points, and segments they
-  // read, filled when it changes.
+  // The edit count the look's marks were built at.
   std::optional<uint64_t> LookEdits;
-  std::vector<ParkBox> LookBoxes;
-  std::vector<ParkPathPoint> LookPoints;
-  std::vector<ParkSegment> LookSegments;
   // The ghost's parts, and the ghost put together from them. The look's marks use only Lit and
   // Marks.
   GhostMesh EditGhost;
@@ -134,7 +135,7 @@ private:
     std::optional<ParkEdit> Edit;
   };
   std::optional<ShapedFor> Shaped;
-  OverlayShape Shape;
+  OverlayShapeLists ShapeLists;
   // The previewed world's tick and the need the shades were built for, while an overlay is shown.
   struct ShadedFor {
     uint64_t Tick = 0;

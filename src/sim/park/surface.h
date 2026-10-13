@@ -3,6 +3,7 @@
 
 #include "sim/entity_key.h"
 #include "sim/park/intent.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
 #include <array>
@@ -204,6 +205,11 @@ struct ParkTaper {
 
 // Each taper, in ascending key order of its point.
 std::vector<ParkTaper> parkTapers(const World &world);
+// As the returning forms of parkEdges and parkTapers, into a list the caller keeps, which they
+// clear first, keeping the lists they work with in the buffers. Allocate nothing once the lists
+// have grown.
+void parkEdges(const World &world, std::vector<ParkEdge> &edges, TickBuffers &buffers);
+void parkTapers(const World &world, std::vector<ParkTaper> &tapers, TickBuffers &buffers);
 
 } // namespace tpj
 

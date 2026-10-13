@@ -153,11 +153,12 @@ void addDoor(std::vector<ParkDoor> &doors, EntityKey entity, const Pose &pose, F
                    .Width = size.Width});
 }
 
-// The doors serving the kind: an entrance's front, a shop's, a bench's, and a toilet block's front
-// serve guests, and a shop's back and a depot's front serve backstage.
-std::vector<ParkDoor> doorsServing(const std::vector<ParkEntrance> &entrances,
-                                   const std::vector<ParkBox> &boxes, PathKind kind) {
-  std::vector<ParkDoor> doors;
+// Puts the doors serving the kind in doors, clearing it first: an entrance's front, a shop's, a
+// bench's, and a toilet block's front serve guests, and a shop's back and a depot's front serve
+// backstage.
+void doorsServing(const std::vector<ParkEntrance> &entrances, const std::vector<ParkBox> &boxes,
+                  PathKind kind, std::vector<ParkDoor> &doors) {
+  doors.clear();
   if (kind == PathKind::Guest) {
     for (const ParkEntrance &entrance : entrances) {
       addDoor(doors, entrance.Key, entrance.At, ENTRANCE_SIZE, Face::Front);
@@ -172,8 +173,21 @@ std::vector<ParkDoor> doorsServing(const std::vector<ParkEntrance> &entrances,
       addDoor(doors, box.Key, box.At, boxSize(box.Kind), shop ? Face::Back : Face::Front);
     }
   }
+}
+
+// The doors serving the kind, as the fill form gives them.
+std::vector<ParkDoor> doorsServing(const std::vector<ParkEntrance> &entrances,
+                                   const std::vector<ParkBox> &boxes, PathKind kind) {
+  std::vector<ParkDoor> doors;
+  doorsServing(entrances, boxes, kind, doors);
   return doors;
 }
+
+// The entrances and boxes the doors are read from.
+struct DoorLists {
+  std::vector<ParkEntrance> Entrances;
+  std::vector<ParkBox> Boxes;
+};
 
 // The path carriers, each stopping only at its two ends, as a network nearestPlace can search.
 Network linesOnly(const std::vector<Carrier> &carriers) {
@@ -555,7 +569,18 @@ const Network *previousNetwork(const World &world, PathKind kind) {
 }
 
 std::vector<ParkDoor> parkDoors(const World &world, PathKind kind) {
-  return doorsServing(parkEntrances(world), parkBoxes(world), kind);
+  std::vector<ParkDoor> doors;
+  TickBuffers buffers;
+  parkDoors(world, kind, doors, buffers);
+  return doors;
+}
+
+void parkDoors(const World &world, PathKind kind, std::vector<ParkDoor> &doors,
+               TickBuffers &buffers) {
+  DoorLists &lists = buffers.get<DoorLists>();
+  parkEntrances(world, lists.Entrances);
+  parkBoxes(world, lists.Boxes);
+  doorsServing(lists.Entrances, lists.Boxes, kind, doors);
 }
 
 std::vector<KeyedWalkway> keyedWalkways(const World &world, PathKind kind) {

@@ -4,6 +4,7 @@
 #include "sim/entity_key.h"
 #include "sim/medium/network.h"
 #include "sim/schema.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
 #include <array>
@@ -223,6 +224,11 @@ std::vector<ParkBox> parkBoxes(const World &world);
 // nothing once the list has grown.
 void parkEntrances(const World &world, std::vector<ParkEntrance> &entrances);
 void parkBoxes(const World &world, std::vector<ParkBox> &boxes);
+void parkPathPoints(const World &world, std::vector<ParkPathPoint> &points);
+// As the returning forms, into a list the caller keeps, keeping the lists that deriving the
+// segments' lines works with in the buffers. Allocate nothing once the lists have grown.
+void parkSegments(const World &world, std::vector<ParkSegment> &segments, TickBuffers &buffers);
+void parkCorners(const World &world, std::vector<ParkCorner> &corners, TickBuffers &buffers);
 // The box the key holds, as parkBoxes gives it, or none when the key holds no box. Allocates
 // nothing.
 std::optional<ParkBox> parkBox(const World &world, EntityKey key);

@@ -9,6 +9,7 @@
 #include "sim/world.h"
 
 #include <optional>
+#include <vector>
 
 namespace tpj {
 
@@ -37,11 +38,19 @@ std::optional<ParkPoint> pointAtCursor(const CameraView &view, float aspect, flo
 std::optional<double> rayEntry(const CursorRay &ray, const Pose &pose, FootprintSize size,
                                float height);
 
+// The lists picking reuses: the entrances, boxes, and guests.
+struct PickLists {
+  std::vector<ParkEntrance> Entrances;
+  std::vector<ParkBox> Boxes;
+  std::vector<EntityKey> Guests;
+};
+
 // The entrance, box, or guest the cursor's ray first meets, as the park and guest meshes draw
-// them with the seated guests, or none when it meets none.
+// them with the seated guests, or none when it meets none. Uses lists the caller keeps, and
+// allocates nothing once they have grown.
 std::optional<EntityKey> entityAtCursor(const World &world, const SeatedGuests &seated,
                                         const CameraView &view, float aspect, float ndcX,
-                                        float ndcY);
+                                        float ndcY, PickLists &lists);
 
 } // namespace tpj
 

@@ -5,6 +5,7 @@
 #include "sim/park/internal/around.h"
 #include "sim/park/internal/layout.h"
 #include "sim/schema.h"
+#include "sim/tick_buffers.h"
 
 #include <algorithm>
 #include <array>
@@ -801,9 +802,9 @@ focusOf(const PathGround &ground, const std::vector<EntityKey> &focus) {
 
 // The shape of each segment with a ground line, or when loaded is given, of each that ends at a
 // point in it.
-std::vector<Shape> shapesOf(const PathLayout &layout, const PathGround &ground,
-                            const std::vector<EntityKey> *loaded) {
-  std::vector<Shape> shapes;
+void shapesOf(const PathLayout &layout, const PathGround &ground,
+              const std::vector<EntityKey> *loaded, std::vector<Shape> &shapes) {
+  shapes.clear();
   for (const ParkSegment &segment : ground.Segments) {
     if (segment.Line.empty() || (loaded != nullptr && !touches(segment, *loaded))) {
       continue;
@@ -822,12 +823,19 @@ std::vector<Shape> shapesOf(const PathLayout &layout, const PathGround &ground,
                            {},
                            {segment.FromEdge, segment.ToEdge}});
   }
+}
+
+std::vector<Shape> shapesOf(const PathLayout &layout, const PathGround &ground,
+                            const std::vector<EntityKey> *loaded) {
+  std::vector<Shape> shapes;
+  shapesOf(layout, ground, loaded, shapes);
   return shapes;
 }
 
-// Each segment end, by its point's key, then by its segment's key.
-std::vector<std::tuple<EntityKey, EntityKey, End>> endsOf(const std::vector<Shape> &shapes) {
-  std::vector<std::tuple<EntityKey, EntityKey, End>> ends;
+// Each segment end, by its point's key, then by its segment's key, in ends.
+void endsOf(const std::vector<Shape> &shapes,
+            std::vector<std::tuple<EntityKey, EntityKey, End>> &ends) {
+  ends.clear();
   ends.reserve(2 * shapes.size());
   for (size_t i = 0; i < shapes.size(); ++i) {
     ends.emplace_back(shapes[i].Points[0], shapes[i].Key, End{i, 0});
@@ -837,6 +845,11 @@ std::vector<std::tuple<EntityKey, EntityKey, End>> endsOf(const std::vector<Shap
     return std::tie(std::get<0>(x), std::get<1>(x), std::get<2>(x).Which) <
            std::tie(std::get<0>(y), std::get<1>(y), std::get<2>(y).Which);
   });
+}
+
+std::vector<std::tuple<EntityKey, EntityKey, End>> endsOf(const std::vector<Shape> &shapes) {
+  std::vector<std::tuple<EntityKey, EntityKey, End>> ends;
+  endsOf(shapes, ends);
   return ends;
 }
 
@@ -861,8 +874,9 @@ void forEachPoint(const std::vector<std::tuple<EntityKey, EntityKey, End>> &ends
 }
 
 // The points, in ascending key order, and the far end of each segment at one of them.
-std::vector<EntityKey> farEndsOf(const PathGround &ground, const std::vector<EntityKey> &points) {
-  std::vector<EntityKey> reached = points;
+void farEndsOf(const PathGround &ground, const std::vector<EntityKey> &points,
+               std::vector<EntityKey> &reached) {
+  copyGrowing(reached, std::span<const EntityKey>(points));
   for (const ParkSegment &segment : ground.Segments) {
     if (touches(segment, points)) {
       reached.push_back(segment.From);
@@ -870,6 +884,11 @@ std::vector<EntityKey> farEndsOf(const PathGround &ground, const std::vector<Ent
     }
   }
   sortUnique(reached);
+}
+
+std::vector<EntityKey> farEndsOf(const PathGround &ground, const std::vector<EntityKey> &points) {
+  std::vector<EntityKey> reached;
+  farEndsOf(ground, points, reached);
   return reached;
 }
 
@@ -1408,13 +1427,29 @@ PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways) 
   return surface;
 }
 
-std::vector<ParkEdge> edgesOf(const PathLayout &layout, const PathGround &ground) {
-  std::vector<Shape> shapes = shapesOf(layout, ground, nullptr);
-  const std::vector<std::tuple<EntityKey, EntityKey, End>> ends = endsOf(shapes);
-  Scratch scratch;
-  askPoints(layout, ends, ground, scratch, shapes, nullptr);
-  std::vector<ParkEdge> found;
-  forEachPoint(ends, ground, scratch, nullptr, [&](EntityKey key, const ParkCorner *corner) {
+namespace {
+
+// The lists fitting edges and tapers reuses: the shapes, their ends, the fitting's scratch, the
+// points whose asks are found, the taper candidates, and the segment ends they are found from.
+struct EdgeLists {
+  std::vector<Shape> Shapes;
+  std::vector<std::tuple<EntityKey, EntityKey, End>> Ends;
+  Scratch Fit;
+  std::vector<EntityKey> Asked;
+  std::vector<EntityKey> Candidates;
+  std::vector<std::pair<EntityKey, double>> CandidateEnds;
+};
+
+// Each edge the layout's segments make, as parkEdges gives them, given its ground, in found.
+void fitEdges(const PathLayout &layout, const PathGround &ground, EdgeLists &lists,
+              std::vector<ParkEdge> &found) {
+  std::vector<Shape> &shapes = lists.Shapes;
+  shapesOf(layout, ground, nullptr, shapes);
+  endsOf(shapes, lists.Ends);
+  Scratch &scratch = lists.Fit;
+  askPoints(layout, lists.Ends, ground, scratch, shapes, nullptr);
+  found.clear();
+  forEachPoint(lists.Ends, ground, scratch, nullptr, [&](EntityKey key, const ParkCorner *corner) {
     if (scratch.Group.size() < 2) {
       return;
     }
@@ -1424,22 +1459,20 @@ std::vector<ParkEdge> edgesOf(const PathLayout &layout, const PathGround &ground
   });
   std::ranges::sort(found, {},
                     [](const ParkEdge &edge) { return std::pair{edge.Point, edge.Segment}; });
-  return found;
 }
 
-namespace {
-
 // The points, in ascending key order, that exactly two segments of different widths use, as their
-// intent gives them. Every taper is one of them.
-std::vector<EntityKey> taperCandidates(const World &world) {
-  std::vector<std::pair<EntityKey, double>> ends;
-  for (const EntityKey key : world.keysWith<PathSegmentIntent>()) {
-    const PathSegmentIntent &segment = world.get<PathSegmentIntent>(key);
-    ends.emplace_back(segment.From, segment.Width);
-    ends.emplace_back(segment.To, segment.Width);
-  }
+// intent gives them, in candidates. Every taper is one of them. ends is a list it reuses.
+void taperCandidates(const World &world, std::vector<std::pair<EntityKey, double>> &ends,
+                     std::vector<EntityKey> &candidates) {
+  ends.clear();
+  world.forEachWith<PathSegmentIntent>(
+      [&ends](EntityKey /*key*/, const PathSegmentIntent &segment) {
+        ends.emplace_back(segment.From, segment.Width);
+        ends.emplace_back(segment.To, segment.Width);
+      });
   std::ranges::sort(ends);
-  std::vector<EntityKey> candidates;
+  candidates.clear();
   for (size_t first = 0; first < ends.size();) {
     size_t last = first;
     while (last < ends.size() && ends[last].first == ends[first].first) {
@@ -1450,51 +1483,82 @@ std::vector<EntityKey> taperCandidates(const World &world) {
     }
     first = last;
   }
-  return candidates;
 }
 
-// Each taper among the candidates, which are in ascending key order. Only the candidates and the
-// far ends of their segments are fitted.
-std::vector<ParkTaper> tapersAt(const PathLayout &layout, const PathGround &ground,
-                                const std::vector<EntityKey> &candidates) {
-  const std::vector<EntityKey> asked = farEndsOf(ground, candidates);
-  std::vector<Shape> shapes = shapesOf(layout, ground, &asked);
-  const std::vector<std::tuple<EntityKey, EntityKey, End>> ends = endsOf(shapes);
-  Scratch scratch;
-  askPoints(layout, ends, ground, scratch, shapes, &asked);
-  std::vector<ParkTaper> found;
-  forEachPoint(ends, ground, scratch, &candidates, [&](EntityKey key, const ParkCorner *corner) {
-    if (scratch.Group.size() != 2) {
-      return;
-    }
-    const PathPointIntent &point = *findPoint(layout, key);
-    trimPoint(scratch, shapes, corner, false, heldTaper(point));
-    if (!scratch.Taper.Tapers) {
-      return;
-    }
-    const TaperFit &taper = scratch.Taper;
-    const End &narrow = scratch.Group[taper.Narrow];
-    const ParkPoint along = shapes[narrow.Shape].outward(narrow.Which);
-    found.push_back(ParkTaper{key, point.At + along * taper.Start, shapes[narrow.Shape].Key, along,
-                              taper.Length, taper.MaxLength});
-  });
-  return found;
+// Each taper among the candidates, which are in ascending key order, in found. Only the candidates
+// and the far ends of their segments are fitted.
+void fitTapers(const PathLayout &layout, const PathGround &ground,
+               const std::vector<EntityKey> &candidates, EdgeLists &lists,
+               std::vector<ParkTaper> &found) {
+  farEndsOf(ground, candidates, lists.Asked);
+  std::vector<Shape> &shapes = lists.Shapes;
+  shapesOf(layout, ground, &lists.Asked, shapes);
+  endsOf(shapes, lists.Ends);
+  Scratch &scratch = lists.Fit;
+  askPoints(layout, lists.Ends, ground, scratch, shapes, &lists.Asked);
+  found.clear();
+  forEachPoint(
+      lists.Ends, ground, scratch, &candidates, [&](EntityKey key, const ParkCorner *corner) {
+        if (scratch.Group.size() != 2) {
+          return;
+        }
+        const PathPointIntent &point = *findPoint(layout, key);
+        trimPoint(scratch, shapes, corner, false, heldTaper(point));
+        if (!scratch.Taper.Tapers) {
+          return;
+        }
+        const TaperFit &taper = scratch.Taper;
+        const End &narrow = scratch.Group[taper.Narrow];
+        const ParkPoint along = shapes[narrow.Shape].outward(narrow.Which);
+        found.push_back(ParkTaper{key, point.At + along * taper.Start, shapes[narrow.Shape].Key,
+                                  along, taper.Length, taper.MaxLength});
+      });
 }
 
 } // namespace
 
+std::vector<ParkEdge> edgesOf(const PathLayout &layout, const PathGround &ground) {
+  EdgeLists lists;
+  std::vector<ParkEdge> found;
+  fitEdges(layout, ground, lists, found);
+  return found;
+}
+
 std::vector<ParkTaper> parkTapers(const World &world) {
-  const std::vector<EntityKey> candidates = taperCandidates(world);
-  if (candidates.empty()) {
-    return {};
+  EdgeLists lists;
+  taperCandidates(world, lists.CandidateEnds, lists.Candidates);
+  std::vector<ParkTaper> tapers;
+  if (lists.Candidates.empty()) {
+    return tapers;
   }
   const PathLayout layout = layoutOf(world);
-  return tapersAt(layout, groundOf(layout), candidates);
+  fitTapers(layout, groundOf(layout), lists.Candidates, lists, tapers);
+  return tapers;
+}
+
+void parkTapers(const World &world, std::vector<ParkTaper> &tapers, TickBuffers &buffers) {
+  EdgeLists &lists = buffers.get<EdgeLists>();
+  taperCandidates(world, lists.CandidateEnds, lists.Candidates);
+  tapers.clear();
+  if (lists.Candidates.empty()) {
+    return;
+  }
+  GroundLists &ground = buffers.get<GroundLists>();
+  layoutOf(world, ground.Layout);
+  groundOf(ground.Layout, ground);
+  fitTapers(ground.Layout, ground.Ground, lists.Candidates, lists, tapers);
 }
 
 std::vector<ParkEdge> parkEdges(const World &world) {
   const PathLayout layout = layoutOf(world);
   return edgesOf(layout, groundOf(layout));
+}
+
+void parkEdges(const World &world, std::vector<ParkEdge> &edges, TickBuffers &buffers) {
+  GroundLists &ground = buffers.get<GroundLists>();
+  layoutOf(world, ground.Layout);
+  groundOf(ground.Layout, ground);
+  fitEdges(ground.Layout, ground.Ground, buffers.get<EdgeLists>(), edges);
 }
 
 double edgeRadiusFor(const ParkEdge &edge, double distance) {

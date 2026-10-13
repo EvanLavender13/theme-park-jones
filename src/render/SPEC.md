@@ -53,7 +53,7 @@ The scene is lit in linear light and tonemapped to the screen. The tonemap keeps
 
 ## The park
 
-buildParkMesh gives a world's park as the player sees it. Each entrance, path, and box is in its place, at its size and height. If a door has a connector, its walkway is drawn as part of the paved surface, joined to the segment it reaches (connectorWalkways). Guest paths, backstage paths, shops, depots, benches, toilet blocks, and the entrance each have their own opaque color. Paths draw as the paved surface parkSurface gives: each piece filled in its kind's color, and a strip EDGE_LINE_WIDTH wide along each edge line, on the paving's side, in a darker shade of that color, above the fills. Where an edge line turns sharply, its strip has no gap. Each piece of furniture is drawn as a low box over its footprint, benches and tables each in their own color. Each starved shop has a mark floating over its roof, in a color unlike any other in the scene.
+buildParkMesh gives a world's park as the player sees it. Each entrance, path, and box is in its place, at its size and height. If a door has a connector, its walkway is drawn as part of the paved surface, joined to the segment it reaches (connectorWalkways). Guest paths, backstage paths, shops, depots, benches, toilet blocks, and the entrance each have their own opaque color. Paths draw as the paved surface parkSurface gives: each piece filled in its kind's color, and a strip EDGE_LINE_WIDTH wide along each edge line, on the paving's side, in a darker shade of that color, above the fills. Where an edge line turns sharply, its strip has no gap. Each piece of furniture is drawn as a low box over its footprint, benches and tables each in their own color. Each starved shop has a mark floating over its roof, in a color unlike any other in the scene. buildParkMesh fills a mesh the caller keeps, with the lists it works with. Once they have grown, it allocates nothing.
 
 meshBounds gives the smallest rectangle on the ground that holds a mesh's vertices, or none for an empty mesh.
 
@@ -88,7 +88,7 @@ buildGuestMesh fills a GuestMeshLists that the caller keeps. It clears the lists
 
 ## Paving overlay
 
-buildOverlayShape(world) gives the guest paving's overlay shape: each piece of the paved surface that belongs to a guest segment or to a point where guest segments meet, without door walkways, the lines of the guest segments, and which pieces of different owners overlap. It depends only on the park's path points and segments, so it changes only when they do.
+buildOverlayShape fills the guest paving's overlay shape in lists the caller keeps: each piece of the paved surface that belongs to a guest segment or to a point where guest segments meet, without door walkways, the lines of the guest segments, and which pieces of different owners overlap. It depends only on the park's path points and segments, so it changes only when they do. Once the lists have grown, building it allocates nothing.
 
 Each spot of the shape has an overlay place, which overlayPlace(shape, point, lines) gives, or none when the shape holds no piece there. A spot of a segment's paving takes the place on that segment's line nearest it. A spot of a point's paving takes the nearest place on the lines of the guest segments at that point. Where paving of several owners holds a spot, the nearest of their places wins, and ties go to the lower segment key. overlayPlace uses a list the caller keeps, and allocates nothing once it has grown.
 
@@ -104,7 +104,7 @@ groundAtCursor gives the point on the ground under a cursor for a camera view. I
 
 pointAtCursor gives the point at a height above the ground under a cursor, where its ray meets that level. It gives none when the eye is not above that level or the ray does not descend. groundAtCursor is pointAtCursor at height 0.
 
-entityAtCursor gives the key of the nearest entrance, box, or guest that the cursor's ray meets, or none. It uses the shapes the park and guest meshes draw, with the same seated guests. Paths, walkways, and starved marks do not stop the ray, so a click meets what stands on the ground.
+entityAtCursor gives the key of the nearest entrance, box, or guest that the cursor's ray meets, or none. It uses the shapes the park and guest meshes draw, with the same seated guests. Paths, walkways, and starved marks do not stop the ray, so a click meets what stands on the ground. It reads the park and the guests into lists the caller keeps, and allocates nothing once they have grown.
 
 ## Graph overlay
 

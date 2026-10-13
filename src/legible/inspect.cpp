@@ -272,19 +272,20 @@ void facilityRows(const FacilityRecord &record, std::vector<InspectorRow> &rows)
 
 } // namespace
 
-std::optional<InspectorSubject> inspectorSubject(const World &world, EntityKey key) {
+std::optional<InspectorSubject> inspectorSubject(const World &world, EntityKey key,
+                                                 TickBuffers &buffers) {
   if (guestRecord(world, key)) {
     return InspectorSubject{key, SubjectKind::Guest};
   }
-  if (shopRecord(world, key)) {
+  if (shopRecord(world, key, buffers)) {
     return InspectorSubject{key, SubjectKind::Shop};
   }
   if (facilityRecord(world, key)) {
-    for (const ParkBox &box : parkBoxes(world)) {
-      if (box.Key == key && box.Kind == BoxKind::Bench) {
+    if (const std::optional<ParkBox> box = parkBox(world, key)) {
+      if (box->Kind == BoxKind::Bench) {
         return InspectorSubject{key, SubjectKind::Bench};
       }
-      if (box.Key == key && box.Kind == BoxKind::ToiletBlock) {
+      if (box->Kind == BoxKind::ToiletBlock) {
         return InspectorSubject{key, SubjectKind::ToiletBlock};
       }
     }
@@ -293,11 +294,11 @@ std::optional<InspectorSubject> inspectorSubject(const World &world, EntityKey k
 }
 
 void pickSubject(std::optional<InspectorSubject> &subject, const World &world,
-                 std::optional<EntityKey> key) {
+                 std::optional<EntityKey> key, TickBuffers &buffers) {
   if (!key) {
     return;
   }
-  if (const std::optional<InspectorSubject> picked = inspectorSubject(world, *key)) {
+  if (const std::optional<InspectorSubject> picked = inspectorSubject(world, *key, buffers)) {
     subject = picked;
   }
 }

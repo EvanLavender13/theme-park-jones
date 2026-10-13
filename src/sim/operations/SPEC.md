@@ -44,7 +44,7 @@ A shop sells food, drink, or both. Each good has its own kinds: supply-orders, s
 
 ## Supply
 
-A shop is supplied when the backstage network connects it to a depot. nearestDepot returns the depot with the shortest backstage route, or none. A shop is starved when it has no backstage connection, or its connection reaches no depot. If a shop is starved, it can still be placed, and it simply gets no supplies (principle 5).
+A shop is supplied when the backstage network connects it to a depot. nearestDepot returns the depot with the shortest backstage route, or none. It can also keep the lists it works with in TickBuffers the caller keeps, and then allocates nothing once they have grown. A shop is starved when it has no backstage connection, or its connection reaches no depot. If a shop is starved, it can still be placed, and it simply gets no supplies (principle 5).
 
 If a shop is supplied, it keeps its stock of each good it sells topped up by ordering from its nearest depot. It orders a good whenever what it holds of it plus what it has on order falls to REORDER_POINT, and it orders up to ORDER_UP_TO. Orders take ORDER_DELAY to reach the depot. Supplies travel back at SUPPLY_SPEED, so they take longer on a longer backstage route. A depot is an unlimited source of both goods.
 

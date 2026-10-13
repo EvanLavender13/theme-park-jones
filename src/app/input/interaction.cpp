@@ -41,8 +41,9 @@ void Interaction::useButtons(const World &world, CommandQueue &commands,
     pressPointer(Tool, Park, world);
   }
   if (buttons.Released) {
-    if (const std::optional<ParkEdit> edit = releasePointer(Tool, Park, world)) {
-      queueEdit(commands, *edit);
+    releasePointer(Tool, Park, world, Released);
+    if (Released.Edit) {
+      queueEdit(commands, *Released.Edit);
     }
   }
 }
@@ -51,9 +52,10 @@ bool Interaction::picks(const PointerButtons &buttons) const {
   return buttons.Pressed && Tool.Kind == ToolKind::None;
 }
 
-void Interaction::pick(const World &world, std::optional<EntityKey> entity) {
+void Interaction::pick(const World &world, const SeatedGuests &seated,
+                       const std::optional<CursorNdc> &cursor, const CameraView &view) {
   const std::optional<InspectorSubject> was = Subject;
-  pickSubject(Subject, world, entity);
+  pickSubject(Subject, world, entityUnderCursor(world, seated, cursor, view, Picks), PickBuffers);
   if (Subject != was) {
     StockChoice.reset();
   }
@@ -106,20 +108,22 @@ void Interaction::movePointer(const World &world, const PointerSample &pointer) 
 
 const std::optional<ParkEdit> &Interaction::tentativeEdit(const World &world) {
   tpj::tentativeEdit(Tool, Park, world, Edit);
-  if (Edit) {
-    return Edit;
+  std::optional<ParkEdit> &edit = Edit.Edit;
+  if (edit) {
+    return edit;
   }
+  // The tool's edit is empty here, so setting another holds no path whose stops it could drop.
   if (Subject && Subject->Kind == SubjectKind::Shop && StockChoice) {
     const std::optional<ShopStock> stock = shopStockOf(Park, Subject->Key);
     if (stock && *stock != *StockChoice) {
-      Edit = SetShopStock{Subject->Key, *StockChoice};
-      return Edit;
+      edit = SetShopStock{Subject->Key, *StockChoice};
+      return edit;
     }
   }
   if (HoursChoice && *HoursChoice != parkHours(world)) {
-    Edit = SetOpeningHours{*HoursChoice};
+    edit = SetOpeningHours{*HoursChoice};
   }
-  return Edit;
+  return edit;
 }
 
 std::optional<EntityKey> Interaction::highlighted(const World &world) const {

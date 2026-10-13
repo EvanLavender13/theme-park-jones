@@ -82,7 +82,7 @@ std::optional<double> rayEntry(const CursorRay &ray, const Pose &pose, Footprint
 
 std::optional<EntityKey> entityAtCursor(const World &world, const SeatedGuests &seated,
                                         const CameraView &view, float aspect, float ndcX,
-                                        float ndcY) {
+                                        float ndcY, PickLists &lists) {
   const CursorRay ray = cursorRay(view, aspect, ndcX, ndcY);
   std::optional<EntityKey> nearest;
   double nearestEntry = 0.0;
@@ -93,13 +93,16 @@ std::optional<EntityKey> entityAtCursor(const World &world, const SeatedGuests &
       nearestEntry = *entry;
     }
   };
-  for (const ParkEntrance &entrance : parkEntrances(world)) {
+  parkEntrances(world, lists.Entrances);
+  for (const ParkEntrance &entrance : lists.Entrances) {
     consider(entrance.Key, rayEntry(ray, entrance.At, ENTRANCE_SIZE, ENTRANCE_HEIGHT));
   }
-  for (const ParkBox &box : parkBoxes(world)) {
+  parkBoxes(world, lists.Boxes);
+  for (const ParkBox &box : lists.Boxes) {
     consider(box.Key, rayEntry(ray, box.At, boxSize(box.Kind), boxHeight(box.Kind)));
   }
-  for (const EntityKey guest : parkGuests(world)) {
+  parkGuests(world, lists.Guests);
+  for (const EntityKey guest : lists.Guests) {
     const std::optional<GuestRecord> record = guestRecord(world, guest);
     if (const std::optional<Pose> seat = seated.seatOf(guest)) {
       consider(guest, rayEntry(ray, *seat, GUEST_SIZE, GUEST_SEATED_HEIGHT));

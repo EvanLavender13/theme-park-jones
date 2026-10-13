@@ -98,6 +98,9 @@ struct SeatPlaces {
 void addFurniture(WorldSchema &schema);
 // Every piece, in ascending key order.
 std::vector<FurniturePiece> parkFurniture(const World &world);
+// As the returning form, into a list the caller keeps, which it clears first. Allocates nothing
+// once the list has grown.
+void parkFurniture(const World &world, std::vector<FurniturePiece> &pieces);
 // The piece the key holds, as parkFurniture gives it, or none when the key holds no piece.
 // Allocates nothing.
 std::optional<FurniturePiece> furniturePiece(const World &world, EntityKey key);

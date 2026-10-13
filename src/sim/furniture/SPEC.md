@@ -8,7 +8,7 @@ furniture reads intent only through parkSegments, parkPathPoints, parkBoxes, par
 
 ## Pieces
 
-Furniture is derived in each resolution from intent alone, so saves never hold it (principle 1). parkFurniture gives every piece, in key order. furniturePiece gives the piece a key holds, as parkFurniture gives it, or none when the key holds no piece. It allocates nothing. A FurniturePiece has its key, its segment, the side of the segment it stands on, its kind, and its pose. furnitureSize gives a kind's footprint, its width along the paving and its depth across it.
+Furniture is derived in each resolution from intent alone, so saves never hold it (principle 1). parkFurniture gives every piece, in key order. It can also put them in a list the caller keeps, clearing it first, and then allocates nothing once the list has grown. furniturePiece gives the piece a key holds, as parkFurniture gives it, or none when the key holds no piece. It allocates nothing. A FurniturePiece has its key, its segment, the side of the segment it stands on, its kind, and its pose. furnitureSize gives a kind's footprint, its width along the paving and its depth across it.
 
 Each piece is an entity, so flows can reach it. Its key is derived from its segment, its side, and where it stands along the segment. A piece exists while a resolution lays it, and the resolution that no longer lays it removes it.
 

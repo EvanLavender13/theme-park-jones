@@ -9,11 +9,11 @@
 
 namespace tpj {
 
-// Gives the renderer the meshes the frame needs: the park mesh, built from the world, and the
-// guest mesh, as the scene's sync built it. Frames the camera on the park mesh's bounds when asked
-// and the mesh has vertices. False if an upload failed.
-bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes &meshes,
-                       const ParkMesh &guests, OrbitCamera &camera);
+// Gives the renderer the meshes the frame needs, as the scene's sync built them: the park mesh and
+// the guest mesh. Frames the camera on the park mesh's bounds when asked and the mesh has
+// vertices. False if an upload failed.
+bool uploadWorldMeshes(Renderer &renderer, const SceneSync &scene, const WorldMeshes &meshes,
+                       OrbitCamera &camera);
 // Gives the renderer the preview meshes the scene's sync built: the ghost when the frame rebuilt
 // it, the overlay's shape when it changed, and the overlay's shades when the frame rebuilt them.
 // False if an upload failed.

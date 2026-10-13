@@ -5,6 +5,7 @@
 #include "sim/park/intent.h"
 #include "sim/park/internal/components.h"
 #include "sim/park/surface.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
 #include <vector>
@@ -36,7 +37,27 @@ struct PathGround {
 };
 
 PathLayout layoutOf(const World &world);
+// As the returning form, into a layout the caller keeps, clearing its lists first.
+void layoutOf(const World &world, PathLayout &layout);
+
+// The lists deriving a ground reuses, and the ground it gives: the layout read from the world, each
+// segment's straight line, the arc points, the scratch the roundings are found with, and the
+// ground. The straight lines, the ground's segments, and a caller's segments keep their extra
+// values in spare lists.
+struct GroundLists {
+  PathLayout Layout;
+  std::vector<std::vector<CarrierPoint>> Lines;
+  std::vector<std::vector<CarrierPoint>> SpareLines;
+  std::vector<ParkPoint> Arcs;
+  TickBuffers Scratch;
+  PathGround Ground;
+  std::vector<ParkSegment> SpareSegments;
+  std::vector<ParkSegment> CallerSpare;
+};
+
 PathGround groundOf(const PathLayout &layout);
+// As the returning form, into lists.Ground. Allocates nothing once the lists have grown.
+void groundOf(const PathLayout &layout, GroundLists &lists);
 // Each segment with its ground line, rounded at its corners, in ascending key order.
 std::vector<ParkSegment> segmentsOf(const PathLayout &layout);
 // Each corner, in ascending key order of its point.

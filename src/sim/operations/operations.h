@@ -166,6 +166,9 @@ std::optional<double> supplyRouteLength(const World &world, EntityKey at, Entity
 // The depot box with the least supply route length from the shop, ties to the lower key, or none
 // for a starved shop.
 std::optional<DepotRoute> nearestDepot(const World &world, EntityKey shop);
+// As the returning form, keeping the lists it works with in the buffers. Allocates nothing once
+// they have grown.
+std::optional<DepotRoute> nearestDepot(const World &world, EntityKey shop, TickBuffers &buffers);
 // The ticks a shipment takes over a backstage route of the distance, at least 1.
 uint32_t shipmentDelay(double distance);
 // The supplies of the good the shop holds or has coming, and its orders for the good on their way

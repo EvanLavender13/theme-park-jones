@@ -2,10 +2,12 @@
 #define TPJ_RENDER_PARK_MESH_H
 
 #include "sim/entity_key.h"
+#include "sim/furniture/furniture.h"
 #include "sim/park/edits.h"
 #include "sim/park/geometry.h"
 #include "sim/park/intent.h"
 #include "sim/park/surface.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
 #include <optional>
@@ -206,9 +208,20 @@ void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha);
 // alpha given.
 void appendFurniture(ParkMesh &mesh, const World &world, float alpha);
 
+// The lists building the park mesh reuses, and the mesh: the entrances, boxes, and furniture, the
+// buffers for the shops' supply routes, and the mesh.
+struct ParkMeshLists {
+  std::vector<ParkEntrance> Entrances;
+  std::vector<ParkBox> Boxes;
+  std::vector<FurniturePiece> Furniture;
+  TickBuffers Buffers;
+  ParkMesh Mesh;
+};
+
 // The world's entrances, paths, walkways, boxes, and furniture, in that order and each in key
-// order, then a starved mark over each starved shop.
-ParkMesh buildParkMesh(const World &world);
+// order, then a starved mark over each starved shop. The mesh is put in lists.Mesh. Uses lists the
+// caller keeps, which it clears first, and allocates nothing once they have grown.
+void buildParkMesh(const World &world, ParkMeshLists &lists);
 
 // Adds the box, segment, or path point the key holds, in the color: a box shaped as buildParkMesh
 // draws it, a segment as its own pieces of the paved surface GHOST_LIFT higher, and a path point

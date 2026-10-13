@@ -62,12 +62,15 @@ struct Inspection {
 };
 
 // The subject for the key: a guest when the key holds one, a shop, bench, or toilet block when it
-// holds that box, and none otherwise.
-std::optional<InspectorSubject> inspectorSubject(const World &world, EntityKey key);
+// holds that box, and none otherwise. Keeps the lists it works with in the buffers, and allocates
+// nothing once they have grown.
+std::optional<InspectorSubject> inspectorSubject(const World &world, EntityKey key,
+                                                 TickBuffers &buffers);
 
-// Replaces the subject with the picked key's when it has one, and otherwise leaves it.
+// Replaces the subject with the picked key's when it has one, and otherwise leaves it. Keeps the
+// lists it works with in the buffers, and allocates nothing once they have grown.
 void pickSubject(std::optional<InspectorSubject> &subject, const World &world,
-                 std::optional<EntityKey> key);
+                 std::optional<EntityKey> key, TickBuffers &buffers);
 
 // The lists inspectSubject reuses from call to call.
 struct InspectLists {

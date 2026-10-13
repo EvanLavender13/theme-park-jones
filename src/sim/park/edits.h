@@ -215,6 +215,11 @@ struct IntentRecords {
   bool operator==(const IntentRecords &) const = default;
 };
 
+// Each segment's record, in ascending key order, into a list the caller keeps, which it clears
+// first: what parkSegments gives for it, without its line. Doesn't derive the lines, and allocates
+// nothing once the list has grown.
+void segmentRecords(const World &world, std::vector<SegmentRecord> &records);
+
 // Intent put back as an undo or redo finds it. The path points, segments, and boxes Remove names
 // go. Each record in Set replaces the values of the one holding its key. Each record in Add is
 // added with a key from the counter, in the order listed, points first, then segments, then boxes.

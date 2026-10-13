@@ -5,23 +5,12 @@
 #include "sim/park/internal/layout.h"
 
 #include <optional>
+#include <span>
+#include <stddef.h>
 #include <utility>
 #include <vector>
 
 namespace tpj {
-
-namespace {
-
-// Every entity holding the component T, made public by toValue, in ascending key order.
-template <typename T, typename ToValue> auto collectIntent(const World &world, ToValue toValue) {
-  std::vector<decltype(toValue(EntityKey{}, std::declval<const T &>()))> result;
-  for (const EntityKey key : world.keysWith<T>()) {
-    result.push_back(toValue(key, world.get<T>(key)));
-  }
-  return result;
-}
-
-} // namespace
 
 void addParkIntent(WorldSchema &schema) {
   schema.addComponent<EntranceIntent>("entrance", DataKind::Intent);
@@ -48,8 +37,15 @@ void parkEntrances(const World &world, std::vector<ParkEntrance> &entrances) {
 }
 
 std::vector<ParkPathPoint> parkPathPoints(const World &world) {
-  return collectIntent<PathPointIntent>(world, [](EntityKey key, const PathPointIntent &point) {
-    return ParkPathPoint{key, point.At, point.Radius, point.Taper};
+  std::vector<ParkPathPoint> points;
+  parkPathPoints(world, points);
+  return points;
+}
+
+void parkPathPoints(const World &world, std::vector<ParkPathPoint> &points) {
+  points.clear();
+  world.forEachWith<PathPointIntent>([&points](EntityKey key, const PathPointIntent &point) {
+    points.push_back(ParkPathPoint{key, point.At, point.Radius, point.Taper});
   });
 }
 
@@ -66,7 +62,41 @@ std::vector<ParkSegment> parkSegments(const World &world) {
   return segments;
 }
 
+void parkSegments(const World &world, std::vector<ParkSegment> &segments, TickBuffers &buffers) {
+  GroundLists &lists = buffers.get<GroundLists>();
+  layoutOf(world, lists.Layout);
+  groundOf(lists.Layout, lists);
+  const std::vector<ParkSegment> &ground = lists.Ground.Segments;
+  resizeKeeping(segments, ground.size(), lists.CallerSpare);
+  for (size_t i = 0; i < ground.size(); ++i) {
+    const ParkSegment &from = ground[i];
+    ParkSegment &segment = segments[i];
+    segment.Key = from.Key;
+    segment.Kind = from.Kind;
+    segment.From = from.From;
+    segment.To = from.To;
+    segment.Width = from.Width;
+    copyGrowing(segment.Line, std::span<const CarrierPoint>(from.Line));
+    segment.FromEdge = from.FromEdge;
+    segment.ToEdge = from.ToEdge;
+    segment.Furnished = {};
+    if (const auto *left = world.tryGet<LeftFurnishingIntent>(segment.Key)) {
+      segment.Furnished.Left = left->Held;
+    }
+    if (const auto *right = world.tryGet<RightFurnishingIntent>(segment.Key)) {
+      segment.Furnished.Right = right->Held;
+    }
+  }
+}
+
 std::vector<ParkCorner> parkCorners(const World &world) { return cornersOf(layoutOf(world)); }
+
+void parkCorners(const World &world, std::vector<ParkCorner> &corners, TickBuffers &buffers) {
+  GroundLists &lists = buffers.get<GroundLists>();
+  layoutOf(world, lists.Layout);
+  groundOf(lists.Layout, lists);
+  copyGrowing(corners, std::span<const ParkCorner>(lists.Ground.Corners));
+}
 
 std::vector<ParkBox> parkBoxes(const World &world) {
   std::vector<ParkBox> boxes;
