@@ -2,7 +2,7 @@
 
 Slice: none
 
-Status: planned
+Status: complete
 
 ## Summary
 
@@ -74,10 +74,15 @@ Fixed by quiet-edits, feature 7, and held to the rule by the allocation check's 
 - A click's pick and its subject (picking.cpp entityAtCursor, inspect.cpp inspectorSubject).
 - Each tool's press and release, and switching between a path and another edit: the kept edit holds a path's stops while it holds another edit (tools.cpp KeptEdit, releasePointer, tentativeEdit).
 
+Fixed by quiet-commands, feature 8, and held to the rule by the same rounds:
+
+- Queueing a command and emptying the queue. The queue held each command in a std::any, which put any command larger than a pointer on the heap, with its stops or records, and applying it freed them. It now keeps the values of each command type it has held and copies later commands into them (sim/command_queue.h). The allocation check queues each release's edit and the second history's undo or redo command on its own queue, and empties it, watched. The session's own queue runs the same push and clear inside step and applyWithoutTick, where applying the command resolves.
+
 Left as they are, since each makes something new by nature and runs once per player action:
 
 - Opening and saving a park, and the file dialogs (park_session.cpp useFileRequest). Each frame takes an empty request, which moves an empty string and allocates nothing.
 - --capture's readback, which runs once for the last frame (renderer.cpp submitWithCapture).
+- The render targets at a window resize. When the swapchain's size changes, the renderer releases its scene, color, and depth textures and creates new ones of the new size (renderer.cpp ensureRenderTargets). Each size needs textures of that size, and it happens only while the player resizes the window. The old textures are released before the new ones are made, so nothing leaks.
 - A plain edit's new change on the undo list, and the redo list it empties, which drops edits that can no longer be redone (history.cpp noteEdits). Each undo or redo adds its restored keys to the history's renames, which only grows.
 
 Unchecked while the pointer or the view moves, owned by the deepening candidate above, a frame check of the app with scripted input. The allocation check holds the pointer and the camera still. The code keeps its lists for a moving pointer and view too, but nothing runs it moving:
