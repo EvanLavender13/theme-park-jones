@@ -78,7 +78,7 @@ In debug builds, if a registered component holds a NaN, the walk refuses the wor
 
 ## Commands
 
-Commands are values of types that their owning module registers with addCommand. The module applies them with its applyCommand. Commands wait in a CommandQueue outside the world, so copies, hashes, and saves never hold them. stepWorld empties the queue. If a queue holds a command of an unregistered type, the queue is refused before anything changes.
+Commands are values of types that their owning module registers with addCommand. The module applies them with its applyCommand. Commands wait in a CommandQueue outside the world, so copies, hashes, and saves never hold them. stepWorld empties the queue. A queue keeps the memory of the commands it has held. Queueing a command copies it into memory kept for commands of its type, and emptying the queue keeps that memory for later commands. Once the queue has grown to hold its commands, queueing them and emptying the queue allocate nothing. If a queue holds a command of an unregistered type, the queue is refused before anything changes.
 
 ## Resolution
 
@@ -130,3 +130,5 @@ The results also depend on the floating-point environment, which must be round-t
 ## Memory in play
 
 Once its buffers have grown, a cycle with no commands frees no memory it allocated (decision 0041). The world keeps the memory of the entities and components it removes and reuses it for those it adds. Once the park has held as many as it holds, guests arriving and leaving and seat service starting and ending allocate nothing. The allocation check in tests/checks holds a stretch of full.park's ticks to the first sentence.
+
+Queueing commands and emptying the queue free no memory they allocated once the queue has grown. Applying a command resolves the world, which stays outside this. The allocation check holds the queue to it over each tool's release and each undo and redo on full.park.

@@ -678,7 +678,8 @@ void warmUp(SteadyPlay &play, tpj::ParkSession &session) {
 
 // The work after an undo or a redo: an interaction that picks and presses each tool, a scene that
 // shows the Food overlay and inspects a shop, a second history that follows the session's world,
-// the queue the releases put their edits on, and the places they press and pick at.
+// the queue the releases put their edits on and the second history's commands go on, and the places
+// they press and pick at.
 struct EditRounds {
   explicit EditRounds(const tpj::ParkSession &session)
       : Tools(session.world(), session.generation(), session.edits()) {}
@@ -732,14 +733,6 @@ void pointAt(EditRounds &rounds, const tpj::World &world, tpj::ParkPoint at) {
   static_cast<void>(rounds.Tools.tentativeEdit(world));
 }
 
-// Empties the queue the releases put their edits on, unwatched: queueing a command puts it on the
-// heap, and applying it frees it.
-void dropQueued(EditRounds &rounds) {
-  tpj::check::pauseWatching();
-  rounds.Queued.clear();
-  tpj::check::resumeWatching();
-}
-
 // Selects the tool, points at the place, presses, and releases.
 void pressAndRelease(EditRounds &rounds, const tpj::World &world, tpj::ToolKind kind,
                      tpj::ParkPoint at) {
@@ -747,7 +740,7 @@ void pressAndRelease(EditRounds &rounds, const tpj::World &world, tpj::ToolKind 
   pointAt(rounds, world, at);
   rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{true, false});
   rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{false, true});
-  dropQueued(rounds);
+  rounds.Queued.clear();
 }
 
 // Draws a guest path of two stops and finishes it. The second stop's press asks the world whether
@@ -766,7 +759,7 @@ void drawPath(EditRounds &rounds, const tpj::World &world) {
     throw std::runtime_error("the drawn path did not finish");
   }
   rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{false, true});
-  dropQueued(rounds);
+  rounds.Queued.clear();
 }
 
 // Each tool's press and release: on the places the held tools rest on, and drawing a path.
@@ -799,12 +792,17 @@ void pickAt(EditRounds &rounds, const tpj::World &world, tpj::ParkPoint at) {
 }
 
 // One undo or redo and the app's work after it. The watch pauses while the session takes and
-// applies the command, and watches the second history take and note the same one.
+// applies the command, and watches the second history take and note the same one and queue its
+// command, as the session does.
 void editRound(EditRounds &rounds, HiddenFrame &frame, tpj::ParkSession &session, bool undo) {
   tpj::check::watchWork("the history");
-  if ((undo ? tpj::takeUndo(rounds.History) : tpj::takeRedo(rounds.History)) == nullptr) {
+  const tpj::RestoreIntent *restore =
+      undo ? tpj::takeUndo(rounds.History) : tpj::takeRedo(rounds.History);
+  if (restore == nullptr) {
     throw std::runtime_error("the history has nothing to undo or redo");
   }
+  rounds.Queued.push(*restore);
+  rounds.Queued.clear();
   tpj::check::pauseWatching();
   if (undo) {
     session.undo();

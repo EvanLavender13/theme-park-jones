@@ -6,7 +6,6 @@
 #include "sim/field_text.h"
 #include "sim/type_id.h"
 
-#include <any>
 #include <bit>
 #include <map>
 #include <memory>
@@ -89,10 +88,11 @@ struct ResolverType {
   std::vector<std::string> Dependencies;
 };
 
-// A registered command type. Apply calls the owning module's applyCommand on a queued value.
+// A registered command type. Apply calls the owning module's applyCommand on a pointer to a queued
+// value.
 struct CommandType {
   TypeId Id = nullptr;
-  void (*Apply)(World &world, const std::any &command) = nullptr;
+  void (*Apply)(World &world, const void *command) = nullptr;
 };
 
 // A command type names the function that applies it, found by argument-dependent lookup,
@@ -270,8 +270,8 @@ template <typename T> void WorldSchema::addCommand() {
   static_assert(HasApplyCommand<T>, "a command type needs an applyCommand function");
   CommandType type;
   type.Id = typeIdOf<T>();
-  type.Apply = [](World &world, const std::any &command) {
-    applyCommand(world, std::any_cast<const T &>(command));
+  type.Apply = [](World &world, const void *command) {
+    applyCommand(world, *static_cast<const T *>(command));
   };
   addCommandType(type);
 }
