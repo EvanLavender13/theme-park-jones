@@ -2,7 +2,7 @@
 
 Slice: none
 
-Status: planned
+Status: complete
 
 ## Summary
 
@@ -50,6 +50,44 @@ quiet-tick. It builds the check, and makes the world's storage and the tick pass
 Unordered pool this milestone draws later features from.
 
 - A frame check of the app itself: run the app hidden with scripted pointer input and count allocations per frame, including ImGui's own drawing. Gated on: scripted input for the app.
+
+## Leftovers
+
+What the milestone left outside its criteria and the allocation check, with the code read for each.
+
+Owned by changing-previews, the capability's milestone 6, still to be planned. Each of these allocates today, in ordinary play. They run at every frame the tool's edit changes: while the pointer moves with a place tool (tools.cpp otherEdit poses the box at the pointer), while it moves with a path tool that has stops drawn (pathEdit adds the pointer's stop), and while anything is dragged. They also run at each tick while an overlay is shown and the preview holds a candidate:
+
+- Making the preview again: resolving a new candidate world (scene_sync.cpp syncPreview, legible/preview.cpp keepPreview and previewEdit).
+- Building the edit's ghost whenever the preview is made again (scene_sync.cpp syncLook). buildGhostMesh allocates as a whole: it returns a new GhostMesh, and among its lists it copies the park's furniture twice in appendFurnitureChanges, the boxes for a MoveBox, and the segments in appendDeleted, and makes temporary lists in appendJoinMarks, ownersOf, appendWalkways, appendStraightPath, appendStarvedMarks, and the Remove point ghost's appendEntity per segment (park_mesh.cpp).
+- Building the overlay's shape again, while an overlay is shown and a path edit changes: buildOverlayShape returns a new OverlayShape (scene_sync.cpp syncOverlayShape).
+- The need tooltip on a candidate. Its own lists are kept, but the candidate it reads is made again at each tick.
+- Applying a command at a tick, which resolves.
+
+Not steady play, read and left as they are, since each runs once per player action:
+
+- Committing an edit, undo, and redo: buildParkMesh returns a new ParkMesh, and the scene reads the boxes, path points, and segments again (scene_uploads.cpp uploadWorldMeshes, scene_sync.cpp syncLook). This runs once per edit.
+- Presses and releases: a press may ask the world whether it accepts a path (tools.cpp).
+- Picking a subject on a click (picking.cpp entityAtCursor).
+- Opening and saving a park, and the file dialogs (park_session.cpp useFileRequest). Each frame takes an empty request, which moves an empty string and allocates nothing.
+- --capture's readback, which runs once for the last frame (renderer.cpp submitWithCapture).
+
+Unchecked while the pointer or the view moves, owned by the deepening candidate above, a frame check of the app with scripted input. The allocation check holds the pointer and the camera still. The code keeps its lists for a moving pointer and view too, but nothing runs it moving:
+
+- The tools' own work at a moving pointer: snapping, the frontage search, Edit path's handles and hovered handle, and the look's marks, which fill the lists ToolLists and SceneSync keep (tools/tools.cpp, scene_sync.cpp syncLook).
+- The Graph view at a moving camera, which fills the GraphOverlay and keys PanelData keeps, and the need tooltip at a moving point, which fills PanelData's overlay lines and availability lists (panel_data.cpp).
+
+Outside the check, read and following the rule:
+
+- ImGui's own drawing. Its SDL_GPU backend keeps its vertex, index, and transfer buffers and grows them only when outgrown (imgui_impl_sdlgpu3.cpp CreateOrResizeBuffers). ImGui reuses its draw lists from frame to frame. The deepening candidate above would put it in a check.
+- The app's own per-frame code that only the app runs: gatherInput, readCursor, ToolingUi::build and each panel's drawing, and the snap guides' labels. They format into stack buffers or pass literals and allocate nothing. The Debug panel copied each need's name into a std::string every frame. The names fit libstdc++'s short-string buffer, so it reached no heap, but it was a copy at every frame, and it now formats into a stack buffer.
+- The GPU driver's own memory, which neither hook sees. SDL suballocates device memory itself, and each buffer or region it makes goes through SDL_malloc, which the check counts.
+
+Fixed at closing: tpj_bench's food-overlay and guest-mesh stages timed the returning forms, which made new lists at each repetition, while the app keeps them. The stages now keep their lists across repetitions as the app does, and the returning forms of availabilityShades and buildGuestMesh are gone, since nothing else called them (bench/stages.cpp).
+
+Owned by the capability's backlog:
+
+- stepShops samples backstage route distance at every tick for each shop's nearest depot, which changes only at a resolution. It allocates nothing, but it repeats work ("Depot routes kept per resolution").
+- Drawing guests from one shared mesh instead of rebuilding and uploading a mesh of all guests at every tick ("Instanced guests").
 
 ## Open questions
 
