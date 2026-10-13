@@ -30,7 +30,9 @@ Rejected: leaving the world's storage out of the check — the churn would keep 
 
 ## What a kept preview must reproduce
 
-A tick changes no intent, so a candidate's derived data stays valid while the edit is unchanged. Copying the world's state into a kept candidate isn't enough, though. makeCandidate applies the edit and resolves, and the finishers change state: carryGuests sets every guest's aim and turn on the new network, and settleSteppedEntries clears stepped entries the new derived data no longer matches. Applying an edit that adds a box also takes a key from the counter, which the world may give to an arriving guest at the next tick. A kept candidate must give exactly what makeCandidate gives at that tick (principle 8). The kept-preview feature finds how, and the park world checks compare the two.
+A tick changes no intent, so a candidate's derived data stays valid while the edit is unchanged. Copying the world's state into a kept candidate isn't enough, though. makeCandidate applies the edit and resolves, and the finishers change state: carryGuests sets every guest's aim and turn on the new network, and settleSteppedEntries clears stepped entries the new derived data no longer matches. Each compares the world's resolution with the candidate's. Applying an edit that adds a path or a box also takes a key from the counter, and an arriving guest takes keys from the same counter, so after an arrival the candidate's new entity, and everything derived from its key, differs.
+
+Following ticks exactly therefore needs a resolution at each tick. Keeping the derived data and running only the edit and the finishers again stays exact only until a guest arrives, and it splits every resolver into a derived part and a state part. Resolving into kept storage is exact, but making resolution reuse its storage is changing-previews' work. So kept-preview keeps the candidate only while no overlay is shown, as the app does today, and the preview an overlay makes again at each tick moves to changing-previews.
 
 ## The work the app repeats while the park plays
 
