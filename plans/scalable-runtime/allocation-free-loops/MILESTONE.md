@@ -2,7 +2,7 @@
 
 Slice: none
 
-Status: complete
+Status: planned
 
 ## Summary
 
@@ -20,6 +20,7 @@ allocation-free-loops makes docs/conventions.md's rule against allocating in per
 8. The simulation is unchanged: tpj_scenarios --compare of windows-debug output from before and after each feature shows no difference. The runtime report on the stress parks is compared before and after the milestone. Each stage's change is reported, and no stage is marked result-changed. `--frame-times` on full.park with the window idle is reported before and after. (check: tpj_scenarios --compare; scripts/runtime-report.sh and its --compare)
 9. Uploading to the GPU in steady play reuses its buffers: the guest mesh at each tick, the overlay's shades at each tick, and the ghost when the look changes. Each upload writes into the buffers the renderer keeps, and makes larger ones only when the data outgrows them. It allocates and frees no heap block and no GPU buffer while the sizes stay within what they have held. Drawing a frame without a capture frees no block it allocated either. (ctest)
 10. Every SPEC.md whose public functions take kept buffers says so. src/sim/SPEC.md says that stepWorld's caller keeps its buffers. docs/testing.md and docs/conventions.md describe the check as decision 0041 does. The windows-debug build has no warnings, ctest passes, and tidy is clean.
+11. The app's work at a player action reuses its memory: after an edit, an undo, or a redo applies, the park mesh, the overlay's shape, and the scene's lists of boxes, path points, and segments are refilled in the lists the app keeps, and a click's picking and a press's own work keep theirs. Resolving the world at that action stays with changing-previews. (check, in PLAN.md of quiet-edits)
 
 ## Medium
 
@@ -44,6 +45,7 @@ quiet-tick. It builds the check, and makes the world's storage and the tick pass
 4. `quiet-tools`: each tool's per-frame work with the pointer held still, for criterion 6. Depends on: feature 1.
 5. `quiet-panels`: the panels' data, the Inspector, the tooltips, the Graph view, and the frame-time log, for criterion 7; and the edits to docs/testing.md and docs/conventions.md in criterion 10. Depends on: features 1 to 4.
 6. `quiet-uploads`: the renderer keeps each GPU buffer with a transfer buffer of its own and grows them only when outgrown, records uploads on the frame's command buffer, and the allocation check uploads and draws in a hidden window, counting SDL's allocations, for criterion 9. Depends on: none.
+7. `quiet-edits`: the park mesh, the overlay's shape, the scene's lists, picking, and presses keep their memory when a player action applies, for criterion 11. Depends on: feature 1.
 
 ## Deepening candidates
 
@@ -63,11 +65,14 @@ Owned by changing-previews, the capability's milestone 6, still to be planned. E
 - The need tooltip on a candidate. Its own lists are kept, but the candidate it reads is made again at each tick.
 - Applying a command at a tick, which resolves.
 
-Not steady play, read and left as they are, since each runs once per player action:
+Owned by quiet-edits, feature 7. Each runs once per player action and rebuilds what it could refill:
 
-- Committing an edit, undo, and redo: buildParkMesh returns a new ParkMesh, and the scene reads the boxes, path points, and segments again (scene_uploads.cpp uploadWorldMeshes, scene_sync.cpp syncLook). This runs once per edit.
-- Presses and releases: a press may ask the world whether it accepts a path (tools.cpp).
+- Committing an edit, undo, and redo: buildParkMesh returns a new ParkMesh (scene_uploads.cpp uploadWorldMeshes), buildOverlayShape returns a new OverlayShape (scene_sync.cpp syncOverlayShape), and the scene reads the path points and segments into new lists (scene_sync.cpp syncLook).
+- Presses and releases: a press's own work apart from asking the world whether it accepts a path, which resolves and stays with changing-previews (tools.cpp).
 - Picking a subject on a click (picking.cpp entityAtCursor).
+
+Left as they are, since each makes something new by nature and runs once per player action:
+
 - Opening and saving a park, and the file dialogs (park_session.cpp useFileRequest). Each frame takes an empty request, which moves an empty string and allocates nothing.
 - --capture's readback, which runs once for the last frame (renderer.cpp submitWithCapture).
 
