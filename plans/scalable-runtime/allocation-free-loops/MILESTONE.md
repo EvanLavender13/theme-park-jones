@@ -21,6 +21,7 @@ allocation-free-loops makes docs/conventions.md's rule against allocating in per
 9. Uploading to the GPU in steady play reuses its buffers: the guest mesh at each tick, the overlay's shades at each tick, and the ghost when the look changes. Each upload writes into the buffers the renderer keeps, and makes larger ones only when the data outgrows them. It allocates and frees no heap block and no GPU buffer while the sizes stay within what they have held. Drawing a frame without a capture frees no block it allocated either. (ctest)
 10. Every SPEC.md whose public functions take kept buffers says so. src/sim/SPEC.md says that stepWorld's caller keeps its buffers. docs/testing.md and docs/conventions.md describe the check as decision 0041 does. The windows-debug build has no warnings, ctest passes, and tidy is clean.
 11. The app's work at a player action reuses its memory. After an edit, an undo, or a redo applies, the tool park is filled again, and the park mesh, the overlay's shape, and the look's marks are built, each in lists the app keeps. The look reads the tool park's lists. Taking an undo or redo and noting its change in the history, showing or hiding an overlay, a click's pick, and each tool's press and release keep their memory too. Applying the command resolves the world and stays with changing-previews, and so does a path tool's press that asks the world whether it accepts the path. A plain edit adds a new record to the undo list and empties the redo list, which drops records that can no longer be redone. (ctest)
+12. Queueing a command and emptying the queue reuse the queue's memory. Queueing copies the command into memory the queue keeps for commands of its type, and emptying the queue keeps that memory. Once the queue has grown, an edit's, an undo's, or a redo's command frees no block it allocated. Applying the command resolves the world and stays with changing-previews. (ctest)
 
 ## Medium
 
@@ -46,6 +47,7 @@ quiet-tick. It builds the check, and makes the world's storage and the tick pass
 5. `quiet-panels`: the panels' data, the Inspector, the tooltips, the Graph view, and the frame-time log, for criterion 7; and the edits to docs/testing.md and docs/conventions.md in criterion 10. Depends on: features 1 to 4.
 6. `quiet-uploads`: the renderer keeps each GPU buffer with a transfer buffer of its own and grows them only when outgrown, records uploads on the frame's command buffer, and the allocation check uploads and draws in a hidden window, counting SDL's allocations, for criterion 9. Depends on: none.
 7. `quiet-edits`: the history, the tool park, the park mesh, the overlay's shape, the look, picking, and each tool's press and release keep their memory when a player acts, and the allocation check watches them over undos and redos, for criterion 11. Depends on: feature 1.
+8. `quiet-commands`: the command queue keeps each command's memory across queueing and emptying, and the allocation check watches its queue at each release and each undo or redo, for criterion 12. Depends on: feature 7.
 
 ## Deepening candidates
 
@@ -57,24 +59,26 @@ Unordered pool this milestone draws later features from.
 
 What the milestone left outside its criteria and the allocation check, with the code read for each.
 
-Owned by changing-previews, the capability's milestone 6, still to be planned. Each of these allocates today, in ordinary play. They run at every frame the tool's edit changes: while the pointer moves with a place tool (tools.cpp otherEdit poses the box at the pointer), while it moves with a path tool that has stops drawn (pathEdit adds the pointer's stop), and while anything is dragged. They also run at each tick while an overlay is shown and the preview holds a candidate:
+Owned by changing-previews, the capability's milestone 6, still to be planned. Each of these allocates today, in ordinary play. They run at every frame the tool's edit changes: while the pointer moves with a place tool (tools.cpp otherEdit poses the box at the pointer), while it moves with a path tool that has stops drawn (pathEdit adds the pointer's stop), and while anything is dragged. They also run at each tick while an overlay is shown and the preview holds a candidate, and after each edit, undo, or redo while the tool holds an edit, since the scene's sync clears the kept preview's tick then:
 
-- Making the preview again: resolving a new candidate world (scene_sync.cpp syncPreview, legible/preview.cpp keepPreview and previewEdit).
+- Making the preview again: resolving a new candidate world (scene_sync.cpp syncPreview, legible/preview.cpp keepPreview and previewEdit). The resolution calls the returning forms of the park's readers, such as parkSegments, groundOf, and parkDoors, which make new lists. Their fill forms, which the app's work at an action uses, share their code.
 - Building the edit's ghost whenever the preview is made again (scene_sync.cpp syncLook). buildGhostMesh allocates as a whole: it returns a new GhostMesh, and among its lists it copies the park's furniture twice in appendFurnitureChanges, the boxes for a MoveBox, and the segments in appendDeleted, and makes temporary lists in appendJoinMarks, ownersOf, appendWalkways, appendStraightPath, appendStarvedMarks, and the Remove point ghost's appendEntity per segment (park_mesh.cpp).
-- Building the overlay's shape again, while an overlay is shown and a path edit changes: buildOverlayShape returns a new OverlayShape (scene_sync.cpp syncOverlayShape).
 - The need tooltip on a candidate. Its own lists are kept, but the candidate it reads is made again at each tick.
-- Applying a command at a tick, which resolves.
+- Applying a command, at a tick or at once while paused, which resolves (park_session.cpp step and applyWithoutTick). The allocation check pauses its watch around it.
+- A path tool's press after its first stop, which asks the world whether it accepts the path with the next stop: acceptsStop copies the drawn stops into a new AddPath and isAccepted resolves a candidate (tools.cpp pressPointer). The allocation check draws that stop with its watch paused.
 
-Owned by quiet-edits, feature 7. Each runs once per player action and rebuilds what it could refill:
+Fixed by quiet-edits, feature 7, and held to the rule by the allocation check's 20 undos and redos of a guest path on full.park:
 
-- Committing an edit, undo, and redo: the history's records and change (history.cpp noteEdits), the taken edit and its command (history.cpp take), the tool park (tools.cpp keepToolPark), the park mesh (scene_uploads.cpp uploadWorldMeshes), the overlay's shape (scene_sync.cpp syncOverlayShape), the look's points and segments (scene_sync.cpp syncLook), and emptying the kept preview (scene_sync.cpp syncWorld).
+- After an edit, undo, or redo: the history notes the change in kept records, and an undo's or redo's change takes the taken edit's memory (history.cpp noteEdits and take). The tool park refills its points, segments, corners, edges, tapers, and doors (tools.cpp keepToolPark). The scene builds the park mesh and the overlay's shape into kept lists, reads the look's points, segments, and boxes from the tool park, and clears the kept preview's tick instead of emptying it (scene_sync.cpp syncWorld, syncOverlayShape, and syncLook). The preview that clearing makes again, while the tool holds an edit, stays with changing-previews.
+- Hiding the overlay clears the shape's lists in place (scene_sync.cpp syncOverlayShape). While an overlay is shown and a path edit changes, the shape for the new candidate refills the same lists, so only the candidate it reads is new.
 - A click's pick and its subject (picking.cpp entityAtCursor, inspect.cpp inspectorSubject).
-- Each tool's press and release, apart from a path tool's press that asks the world whether it accepts the path (tools.cpp releasePointer).
+- Each tool's press and release, and switching between a path and another edit: the kept edit holds a path's stops while it holds another edit (tools.cpp KeptEdit, releasePointer, tentativeEdit).
 
 Left as they are, since each makes something new by nature and runs once per player action:
 
 - Opening and saving a park, and the file dialogs (park_session.cpp useFileRequest). Each frame takes an empty request, which moves an empty string and allocates nothing.
 - --capture's readback, which runs once for the last frame (renderer.cpp submitWithCapture).
+- A plain edit's new change on the undo list, and the redo list it empties, which drops edits that can no longer be redone (history.cpp noteEdits). Each undo or redo adds its restored keys to the history's renames, which only grows.
 
 Unchecked while the pointer or the view moves, owned by the deepening candidate above, a frame check of the app with scripted input. The allocation check holds the pointer and the camera still. The code keeps its lists for a moving pointer and view too, but nothing runs it moving:
 
@@ -85,6 +89,8 @@ Outside the check, read and following the rule:
 
 - ImGui's own drawing. Its SDL_GPU backend keeps its vertex, index, and transfer buffers and grows them only when outgrown (imgui_impl_sdlgpu3.cpp CreateOrResizeBuffers). ImGui reuses its draw lists from frame to frame. The deepening candidate above would put it in a check.
 - The app's own per-frame code that only the app runs: gatherInput, readCursor, ToolingUi::build and each panel's drawing, and the snap guides' labels. They format into stack buffers or pass literals and allocate nothing. The Debug panel copied each need's name into a std::string every frame. The names fit libstdc++'s short-string buffer, so it reached no heap, but it was a copy at every frame, and it now formats into a stack buffer.
+- The session's own history. The session takes an undo or redo in undo() and redo(), and notes it inside step and applyWithoutTick, next to applying the command, so the allocation check runs the same takeUndo, takeRedo, and noteEdits watched on a second history that follows the same world.
+- Selecting a tool, dropping a hold, and choosing furnishing, stock, or hours set plain values and clear the drawn stops in place (tools.cpp selectTool, interaction.cpp).
 - The GPU driver's own memory, which neither hook sees. SDL suballocates device memory itself, and each buffer or region it makes goes through SDL_malloc, which the check counts.
 
 Fixed at closing: tpj_bench's food-overlay and guest-mesh stages timed the returning forms, which made new lists at each repetition, while the app keeps them. The stages now keep their lists across repetitions as the app does, and the returning forms of availabilityShades and buildGuestMesh are gone, since nothing else called them (bench/stages.cpp).
