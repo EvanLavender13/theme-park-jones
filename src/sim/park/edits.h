@@ -296,6 +296,10 @@ bool isAccepted(const World &world, const RestoreIntent &command);
 // Whether the command the edit holds would be applied to the world.
 bool isAccepted(const World &world, const ParkEdit &edit);
 
+// Whether applying the edit can change a path point or segment: false for AddBox, MoveBox,
+// DeleteBox, SetShopStock, and SetOpeningHours, and true for every other edit.
+bool changesPaths(const ParkEdit &edit);
+
 // Pushes the command the edit holds, as its own type, so the cycle applies it as if pushed
 // directly.
 void queueEdit(CommandQueue &queue, const ParkEdit &edit);

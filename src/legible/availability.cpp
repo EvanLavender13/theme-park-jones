@@ -4,6 +4,7 @@
 #include "sim/park/intent.h"
 #include "sim/routes/networks.h"
 #include "sim/routes/route_distance.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
 #include <algorithm>
@@ -72,12 +73,17 @@ AvailabilityContribution contributionOf(const AvailabilityDefinition &definition
   return contribution;
 }
 
-// Each source's supplied offer, found the first time it is asked for, in ascending source order.
+// Each source's supplied offer, found the first time it is asked for, in ascending source order,
+// kept in a list the caller keeps, which it clears first.
 class SuppliedOffers {
 public:
+  using Entry = std::pair<EntityKey, std::optional<OfferEntry>>;
+
   SuppliedOffers(const World &world, const AvailabilityDefinition &definition,
-                 const Network &network)
-      : TheWorld(world), Definition(definition), TheNetwork(network) {}
+                 const Network &network, std::vector<Entry> &found)
+      : TheWorld(world), Definition(definition), TheNetwork(network), Found(found) {
+    Found.clear();
+  }
 
   std::optional<OfferEntry> of(EntityKey source) {
     const auto at = std::ranges::lower_bound(Found, source, {}, &Entry::first);
@@ -92,16 +98,10 @@ private:
   const World &TheWorld;
   const AvailabilityDefinition &Definition;
   const Network &TheNetwork;
-  using Entry = std::pair<EntityKey, std::optional<OfferEntry>>;
-  std::vector<Entry> Found;
+  std::vector<Entry> &Found;
 };
 
-// A source's least route distance at a stop.
-struct StopEntry {
-  size_t Stop = 0;
-  EntityKey Source = NULL_KEY;
-  double Distance = 0.0;
-};
+using StopEntry = AvailabilityLists::StopEntry;
 
 // A stretch of a source's route distance along an edge, from Start to End along it: the distance
 // at Start plus Slope times how far past Start, Slope 1 when the route leaves by the edge's start
@@ -162,19 +162,16 @@ void addBends(EntityKey carrier, double from, double length, std::optional<doubl
   }
 }
 
-// Adds a place at each stop of each guest segment's line to places, lines in key order, and gives
-// where each line's stops begin in places, with one more entry where the last line's end.
-std::vector<size_t> addStops(const World &world, const Network &network,
-                             std::vector<Place> &places) {
-  std::vector<EntityKey> segments;
-  for (const ParkSegment &segment : parkSegments(world)) {
-    if (segment.Kind == PathKind::Guest) {
-      segments.push_back(segment.Key);
-    }
-  }
-  std::vector<size_t> firstStops;
+// Adds a place at each stop of each guest segment's line to places, lines in key order, and fills
+// the lists' FirstStops with where each line's stops begin in places, with one more entry where
+// the last line's end.
+void addStops(const World &world, const Network &network, std::vector<Place> &places,
+              AvailabilityLists &lists) {
+  parkSegmentKeys(world, PathKind::Guest, lists.Segments);
+  std::vector<size_t> &firstStops = lists.FirstStops;
+  firstStops.clear();
   for (const Carrier &carrier : network.carriers()) {
-    if (!std::ranges::binary_search(segments, carrier.Key)) {
+    if (!std::ranges::binary_search(lists.Segments, carrier.Key)) {
       continue;
     }
     firstStops.push_back(places.size());
@@ -183,17 +180,20 @@ std::vector<size_t> addStops(const World &world, const Network &network,
     }
   }
   firstStops.push_back(places.size());
-  return firstStops;
 }
 
-// Each source's least route distance at each stop, by stop, then by source.
-std::vector<StopEntry> leastAtStops(const World &world, const Network &network,
-                                    std::span<const Place> stops) {
-  std::vector<StopEntry> entries;
+// Fills the lists' Entries with each source's least route distance at each stop, by stop, then by
+// source.
+void leastAtStops(const World &world, const Network &network, std::span<const Place> stops,
+                  AvailabilityLists &lists) {
+  std::vector<StopEntry> &entries = lists.Entries;
+  entries.clear();
   sampleFieldAtPlaces<RouteDistance<PathKind::Guest>>(
-      world, network, stops, [&entries](size_t index, const SampledEntry<RouteEntry> &route) {
+      world, network, stops,
+      [&entries](size_t index, const SampledEntry<RouteEntry> &route) {
         entries.push_back({index, route.Source, route.Value.Distance});
-      });
+      },
+      lists.Routes);
   std::ranges::sort(entries, [](const StopEntry &a, const StopEntry &b) {
     return std::tie(a.Stop, a.Source, a.Distance) < std::tie(b.Stop, b.Source, b.Distance);
   });
@@ -202,19 +202,18 @@ std::vector<StopEntry> leastAtStops(const World &world, const Network &network,
         return a.Stop == b.Stop && a.Source == b.Source;
       });
   entries.erase(first, last);
-  return entries;
 }
 
-// Where each stop's entries begin, with one more entry where the last stop's end.
-std::vector<size_t> firstEntries(std::span<const StopEntry> entries, size_t stopCount) {
-  std::vector<size_t> first(stopCount + 1, entries.size());
+// Fills first with where each stop's entries begin, with one more entry where the last stop's end.
+void firstEntries(std::span<const StopEntry> entries, size_t stopCount,
+                  std::vector<size_t> &first) {
+  fillGrowing(first, stopCount + 1, entries.size());
   for (size_t i = entries.size(); i-- > 0;) {
     first[entries[i].Stop] = i;
   }
   for (size_t stop = stopCount; stop-- > 0;) {
     first[stop] = std::min(first[stop], first[stop + 1]);
   }
-  return first;
 }
 
 // An edge of a line: its carrier, the distance along it of its start, and its length.
@@ -278,18 +277,28 @@ Availability availabilityAt(const World &world, const AvailabilityDefinition &de
 
 std::vector<double> availabilityValues(const World &world, const AvailabilityDefinition &definition,
                                        std::span<const Place> places) {
+  AvailabilityLists lists;
+  std::vector<double> values;
+  availabilityValues(world, definition, places, lists, values);
+  return values;
+}
+
+void availabilityValues(const World &world, const AvailabilityDefinition &definition,
+                        std::span<const Place> places, AvailabilityLists &lists,
+                        std::vector<double> &values) {
   const Network &network = parkNetwork(world, PathKind::Guest);
-  // Dropped when the call returns.
-  SuppliedOffers offers(world, definition, network);
-  std::vector<double> values(places.size(), 0.0);
+  SuppliedOffers offers(world, definition, network, lists.Offers);
+  fillGrowing(values, places.size(), 0.0);
   // Each place's last counted source, since only a source's first entry at a place counts.
-  std::vector<EntityKey> counted(places.size(), NULL_KEY);
+  std::vector<EntityKey> &counted = lists.Counted;
+  fillGrowing(counted, places.size(), NULL_KEY);
   // Along an edge, entries come one source at a time, so the next entry's offer is usually the
   // last one's.
   EntityKey lastSource = NULL_KEY;
   std::optional<OfferEntry> lastOffer;
   sampleFieldAtPlaces<RouteDistance<PathKind::Guest>>(
-      world, network, places, [&](size_t index, const SampledEntry<RouteEntry> &route) {
+      world, network, places,
+      [&](size_t index, const SampledEntry<RouteEntry> &route) {
         if (route.Source == counted[index]) {
           return;
         }
@@ -301,19 +310,29 @@ std::vector<double> availabilityValues(const World &world, const AvailabilityDef
         if (lastOffer) {
           values[index] += contributionOf(definition, route.Source, route.Value, *lastOffer).Term;
         }
-      });
-  return values;
+      },
+      lists.Routes);
 }
 
 std::vector<Place> availabilityBends(const World &world, const AvailabilityDefinition &definition) {
-  const Network &network = parkNetwork(world, PathKind::Guest);
+  AvailabilityLists lists;
   std::vector<Place> bends;
-  const std::vector<size_t> firstStops = addStops(world, network, bends);
+  availabilityBends(world, definition, lists, bends);
+  return bends;
+}
+
+void availabilityBends(const World &world, const AvailabilityDefinition &definition,
+                       AvailabilityLists &lists, std::vector<Place> &bends) {
+  const Network &network = parkNetwork(world, PathKind::Guest);
+  bends.clear();
+  addStops(world, network, bends, lists);
+  const std::vector<size_t> &firstStops = lists.FirstStops;
   const size_t stopCount = bends.size();
-  const std::vector<StopEntry> entries =
-      leastAtStops(world, network, std::span<const Place>(bends.data(), stopCount));
-  const std::vector<size_t> stopEntries = firstEntries(entries, stopCount);
-  SuppliedOffers offers(world, definition, network);
+  leastAtStops(world, network, std::span<const Place>(bends.data(), stopCount), lists);
+  const std::vector<StopEntry> &entries = lists.Entries;
+  firstEntries(entries, stopCount, lists.StopEntries);
+  const std::vector<size_t> &stopEntries = lists.StopEntries;
+  SuppliedOffers offers(world, definition, network, lists.Offers);
   for (size_t line = 0; line + 1 < firstStops.size(); ++line) {
     for (size_t stop = firstStops[line]; stop + 1 < firstStops[line + 1]; ++stop) {
       const Place start = bends[stop];
@@ -331,7 +350,6 @@ std::vector<Place> availabilityBends(const World &world, const AvailabilityDefin
   });
   const auto [same, end] = std::ranges::unique(bends);
   bends.erase(same, end);
-  return bends;
 }
 
 } // namespace tpj

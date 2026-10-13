@@ -92,10 +92,11 @@ const World &previewedWorld(const World &world, const Preview &preview) {
 bool keepPreview(KeptPreview &kept, const World &world, const std::optional<ParkEdit> &edit,
                  bool followTicks) {
   if (kept.Tick.has_value() && kept.Made.Edit == edit &&
-      (kept.Tick == world.Tick || !followTicks)) {
+      (kept.Tick == world.Tick || !followTicks || !kept.Made.Candidate)) {
     // The shop's footfall is the world's now, which ticks change.
     if (kept.Made.Shop && kept.Made.Shop->Connection) {
-      kept.Made.Shop->Footfall = footfallAt(world, *kept.Made.Shop->Connection);
+      kept.Made.Shop->Footfall = fieldValue<HungryFootfall>(
+          world, parkNetwork(world, PathKind::Guest), *kept.Made.Shop->Connection, kept.Footfall);
     }
     return false;
   }

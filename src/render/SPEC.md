@@ -74,6 +74,8 @@ appendPathStart shows where a path would start before its first click: a translu
 
 appendHandle adds a radius, edge, or taper handle as a flat disc of RADIUS_HANDLE_SIZE, in a given color, above join marks. appendPointMark adds a path point's marker as a flat disc of POINT_MARK_SIZE, in a given color, under handles and above join marks. appendSides adds a strip along the inside of each of a segment's two sides, in a given color, above the segment's ghost. It adds nothing when the key holds no segment with a ground line.
 
+appendMesh adds one mesh's triangles after another's, so a ghost can be put together from parts.
+
 ## Guests
 
 buildGuestMesh draws each guest that has a position. A guest is drawn as an upright box where it stands, or a box GUEST_SEATED_HEIGHT tall on its seat while it is seated. The box is shaded from blue when every need of the guest is at 0 to pink when its most pressing need is at 1. appendGuestEntity adds one guest's box, where buildGuestMesh draws it, in a given color. It adds nothing when the guest has no position. The light dims a guest's box but never changes its hue (The light).
@@ -89,6 +91,8 @@ buildOverlayShape(world) gives the guest paving's overlay shape: each piece of t
 Each spot of the shape has an overlay place, which overlayPlace(shape, point) gives, or none when the shape holds no piece there. A spot of a segment's paving takes the place on that segment's line nearest it. A spot of a point's paving takes the nearest place on the lines of the guest segments at that point. Where paving of several owners holds a spot, the nearest of their places wins, and ties go to the lower segment key.
 
 shadeOverlay(shape, places, values, half) gives the shades: for each of the shape's lines, the values at the given places on it, in ascending distance. Between two consecutive places on a line, a value blends linearly. The renderer colors each pixel of the shape by the value at its overlay place, in the same colors at every hour, apart from the distance fade: a perceptually uniform, colorblind-safe ramp from dark purple at 0, the worst, to yellow. A value v shades v / (v + half) of the way up the ramp, so `half` shades its middle, larger values approach yellow, and no value clips. For the same `half`, a color means the same value in every park. Every color of the ramp is distinguishable from both kinds of paving. The renderer finds each pixel's place in single precision, so a pixel within a millimeter of a tie between two lines may take either, and a pixel on the outline of an overlap may take the other piece's place.
+
+shadeOverlay can also fill OverlayShades that the caller keeps, using ShadeLists the caller keeps, and then allocates nothing once they have grown.
 
 The shading lies OVERLAY_HEIGHT above the ground: over the guest paving and under its edge lines, ghosts, boxes, and guests. The ground beside paths, door walkways, and backstage paths are not shaded.
 

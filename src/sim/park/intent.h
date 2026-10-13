@@ -223,6 +223,10 @@ std::vector<ParkBox> parkBoxes(const World &world);
 // nothing once the list has grown.
 void parkEntrances(const World &world, std::vector<ParkEntrance> &entrances);
 void parkBoxes(const World &world, std::vector<ParkBox> &boxes);
+// The keys of the segments of the kind, ascending, into a list the caller keeps, which it clears
+// first. They are the keys parkSegments gives for that kind, without deriving the segments' lines.
+// Allocates nothing once the list has grown.
+void parkSegmentKeys(const World &world, PathKind kind, std::vector<EntityKey> &keys);
 
 // The park's opening hours, or DEFAULT_HOURS when none are set. Allocates nothing.
 OpeningHours parkHours(const World &world);

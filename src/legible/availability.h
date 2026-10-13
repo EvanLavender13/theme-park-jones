@@ -4,14 +4,18 @@
 #include "sim/clock.h"
 #include "sim/entity_key.h"
 #include "sim/guests/guests.h"
+#include "sim/medium/field.h"
 #include "sim/medium/network.h"
 #include "sim/operations/operations.h"
+#include "sim/routes/route_distance.h"
 #include "sim/world.h"
 
 #include <array>
 #include <optional>
 #include <span>
+#include <stddef.h>
 #include <stdint.h>
+#include <utility>
 #include <vector>
 
 namespace tpj {
@@ -69,10 +73,39 @@ struct Availability {
 Availability availabilityAt(const World &world, const AvailabilityDefinition &definition,
                             const Place &place);
 
+// The lists availabilityBends and availabilityValues reuse. Keep one to compute availabilities many
+// times without allocating once its lists have grown.
+struct AvailabilityLists {
+  // A source's least route distance at a stop.
+  struct StopEntry {
+    size_t Stop = 0;
+    EntityKey Source = NULL_KEY;
+    double Distance = 0.0;
+  };
+  // The guest segments' keys, ascending.
+  std::vector<EntityKey> Segments;
+  // Where each line's stops begin, with one more entry where the last line's end.
+  std::vector<size_t> FirstStops;
+  // Each source's least route distance at each stop, by stop, then by source.
+  std::vector<StopEntry> Entries;
+  // Where each stop's entries begin, with one more entry where the last stop's end.
+  std::vector<size_t> StopEntries;
+  // Each source's supplied offer found so far, in ascending source order.
+  std::vector<std::pair<EntityKey, std::optional<OfferEntry>>> Offers;
+  FieldSample<RouteEntry> Routes;
+  // Each place's last counted source.
+  std::vector<EntityKey> Counted;
+};
+
 // The value availabilityAt gives at each of the places, in order, finding each source's offer once
 // in the call.
 std::vector<double> availabilityValues(const World &world, const AvailabilityDefinition &definition,
                                        std::span<const Place> places);
+// As the returning form, into values, which it clears first, and lists the caller keeps.
+// Allocates nothing once they have grown.
+void availabilityValues(const World &world, const AvailabilityDefinition &definition,
+                        std::span<const Place> places, AvailabilityLists &lists,
+                        std::vector<double> &values);
 
 // The places along each guest segment's line where its availability can bend: each stop of the
 // line, and inside each edge each place where a supplied source's route turns from one end to the
@@ -80,6 +113,10 @@ std::vector<double> availabilityValues(const World &world, const AvailabilityDef
 // ascending distance, each once. Between two consecutive bends on a line, availability is linear
 // in distance.
 std::vector<Place> availabilityBends(const World &world, const AvailabilityDefinition &definition);
+// As the returning form, into bends, which it clears first, and lists the caller keeps. Allocates
+// nothing once they have grown.
+void availabilityBends(const World &world, const AvailabilityDefinition &definition,
+                       AvailabilityLists &lists, std::vector<Place> &bends);
 
 } // namespace tpj
 

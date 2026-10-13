@@ -184,7 +184,7 @@ Step 1: Add a held preview: a SceneSync, an optional edit, and a PreviewLook. It
 
 Step 2: Before the warm-up, make two held previews with no overlay, one with no edit for each need in NEEDS, its look showing that need, and one with a refused guest path, its look showing food.
 - The shop move: MoveBox of the first shop in parkBoxes onto its own pose.
-- The point removal: RemovePoint of the first path point the world accepts it for.
+- The segment deletion: DeleteSegment of the first segment with a ground line that the world accepts it for. (Changed from a point removal: no path point of full.park joins exactly two segments, so the world refuses every RemovePoint.)
 - The refused guest path: an AddPath of PathKind::Guest through two NewPoint stops outside the park's square, which the world must refuse. Throw std::runtime_error with "the held guest path is accepted" if isAccepted gives true.
 - Each look of the two: the edit's box or point as the highlight, one handle of each of the Point, Radius, Edge, and Taper kinds at that point's or box's place, a Side handle on the first guest segment from parkSegmentKeys as the hovered handle, a guest path start that joins and a finish at the same place, and as the inspected subject the guest in the middle of parkGuests.
 After the first sync, if the shop move's preview has no candidate, or no shop context with a connection, throw std::runtime_error with "the held shop move has no connected shop context".

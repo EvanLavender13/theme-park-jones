@@ -93,11 +93,26 @@ struct NodeSample {
   std::vector<NodeEnd> Ends;
 };
 
-// A kept field whose owner reads nodes by its own rule:
-//   static std::vector<double> sampleNode(const NodeSample &sample);
+// A kept field whose owner reads nodes by its own rule, appending its values to out:
+//   static void sampleNode(const NodeSample &sample, std::vector<double> &out);
 template <typename F>
-concept HasNodeRule = KeptFieldDefinition<F> && requires(const NodeSample &sample) {
-  { F::sampleNode(sample) } -> std::same_as<std::vector<double>>;
+concept HasNodeRule =
+    KeptFieldDefinition<F> && requires(const NodeSample &sample, std::vector<double> &out) {
+      { F::sampleNode(sample, out) } -> std::same_as<void>;
+    };
+
+// The lists sampling a kept field reuses: the slots, the sample's working lists, the node rule's
+// sample, the node ends that sample isn't using, the node rule's values, and the entries
+// sampleField gives. Keep one to sample a kept field many times without allocating once its lists
+// have grown.
+struct KeptFieldSample {
+  std::vector<const KeptSlot *> Slots;
+  SampleLists<double> Lists;
+  NodeSample Node;
+  // Ends taken out of Node, their lists kept for the next node's ends.
+  std::vector<NodeEnd> SpareEnds;
+  std::vector<double> Values;
+  std::vector<SampledEntry<double>> Entries;
 };
 
 // The field's kept entries, or null when the world holds none.
@@ -278,12 +293,20 @@ void replaceKeptEntries(World &world, EntityKey source, std::vector<KeptEntry> e
 
 // Appends what the field's node rule gives for the source at the node, when the source has an
 // entry at the node's stop places or strictly inside an edge meeting it, each value read by read.
+// Fills the kept sample's node sample, reusing the ends it holds and its spare ends.
 template <KeptFieldDefinition F, typename Read>
   requires HasNodeRule<F>
 void sampleKeptSlotAtNode(const Network &network, const KeptSlot &slot, uint32_t node,
-                          SampleScratch<double> &scratch,
+                          SampleScratch<double> &scratch, KeptFieldSample &kept,
                           std::vector<SampledEntry<double>> &sampled, Read read) {
-  NodeSample sample{.Node = node, .AtNode = {}, .Ends = {}};
+  NodeSample &sample = kept.Node;
+  sample.Node = node;
+  sample.AtNode.clear();
+  // Moving an end keeps its list's memory for a later end.
+  while (!sample.Ends.empty()) {
+    kept.SpareEnds.push_back(std::move(sample.Ends.back()));
+    sample.Ends.pop_back();
+  }
   positionsAtAny(slot, network.stopPlaces(node), scratch.Positions);
   for (const uint32_t i : scratch.Positions) {
     sample.AtNode.push_back(read(i));
@@ -291,8 +314,16 @@ void sampleKeptSlotAtNode(const Network &network, const KeptSlot &slot, uint32_t
   bool any = !sample.AtNode.empty();
   for (const EdgeEnd &end : network.edgeEnds(node)) {
     const NetworkEdge &edge = network.edges()[end.Edge];
-    NodeEnd &nodeEnd =
-        sample.Ends.emplace_back(NodeEnd{.Edge = edge, .AtFrom = end.AtFrom, .Along = {}});
+    if (kept.SpareEnds.empty()) {
+      sample.Ends.emplace_back();
+    } else {
+      sample.Ends.push_back(std::move(kept.SpareEnds.back()));
+      kept.SpareEnds.pop_back();
+    }
+    NodeEnd &nodeEnd = sample.Ends.back();
+    nodeEnd.Edge = edge;
+    nodeEnd.AtFrom = end.AtFrom;
+    nodeEnd.Along.clear();
     std::vector<uint32_t> &inside = scratch.Inside;
     inside.clear();
     positionsInside(slot, edge.Carrier, edge.FromDistance, edge.ToDistance, inside);
@@ -307,48 +338,82 @@ void sampleKeptSlotAtNode(const Network &network, const KeptSlot &slot, uint32_t
   if (!any) {
     return;
   }
-  for (const double value : F::sampleNode(sample)) {
+  kept.Values.clear();
+  F::sampleNode(sample, kept.Values);
+  for (const double value : kept.Values) {
     sampled.push_back({slot.Source, value});
   }
+}
+
+// As sampleKeptFieldAt, keeping its working lists in the sample. Allocates nothing once they have
+// grown.
+template <KeptFieldDefinition F, typename Visit>
+void sampleKeptFieldAt(const World &world, const Network &network, std::span<const Place> places,
+                       Visit visit, KeptFieldSample &sample) {
+  const KeptEntries<F> *kept = findKeptEntries<F>(world);
+  sample.Slots.clear();
+  if (kept != nullptr) {
+    for (const KeptSlot &slot : kept->Slots) {
+      sample.Slots.push_back(&slot);
+    }
+  }
+  sampleSlotsAt<F>(
+      network, places, std::span<const KeptSlot *const>(sample.Slots),
+      [&world](const KeptSlot &slot) {
+        return
+            [&slot, &world](uint32_t i) { return readKeptEntry<F>(slot.Entries[i], world.Tick); };
+      },
+      [&network, &sample](const KeptSlot &slot, uint32_t node, SampleScratch<double> &scratch,
+                          std::vector<SampledEntry<double>> &sampled, auto read) {
+        if constexpr (HasNodeRule<F>) {
+          sampleKeptSlotAtNode<F>(network, slot, node, scratch, sample, sampled, read);
+        } else {
+          sampleSlotAtNode(network, slot, node, scratch, sampled, read);
+        }
+      },
+      visit, sample.Lists);
 }
 
 template <KeptFieldDefinition F, typename Visit>
 void sampleKeptFieldAt(const World &world, const Network &network, std::span<const Place> places,
                        Visit visit) {
-  const KeptEntries<F> *kept = findKeptEntries<F>(world);
-  std::vector<const KeptSlot *> slots;
-  if (kept != nullptr) {
-    slots.reserve(kept->Slots.size());
-    for (const KeptSlot &slot : kept->Slots) {
-      slots.push_back(&slot);
-    }
+  KeptFieldSample sample;
+  sampleKeptFieldAt<F>(world, network, places, visit, sample);
+}
+
+// Fills the sample's Entries, which it clears first, with what sampleField gives for the kept
+// field at the place. Allocates nothing once the sample's lists have grown.
+template <KeptFieldDefinition F>
+void sampleField(const World &world, const Network &network, const Place &place,
+                 KeptFieldSample &sample) {
+  sample.Entries.clear();
+  sampleKeptFieldAt<F>(
+      world, network, std::span<const Place>(&place, 1),
+      [&sample](size_t /*index*/, const SampledEntry<double> &entry) {
+        sample.Entries.push_back(entry);
+      },
+      sample);
+}
+
+// The kept field's value at the place, as fieldValue gives it, using the sample's lists.
+// Allocates nothing once they have grown.
+template <KeptFieldDefinition F>
+double fieldValue(const World &world, const Network &network, const Place &place,
+                  KeptFieldSample &sample) {
+  sampleField<F>(world, network, place, sample);
+  double value = 0.0;
+  for (const SampledEntry<double> &entry : sample.Entries) {
+    value += entry.Value;
   }
-  sampleSlotsAt<F>(
-      network, places, std::span<const KeptSlot *const>(slots),
-      [&world](const KeptSlot &slot) {
-        return
-            [&slot, &world](uint32_t i) { return readKeptEntry<F>(slot.Entries[i], world.Tick); };
-      },
-      [&network](const KeptSlot &slot, uint32_t node, SampleScratch<double> &scratch,
-                 std::vector<SampledEntry<double>> &sampled, auto read) {
-        if constexpr (HasNodeRule<F>) {
-          sampleKeptSlotAtNode<F>(network, slot, node, scratch, sampled, read);
-        } else {
-          sampleSlotAtNode(network, slot, node, scratch, sampled, read);
-        }
-      },
-      visit);
+  return value;
 }
 
 template <KeptFieldDefinition F>
 std::vector<SampledEntry<double>> sampleKeptField(const World &world, const Network &network,
                                                   const Place &place) {
-  std::vector<SampledEntry<double>> sampled;
-  sampleKeptFieldAt<F>(world, network, std::span<const Place>(&place, 1),
-                       [&sampled](size_t /*index*/, const SampledEntry<double> &entry) {
-                         sampled.push_back(entry);
-                       });
-  return sampled;
+  KeptFieldSample sample;
+  sampleField<F>(world, network, place, sample);
+  return std::move(sample.Entries);
 }
 
 } // namespace tpj

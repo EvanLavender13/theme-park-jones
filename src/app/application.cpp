@@ -104,7 +104,8 @@ bool Application::runFrames() {
                                        groundPerPixel(cursor, view).value_or(0.0), input.SnapsOff});
     // Made again only when the edit changes, so the ghost, the overlay, and the tooltips show one
     // candidate, and frames rebuild nothing while the pointer rests. The need overlay reads the
-    // candidate's state, so while it is shown the preview is made again at each tick too.
+    // candidate's state, so while it is shown a preview with a candidate is made again at each tick
+    // too.
     const bool remade =
         Scene.syncPreview(Session.world(), Interactions.tentativeEdit(Session.world()),
                           Ui.shown().Overlay.has_value());
@@ -131,10 +132,8 @@ bool Application::runFrames() {
                            Interactions.pathFinish(Session.world()),
                            Interactions.editHandles(Session.world()),
                            Interactions.hoveredHandle(Session.world())};
-    const bool lookChanged = Scene.syncLook(remade, look);
-    if (((lookChanged || shapeChanged) &&
-         !uploadPreviewMeshes(renderer, Session.world(), Scene.preview(), look, Scene.seated(),
-                              Scene.overlayShape(), shapeChanged)) ||
+    const PreviewMeshes previewMeshes = Scene.syncLook(Session.world(), remade, look, shapeChanged);
+    if (!uploadPreviewMeshes(renderer, Scene, previewMeshes, shapeChanged) ||
         !drawFrame(renderer, view, light, drawData, lastFrame ? CapturePath : nullptr)) {
       return false;
     }

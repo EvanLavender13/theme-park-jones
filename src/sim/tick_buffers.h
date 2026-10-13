@@ -61,6 +61,17 @@ template <typename T> void copyGrowing(std::vector<T> &kept, std::span<const T> 
   kept.assign(values.begin(), values.end());
 }
 
+// Gives a kept list the count copies of the value. When the list must grow, it grows as
+// copyGrowing does, carrying every value it held, so a growing list stays a growing list and
+// never a new one.
+template <typename T> void fillGrowing(std::vector<T> &kept, size_t count, const T &value) {
+  if (kept.capacity() < count) {
+    kept.resize(kept.capacity(), value);
+    kept.reserve(std::max({count, 2 * kept.capacity(), FIRST_KEPT_CAPACITY}));
+  }
+  kept.assign(count, value);
+}
+
 } // namespace tpj
 
 #endif

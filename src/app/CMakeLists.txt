@@ -13,7 +13,8 @@ add_library(tpj_app_core STATIC
     session/park_file_requests.cpp
     session/park_session.cpp)
 target_include_directories(tpj_app_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tpj_app_core PUBLIC tpj_legible tpj_render tpj_sim tpj_tools PRIVATE SDL3::SDL3)
+target_link_libraries(tpj_app_core PUBLIC tpj_legible tpj_render tpj_sim tpj_tools tpj_views
+    PRIVATE SDL3::SDL3)
 tpj_configure_target(tpj_app_core)
 
 add_executable(tpj_app
