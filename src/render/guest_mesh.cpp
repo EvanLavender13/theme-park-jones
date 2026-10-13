@@ -93,12 +93,6 @@ void appendGuestEntity(ParkMesh &mesh, const World &world, const SeatedGuests &s
   }
 }
 
-ParkMesh buildGuestMesh(const World &world, const SeatedGuests &seated) {
-  GuestMeshLists lists;
-  buildGuestMesh(world, seated, lists);
-  return std::move(lists.Mesh);
-}
-
 void buildGuestMesh(const World &world, const SeatedGuests &seated, GuestMeshLists &lists) {
   lists.Mesh.Vertices.clear();
   lists.Mesh.Indices.clear();

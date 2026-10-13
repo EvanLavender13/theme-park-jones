@@ -1,15 +1,6 @@
 #include "views/availability_overlay.h"
 
-#include <utility>
-
 namespace tpj {
-
-OverlayShades availabilityShades(const World &world, const OverlayShape &shape,
-                                 const AvailabilityDefinition &definition) {
-  AvailabilityShadeLists lists;
-  availabilityShades(world, shape, definition, lists);
-  return std::move(lists.Shades);
-}
 
 void availabilityShades(const World &world, const OverlayShape &shape,
                         const AvailabilityDefinition &definition, AvailabilityShadeLists &lists) {

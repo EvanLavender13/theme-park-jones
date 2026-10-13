@@ -106,19 +106,26 @@ std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
   }
 
   stages.push_back(meshStage("food-overlay-shape", park, buildOverlayShape));
-  // What a tick costs while the overlay is shown: the shape is built only when the paths change.
+  // What a tick costs while the overlay is shown: the shape is built only when the paths change,
+  // and the shades fill lists kept from one tick to the next, as the app's are.
   const OverlayShape shape = buildOverlayShape(park);
-  const auto shades = timeRepeated(nothing, [&park, &shape](Nothing /*input*/) {
-    return availabilityShades(park, shape, needAvailability(GuestNeed::Hunger));
+  AvailabilityShadeLists shadeLists;
+  const auto shades = timeRepeated(nothing, [&park, &shape, &shadeLists](Nothing /*input*/) {
+    availabilityShades(park, shape, needAvailability(GuestNeed::Hunger), shadeLists);
+    return shadeLists.Shades.Knots.size();
   });
-  stages.push_back(
-      StageResult{"food-overlay", shades.Times, ResultKind::Values, shades.Last.Knots.size()});
+  stages.push_back(StageResult{"food-overlay", shades.Times, ResultKind::Values, shades.Last});
   stages.push_back(meshStage("park-mesh", park, buildParkMesh));
-  stages.push_back(meshStage("guest-mesh", park, [](const World &world) {
-    SeatedGuests seated;
-    seated.update(world);
-    return buildGuestMesh(world, seated);
-  }));
+  // What a tick costs to draw the guests, with the seats and the mesh kept from one tick to the
+  // next, as the app keeps them.
+  SeatedGuests seated;
+  GuestMeshLists guestLists;
+  const auto guests = timeRepeated(nothing, [&park, &seated, &guestLists](Nothing /*input*/) {
+    seated.update(park);
+    buildGuestMesh(park, seated, guestLists);
+    return guestLists.Mesh.Vertices.size();
+  });
+  stages.push_back(StageResult{"guest-mesh", guests.Times, ResultKind::Vertices, guests.Last});
 
   World stepped = copyWorld(park);
   std::vector<int64_t> tickTimes;

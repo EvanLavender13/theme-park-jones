@@ -64,15 +64,14 @@ void appendGuest(ParkMesh &mesh, GroundPoint point, double need);
 // holds no guest or it has no position.
 void appendGuestEntity(ParkMesh &mesh, const World &world, const SeatedGuests &seated,
                        EntityKey key, Rgba color);
-// Every guest that has a position, in key order: on its seat while seated, else standing.
-ParkMesh buildGuestMesh(const World &world, const SeatedGuests &seated);
 // The lists building the guest mesh reuses: the guests' keys and the mesh.
 struct GuestMeshLists {
   std::vector<EntityKey> Guests;
   ParkMesh Mesh;
 };
-// As buildGuestMesh, into lists the caller keeps, which it clears first. Allocates nothing once
-// they have grown.
+// Every guest that has a position, in key order, on its seat while seated, else standing, in
+// lists.Mesh. Uses lists the caller keeps, which it clears first, and allocates nothing once they
+// have grown.
 void buildGuestMesh(const World &world, const SeatedGuests &seated, GuestMeshLists &lists);
 
 } // namespace tpj

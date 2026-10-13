@@ -9,12 +9,6 @@
 
 namespace tpj {
 
-// An availability's shades of an overlay shape, as the app shows them: the availability at each of
-// availabilityBends' places, halfway up the ramp at the definition's Half. Changes nothing in the
-// world.
-OverlayShades availabilityShades(const World &world, const OverlayShape &shape,
-                                 const AvailabilityDefinition &definition);
-
 // The lists shading an availability reuses: the availability's lists, the bends, the values at
 // them, the shading's lists, and the shades it gives.
 struct AvailabilityShadeLists {
@@ -25,8 +19,10 @@ struct AvailabilityShadeLists {
   OverlayShades Shades;
 };
 
-// As the returning form, leaving the shades in lists.Shades, using lists the caller keeps.
-// Allocates nothing once they have grown.
+// An availability's shades of an overlay shape, as the app shows them, left in lists.Shades: the
+// availability at each of availabilityBends' places, halfway up the ramp at the definition's
+// Half. Uses lists the caller keeps, and allocates nothing once they have grown. Changes nothing
+// in the world.
 void availabilityShades(const World &world, const OverlayShape &shape,
                         const AvailabilityDefinition &definition, AvailabilityShadeLists &lists);
 
