@@ -243,8 +243,16 @@ struct ToolPark {
   std::unique_ptr<ToolLists> Lists;
 };
 
-// Fills the park from the world's intent.
+// Fills the park from the world's intent. Once the park's lists have grown, filling it again frees
+// no memory it allocated.
 void keepToolPark(const World &world, ToolPark &park);
+
+// An edit the caller keeps from call to call, and the stops of the last path it held while it holds
+// another edit, so switching between a path and another edit frees no list.
+struct KeptEdit {
+  std::optional<ParkEdit> Edit;
+  std::vector<PathStop> SpareStops;
+};
 
 // Sets the tool, dropping any hold without committing.
 void selectTool(ToolState &tool, ToolKind kind);
@@ -253,17 +261,16 @@ void selectTool(ToolState &tool, ToolKind kind);
 void movePointer(ToolState &tool, ToolPark &park, const World &world, const PointerSample &pointer);
 // The primary button went down. A path tool adds no stop that would make the world refuse its path.
 void pressPointer(ToolState &tool, ToolPark &park, const World &world);
-// The primary button went up: the edit to commit, which is the tentative edit of the moment
-// before when the press took hold.
-std::optional<ParkEdit> releasePointer(ToolState &tool, ToolPark &park, const World &world);
+// The primary button went up: puts the edit to commit in kept.Edit, or empties it. The edit is the
+// tentative edit of the moment before when the press took hold.
+void releasePointer(ToolState &tool, ToolPark &park, const World &world, KeptEdit &kept);
 
 // Sets what the Furnish tool lays.
 void setFurnishChoice(ToolState &tool, const FurnishChoice &choice);
 
-// Puts the edit the ghost shows in edit. If edit holds an AddPath and the tool's edit is one, it
-// refills that AddPath's stops in place, so they allocate nothing once grown.
-void tentativeEdit(const ToolState &tool, ToolPark &park, const World &world,
-                   std::optional<ParkEdit> &edit);
+// Puts the edit the ghost shows in kept.Edit. A path's stops are refilled in the stops the kept
+// edit holds, so they allocate nothing once grown.
+void tentativeEdit(const ToolState &tool, ToolPark &park, const World &world, KeptEdit &kept);
 // The edit the ghost shows.
 std::optional<ParkEdit> tentativeEdit(const ToolState &tool, ToolPark &park, const World &world);
 // The entity the tool marks.

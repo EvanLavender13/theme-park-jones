@@ -9,7 +9,9 @@
 // panels' data, with a guest, a shop, a bench, and a toilet block inspected. After each sync of the
 // scene or of a held preview, the check uploads what the app's frame uploads and draws the frame,
 // in a hidden window, with SDL's allocations counted too. Before all of that, the check adds guest
-// paths with a rounded corner and a taper, which full.park lacks.
+// paths with a rounded corner and a taper, which full.park lacks. After the ticks, it undoes and
+// redoes a guest path, and watches the app's work after each, with the watch paused while the
+// session applies the command.
 
 #include "watch.h"
 
@@ -62,6 +64,9 @@ constexpr uint64_t WATCHED_TICKS = 600;
 // The overlays are shaded at every this many ticks, since a shading takes about half a second on
 // windows-debug. A block one shading allocates and a later one frees is still found.
 constexpr uint64_t OVERLAY_TICKS = 60;
+// Rounds of undos and redos to warm up, and to watch.
+constexpr uint64_t WARM_ROUNDS = 4;
+constexpr uint64_t WATCHED_ROUNDS = 20;
 
 std::string readText(const char *path) {
   std::ifstream file(path, std::ios::binary);
@@ -148,8 +153,7 @@ tpj::WorldMeshes syncScene(tpj::SceneSync &scene, const tpj::ParkSession &sessio
 void drawScene(HiddenFrame &frame, const tpj::SceneSync &scene, const tpj::ParkSession &session,
                const tpj::WorldMeshes &meshes, const char *work) {
   tpj::check::watchWork("the uploads");
-  const bool uploaded =
-      tpj::uploadWorldMeshes(frame.Gpu, session.world(), meshes, scene.guestMesh(), frame.Camera);
+  const bool uploaded = tpj::uploadWorldMeshes(frame.Gpu, scene, meshes, frame.Camera);
   drawWaited(frame, session, uploaded, work);
 }
 
@@ -168,8 +172,9 @@ struct SyncedPreview {
 
 // The held preview's sync after a frame, as the app runs it: the scene's world, the preview,
 // following ticks while an overlay shows, the overlay's shape before and after the panels, and the
-// ghost and shades.
-SyncedPreview syncPreview(HeldPreview &held, const tpj::ParkSession &session) {
+// ghost and shades, with the look's marks read from the park as the tools read it.
+SyncedPreview syncPreview(HeldPreview &held, const tpj::ParkSession &session,
+                          const tpj::ToolPark &park) {
   const tpj::World &world = session.world();
   held.Scene.syncWorld(world, session.generation(), session.edits());
   const bool shown = held.Look.Overlay.has_value();
@@ -179,7 +184,7 @@ SyncedPreview syncPreview(HeldPreview &held, const tpj::ParkSession &session) {
   shapeChanged =
       held.Scene.syncOverlayShape(tpj::previewedWorld(world, held.Scene.preview()), shown) ||
       shapeChanged;
-  return {held.Scene.syncLook(world, remade, held.Look, shapeChanged), shapeChanged};
+  return {held.Scene.syncLook(world, park, remade, held.Look, shapeChanged), shapeChanged};
 }
 
 // The frame after a held preview's sync, as the app's frame runs it: the uploads, then the
@@ -194,8 +199,8 @@ void drawPreview(HiddenFrame &frame, const HeldPreview &held, const tpj::ParkSes
 
 // A held preview's sync and the frame after it.
 void syncAndDraw(HiddenFrame &frame, HeldPreview &held, const tpj::ParkSession &session,
-                 const char *work) {
-  const SyncedPreview synced = syncPreview(held, session);
+                 const tpj::ToolPark &park, const char *work) {
+  const SyncedPreview synced = syncPreview(held, session, park);
   drawPreview(frame, held, session, synced, work);
 }
 
@@ -581,6 +586,8 @@ void panelFrame(HeldPanel &held, const tpj::ParkSession &session, const PanelPla
 struct SteadyPlay {
   HiddenFrame Frame;
   tpj::SceneSync Scene;
+  // The park as the tools read it, which the looks' marks read.
+  tpj::ToolPark Park;
   std::vector<HeldPreview> Held = std::vector<HeldPreview>(2);
   std::vector<HeldPreview> Overlays = std::vector<HeldPreview>(tpj::NEEDS.size() + 1);
   std::vector<HeldTool> Tools;
@@ -621,7 +628,7 @@ void syncTools(SteadyPlay &play, const tpj::ParkSession &session) {
     toolFrame(held, session);
   }
   play.Moving.Look = play.MovingLooks.at(session.world().Tick % 2);
-  syncAndDraw(play.Frame, play.Moving, session, "the tools");
+  syncAndDraw(play.Frame, play.Moving, session, play.Park, "the tools");
 }
 
 // One tick of steady play and the frames after it, as the warm-up and the watched ticks both run
@@ -637,14 +644,14 @@ void steadyTick(SteadyPlay &play, tpj::ParkSession &session, uint64_t tick) {
   }
   tpj::check::watchWork("the preview");
   for (HeldPreview &edit : play.Held) {
-    syncAndDraw(play.Frame, edit, session, "the preview");
-    syncAndDraw(play.Frame, edit, session, "the preview");
+    syncAndDraw(play.Frame, edit, session, play.Park, "the preview");
+    syncAndDraw(play.Frame, edit, session, play.Park, "the preview");
   }
   if (tick % OVERLAY_TICKS == 0) {
     tpj::check::watchWork("the overlay");
     for (HeldPreview &overlay : play.Overlays) {
-      syncAndDraw(play.Frame, overlay, session, "the overlay");
-      syncAndDraw(play.Frame, overlay, session, "the overlay");
+      syncAndDraw(play.Frame, overlay, session, play.Park, "the overlay");
+      syncAndDraw(play.Frame, overlay, session, play.Park, "the overlay");
     }
   }
   tpj::check::watchWork("the tools");
@@ -669,15 +676,175 @@ void warmUp(SteadyPlay &play, tpj::ParkSession &session) {
   }
 }
 
-// Prints the blocks the watched ticks freed, or that they freed none, and gives the exit status.
-int report() {
+// The work after an undo or a redo: an interaction that picks and presses each tool, a scene that
+// shows the Food overlay and inspects a shop, a second history that follows the session's world,
+// the queue the releases put their edits on, and the places they press and pick at.
+struct EditRounds {
+  explicit EditRounds(const tpj::ParkSession &session)
+      : Tools(session.world(), session.generation(), session.edits()) {}
+
+  tpj::Interaction Tools;
+  HeldPreview Preview;
+  tpj::EditHistory History;
+  tpj::CommandQueue Queued;
+  ToolPlaces Places;
+  tpj::ParkPoint Shop;
+  tpj::ParkPoint Bench;
+};
+
+// The position of the box the key holds.
+tpj::ParkPoint boxPosition(const tpj::World &world, tpj::EntityKey key) {
+  const std::optional<tpj::ParkBox> box = tpj::parkBox(world, key);
+  if (!box) {
+    throw std::runtime_error("a held box is missing");
+  }
+  return {box->At.X, box->At.Z};
+}
+
+// Finds the places the rounds press and pick at, and the look, and adds a guest path in open
+// ground, which the rounds undo and redo, noting it on the second history too. Throws when the
+// world refuses the path.
+void beginRounds(EditRounds &rounds, tpj::ParkSession &session) {
+  const tpj::World &world = session.world();
+  rounds.Places = toolPlaces(world);
+  const tpj::EntityKey shop = firstBox(world, tpj::BoxKind::Shop, "shop");
+  rounds.Shop = boxPosition(world, shop);
+  rounds.Bench = boxPosition(world, firstBox(world, tpj::BoxKind::Bench, "bench"));
+  tpj::PreviewLook &look = rounds.Preview.Look;
+  look.Inspected = tpj::InspectorSubject{shop, tpj::SubjectKind::Shop};
+  look.Highlight = rounds.Places.Guest.From;
+  look.Hovered = tpj::EditHandle{tpj::HandleKind::Side, rounds.Places.Guest.Key, {}, tpj::NULL_KEY};
+  tpj::clearHistory(rounds.History, session.world());
+  tpj::queueEdit(session.commands(),
+                 tpj::AddPath{tpj::PathKind::Guest,
+                              {tpj::NewPoint{{-120.0, -100.0}}, tpj::NewPoint{{-110.0, -100.0}}}});
+  session.applyWithoutTick();
+  tpj::noteEdits(rounds.History, session.world());
+  if (!tpj::canUndo(rounds.History)) {
+    throw std::runtime_error("the open-ground path was refused");
+  }
+}
+
+// Moves the round's pointer to the place and takes the frame's tentative edit, as the app's frame
+// does.
+void pointAt(EditRounds &rounds, const tpj::World &world, tpj::ParkPoint at) {
+  rounds.Tools.movePointer(world, sampleAt(at));
+  static_cast<void>(rounds.Tools.tentativeEdit(world));
+}
+
+// Empties the queue the releases put their edits on, unwatched: queueing a command puts it on the
+// heap, and applying it frees it.
+void dropQueued(EditRounds &rounds) {
+  tpj::check::pauseWatching();
+  rounds.Queued.clear();
+  tpj::check::resumeWatching();
+}
+
+// Selects the tool, points at the place, presses, and releases.
+void pressAndRelease(EditRounds &rounds, const tpj::World &world, tpj::ToolKind kind,
+                     tpj::ParkPoint at) {
+  rounds.Tools.selectTool(kind);
+  pointAt(rounds, world, at);
+  rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{true, false});
+  rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{false, true});
+  dropQueued(rounds);
+}
+
+// Draws a guest path of two stops and finishes it. The second stop's press asks the world whether
+// it accepts the path, which resolves, so it runs unwatched.
+void drawPath(EditRounds &rounds, const tpj::World &world) {
+  const ToolPlaces &places = rounds.Places;
+  rounds.Tools.selectTool(tpj::ToolKind::GuestPath);
+  pointAt(rounds, world, places.Start);
+  rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{true, false});
+  tpj::check::pauseWatching();
+  pointAt(rounds, world, places.Along);
+  rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{true, false});
+  tpj::check::resumeWatching();
+  rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{true, false});
+  if (!rounds.Tools.tool().Holding) {
+    throw std::runtime_error("the drawn path did not finish");
+  }
+  rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{false, true});
+  dropQueued(rounds);
+}
+
+// Each tool's press and release: on the places the held tools rest on, and drawing a path.
+void pressEachTool(EditRounds &rounds, const tpj::World &world) {
+  using tpj::ToolKind;
+  const ToolPlaces &places = rounds.Places;
+  pressAndRelease(rounds, world, ToolKind::PlaceShop, places.Guest.Beside);
+  pressAndRelease(rounds, world, ToolKind::MoveBox, places.Shop);
+  for (const tpj::ParkPoint at :
+       {places.Point, tpj::radiusHandleOf(places.Corner), tpj::taperHandleOf(places.Taper),
+        places.Edge, places.Guest.Side, places.Guest.Middle}) {
+    pressAndRelease(rounds, world, ToolKind::EditPath, at);
+  }
+  pressAndRelease(rounds, world, ToolKind::RemovePoint, places.Point);
+  pressAndRelease(rounds, world, ToolKind::Delete, places.Shop);
+  pressAndRelease(rounds, world, ToolKind::Furnish, places.Guest.Middle);
+  drawPath(rounds, world);
+  rounds.Tools.selectTool(ToolKind::None);
+}
+
+// The pick at the screen's middle, from a view 60 m above and 30 m south of the place, looking at
+// it.
+void pickAt(EditRounds &rounds, const tpj::World &world, tpj::ParkPoint at) {
+  tpj::CameraView view;
+  view.Eye = {static_cast<float>(at.X), 60.0f, static_cast<float>(at.Z) + 30.0f};
+  view.Target = {static_cast<float>(at.X), 0.0f, static_cast<float>(at.Z)};
+  tpj::CursorNdc cursor;
+  cursor.Aspect = 16.0f / 9.0f;
+  rounds.Tools.pick(world, rounds.Preview.Scene.seated(), cursor, view);
+}
+
+// One undo or redo and the app's work after it. The watch pauses while the session takes and
+// applies the command, and watches the second history take and note the same one.
+void editRound(EditRounds &rounds, HiddenFrame &frame, tpj::ParkSession &session, bool undo) {
+  tpj::check::watchWork("the history");
+  if ((undo ? tpj::takeUndo(rounds.History) : tpj::takeRedo(rounds.History)) == nullptr) {
+    throw std::runtime_error("the history has nothing to undo or redo");
+  }
+  tpj::check::pauseWatching();
+  if (undo) {
+    session.undo();
+  } else {
+    session.redo();
+  }
+  session.applyWithoutTick();
+  tpj::check::resumeWatching();
+  const tpj::World &world = session.world();
+  tpj::noteEdits(rounds.History, world);
+  if ((undo ? rounds.History.Redos : rounds.History.Undos).empty()) {
+    throw std::runtime_error("the undo or redo did not apply");
+  }
+  tpj::check::watchWork("the tool park");
+  rounds.Tools.follow(world, session.generation(), session.edits());
+  tpj::check::watchWork("the scene's sync");
+  HeldPreview &preview = rounds.Preview;
+  const tpj::WorldMeshes meshes = syncScene(preview.Scene, session);
+  drawScene(frame, preview.Scene, session, meshes, "the scene's sync");
+  for (const bool shown : {true, false, true}) {
+    preview.Look.Overlay =
+        shown ? std::optional<tpj::GuestNeed>(tpj::GuestNeed::Hunger) : std::nullopt;
+    syncAndDraw(frame, preview, session, rounds.Tools.park(), "the scene's sync");
+  }
+  tpj::check::watchWork("the picking");
+  pickAt(rounds, world, undo ? rounds.Shop : rounds.Bench);
+  tpj::check::watchWork("the presses");
+  pressEachTool(rounds, world);
+}
+
+// Prints the blocks freed during the watched work, or that its table overflowed, and gives 1, or
+// prints nothing and gives 0 when it freed none.
+int reportFreed(const char *watched) {
   if (tpj::check::tableOverflowed()) {
-    std::cout << "allocation check: the watched ticks noted more blocks than the table holds\n";
+    std::cout << "allocation check: " << watched << " noted more blocks than the table holds\n";
     return 1;
   }
   if (tpj::check::freedCount() > 0) {
     std::cout << "allocation check: " << tpj::check::freedCount()
-              << " blocks were allocated and freed during the watched ticks\n";
+              << " blocks were allocated and freed during " << watched << '\n';
     for (const tpj::check::FreedBlock &block : tpj::check::freedBlocks()) {
       std::cout << "allocation check: " << block.FreedBy << " freed a " << block.Size
                 << "-byte block at tick " << block.Freed << " that " << block.AllocatedBy
@@ -685,17 +852,14 @@ int report() {
     }
     return 1;
   }
-  std::cout << "allocation check: " << WATCHED_TICKS
-            << " ticks of full.park, the scene's sync, the preview, the overlays, the tools, the "
-               "panels, the uploads, and the drawing freed no block they allocated\n";
   return 0;
 }
 
 // Steps the park through the app's own session, syncing the scene and the previews after each
 // tick, and reports the blocks the watched ticks freed.
-int checkTicks(tpj::ParkSession &session) {
-  SteadyPlay play;
+int checkTicks(SteadyPlay &play, tpj::ParkSession &session) {
   addCurve(session);
+  tpj::keepToolPark(session.world(), play.Park);
   holdEdits(play.Held, session.world());
   holdOverlays(play.Overlays, session.world());
   holdTools(play.Tools, session);
@@ -711,7 +875,26 @@ int checkTicks(tpj::ParkSession &session) {
     steadyTick(play, session, tick);
   }
   tpj::check::stopWatching();
-  return report();
+  return reportFreed("the watched ticks");
+}
+
+// Undoes and redoes a guest path on the session, running the app's work after each in the play's
+// hidden frame, and reports the blocks the watched rounds freed.
+int checkEdits(SteadyPlay &play, tpj::ParkSession &session) {
+  EditRounds rounds(session);
+  beginRounds(rounds, session);
+  for (uint64_t round = 0; round < WARM_ROUNDS; ++round) {
+    editRound(rounds, play.Frame, session, round % 2 == 0);
+  }
+  if (!rounds.Tools.subject()) {
+    throw std::runtime_error("the first pick picked nothing");
+  }
+  tpj::check::startWatching(session.world().Tick);
+  for (uint64_t round = 0; round < WATCHED_ROUNDS; ++round) {
+    editRound(rounds, play.Frame, session, round % 2 == 0);
+  }
+  tpj::check::stopWatching();
+  return reportFreed("the watched rounds");
 }
 
 } // namespace
@@ -727,7 +910,16 @@ int main() {
     tpj::World world = tpj::loadWorld(tpj::makeParkSchema(), text);
     tpj::resolveWorld(world);
     tpj::ParkSession session(std::move(world));
-    return checkTicks(session);
+    SteadyPlay play;
+    if (checkTicks(play, session) != 0 || checkEdits(play, session) != 0) {
+      return 1;
+    }
+    std::cout << "allocation check: " << WATCHED_TICKS
+              << " ticks of full.park, the scene's sync, the preview, the overlays, the tools, the "
+                 "panels, the uploads, and the drawing, and "
+              << WATCHED_ROUNDS
+              << " undos and redos with the app's work after each, freed no block they allocated\n";
+    return 0;
   } catch (const std::exception &error) {
     std::cout << "allocation check: " << error.what() << '\n';
     return 2;

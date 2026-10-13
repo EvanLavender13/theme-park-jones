@@ -20,7 +20,7 @@ allocation-free-loops makes docs/conventions.md's rule against allocating in per
 8. The simulation is unchanged: tpj_scenarios --compare of windows-debug output from before and after each feature shows no difference. The runtime report on the stress parks is compared before and after the milestone. Each stage's change is reported, and no stage is marked result-changed. `--frame-times` on full.park with the window idle is reported before and after. (check: tpj_scenarios --compare; scripts/runtime-report.sh and its --compare)
 9. Uploading to the GPU in steady play reuses its buffers: the guest mesh at each tick, the overlay's shades at each tick, and the ghost when the look changes. Each upload writes into the buffers the renderer keeps, and makes larger ones only when the data outgrows them. It allocates and frees no heap block and no GPU buffer while the sizes stay within what they have held. Drawing a frame without a capture frees no block it allocated either. (ctest)
 10. Every SPEC.md whose public functions take kept buffers says so. src/sim/SPEC.md says that stepWorld's caller keeps its buffers. docs/testing.md and docs/conventions.md describe the check as decision 0041 does. The windows-debug build has no warnings, ctest passes, and tidy is clean.
-11. The app's work at a player action reuses its memory: after an edit, an undo, or a redo applies, the park mesh, the overlay's shape, and the scene's lists of boxes, path points, and segments are refilled in the lists the app keeps, and a click's picking and a press's own work keep theirs. Resolving the world at that action stays with changing-previews. (check, in PLAN.md of quiet-edits)
+11. The app's work at a player action reuses its memory. After an edit, an undo, or a redo applies, the tool park is filled again, and the park mesh, the overlay's shape, and the look's marks are built, each in lists the app keeps. The look reads the tool park's lists. Taking an undo or redo and noting its change in the history, showing or hiding an overlay, a click's pick, and each tool's press and release keep their memory too. Applying the command resolves the world and stays with changing-previews, and so does a path tool's press that asks the world whether it accepts the path. A plain edit adds a new record to the undo list and empties the redo list, which drops records that can no longer be redone. (ctest)
 
 ## Medium
 
@@ -45,7 +45,7 @@ quiet-tick. It builds the check, and makes the world's storage and the tick pass
 4. `quiet-tools`: each tool's per-frame work with the pointer held still, for criterion 6. Depends on: feature 1.
 5. `quiet-panels`: the panels' data, the Inspector, the tooltips, the Graph view, and the frame-time log, for criterion 7; and the edits to docs/testing.md and docs/conventions.md in criterion 10. Depends on: features 1 to 4.
 6. `quiet-uploads`: the renderer keeps each GPU buffer with a transfer buffer of its own and grows them only when outgrown, records uploads on the frame's command buffer, and the allocation check uploads and draws in a hidden window, counting SDL's allocations, for criterion 9. Depends on: none.
-7. `quiet-edits`: the park mesh, the overlay's shape, the scene's lists, picking, and presses keep their memory when a player action applies, for criterion 11. Depends on: feature 1.
+7. `quiet-edits`: the history, the tool park, the park mesh, the overlay's shape, the look, picking, and each tool's press and release keep their memory when a player acts, and the allocation check watches them over undos and redos, for criterion 11. Depends on: feature 1.
 
 ## Deepening candidates
 
@@ -67,9 +67,9 @@ Owned by changing-previews, the capability's milestone 6, still to be planned. E
 
 Owned by quiet-edits, feature 7. Each runs once per player action and rebuilds what it could refill:
 
-- Committing an edit, undo, and redo: buildParkMesh returns a new ParkMesh (scene_uploads.cpp uploadWorldMeshes), buildOverlayShape returns a new OverlayShape (scene_sync.cpp syncOverlayShape), and the scene reads the path points and segments into new lists (scene_sync.cpp syncLook).
-- Presses and releases: a press's own work apart from asking the world whether it accepts a path, which resolves and stays with changing-previews (tools.cpp).
-- Picking a subject on a click (picking.cpp entityAtCursor).
+- Committing an edit, undo, and redo: the history's records and change (history.cpp noteEdits), the taken edit and its command (history.cpp take), the tool park (tools.cpp keepToolPark), the park mesh (scene_uploads.cpp uploadWorldMeshes), the overlay's shape (scene_sync.cpp syncOverlayShape), the look's points and segments (scene_sync.cpp syncLook), and emptying the kept preview (scene_sync.cpp syncWorld).
+- A click's pick and its subject (picking.cpp entityAtCursor, inspect.cpp inspectorSubject).
+- Each tool's press and release, apart from a path tool's press that asks the world whether it accepts the path (tools.cpp releasePointer).
 
 Left as they are, since each makes something new by nature and runs once per player action:
 

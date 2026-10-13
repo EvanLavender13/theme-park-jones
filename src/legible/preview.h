@@ -55,8 +55,9 @@ struct KeptPreview {
 // to show the candidate's state. A preview without a candidate holds nothing a tick changes,
 // since whether the world accepts an edit depends only on the park's intent. Keeping the preview
 // allocates nothing once its lists have grown. The kept preview holds only while the world changes
-// just by ticking: empty it when the world is replaced, or changed without a tick, as edits applied
-// while paused change it.
+// just by ticking. When the world is changed without a tick, as edits applied while paused change
+// it, clear the kept preview's Tick, so the next call makes it again, keeping its lists. Empty it
+// when the world is replaced.
 bool keepPreview(KeptPreview &kept, const World &world, const std::optional<ParkEdit> &edit,
                  bool followTicks);
 

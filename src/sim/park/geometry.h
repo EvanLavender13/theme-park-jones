@@ -20,6 +20,9 @@ inline constexpr double ARC_TOLERANCE = 0.05;
 // at the length between them. Empty when either position is not finite or lies outside the park,
 // or the two lie closer together than MIN_SEGMENT_LENGTH.
 std::vector<CarrierPoint> segmentLine(ParkPoint from, ParkPoint to);
+// As the returning form, into a list the caller keeps, which it clears first. Allocates nothing
+// once the list has grown.
+void segmentLine(ParkPoint from, ParkPoint to, std::vector<CarrierPoint> &line);
 
 // The rectangle a box or entrance covers. Forward and Right are unit directions.
 struct Footprint {

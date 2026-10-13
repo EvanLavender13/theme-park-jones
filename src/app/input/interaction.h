@@ -1,6 +1,7 @@
 #ifndef TPJ_APP_INPUT_INTERACTION_H
 #define TPJ_APP_INPUT_INTERACTION_H
 
+#include "app/input/cursor.h"
 #include "app/input/input_map.h"
 #include "legible/inspect.h"
 #include "sim/command_queue.h"
@@ -29,6 +30,8 @@ public:
   Interaction(const World &world, uint64_t generation, uint64_t edits);
 
   [[nodiscard]] const ToolState &tool() const { return Tool; }
+  // The park as the tools read it, filled again whenever the generation or the edit count changes.
+  [[nodiscard]] const ToolPark &park() const { return Park; }
   [[nodiscard]] const std::optional<InspectorSubject> &subject() const { return Subject; }
 
   // For a generation other than the last one it saw, selects the current tool again, so it drops
@@ -39,8 +42,10 @@ public:
   void useButtons(const World &world, CommandQueue &commands, const PointerButtons &buttons);
   // True when the frame's press picks a subject: a press with the Look tool.
   [[nodiscard]] bool picks(const PointerButtons &buttons) const;
-  // Sets the subject from the entity under the cursor, as pickSubject does.
-  void pick(const World &world, std::optional<EntityKey> entity);
+  // Sets the subject from the entity under the cursor, as entityUnderCursor finds it and
+  // pickSubject keeps it, with lists the interaction keeps.
+  void pick(const World &world, const SeatedGuests &seated, const std::optional<CursorNdc> &cursor,
+            const CameraView &view);
   void forgetSubject();
   // The stock chosen in the Inspector and not yet applied.
   [[nodiscard]] const std::optional<ShopStock> &stockChoice() const { return StockChoice; }
@@ -92,7 +97,10 @@ private:
   uint64_t Edits;
   ToolState Tool;
   ToolPark Park;
-  std::optional<ParkEdit> Edit;
+  KeptEdit Edit;
+  KeptEdit Released;
+  PickLists Picks;
+  TickBuffers PickBuffers;
   std::vector<MeasuredLength> Lengths;
   std::optional<InspectorSubject> Subject;
   std::optional<ShopStock> StockChoice;

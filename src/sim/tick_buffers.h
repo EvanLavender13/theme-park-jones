@@ -72,6 +72,28 @@ template <typename T> void fillGrowing(std::vector<T> &kept, size_t count, const
   kept.assign(count, value);
 }
 
+// Gives a kept list whose values hold lists of their own count values, keeping every inner list's
+// memory: when it shrinks, its extra values move to the spare list, and when it grows, it takes
+// values back from the spare list before making new ones. The values it keeps still hold what
+// they held, for the caller to overwrite.
+template <typename T>
+void resizeKeeping(std::vector<T> &kept, size_t count, std::vector<T> &spare) {
+  while (kept.size() > count) {
+    spare.push_back(std::move(kept.back()));
+    // A moved-from value holds no memory, so dropping it frees nothing.
+    kept.pop_back();
+  }
+  kept.reserve(count);
+  while (kept.size() < count) {
+    if (spare.empty()) {
+      kept.emplace_back();
+    } else {
+      kept.push_back(std::move(spare.back()));
+      spare.pop_back();
+    }
+  }
+}
+
 } // namespace tpj
 
 #endif

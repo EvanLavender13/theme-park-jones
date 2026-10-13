@@ -1089,11 +1089,16 @@ void addFurniture(WorldSchema &schema) {
 
 std::vector<FurniturePiece> parkFurniture(const World &world) {
   std::vector<FurniturePiece> pieces;
-  for (const EntityKey key : world.keysWith<FurniturePieceState>()) {
-    const FurniturePieceState &piece = world.get<FurniturePieceState>(key);
-    pieces.push_back(FurniturePiece{key, piece.Segment, piece.Side, piece.Kind, piece.At});
-  }
+  parkFurniture(world, pieces);
   return pieces;
+}
+
+void parkFurniture(const World &world, std::vector<FurniturePiece> &pieces) {
+  pieces.clear();
+  world.forEachWith<FurniturePieceState>(
+      [&pieces](EntityKey key, const FurniturePieceState &piece) {
+        pieces.push_back(FurniturePiece{key, piece.Segment, piece.Side, piece.Kind, piece.At});
+      });
 }
 
 std::optional<FurniturePiece> furniturePiece(const World &world, EntityKey key) {

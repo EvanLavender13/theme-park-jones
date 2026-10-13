@@ -4,7 +4,9 @@
 #include "render/park_mesh.h"
 #include "sim/entity_key.h"
 #include "sim/medium/network.h"
+#include "sim/park/edits.h"
 #include "sim/park/intent.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
 #include <array>
@@ -64,9 +66,19 @@ struct OverlayShape {
   std::vector<uint32_t> Overlaps;
 };
 
+// The lists building the overlay shape reuses, and the shape: each segment's record, the buffers
+// for the search for overlaps, and the shape.
+struct OverlayShapeLists {
+  std::vector<SegmentRecord> Segments;
+  TickBuffers Buffers;
+  OverlayShape Shape;
+};
+
 // The guest paving's overlay shape: each piece of the paved surface, without walkways, that
 // belongs to a guest segment or to a point where guest segments meet, with its lines and overlaps.
-OverlayShape buildOverlayShape(const World &world);
+// The shape is put in lists.Shape. Uses lists the caller keeps, which it clears first, and
+// allocates nothing once they have grown.
+void buildOverlayShape(const World &world, OverlayShapeLists &lists);
 
 // The overlay place of a ground point: the nearest place on the lines of the pieces that hold it,
 // ties to the lower segment key, or none when no piece holds it or it is not finite. Uses a list

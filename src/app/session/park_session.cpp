@@ -34,11 +34,10 @@ ParkSession::ParkSession(World world) : Current(std::move(world)) {
 
 void ParkSession::step() {
   // An undo or redo applies alone, so the history can tell which keys its restored things took.
-  if (Restore) {
-    CommandQueue alone;
-    queueEdit(alone, *Restore);
-    Restore.reset();
-    stepWorld(Current, alone, Buffers);
+  if (Restore != nullptr) {
+    Alone.push(*Restore);
+    Restore = nullptr;
+    stepWorld(Current, Alone, Buffers);
     noteEdits(History, Current);
     ++Edits;
     return;
@@ -52,11 +51,10 @@ void ParkSession::step() {
 }
 
 void ParkSession::applyWithoutTick() {
-  if (Restore) {
-    CommandQueue alone;
-    queueEdit(alone, *Restore);
-    Restore.reset();
-    commitCommands(Current, alone);
+  if (Restore != nullptr) {
+    Alone.push(*Restore);
+    Restore = nullptr;
+    commitCommands(Current, Alone);
     noteEdits(History, Current);
     ++Edits;
     return;
@@ -70,14 +68,14 @@ void ParkSession::applyWithoutTick() {
 }
 
 void ParkSession::undo() {
-  if (Commands.empty() && !Restore) {
-    Restore = undoEdit(History);
+  if (Commands.empty() && Restore == nullptr) {
+    Restore = takeUndo(History);
   }
 }
 
 void ParkSession::redo() {
-  if (Commands.empty() && !Restore) {
-    Restore = redoEdit(History);
+  if (Commands.empty() && Restore == nullptr) {
+    Restore = takeRedo(History);
   }
 }
 
@@ -113,7 +111,7 @@ void ParkSession::useFileRequest(const FileRequest &request, ParkFileEdge &edge)
 void ParkSession::replace(World world) {
   Current = std::move(world);
   Commands.clear();
-  Restore.reset();
+  Restore = nullptr;
   clearHistory(History, Current);
   ++Generation;
 }

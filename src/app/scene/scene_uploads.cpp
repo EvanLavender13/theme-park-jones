@@ -6,10 +6,10 @@
 
 namespace tpj {
 
-bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes &meshes,
-                       const ParkMesh &guests, OrbitCamera &camera) {
+bool uploadWorldMeshes(Renderer &renderer, const SceneSync &scene, const WorldMeshes &meshes,
+                       OrbitCamera &camera) {
   if (meshes.Park) {
-    const ParkMesh mesh = buildParkMesh(world);
+    const ParkMesh &mesh = scene.parkMesh();
     if (meshes.FrameCamera) {
       if (const std::optional<GroundBounds> bounds = meshBounds(mesh)) {
         frameOrbitCamera(camera, *bounds, CameraView{}.FovY);
@@ -19,7 +19,7 @@ bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes
       return false;
     }
   }
-  return !meshes.Guests || setGuestMesh(renderer, guests);
+  return !meshes.Guests || setGuestMesh(renderer, scene.guestMesh());
 }
 
 bool uploadPreviewMeshes(Renderer &renderer, const SceneSync &scene, PreviewMeshes meshes,

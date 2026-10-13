@@ -494,18 +494,30 @@ void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha) {
   }
 }
 
-ParkMesh buildParkMesh(const World &world) {
-  ParkMesh mesh;
-  for (const ParkEntrance &entrance : parkEntrances(world)) {
+void buildParkMesh(const World &world, ParkMeshLists &lists) {
+  ParkMesh &mesh = lists.Mesh;
+  mesh.Vertices.clear();
+  mesh.Indices.clear();
+  parkEntrances(world, lists.Entrances);
+  for (const ParkEntrance &entrance : lists.Entrances) {
     appendBox(mesh, entrance.At, ENTRANCE_SIZE, ENTRANCE_HEIGHT, ENTRANCE_COLOR);
   }
   appendSurface(mesh, walkedSurface(world), 0.0f, pathColor);
-  for (const ParkBox &box : parkBoxes(world)) {
+  parkBoxes(world, lists.Boxes);
+  for (const ParkBox &box : lists.Boxes) {
     appendBox(mesh, box.At, boxSize(box.Kind), boxHeight(box.Kind), boxColor(box.Kind));
   }
-  appendFurniture(mesh, world, 1.0f);
-  appendStarvedMarks(mesh, world, 1.0f);
-  return mesh;
+  parkFurniture(world, lists.Furniture);
+  for (const FurniturePiece &piece : lists.Furniture) {
+    appendBox(mesh, piece.At, furnitureSize(piece.Kind), furnitureHeight(piece.Kind),
+              furnitureColor(piece.Kind));
+  }
+  // As appendStarvedMarks draws them, reading the supply routes through the kept lists.
+  for (const ParkBox &box : lists.Boxes) {
+    if (box.Kind == BoxKind::Shop && !nearestDepot(world, box.Key, lists.Buffers)) {
+      appendStarvedMark(mesh, box.At, STARVED_COLOR);
+    }
+  }
 }
 
 void appendFurniture(ParkMesh &mesh, const World &world, float alpha) {

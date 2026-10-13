@@ -137,6 +137,14 @@ std::optional<DepotRoute> depotRouteBy(const World &world, EntityKey shop,
   return nearestDepotIn(lengths.Lengths, depots);
 }
 
+// The lists finding a shop's nearest depot reuses: the boxes, the depots' keys, ascending, and the
+// route lengths.
+struct DepotLists {
+  std::vector<ParkBox> Boxes;
+  std::vector<EntityKey> Depots;
+  RouteLengths Lengths;
+};
+
 constexpr size_t goodIndex(Good good) { return static_cast<size_t>(good); }
 
 static_assert(goodIndex(GOODS[0]) == 0 && goodIndex(GOODS[1]) == 1,
@@ -739,7 +747,20 @@ std::optional<double> supplyRouteLength(const World &world, EntityKey at, Entity
 }
 
 std::optional<DepotRoute> nearestDepot(const World &world, EntityKey shop) {
-  return depotRouteBy(world, shop, Layers::Both);
+  TickBuffers buffers;
+  return nearestDepot(world, shop, buffers);
+}
+
+std::optional<DepotRoute> nearestDepot(const World &world, EntityKey shop, TickBuffers &buffers) {
+  DepotLists &lists = buffers.get<DepotLists>();
+  parkBoxes(world, lists.Boxes);
+  lists.Depots.clear();
+  for (const ParkBox &box : lists.Boxes) {
+    if (box.Kind == BoxKind::Depot) {
+      lists.Depots.push_back(box.Key);
+    }
+  }
+  return depotRouteBy(world, shop, lists.Depots, lists.Lengths);
 }
 
 uint32_t shipmentDelay(double distance) {

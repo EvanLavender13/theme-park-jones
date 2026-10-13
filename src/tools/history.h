@@ -25,7 +25,7 @@ struct IntentChange {
 enum class HistoryStep : uint8_t { None, Undo, Redo };
 
 // The edits to undo and to redo, each list oldest first. Change it only through clearHistory,
-// noteEdits, undoEdit, and redoEdit.
+// noteEdits, undoEdit, redoEdit, takeUndo, and takeRedo.
 struct EditHistory {
   // The world's path points, segments, and boxes when the history last looked.
   IntentRecords Seen;
@@ -38,6 +38,10 @@ struct EditHistory {
   RestoreIntent Sent;
   // Each key whose record an undo or redo added back, and the key it took.
   std::map<EntityKey, EntityKey> Renamed;
+  // The lists noting an edit reuses: the world's intent as it is now, and the change since the
+  // intent the history saw last.
+  IntentRecords Now;
+  IntentChange Change;
 };
 
 // Empties both lists and takes the world's intent as the intent the history saw last.
@@ -50,6 +54,10 @@ void noteEdits(EditHistory &history, const World &world);
 // commitCommands.
 std::optional<RestoreIntent> undoEdit(EditHistory &history);
 std::optional<RestoreIntent> redoEdit(EditHistory &history);
+// As undoEdit and redoEdit, giving the command the history keeps until its next undo or redo
+// instead of a copy, or null where those give none.
+const RestoreIntent *takeUndo(EditHistory &history);
+const RestoreIntent *takeRedo(EditHistory &history);
 // Whether undoEdit or redoEdit would give a command.
 bool canUndo(const EditHistory &history);
 bool canRedo(const EditHistory &history);

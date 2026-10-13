@@ -100,18 +100,33 @@ Bounds boundsOf(const OverlayPiece &piece) {
   return bounds;
 }
 
+// The lists building the shape reuses: the guest segments' keys, each guest segment's ends as
+// (point, segment), each piece's owner, and the search for overlaps' bounds, order, and pairs.
+struct ShapeScratch {
+  std::vector<EntityKey> Segments;
+  std::vector<std::pair<EntityKey, EntityKey>> Ends;
+  std::vector<EntityKey> Owners;
+  std::vector<Bounds> PieceBounds;
+  std::vector<uint32_t> Order;
+  std::vector<std::pair<uint32_t, uint32_t>> Pairs;
+};
+
 // Fills each piece's overlaps: the pieces of other owners it shares positive area with, ascending.
-void findOverlaps(OverlayShape &shape, const std::vector<EntityKey> &owners) {
+void findOverlaps(OverlayShape &shape, const std::vector<EntityKey> &owners,
+                  ShapeScratch &scratch) {
   const size_t count = shape.Pieces.size();
-  std::vector<Bounds> bounds(count);
-  std::vector<uint32_t> order(count);
+  std::vector<Bounds> &bounds = scratch.PieceBounds;
+  std::vector<uint32_t> &order = scratch.Order;
+  fillGrowing(bounds, count, Bounds{});
+  fillGrowing(order, count, uint32_t{0});
   for (uint32_t i = 0; i < count; ++i) {
     bounds[i] = boundsOf(shape.Pieces[i]);
     order[i] = i;
   }
   std::ranges::sort(
       order, [&bounds](uint32_t a, uint32_t b) { return bounds[a].LeastX < bounds[b].LeastX; });
-  std::vector<std::pair<uint32_t, uint32_t>> pairs;
+  std::vector<std::pair<uint32_t, uint32_t>> &pairs = scratch.Pairs;
+  pairs.clear();
   for (size_t i = 0; i < count; ++i) {
     const uint32_t a = order[i];
     for (size_t j = i + 1; j < count && bounds[order[j]].LeastX < bounds[a].MostX; ++j) {
@@ -176,12 +191,16 @@ LinePlace nearestOnLine(const OverlayShape &shape, const OverlayLine &line, Grou
   return nearest;
 }
 
-// Adds the guest segments' lines to the shape, and gives each guest segment's ends, as
-// (point, segment), sorted.
-std::vector<std::pair<EntityKey, EntityKey>> addLines(const World &world, OverlayShape &shape) {
-  std::vector<EntityKey> segments;
-  std::vector<std::pair<EntityKey, EntityKey>> ends;
-  for (const ParkSegment &segment : parkSegments(world)) {
+// Adds the guest segments' lines to the shape, and puts each guest segment's ends, as
+// (point, segment), sorted, in scratch.Ends.
+void addLines(const World &world, std::vector<SegmentRecord> &records, OverlayShape &shape,
+              ShapeScratch &scratch) {
+  std::vector<EntityKey> &segments = scratch.Segments;
+  std::vector<std::pair<EntityKey, EntityKey>> &ends = scratch.Ends;
+  segments.clear();
+  ends.clear();
+  segmentRecords(world, records);
+  for (const SegmentRecord &segment : records) {
     if (segment.Kind == PathKind::Guest) {
       segments.push_back(segment.Key);
       ends.emplace_back(segment.From, segment.Key);
@@ -197,7 +216,6 @@ std::vector<std::pair<EntityKey, EntityKey>> addLines(const World &world, Overla
                            static_cast<uint32_t>(carrier.Points.size())});
     shape.Points.insert(shape.Points.end(), carrier.Points.begin(), carrier.Points.end());
   }
-  return ends;
 }
 
 // Adds the surface's piece to the shape with its lines, its owner's line when it is a segment and
@@ -240,17 +258,25 @@ bool addPiece(OverlayShape &shape, const SurfacePiece &surfacePiece,
 
 } // namespace
 
-OverlayShape buildOverlayShape(const World &world) {
-  OverlayShape shape;
-  const std::vector<std::pair<EntityKey, EntityKey>> ends = addLines(world, shape);
-  std::vector<EntityKey> owners;
+void buildOverlayShape(const World &world, OverlayShapeLists &lists) {
+  OverlayShape &shape = lists.Shape;
+  shape.Vertices.clear();
+  shape.Indices.clear();
+  shape.Pieces.clear();
+  shape.LineRefs.clear();
+  shape.Lines.clear();
+  shape.Points.clear();
+  shape.Overlaps.clear();
+  ShapeScratch &scratch = lists.Buffers.get<ShapeScratch>();
+  addLines(world, lists.Segments, shape, scratch);
+  std::vector<EntityKey> &owners = scratch.Owners;
+  owners.clear();
   for (const SurfacePiece &piece : resolvedSurface(world).Pieces) {
-    if (piece.Kind == PathKind::Guest && addPiece(shape, piece, ends)) {
+    if (piece.Kind == PathKind::Guest && addPiece(shape, piece, scratch.Ends)) {
       owners.push_back(piece.Owner);
     }
   }
-  findOverlaps(shape, owners);
-  return shape;
+  findOverlaps(shape, owners, scratch);
 }
 
 std::optional<Place> overlayPlace(const OverlayShape &shape, GroundPoint point,

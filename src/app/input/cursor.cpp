@@ -60,11 +60,11 @@ std::optional<double> groundPerPixel(const std::optional<CursorNdc> &cursor,
 
 std::optional<EntityKey> entityUnderCursor(const World &world, const SeatedGuests &seated,
                                            const std::optional<CursorNdc> &cursor,
-                                           const CameraView &view) {
+                                           const CameraView &view, PickLists &lists) {
   if (!cursor) {
     return std::nullopt;
   }
-  return entityAtCursor(world, seated, view, cursor->Aspect, cursor->X, cursor->Y);
+  return entityAtCursor(world, seated, view, cursor->Aspect, cursor->X, cursor->Y, lists);
 }
 
 } // namespace tpj

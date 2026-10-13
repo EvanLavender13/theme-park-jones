@@ -30,6 +30,11 @@ void watchTick(uint64_t tick);
 // a string literal does.
 void watchWork(const char *work);
 void stopWatching();
+// Pauses and resumes watching. While paused, no block is noted, and freeing a noted block removes
+// its note without finding it. That can hide a free but never finds a false one, so work the check
+// doesn't watch can run between watched work.
+void pauseWatching();
+void resumeWatching();
 // How many noted blocks were freed while watching, and the first REPORTED_BLOCKS of them.
 size_t freedCount();
 std::span<const FreedBlock> freedBlocks();

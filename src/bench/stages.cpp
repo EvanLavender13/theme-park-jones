@@ -67,11 +67,13 @@ struct Nothing {};
 
 Nothing nothing() { return {}; }
 
-// A stage that builds a mesh from the resolved park, with its vertex count as its result.
-template <typename Build> StageResult meshStage(std::string name, const World &park, Build build) {
-  const auto mesh =
-      timeRepeated(nothing, [&park, &build](Nothing /*input*/) { return build(park); });
-  return StageResult{std::move(name), mesh.Times, ResultKind::Vertices, mesh.Last.Vertices.size()};
+// A stage that builds a mesh from the resolved park into lists kept across repetitions, as the app
+// keeps them, with the mesh's vertex count as its result.
+template <typename Lists, typename Build>
+StageResult meshStage(std::string name, const World &park, Lists &lists, Build build) {
+  const auto mesh = timeRepeated(
+      nothing, [&park, &lists, &build](Nothing /*input*/) { return build(park, lists).size(); });
+  return StageResult{std::move(name), mesh.Times, ResultKind::Vertices, mesh.Last};
 }
 
 } // namespace
@@ -105,17 +107,27 @@ std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
         StageResult{"preview", preview.Times, ResultKind::Hash, hashWorld(*candidate)});
   }
 
-  stages.push_back(meshStage("food-overlay-shape", park, buildOverlayShape));
+  OverlayShapeLists shapeLists;
+  stages.push_back(meshStage("food-overlay-shape", park, shapeLists,
+                             [](const World &world, OverlayShapeLists &lists) -> const auto & {
+                               buildOverlayShape(world, lists);
+                               return lists.Shape.Vertices;
+                             }));
   // What a tick costs while the overlay is shown: the shape is built only when the paths change,
   // and the shades fill lists kept from one tick to the next, as the app's are.
-  const OverlayShape shape = buildOverlayShape(park);
+  const OverlayShape &shape = shapeLists.Shape;
   AvailabilityShadeLists shadeLists;
   const auto shades = timeRepeated(nothing, [&park, &shape, &shadeLists](Nothing /*input*/) {
     availabilityShades(park, shape, needAvailability(GuestNeed::Hunger), shadeLists);
     return shadeLists.Shades.Knots.size();
   });
   stages.push_back(StageResult{"food-overlay", shades.Times, ResultKind::Values, shades.Last});
-  stages.push_back(meshStage("park-mesh", park, buildParkMesh));
+  ParkMeshLists parkLists;
+  stages.push_back(meshStage("park-mesh", park, parkLists,
+                             [](const World &world, ParkMeshLists &lists) -> const auto & {
+                               buildParkMesh(world, lists);
+                               return lists.Mesh.Vertices;
+                             }));
   // What a tick costs to draw the guests, with the seats and the mesh kept from one tick to the
   // next, as the app keeps them.
   SeatedGuests seated;

@@ -2,6 +2,7 @@
 #define TPJ_APP_INPUT_CURSOR_H
 
 #include "render/guest_mesh.h"
+#include "render/picking.h"
 #include "render/renderer.h"
 #include "sim/entity_key.h"
 #include "sim/park/intent.h"
@@ -43,7 +44,7 @@ std::optional<double> groundPerPixel(const std::optional<CursorNdc> &cursor,
 // guests, and the view, or none without a cursor.
 std::optional<EntityKey> entityUnderCursor(const World &world, const SeatedGuests &seated,
                                            const std::optional<CursorNdc> &cursor,
-                                           const CameraView &view);
+                                           const CameraView &view, PickLists &lists);
 
 } // namespace tpj
 

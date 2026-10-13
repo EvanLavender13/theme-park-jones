@@ -2277,6 +2277,22 @@ bool changesPaths(const ParkEdit &edit) {
       edit);
 }
 
+void segmentRecords(const World &world, std::vector<SegmentRecord> &records) {
+  records.clear();
+  world.forEachWith<PathSegmentIntent>(
+      [&world, &records](EntityKey key, const PathSegmentIntent &segment) {
+        SegmentRecord record{key,           segment.Kind,     segment.From,   segment.To,
+                             segment.Width, segment.FromEdge, segment.ToEdge, Furnishing{}};
+        if (const auto *left = world.tryGet<LeftFurnishingIntent>(key)) {
+          record.Furnished.Left = left->Held;
+        }
+        if (const auto *right = world.tryGet<RightFurnishingIntent>(key)) {
+          record.Furnished.Right = right->Held;
+        }
+        records.push_back(record);
+      });
+}
+
 void queueEdit(CommandQueue &queue, const ParkEdit &edit) {
   std::visit([&queue](const auto &command) { queue.push(command); }, edit);
 }

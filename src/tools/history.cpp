@@ -1,26 +1,31 @@
 #include "tools/history.h"
 
 #include "sim/park/intent.h"
+#include "sim/tick_buffers.h"
 
 #include <algorithm>
+#include <span>
 #include <stddef.h>
 #include <utility>
 
 namespace tpj {
 namespace {
 
-// The world's path points, segments, and boxes, each in key order, and its opening hours.
-IntentRecords recordsOf(const World &world) {
-  IntentRecords records;
-  records.Points = parkPathPoints(world);
-  for (const ParkSegment &segment : parkSegments(world)) {
-    records.Segments.push_back(SegmentRecord{segment.Key, segment.Kind, segment.From, segment.To,
-                                             segment.Width, segment.FromEdge, segment.ToEdge,
-                                             segment.Furnished});
-  }
-  records.Boxes = parkBoxes(world);
+// Puts the world's path points, segments, and boxes, each in key order, and its opening hours in
+// records.
+void recordsOf(const World &world, IntentRecords &records) {
+  parkPathPoints(world, records.Points);
+  segmentRecords(world, records.Segments);
+  parkBoxes(world, records.Boxes);
   records.Hours = parkHours(world);
-  return records;
+}
+
+// Empties the records' lists, keeping their memory.
+void clearRecords(IntentRecords &records) {
+  records.Points.clear();
+  records.Segments.clear();
+  records.Boxes.clear();
+  records.Hours.reset();
 }
 
 // Sorts the records of two lists in key order into removed, added, and changed, before and after.
@@ -46,8 +51,12 @@ void compare(const std::vector<Record> &was, const std::vector<Record> &is,
   }
 }
 
-IntentChange changeBetween(const IntentRecords &was, const IntentRecords &is) {
-  IntentChange change;
+// Puts the change from the one intent to the other in change.
+void changeBetween(const IntentRecords &was, const IntentRecords &is, IntentChange &change) {
+  clearRecords(change.Removed);
+  clearRecords(change.Added);
+  clearRecords(change.Before);
+  clearRecords(change.After);
   compare(was.Points, is.Points, change.Removed.Points, change.Added.Points, change.Before.Points,
           change.After.Points);
   compare(was.Segments, is.Segments, change.Removed.Segments, change.Added.Segments,
@@ -58,7 +67,6 @@ IntentChange changeBetween(const IntentRecords &was, const IntentRecords &is) {
     change.Before.Hours = was.Hours;
     change.After.Hours = is.Hours;
   }
-  return change;
 }
 
 bool isEmpty(const IntentRecords &records) {
@@ -81,8 +89,8 @@ EntityKey current(const EditHistory &history, EntityKey key) {
 }
 
 // The command that turns the intent after the change back into the intent before it. What it adds
-// back keeps its old keys as names, and its segments name those points by them.
-RestoreIntent reversal(const EditHistory &history, const IntentChange &change) {
+// back keeps its old keys as names, and its segments name those points by them. Put in command.
+void reversal(const EditHistory &history, const IntentChange &change, RestoreIntent &command) {
   const auto isAddedBack = [&change](EntityKey point) {
     return std::ranges::binary_search(change.Removed.Points, point, {}, &ParkPathPoint::Key);
   };
@@ -94,7 +102,9 @@ RestoreIntent reversal(const EditHistory &history, const IntentChange &change) {
     segment.To = pointNow(segment.To);
     return segment;
   };
-  RestoreIntent command;
+  command.Remove.clear();
+  clearRecords(command.Set);
+  clearRecords(command.Add);
   for (const ParkPathPoint &point : change.Added.Points) {
     command.Remove.push_back(current(history, point.Key));
   }
@@ -116,13 +126,12 @@ RestoreIntent reversal(const EditHistory &history, const IntentChange &change) {
     box.Key = current(history, box.Key);
     command.Set.Boxes.push_back(box);
   }
-  command.Add.Points = change.Removed.Points;
+  copyGrowing(command.Add.Points, std::span<const ParkPathPoint>(change.Removed.Points));
   for (const SegmentRecord &segment : change.Removed.Segments) {
     command.Add.Segments.push_back(segmentNow(segment));
   }
-  command.Add.Boxes = change.Removed.Boxes;
+  copyGrowing(command.Add.Boxes, std::span<const ParkBox>(change.Removed.Boxes));
   command.Set.Hours = change.Before.Hours;
-  return command;
 }
 
 // Pairs each record of a list the command added, in the order it lists them, with a record of what
@@ -142,54 +151,67 @@ void rename(EditHistory &history, const IntentChange &seen) {
 }
 
 // Takes the last edit off the list and gives the command that reverses it, waiting to note it.
-std::optional<RestoreIntent> take(EditHistory &history, std::vector<IntentChange> &from,
-                                  HistoryStep step) {
+const RestoreIntent *take(EditHistory &history, std::vector<IntentChange> &from, HistoryStep step) {
   if (history.Waiting != HistoryStep::None || from.empty()) {
-    return std::nullopt;
+    return nullptr;
   }
   history.Taken = std::move(from.back());
   from.pop_back();
-  history.Sent = reversal(history, history.Taken);
+  reversal(history, history.Taken, history.Sent);
   history.Waiting = step;
-  return history.Sent;
+  return &history.Sent;
 }
 
 } // namespace
 
 void clearHistory(EditHistory &history, const World &world) {
   history = EditHistory{};
-  history.Seen = recordsOf(world);
+  recordsOf(world, history.Seen);
 }
 
 void noteEdits(EditHistory &history, const World &world) {
-  IntentRecords now = recordsOf(world);
-  IntentChange change = changeBetween(history.Seen, now);
-  history.Seen = std::move(now);
+  recordsOf(world, history.Now);
+  changeBetween(history.Seen, history.Now, history.Change);
+  // Swapped, so both keep their memory.
+  std::swap(history.Seen, history.Now);
   const HistoryStep waiting = history.Waiting;
   history.Waiting = HistoryStep::None;
   if (waiting == HistoryStep::None) {
-    if (!isEmpty(change)) {
-      history.Undos.push_back(std::move(change));
+    if (!isEmpty(history.Change)) {
+      history.Undos.push_back(std::move(history.Change));
       history.Redos.clear();
     }
     return;
   }
   // A refused undo or redo changed nothing, so its edit goes back where it was.
-  if (isEmpty(change)) {
+  if (isEmpty(history.Change)) {
     (waiting == HistoryStep::Undo ? history.Undos : history.Redos)
         .push_back(std::move(history.Taken));
     return;
   }
-  rename(history, change);
-  (waiting == HistoryStep::Undo ? history.Redos : history.Undos).push_back(std::move(change));
+  rename(history, history.Change);
+  // The taken edit is done with, so its memory holds the next change.
+  std::swap(history.Change, history.Taken);
+  (waiting == HistoryStep::Undo ? history.Redos : history.Undos)
+      .push_back(std::move(history.Taken));
 }
 
-std::optional<RestoreIntent> undoEdit(EditHistory &history) {
+const RestoreIntent *takeUndo(EditHistory &history) {
   return take(history, history.Undos, HistoryStep::Undo);
 }
 
-std::optional<RestoreIntent> redoEdit(EditHistory &history) {
+const RestoreIntent *takeRedo(EditHistory &history) {
   return take(history, history.Redos, HistoryStep::Redo);
+}
+
+std::optional<RestoreIntent> undoEdit(EditHistory &history) {
+  const RestoreIntent *command = takeUndo(history);
+  return command != nullptr ? std::optional<RestoreIntent>(*command) : std::nullopt;
+}
+
+std::optional<RestoreIntent> redoEdit(EditHistory &history) {
+  const RestoreIntent *command = takeRedo(history);
+  return command != nullptr ? std::optional<RestoreIntent>(*command) : std::nullopt;
 }
 
 bool canUndo(const EditHistory &history) {

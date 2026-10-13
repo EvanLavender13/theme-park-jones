@@ -16,16 +16,23 @@ bool isInsidePark(const ParkPoint &point) {
 } // namespace
 
 std::vector<CarrierPoint> segmentLine(ParkPoint from, ParkPoint to) {
+  std::vector<CarrierPoint> line;
+  segmentLine(from, to, line);
+  return line;
+}
+
+void segmentLine(ParkPoint from, ParkPoint to, std::vector<CarrierPoint> &line) {
+  line.clear();
   if (!isInsidePark(from) || !isInsidePark(to)) {
-    return {};
+    return;
   }
   const double dx = to.X - from.X;
   const double dz = to.Z - from.Z;
   const double length = std::sqrt(dx * dx + dz * dz);
   if (length < MIN_SEGMENT_LENGTH) {
-    return {};
+    return;
   }
-  return {CarrierPoint{from.X, from.Z, 0.0}, CarrierPoint{to.X, to.Z, length}};
+  line.assign({CarrierPoint{from.X, from.Z, 0.0}, CarrierPoint{to.X, to.Z, length}});
 }
 
 std::optional<Footprint> footprintOf(const Pose &pose, FootprintSize size) {

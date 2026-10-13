@@ -6,6 +6,7 @@
 #include "sim/mix.h"
 #include "sim/park/intent.h"
 #include "sim/park/surface.h"
+#include "sim/tick_buffers.h"
 
 #include <stdint.h>
 #include <vector>
@@ -54,6 +55,10 @@ struct ParkDoor {
 // The doors serving the kind: the entrances' first, then the boxes', each in key order of its
 // entity. An entity with no footprint has no door.
 std::vector<ParkDoor> parkDoors(const World &world, PathKind kind);
+// As the returning form, into a list the caller keeps, which it clears first, keeping the
+// entrances and boxes it reads in the buffers. Allocates nothing once the lists have grown.
+void parkDoors(const World &world, PathKind kind, std::vector<ParkDoor> &doors,
+               TickBuffers &buffers);
 
 // A walkway for each connector of the kind's network, in key order of the connector.
 std::vector<Walkway> connectorWalkways(const World &world, PathKind kind);

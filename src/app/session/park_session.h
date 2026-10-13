@@ -83,8 +83,11 @@ private:
   // The lists the world's systems reuse from tick to tick. Replacing the world keeps them.
   TickBuffers Buffers;
   EditHistory History;
-  // The undo's or redo's command waiting to apply alone in the next cycle.
-  std::optional<RestoreIntent> Restore;
+  // The command the history keeps for the undo or redo waiting to apply alone in the next cycle,
+  // or null.
+  const RestoreIntent *Restore = nullptr;
+  // The queue an undo or redo applies alone on, kept between them.
+  CommandQueue Alone;
   uint64_t Generation = 0;
   uint64_t Edits = 0;
 };

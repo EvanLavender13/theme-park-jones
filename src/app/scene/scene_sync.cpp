@@ -26,7 +26,10 @@ WorldMeshes SceneSync::syncWorld(const World &world, uint64_t generation, uint64
     meshes.Park = true;
     // An edit applied while paused changes the world without a tick, and may move guests.
     meshes.Guests = true;
-    Kept = {};
+    Kept.Tick.reset();
+  }
+  if (meshes.Park) {
+    buildParkMesh(world, ParkLists);
   }
   if (GuestTick != world.Tick) {
     GuestTick = world.Tick;
@@ -114,8 +117,8 @@ void fillLook(Interaction &interaction, const World &world, std::optional<GuestN
   look.Hovered = interaction.hoveredHandle();
 }
 
-PreviewMeshes SceneSync::syncLook(const World &world, bool remade, const PreviewLook &look,
-                                  bool shapeChanged) {
+PreviewMeshes SceneSync::syncLook(const World &world, const ToolPark &park, bool remade,
+                                  const PreviewLook &look, bool shapeChanged) {
   PreviewMeshes meshes;
   const bool first = !Look.has_value();
   const bool editBuilt = remade || first;
@@ -131,12 +134,7 @@ PreviewMeshes SceneSync::syncLook(const World &world, bool remade, const Preview
   }
   const bool lookBuilt = first || *Look != look || LookEdits != Edits;
   if (lookBuilt) {
-    if (LookEdits != Edits) {
-      parkBoxes(world, LookBoxes);
-      LookPoints = parkPathPoints(world);
-      LookSegments = parkSegments(world);
-    }
-    buildLookMarks(LookMarks, world, {LookBoxes, LookPoints, LookSegments}, look);
+    buildLookMarks(LookMarks, world, {park.Boxes, park.Points, park.Segments}, look);
     LookEdits = Edits;
   }
   const bool guest = look.Inspected && look.Inspected->Kind == SubjectKind::Guest;
@@ -161,7 +159,7 @@ PreviewMeshes SceneSync::syncLook(const World &world, bool remade, const Preview
     const World &previewed = previewedWorld(world, Kept.Made);
     if (remade || shapeChanged || !Shaded || Shaded->Tick != previewed.Tick ||
         Shaded->Need != *look.Overlay) {
-      availabilityShades(previewed, Shape, needAvailability(*look.Overlay), ShadeLists);
+      availabilityShades(previewed, ShapeLists.Shape, needAvailability(*look.Overlay), ShadeLists);
       Shaded = ShadedFor{previewed.Tick, *look.Overlay};
       meshes.Shades = true;
     }
@@ -174,10 +172,18 @@ PreviewMeshes SceneSync::syncLook(const World &world, bool remade, const Preview
 bool SceneSync::syncOverlayShape(const World &previewed, bool shown) {
   if (!shown) {
     Shaped.reset();
-    if (Shape.Pieces.empty()) {
+    OverlayShape &shape = ShapeLists.Shape;
+    if (shape.Pieces.empty()) {
       return false;
     }
-    Shape = {};
+    // Emptied in place, so the lists keep their memory for the next time it shows.
+    shape.Vertices.clear();
+    shape.Indices.clear();
+    shape.Pieces.clear();
+    shape.LineRefs.clear();
+    shape.Lines.clear();
+    shape.Points.clear();
+    shape.Overlaps.clear();
     return true;
   }
   const Preview &preview = Kept.Made;
@@ -196,7 +202,7 @@ bool SceneSync::syncOverlayShape(const World &previewed, bool shown) {
   } else {
     Shaped->Edit.reset();
   }
-  Shape = buildOverlayShape(previewed);
+  buildOverlayShape(previewed, ShapeLists);
   return true;
 }
 
