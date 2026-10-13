@@ -4,7 +4,8 @@
 
 #include <imgui.h>
 
-#include <string>
+#include <stdio.h>
+#include <string_view>
 
 namespace tpj {
 
@@ -27,7 +28,11 @@ void drawDebugPanel(const DebugStats &stats, bool &showGraph, std::optional<Gues
     }
     for (const GuestNeed need : NEEDS) {
       ImGui::SameLine();
-      if (ImGui::RadioButton(std::string(needAvailabilityName(need)).c_str(), overlay == need)) {
+      // ImGui needs a terminated label. A copy on the stack makes no string each frame.
+      const std::string_view name = needAvailabilityName(need);
+      char label[16];
+      (void)snprintf(label, sizeof(label), "%.*s", static_cast<int>(name.size()), name.data());
+      if (ImGui::RadioButton(label, overlay == need)) {
         overlay = need;
       }
     }
