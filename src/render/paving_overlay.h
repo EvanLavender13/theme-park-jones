@@ -69,8 +69,10 @@ struct OverlayShape {
 OverlayShape buildOverlayShape(const World &world);
 
 // The overlay place of a ground point: the nearest place on the lines of the pieces that hold it,
-// ties to the lower segment key, or none when no piece holds it or it is not finite.
-std::optional<Place> overlayPlace(const OverlayShape &shape, GroundPoint point);
+// ties to the lower segment key, or none when no piece holds it or it is not finite. Uses a list
+// the caller keeps, and allocates nothing once it has grown.
+std::optional<Place> overlayPlace(const OverlayShape &shape, GroundPoint point,
+                                  std::vector<uint32_t> &lines);
 
 // A value at a distance along a line.
 struct OverlayKnot {

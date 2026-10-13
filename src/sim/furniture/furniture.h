@@ -7,6 +7,7 @@
 #include "sim/schema.h"
 #include "sim/world.h"
 
+#include <optional>
 #include <stdint.h>
 #include <string_view>
 #include <vector>
@@ -97,6 +98,9 @@ struct SeatPlaces {
 void addFurniture(WorldSchema &schema);
 // Every piece, in ascending key order.
 std::vector<FurniturePiece> parkFurniture(const World &world);
+// The piece the key holds, as parkFurniture gives it, or none when the key holds no piece.
+// Allocates nothing.
+std::optional<FurniturePiece> furniturePiece(const World &world, EntityKey key);
 
 } // namespace tpj
 

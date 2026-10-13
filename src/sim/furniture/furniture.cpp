@@ -1096,4 +1096,12 @@ std::vector<FurniturePiece> parkFurniture(const World &world) {
   return pieces;
 }
 
+std::optional<FurniturePiece> furniturePiece(const World &world, EntityKey key) {
+  const FurniturePieceState *piece = world.tryGet<FurniturePieceState>(key);
+  if (piece == nullptr) {
+    return std::nullopt;
+  }
+  return FurniturePiece{key, piece->Segment, piece->Side, piece->Kind, piece->At};
+}
+
 } // namespace tpj

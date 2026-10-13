@@ -64,11 +64,12 @@ struct GraphOverlay {
 std::optional<WindowPoint> windowPoint(const CameraView &view, float width, float height,
                                        GroundPoint point);
 
-// Both networks' segments and nodes in a window of the width and height, with segments clipped to
-// the near plane. A line is marked as a connector when its carrier is not a path's, and a node
-// holds its anchor.
-GraphOverlay buildGraphOverlay(const World &world, const CameraView &view, float width,
-                               float height);
+// Fills overlay, which it clears first, with both networks' segments and nodes in a window of the
+// width and height, with segments clipped to the near plane. A line is marked as a connector when
+// its carrier is not a path's, and a node holds its anchor. Uses a list of keys the caller keeps,
+// and allocates nothing once they have grown.
+void buildGraphOverlay(const World &world, const CameraView &view, float width, float height,
+                       std::vector<EntityKey> &pathKeys, GraphOverlay &overlay);
 
 } // namespace tpj
 

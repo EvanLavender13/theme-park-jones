@@ -2,6 +2,8 @@
 #define TPJ_LEGIBLE_INSPECT_H
 
 #include "sim/entity_key.h"
+#include "sim/guests/guests.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
 #include <optional>
@@ -67,9 +69,18 @@ std::optional<InspectorSubject> inspectorSubject(const World &world, EntityKey k
 void pickSubject(std::optional<InspectorSubject> &subject, const World &world,
                  std::optional<EntityKey> key);
 
-// The subject's inspector, built from its inspection record and the world's tick, or saying its
-// entity is gone when the world gives no record. Changes nothing.
-Inspection inspectSubject(const World &world, const InspectorSubject &subject);
+// The lists inspectSubject reuses from call to call.
+struct InspectLists {
+  TickBuffers Buffers;
+  std::vector<ChoiceOption> Options;
+};
+
+// Fills the inspection, which the caller keeps, with the subject's inspector, built from its
+// inspection record and the world's tick, or saying its entity is gone when the world gives no
+// record. Changes nothing. Filling it again for the same subject allocates nothing once the lists
+// and the inspection have grown.
+void inspectSubject(const World &world, const InspectorSubject &subject, InspectLists &lists,
+                    Inspection &inspection);
 
 } // namespace tpj
 

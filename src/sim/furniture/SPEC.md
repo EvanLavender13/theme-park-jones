@@ -4,11 +4,11 @@ This module serves the effortless-building capability (plans/effortless-building
 
 ## Boundary
 
-furniture reads intent only through parkSegments, parkPathPoints, parkBoxes, parkEntrances, and footprintOf (sim/park/SPEC.md), and doors, walkways, and the paved surface with its walkways only through routes' parkDoors, keyedWalkways, and walkedSurface (sim/routes/SPEC.md). It reads the guest network through routes' parkNetwork. addFurniture registers the derived types furniture-piece and laid-furniture, the field seat places, and the furniture resolver. addPark calls it after addRoutes. Other modules read the furniture through parkFurniture and furnitureSize, and its seats through the seat places field, furnitureSeats, and seatPose.
+furniture reads intent only through parkSegments, parkPathPoints, parkBoxes, parkEntrances, and footprintOf (sim/park/SPEC.md), and doors, walkways, and the paved surface with its walkways only through routes' parkDoors, keyedWalkways, and walkedSurface (sim/routes/SPEC.md). It reads the guest network through routes' parkNetwork. addFurniture registers the derived types furniture-piece and laid-furniture, the field seat places, and the furniture resolver. addPark calls it after addRoutes. Other modules read the furniture through parkFurniture, furniturePiece, and furnitureSize, and its seats through the seat places field, furnitureSeats, and seatPose.
 
 ## Pieces
 
-Furniture is derived in each resolution from intent alone, so saves never hold it (principle 1). parkFurniture gives every piece, in key order. A FurniturePiece has its key, its segment, the side of the segment it stands on, its kind, and its pose. furnitureSize gives a kind's footprint, its width along the paving and its depth across it.
+Furniture is derived in each resolution from intent alone, so saves never hold it (principle 1). parkFurniture gives every piece, in key order. furniturePiece gives the piece a key holds, as parkFurniture gives it, or none when the key holds no piece. It allocates nothing. A FurniturePiece has its key, its segment, the side of the segment it stands on, its kind, and its pose. furnitureSize gives a kind's footprint, its width along the paving and its depth across it.
 
 Each piece is an entity, so flows can reach it. Its key is derived from its segment, its side, and where it stands along the segment. A piece exists while a resolution lays it, and the resolution that no longer lays it removes it.
 

@@ -258,27 +258,26 @@ template <BoxKind K> void resolveFacilityOffers(World &world) {
 
 std::optional<FacilityRecord> facilityRecord(const World &world, EntityKey facility) {
   std::optional<FacilityRecord> record;
-  for (const ParkBox &box : parkBoxes(world)) {
-    if (box.Key != facility) {
-      continue;
-    }
-    forEachFacility([&]<BoxKind K>() {
-      using Kinds = FacilityKinds<K>;
-      if (box.Kind != K) {
-        return;
-      }
-      record = FacilityRecord{.Places = Kinds::Places};
-      if (const FacilityService *service = world.tryGet<FacilityService>(facility)) {
-        record->Taken = std::ranges::count_if(
-            service->FreeAt, [&world](uint64_t freeAt) { return freeAt > world.Tick; });
-      }
-      for (const FlowStock &held : stocksAt<typename Kinds::Visits>(world, facility)) {
-        if (isLive(world, held.Handle)) {
-          record->Queue += held.Units;
-        }
-      }
-    });
+  const std::optional<ParkBox> box = parkBox(world, facility);
+  if (!box) {
+    return record;
   }
+  forEachFacility([&]<BoxKind K>() {
+    using Kinds = FacilityKinds<K>;
+    if (box->Kind != K) {
+      return;
+    }
+    record = FacilityRecord{.Places = Kinds::Places};
+    if (const FacilityService *service = world.tryGet<FacilityService>(facility)) {
+      record->Taken = std::ranges::count_if(
+          service->FreeAt, [&world](uint64_t freeAt) { return freeAt > world.Tick; });
+    }
+    for (const FlowStock &held : stocksAt<typename Kinds::Visits>(world, facility)) {
+      if (isLive(world, held.Handle)) {
+        record->Queue += held.Units;
+      }
+    }
+  });
   return record;
 }
 

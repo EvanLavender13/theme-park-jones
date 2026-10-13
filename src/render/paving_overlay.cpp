@@ -253,11 +253,12 @@ OverlayShape buildOverlayShape(const World &world) {
   return shape;
 }
 
-std::optional<Place> overlayPlace(const OverlayShape &shape, GroundPoint point) {
+std::optional<Place> overlayPlace(const OverlayShape &shape, GroundPoint point,
+                                  std::vector<uint32_t> &lines) {
+  lines.clear();
   if (!isfinite(point.X) || !isfinite(point.Z)) {
     return std::nullopt;
   }
-  std::vector<uint32_t> lines;
   for (const OverlayPiece &piece : shape.Pieces) {
     if (holds(piece, point)) {
       lines.insert(lines.end(), shape.LineRefs.begin() + piece.FirstLine,

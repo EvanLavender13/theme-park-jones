@@ -223,6 +223,9 @@ std::vector<ParkBox> parkBoxes(const World &world);
 // nothing once the list has grown.
 void parkEntrances(const World &world, std::vector<ParkEntrance> &entrances);
 void parkBoxes(const World &world, std::vector<ParkBox> &boxes);
+// The box the key holds, as parkBoxes gives it, or none when the key holds no box. Allocates
+// nothing.
+std::optional<ParkBox> parkBox(const World &world, EntityKey key);
 // The keys of the segments of the kind, ascending, into a list the caller keeps, which it clears
 // first. They are the keys parkSegments gives for that kind, without deriving the segments' lines.
 // Allocates nothing once the list has grown.

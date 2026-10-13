@@ -24,7 +24,7 @@ Previews of an edit that changes every frame, such as dragging a path, resolve a
 
 ## Consequences
 
-docs/testing.md's list of mechanical checks gains the allocation check. A feature doesn't add its own allocation test. If a feature adds work to steady play, the check covers it once full.park holds what the feature adds, as keeping full.park current already requires.
+docs/testing.md's list of mechanical checks gains the allocation check. A feature doesn't add its own allocation test. If a feature adds to the tick, the check covers it once full.park holds what the feature adds, as keeping full.park current already requires. If it adds other work to steady play, such as a panel's data or a tool's hover, the feature adds that work to the check.
 
 scalable-runtime's allocation-free-loops milestone builds the check and fixes steady play area by area. Its changing-previews milestone extends the check to previews of a changing edit and to the preview an overlay makes again at each tick. Features in other capabilities wait until allocation-free-loops closes.
 

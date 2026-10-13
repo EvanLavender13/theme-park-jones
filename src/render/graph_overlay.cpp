@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <span>
 #include <vector>
 
 namespace tpj {
@@ -31,7 +32,7 @@ GroundPoint pointAtDepth(GroundPoint behind, GroundPoint ahead, float behindDept
 
 // Adds a line for each segment of the network's carriers with a part in front of the near plane.
 void appendLines(GraphOverlay &overlay, const Network &network, PathKind kind,
-                 const std::vector<EntityKey> &pathKeys, const CameraView &view, float width,
+                 std::span<const EntityKey> pathKeys, const CameraView &view, float width,
                  float height) {
   for (const Carrier &carrier : network.carriers()) {
     for (std::size_t index = 0; index + 1 < carrier.Points.size(); ++index) {
@@ -91,22 +92,20 @@ std::optional<WindowPoint> windowPoint(const CameraView &view, float width, floa
   return WindowPoint{((row(0) / w) + 1.0f) * 0.5f * width, (1.0f - (row(1) / w)) * 0.5f * height};
 }
 
-GraphOverlay buildGraphOverlay(const World &world, const CameraView &view, float width,
-                               float height) {
-  GraphOverlay overlay;
+void buildGraphOverlay(const World &world, const CameraView &view, float width, float height,
+                       std::vector<EntityKey> &pathKeys, GraphOverlay &overlay) {
+  overlay.Lines.clear();
+  overlay.Nodes.clear();
   if (!(width > 0.0f) || !(height > 0.0f)) {
-    return overlay;
-  }
-  // parkSegments gives segments in ascending key order, so their keys can be searched.
-  std::vector<EntityKey> pathKeys;
-  for (const ParkSegment &segment : parkSegments(world)) {
-    pathKeys.push_back(segment.Key);
+    return;
   }
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
+    // A network's carriers are its own kind's segments or connectors, so that kind's keys, which
+    // come ascending, mark its connectors.
+    parkSegmentKeys(world, kind, pathKeys);
     appendLines(overlay, parkNetwork(world, kind), kind, pathKeys, view, width, height);
     appendNodes(overlay, parkNetwork(world, kind), kind, view, width, height);
   }
-  return overlay;
 }
 
 } // namespace tpj

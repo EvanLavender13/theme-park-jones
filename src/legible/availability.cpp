@@ -251,13 +251,14 @@ void addEdgeBends(const Edge &edge, std::span<const StopEntry> atStart,
 
 } // namespace
 
-Availability availabilityAt(const World &world, const AvailabilityDefinition &definition,
-                            const Place &place) {
+void availabilityAt(const World &world, const AvailabilityDefinition &definition,
+                    const Place &place, AvailabilityLists &lists, Availability &availability) {
   const Network &network = parkNetwork(world, PathKind::Guest);
-  Availability availability;
+  availability.Contributions.clear();
+  availability.Value = 0.0;
   EntityKey previous = NULL_KEY;
-  for (const SampledEntry<RouteEntry> &route :
-       sampleField<RouteDistance<PathKind::Guest>>(world, network, place)) {
+  sampleField<RouteDistance<PathKind::Guest>>(world, network, place, lists.Routes);
+  for (const SampledEntry<RouteEntry> &route : lists.Routes.Entries) {
     // Sources come in ascending order, and only a source's first entry counts.
     if (route.Source == previous) {
       continue;
@@ -272,7 +273,6 @@ Availability availabilityAt(const World &world, const AvailabilityDefinition &de
     availability.Value += contribution.Term;
     availability.Contributions.push_back(contribution);
   }
-  return availability;
 }
 
 std::vector<double> availabilityValues(const World &world, const AvailabilityDefinition &definition,

@@ -8,20 +8,34 @@
 #include "sim/park/intent.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <format>
+#include <iterator>
 #include <stddef.h>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace tpj {
 namespace {
 
-std::string keyText(EntityKey key) { return std::format("{}", static_cast<uint64_t>(key)); }
+// The most rows any inspection shows, which a guest's do, the rows of a guest's choice table, and
+// heading home's terms. Each list is reserved to its size, so none grows after the first fill.
+constexpr size_t MOST_ROWS = 11;
+constexpr size_t CHOICE_ROWS = NEEDS.size() + 2;
+constexpr size_t HOME_TERMS = HOME_REASONS.size() + 1;
 
-std::string twoDecimals(double value) { return std::format("{:.2f}", value); }
+// Writes the text in place of what the string held, keeping its memory.
+template <typename... Args>
+void setText(std::string &text, std::format_string<Args...> format, Args &&...args) {
+  text.clear();
+  std::format_to(std::back_inserter(text), format, std::forward<Args>(args)...);
+}
 
-// The seconds a number of ticks lasts, with one decimal.
-std::string seconds(uint64_t ticks) {
-  return std::format("{:.1f}", static_cast<double>(ticks) * SIM_TICK_SECONDS);
+// Writes the text after what the string holds.
+template <typename... Args>
+void appendText(std::string &text, std::format_string<Args...> format, Args &&...args) {
+  std::format_to(std::back_inserter(text), format, std::forward<Args>(args)...);
 }
 
 // The ticks from a past tick to the world's, and 0 for a later one.
@@ -29,32 +43,69 @@ uint64_t ticksSince(const World &world, uint64_t tick) {
   return tick <= world.Tick ? world.Tick - tick : 0;
 }
 
-// An enum's name for display, each '-' a space.
-template <typename Enum> std::string displayName(Enum value) {
-  std::string name(enumNames(value)[static_cast<size_t>(value)]);
-  std::ranges::replace(name, '-', ' ');
-  return name;
+// The seconds a number of ticks lasts.
+double seconds(uint64_t ticks) { return static_cast<double>(ticks) * SIM_TICK_SECONDS; }
+
+// Appends an enum's name for display, each '-' a space.
+template <typename Enum> void appendDisplayName(std::string &text, Enum value) {
+  const size_t start = text.size();
+  text += enumNames(value)[static_cast<size_t>(value)];
+  std::replace(text.begin() + static_cast<std::ptrdiff_t>(start), text.end(), '-', ' ');
 }
 
-// The box's or piece of furniture's kind and key, such as "bench 5" or "table 9", or "box <key>"
-// when neither has the key.
-std::string boxText(const World &world, EntityKey key) {
-  for (const ParkBox &box : parkBoxes(world)) {
-    if (box.Key == key) {
-      return displayName(box.Kind) + " " + keyText(key);
-    }
+// Capitalizes the text's first letter.
+void capitalize(std::string &text) {
+  if (!text.empty() && text[0] >= 'a' && text[0] <= 'z') {
+    text[0] = static_cast<char>(text[0] - 'a' + 'A');
   }
-  for (const FurniturePiece &piece : parkFurniture(world)) {
-    if (piece.Key == key) {
-      return displayName(piece.Kind) + " " + keyText(key);
-    }
+}
+
+// Appends the box's or piece of furniture's kind and key, such as "bench 5" or "table 9", or
+// "box <key>" when neither has the key.
+void appendBoxText(std::string &text, const World &world, EntityKey key) {
+  if (const std::optional<ParkBox> box = parkBox(world, key)) {
+    appendDisplayName(text, box->Kind);
+  } else if (const std::optional<FurniturePiece> piece = furniturePiece(world, key)) {
+    appendDisplayName(text, piece->Kind);
+  } else {
+    text += "box";
   }
-  return "box " + keyText(key);
+  appendText(text, " {}", static_cast<uint64_t>(key));
+}
+
+// The list's next row, its text cleared for the caller to write, reusing a row the list holds.
+template <typename Row> Row &nextRow(std::vector<Row> &rows, size_t &used) {
+  if (used == rows.size()) {
+    rows.emplace_back();
+  }
+  return rows[used++];
+}
+
+InspectorRow &clearedRow(std::vector<InspectorRow> &rows, size_t &used) {
+  InspectorRow &row = nextRow(rows, used);
+  row.Label.clear();
+  row.Value.clear();
+  return row;
+}
+
+// The next row with its label, giving its value cleared for the caller to write.
+std::string &valueOf(std::vector<InspectorRow> &rows, size_t &used, std::string_view label) {
+  InspectorRow &row = clearedRow(rows, used);
+  row.Label.assign(label);
+  return row.Value;
+}
+
+ChoiceRow &clearedChoice(std::vector<ChoiceRow> &rows, size_t &used) {
+  ChoiceRow &row = nextRow(rows, used);
+  for (std::string *cell : {&row.Choice, &row.Target, &row.Relief, &row.Distance, &row.Wait,
+                            &row.Commitment, &row.Score, &row.Probability}) {
+    cell->clear();
+  }
+  return row;
 }
 
 // The pieces the guest remembers as full, each with how long ago it found it full, or "none".
-std::string fullPiecesText(const World &world, const GuestRecord &record) {
-  std::string text;
+void fullPiecesText(std::string &text, const World &world, const GuestRecord &record) {
   for (const FullPiece &full : record.FullPieces) {
     if (full.Piece == NULL_KEY) {
       continue;
@@ -62,64 +113,61 @@ std::string fullPiecesText(const World &world, const GuestRecord &record) {
     if (!text.empty()) {
       text += "; ";
     }
-    text += std::format("{} {} s ago", boxText(world, full.Piece),
-                        seconds(ticksSince(world, full.Found)));
+    appendBoxText(text, world, full.Piece);
+    appendText(text, " {:.1f} s ago", seconds(ticksSince(world, full.Found)));
   }
-  return text.empty() ? "none" : text;
+  if (text.empty()) {
+    text.assign("none");
+  }
 }
 
-std::vector<InspectorRow> guestRows(const World &world, const GuestRecord &record) {
-  std::vector<InspectorRow> rows;
-  rows.push_back({"Activity", displayName(record.Activity)});
-  rows.push_back({"Hunger", twoDecimals(record.Hunger)});
-  rows.push_back({"Thirst", twoDecimals(record.Thirst)});
-  rows.push_back({"Tiredness", twoDecimals(record.Tiredness)});
-  rows.push_back({"Bladder", twoDecimals(record.Bladder)});
+void guestRows(const World &world, const GuestRecord &record, std::vector<InspectorRow> &rows) {
+  size_t used = 0;
+  appendDisplayName(valueOf(rows, used, "Activity"), record.Activity);
+  setText(valueOf(rows, used, "Hunger"), "{:.2f}", record.Hunger);
+  setText(valueOf(rows, used, "Thirst"), "{:.2f}", record.Thirst);
+  setText(valueOf(rows, used, "Tiredness"), "{:.2f}", record.Tiredness);
+  setText(valueOf(rows, used, "Bladder"), "{:.2f}", record.Bladder);
   const ParkTime arrived = parkTime(record.Arrived);
-  rows.push_back({"Arrived", std::format("day {}, {}:{:02}", arrived.Day, arrived.Second / 3600,
-                                         (arrived.Second % 3600) / 60)});
+  setText(valueOf(rows, used, "Arrived"), "day {}, {}:{:02}", arrived.Day, arrived.Second / 3600,
+          (arrived.Second % 3600) / 60);
+  std::string &target = valueOf(rows, used, "Target");
   if (record.Target != NULL_KEY) {
-    rows.push_back(
-        {"Target", boxText(world, record.Target) + " for " + displayName(record.TargetNeed)});
+    appendBoxText(target, world, record.Target);
+    target += " for ";
+    appendDisplayName(target, record.TargetNeed);
   } else if (record.Activity == GuestActivity::HeadingHome) {
-    rows.push_back({"Target", "home for " + displayName(record.Reason)});
+    target += "home for ";
+    appendDisplayName(target, record.Reason);
   } else {
-    rows.push_back({"Target", "none"});
+    target.assign("none");
   }
-  rows.push_back({"Carrying", record.Carrying ? "food" : "nothing"});
-  rows.push_back({"Meals eaten", std::format("{}", record.MealsEaten)});
+  valueOf(rows, used, "Carrying").assign(record.Carrying ? "food" : "nothing");
+  setText(valueOf(rows, used, "Meals eaten"), "{}", record.MealsEaten);
+  std::string &lastMeal = valueOf(rows, used, "Last meal");
   if (const std::optional<GuestMeal> &meal = record.LastMeal) {
-    rows.push_back({"Last meal", std::format("{} s ago, hunger {:.2f} to {:.2f}",
-                                             seconds(ticksSince(world, meal->Tick)), meal->Before,
-                                             meal->After)});
+    setText(lastMeal, "{:.1f} s ago, hunger {:.2f} to {:.2f}",
+            seconds(ticksSince(world, meal->Tick)), meal->Before, meal->After);
   } else {
-    rows.push_back({"Last meal", "none"});
+    lastMeal.assign("none");
   }
-  rows.push_back({"Full pieces", fullPiecesText(world, record)});
-  return rows;
-}
-
-// The name with its first letter capitalized.
-std::string capitalized(std::string name) {
-  if (!name.empty() && name[0] >= 'a' && name[0] <= 'z') {
-    name[0] = static_cast<char>(name[0] - 'a' + 'A');
-  }
-  return name;
+  fullPiecesText(valueOf(rows, used, "Full pieces"), world, record);
+  rows.resize(used);
 }
 
 // The guest's choices as six rows: each need's best offer, seat, or eating now and the chance of
 // any of them, then carrying on and heading home. While the guest carries food, every row but
 // hunger's says so.
-std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOption> &options,
-                                  bool carrying) {
-  std::vector<ChoiceRow> rows;
+void choiceRows(const World &world, const std::vector<ChoiceOption> &options, bool carrying,
+                std::vector<ChoiceRow> &rows) {
+  size_t used = 0;
   for (const GuestNeed need : NEEDS) {
     // HomeReason lists the needs in NEEDS order, so its names give "toilet" for the bladder.
-    ChoiceRow row;
-    row.Choice = capitalized(displayName(static_cast<HomeReason>(need)));
+    ChoiceRow &row = clearedChoice(rows, used);
+    appendDisplayName(row.Choice, static_cast<HomeReason>(need));
+    capitalize(row.Choice);
     if (carrying && need != GuestNeed::Hunger) {
-      row.Target = "carrying food";
-      rows.push_back(std::move(row));
+      row.Target.assign("carrying food");
       continue;
     }
     const ChoiceOption *best = nullptr;
@@ -135,77 +183,91 @@ std::vector<ChoiceRow> choiceRows(const World &world, const std::vector<ChoiceOp
       }
     }
     if (best == nullptr) {
-      row.Target = "no offer";
-    } else {
-      row.Target = best->Kind == ChoiceKind::EatNow ? "eat now" : boxText(world, best->Facility);
-      row.Relief = twoDecimals(best->Relief);
-      row.Distance = twoDecimals(best->Distance);
-      row.Wait = twoDecimals(best->Wait);
-      row.Commitment = twoDecimals(best->Commitment);
-      row.Score = twoDecimals(best->Score);
-      row.Probability = twoDecimals(probability);
+      row.Target.assign("no offer");
+      continue;
     }
-    rows.push_back(std::move(row));
+    if (best->Kind == ChoiceKind::EatNow) {
+      row.Target.assign("eat now");
+    } else {
+      appendBoxText(row.Target, world, best->Facility);
+    }
+    setText(row.Relief, "{:.2f}", best->Relief);
+    setText(row.Distance, "{:.2f}", best->Distance);
+    setText(row.Wait, "{:.2f}", best->Wait);
+    setText(row.Commitment, "{:.2f}", best->Commitment);
+    setText(row.Score, "{:.2f}", best->Score);
+    setText(row.Probability, "{:.2f}", probability);
   }
-  ChoiceRow carryOn;
-  carryOn.Choice = capitalized(displayName(ChoiceKind::CarryOn));
+  ChoiceRow &carryOn = clearedChoice(rows, used);
+  appendDisplayName(carryOn.Choice, ChoiceKind::CarryOn);
+  capitalize(carryOn.Choice);
   if (carrying) {
-    carryOn.Target = "carrying food";
+    carryOn.Target.assign("carrying food");
   }
   const auto carry = std::ranges::find(options, ChoiceKind::CarryOn, &ChoiceOption::Kind);
   if (carry != options.end()) {
-    carryOn.Score = twoDecimals(carry->Score);
-    carryOn.Probability = twoDecimals(carry->Probability);
+    setText(carryOn.Score, "{:.2f}", carry->Score);
+    setText(carryOn.Probability, "{:.2f}", carry->Probability);
   }
-  rows.push_back(std::move(carryOn));
-  ChoiceRow headHome;
-  headHome.Choice = capitalized(displayName(ChoiceKind::HeadHome));
+  ChoiceRow &headHome = clearedChoice(rows, used);
+  appendDisplayName(headHome.Choice, ChoiceKind::HeadHome);
+  capitalize(headHome.Choice);
   const auto home = std::ranges::find(options, ChoiceKind::HeadHome, &ChoiceOption::Kind);
   if (home != options.end()) {
-    headHome.Target = "home for " + displayName(home->Reason);
-    headHome.Commitment = twoDecimals(home->Commitment);
-    headHome.Score = twoDecimals(home->Score);
-    headHome.Probability = twoDecimals(home->Probability);
+    headHome.Target += "home for ";
+    appendDisplayName(headHome.Target, home->Reason);
+    setText(headHome.Commitment, "{:.2f}", home->Commitment);
+    setText(headHome.Score, "{:.2f}", home->Score);
+    setText(headHome.Probability, "{:.2f}", home->Probability);
   } else {
-    headHome.Target = carrying ? "carrying food" : "no route home";
+    headHome.Target.assign(carrying ? "carrying food" : "no route home");
   }
-  rows.push_back(std::move(headHome));
-  return rows;
+  rows.resize(used);
 }
 
 // Heading home's base and each reason's term, or nothing when heading home is not an option.
-std::vector<InspectorRow> homeTerms(const std::vector<ChoiceOption> &options) {
-  std::vector<InspectorRow> rows;
+void homeTerms(const std::vector<ChoiceOption> &options, std::vector<InspectorRow> &rows) {
+  size_t used = 0;
   const auto home = std::ranges::find(options, ChoiceKind::HeadHome, &ChoiceOption::Kind);
-  if (home == options.end()) {
-    return rows;
+  if (home != options.end()) {
+    setText(valueOf(rows, used, "Base"), "{:.2f}", home->Base);
+    for (const HomeReason reason : HOME_REASONS) {
+      InspectorRow &row = clearedRow(rows, used);
+      appendDisplayName(row.Label, reason);
+      capitalize(row.Label);
+      setText(row.Value, "{:.2f}", home->Reasons[static_cast<size_t>(reason)]);
+    }
   }
-  rows.push_back({"Base", twoDecimals(home->Base)});
-  for (const HomeReason reason : HOME_REASONS) {
-    rows.push_back({capitalized(displayName(reason)),
-                    twoDecimals(home->Reasons[static_cast<size_t>(reason)])});
-  }
-  return rows;
+  rows.resize(used);
 }
 
-std::vector<InspectorRow> shopRows(const ShopRecord &record) {
-  std::vector<InspectorRow> rows;
+void shopRows(const ShopRecord &record, std::vector<InspectorRow> &rows) {
+  size_t used = 0;
   for (const Good good : GOODS) {
-    const std::string name = capitalized(displayName(good));
     const GoodRecord &holding = record.Goods[static_cast<size_t>(good)];
-    rows.push_back({name + " stock", std::format("{}", holding.Stock)});
-    rows.push_back({name + " on order", std::format("{}", holding.OnOrder)});
+    InspectorRow &stock = clearedRow(rows, used);
+    appendDisplayName(stock.Label, good);
+    capitalize(stock.Label);
+    stock.Label += " stock";
+    setText(stock.Value, "{}", holding.Stock);
+    InspectorRow &onOrder = clearedRow(rows, used);
+    appendDisplayName(onOrder.Label, good);
+    capitalize(onOrder.Label);
+    onOrder.Label += " on order";
+    setText(onOrder.Value, "{}", holding.OnOrder);
   }
-  rows.push_back({"Queue", std::format("{}", record.Queue)});
-  rows.push_back({"Limit", std::string(limitingFactorName(record.Limit))});
-  rows.push_back({"Starved", record.Starved ? "yes" : "no"});
-  return rows;
+  setText(valueOf(rows, used, "Queue"), "{}", record.Queue);
+  valueOf(rows, used, "Limit").assign(limitingFactorName(record.Limit));
+  valueOf(rows, used, "Starved").assign(record.Starved ? "yes" : "no");
+  rows.resize(used);
 }
 
-std::vector<InspectorRow> facilityRows(const FacilityRecord &record) {
-  return {{"Places", std::format("{}", record.Places)},
-          {"Taken", std::format("{}", record.Taken)},
-          {"Queue", std::format("{}", record.Queue)}};
+void facilityRows(const FacilityRecord &record, std::vector<InspectorRow> &rows) {
+  size_t used = 0;
+  setText(valueOf(rows, used, "Places"), "{}", record.Places);
+  setText(valueOf(rows, used, "Taken"), "{}", record.Taken);
+  setText(valueOf(rows, used, "Queue"), "{}", record.Queue);
+  rows.resize(used);
 }
 
 } // namespace
@@ -240,39 +302,49 @@ void pickSubject(std::optional<InspectorSubject> &subject, const World &world,
   }
 }
 
-Inspection inspectSubject(const World &world, const InspectorSubject &subject) {
-  Inspection inspection;
+void inspectSubject(const World &world, const InspectorSubject &subject, InspectLists &lists,
+                    Inspection &inspection) {
+  inspection.Rows.reserve(MOST_ROWS);
+  inspection.Choices.reserve(CHOICE_ROWS);
+  inspection.HomeTerms.reserve(HOME_TERMS);
+  const auto key = static_cast<uint64_t>(subject.Key);
+  inspection.Gone = true;
+  bool hasChoices = false;
   if (subject.Kind == SubjectKind::Guest) {
-    inspection.Title = "Guest " + keyText(subject.Key);
-    const std::optional<GuestRecord> record = guestRecord(world, subject.Key);
-    inspection.Gone = !record;
-    if (record) {
-      inspection.Rows = guestRows(world, *record);
-      if (const std::optional<std::vector<ChoiceOption>> options =
-              guestOptions(world, subject.Key)) {
-        inspection.Choices = choiceRows(world, *options, record->Carrying);
-        inspection.HomeTerms = homeTerms(*options);
+    setText(inspection.Title, "Guest {}", key);
+    if (const std::optional<GuestRecord> record = guestRecord(world, subject.Key)) {
+      inspection.Gone = false;
+      guestRows(world, *record, inspection.Rows);
+      hasChoices = guestOptions(world, subject.Key, lists.Buffers, lists.Options);
+      if (hasChoices) {
+        choiceRows(world, lists.Options, record->Carrying, inspection.Choices);
+        homeTerms(lists.Options, inspection.HomeTerms);
       }
     }
-    return inspection;
-  }
-  if (subject.Kind == SubjectKind::Bench || subject.Kind == SubjectKind::ToiletBlock) {
+  } else if (subject.Kind == SubjectKind::Bench || subject.Kind == SubjectKind::ToiletBlock) {
     const BoxKind kind = subject.Kind == SubjectKind::Bench ? BoxKind::Bench : BoxKind::ToiletBlock;
-    inspection.Title = capitalized(displayName(kind)) + " " + keyText(subject.Key);
-    const std::optional<FacilityRecord> record = facilityRecord(world, subject.Key);
-    inspection.Gone = !record;
-    if (record) {
-      inspection.Rows = facilityRows(*record);
+    inspection.Title.clear();
+    appendDisplayName(inspection.Title, kind);
+    capitalize(inspection.Title);
+    appendText(inspection.Title, " {}", key);
+    if (const std::optional<FacilityRecord> record = facilityRecord(world, subject.Key)) {
+      inspection.Gone = false;
+      facilityRows(*record, inspection.Rows);
     }
-    return inspection;
+  } else {
+    setText(inspection.Title, "Shop {}", key);
+    if (const std::optional<ShopRecord> record = shopRecord(world, subject.Key, lists.Buffers)) {
+      inspection.Gone = false;
+      shopRows(*record, inspection.Rows);
+    }
   }
-  inspection.Title = "Shop " + keyText(subject.Key);
-  const std::optional<ShopRecord> record = shopRecord(world, subject.Key);
-  inspection.Gone = !record;
-  if (record) {
-    inspection.Rows = shopRows(*record);
+  if (inspection.Gone) {
+    inspection.Rows.clear();
   }
-  return inspection;
+  if (!hasChoices) {
+    inspection.Choices.clear();
+    inspection.HomeTerms.clear();
+  }
 }
 
 } // namespace tpj

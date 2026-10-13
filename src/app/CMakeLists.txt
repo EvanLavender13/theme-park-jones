@@ -11,7 +11,8 @@ add_library(tpj_app_core STATIC
     scene/scene_sync.cpp
     session/park_file.cpp
     session/park_file_requests.cpp
-    session/park_session.cpp)
+    session/park_session.cpp
+    ui/panel_data.cpp)
 target_include_directories(tpj_app_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tpj_app_core PUBLIC tpj_legible tpj_render tpj_sim tpj_tools tpj_views
     PRIVATE SDL3::SDL3)
