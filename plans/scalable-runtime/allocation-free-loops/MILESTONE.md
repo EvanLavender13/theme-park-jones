@@ -18,7 +18,7 @@ allocation-free-loops makes docs/conventions.md's rule against allocating in per
 6. With the pointer held at fixed places, a frame's tool work frees no block it allocated. That covers the pointer's snapping and frontage search, the tentative edit, the highlight, a path tool's marks, and Edit path's handles and hovered handle, for each tool. (ctest)
 7. The panels' data, the Inspector's inspection of a guest, the overlay tooltip's availability, the shop ghost's context, and the Graph view's overlay, repeated, free no block they allocated. The panels' data, such as the guest count, moves out of the tpj_app executable into tpj_app_core, so the check can run it. The app keeps frame times only while --frame-times is on, so ordinary play keeps no list that grows every frame. (ctest)
 8. The simulation is unchanged: tpj_scenarios --compare of windows-debug output from before and after each feature shows no difference. The runtime report on the stress parks is compared before and after the milestone. Each stage's change is reported, and no stage is marked result-changed. `--frame-times` on full.park with the window idle is reported before and after. (check: tpj_scenarios --compare; scripts/runtime-report.sh and its --compare)
-9. Uploading to the GPU in steady play reuses its buffers: the guest mesh at each tick, the overlay's shades at each tick, and the ghost when the look changes. Each upload writes into the buffers the renderer keeps, and makes larger ones only when the data outgrows them. It allocates and frees no heap block and no GPU buffer while the sizes stay within what they have held. (check, in PLAN.md of quiet-uploads)
+9. Uploading to the GPU in steady play reuses its buffers: the guest mesh at each tick, the overlay's shades at each tick, and the ghost when the look changes. Each upload writes into the buffers the renderer keeps, and makes larger ones only when the data outgrows them. It allocates and frees no heap block and no GPU buffer while the sizes stay within what they have held. Drawing a frame without a capture frees no block it allocated either. (ctest)
 10. Every SPEC.md whose public functions take kept buffers says so. src/sim/SPEC.md says that stepWorld's caller keeps its buffers. docs/testing.md and docs/conventions.md describe the check as decision 0041 does. The windows-debug build has no warnings, ctest passes, and tidy is clean.
 
 ## Medium
@@ -43,13 +43,13 @@ quiet-tick. It builds the check, and makes the world's storage and the tick pass
 3. `kept-preview`: the kept preview, the overlay's shades and shape, and the frame's ghost with the edit unchanged, for criterion 5. Depends on: feature 1.
 4. `quiet-tools`: each tool's per-frame work with the pointer held still, for criterion 6. Depends on: feature 1.
 5. `quiet-panels`: the panels' data, the Inspector, the tooltips, the Graph view, and the frame-time log, for criterion 7; and the edits to docs/testing.md and docs/conventions.md in criterion 10. Depends on: features 1 to 4.
-6. `quiet-uploads`: the renderer keeps its GPU buffers, staging buffer, and shade words, and grows them only when the data outgrows them, for criterion 9. Depends on: none.
+6. `quiet-uploads`: the renderer keeps each GPU buffer with a transfer buffer of its own and grows them only when outgrown, records uploads on the frame's command buffer, and the allocation check uploads and draws in a hidden window, counting SDL's allocations, for criterion 9. Depends on: none.
 
 ## Deepening candidates
 
 Unordered pool this milestone draws later features from.
 
-- A frame check of the app itself: run the app hidden with scripted pointer input and count allocations per frame, including uploading and drawing. Gated on: scripted input for the app.
+- A frame check of the app itself: run the app hidden with scripted pointer input and count allocations per frame, including ImGui's own drawing. Gated on: scripted input for the app.
 
 ## Open questions
 

@@ -6,8 +6,8 @@
 #include <stdint.h>
 
 // Watches the program's heap: while watching, every block allocated is noted, and freeing a noted
-// block is found. watch.cpp replaces the global operator new and operator delete to do it, so it
-// sees every allocation in the program.
+// block is found. watch.cpp replaces the global operator new and operator delete, and gives SDL its
+// allocation functions, to see every allocation in the program and in SDL.
 namespace tpj::check {
 
 // A block allocated and freed while watching, with the ticks the watch was at for each, and the
@@ -35,6 +35,15 @@ size_t freedCount();
 std::span<const FreedBlock> freedBlocks();
 // True when more blocks were noted at once than the table holds.
 bool tableOverflowed();
+// Allocation functions with the C library's signatures, which watch the blocks they allocate and
+// free as operator new and delete do. Give them to SDL with SDL_SetMemoryFunctions before SDL
+// allocates anything. A realloc counts as its block growing, as a list moving to a larger block
+// does, so it is never found.
+void *watchedMalloc(size_t size);
+void *watchedCalloc(size_t count, size_t size);
+void *watchedRealloc(void *block, size_t size);
+void watchedFree(void *block);
+
 // Called at each noted block freed while watching. Stop here in a debugger to see who frees it.
 void blockFreed(const FreedBlock &block);
 

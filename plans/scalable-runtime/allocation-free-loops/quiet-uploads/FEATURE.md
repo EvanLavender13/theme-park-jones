@@ -28,7 +28,7 @@ None changes. The feature adds, samples, and publishes no fields or flows.
 
 src/render/SPEC.md:
 
-- After the paragraph that starts "Each of setParkMesh, setGuestMesh, and setGhostMesh replaces the mesh set by its previous call", add "A mesh, shape, or shades set reaches the GPU in the next frame drawFrame draws. The renderer keeps the GPU memory each of them was last uploaded into. If the new one fits that memory, setting it allocates nothing and creates no GPU buffer. Once the renderer's memory has grown, drawing a frame without a capture frees no memory it allocated."
+- After the paragraph that starts "Each of setParkMesh, setGuestMesh, and setGhostMesh replaces the mesh set by its previous call", add "A mesh, shape, or shades set reaches the GPU in the next frame drawFrame draws. The renderer keeps the GPU memory each of them was last uploaded into. Once the renderer's memory has grown to the frames in flight, setting one that fits that memory frees nothing it allocated and creates no GPU buffer. Once the renderer's memory has grown, drawing a frame without a capture frees no memory it allocated."
 
 src/app/SPEC.md:
 

@@ -1,4 +1,5 @@
-# The app's components that need no window, so the app's tests call them through their headers.
+# The app's components that need no window of their own, so the app's tests and checks call them
+# through their headers.
 add_library(tpj_app_core STATIC
     frame_clock.cpp
     frame_times.cpp
@@ -9,6 +10,7 @@ add_library(tpj_app_core STATIC
     input/orbit_camera.cpp
     options.cpp
     scene/scene_sync.cpp
+    scene/scene_uploads.cpp
     session/park_file.cpp
     session/park_file_requests.cpp
     session/park_session.cpp
@@ -23,7 +25,6 @@ add_executable(tpj_app
     input/platform_input.cpp
     main.cpp
     platform.cpp
-    scene/scene_uploads.cpp
     session/park_dialogs.cpp
     ui/debug_panel.cpp
     ui/departures_panel.cpp

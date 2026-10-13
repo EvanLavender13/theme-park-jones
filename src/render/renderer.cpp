@@ -6,8 +6,11 @@
 #include <imgui.h>
 #include <imgui_impl_sdlgpu3.h>
 
+#include <algorithm>
 #include <bit>
+#include <span>
 #include <stddef.h>
+#include <tuple>
 #include <vector>
 
 namespace tpj {
@@ -287,7 +290,6 @@ constexpr uint32_t TERRAIN_VERTICES_PER_SIDE = TERRAIN_CELLS_PER_SIDE + 1;
 constexpr uint32_t TERRAIN_VERTEX_COUNT = TERRAIN_VERTICES_PER_SIDE * TERRAIN_VERTICES_PER_SIDE;
 constexpr uint32_t TERRAIN_INDEX_COUNT = TERRAIN_CELLS_PER_SIDE * TERRAIN_CELLS_PER_SIDE * 6;
 constexpr uint32_t TERRAIN_VERTEX_BYTES = TERRAIN_VERTEX_COUNT * sizeof(TerrainVertex);
-constexpr uint32_t TERRAIN_INDEX_BYTES = TERRAIN_INDEX_COUNT * sizeof(uint32_t);
 
 // Writes a flat grid mesh. Each cell is two triangles wound counter-clockwise when seen from
 // above, so their front faces point up.
@@ -324,167 +326,176 @@ void writeTerrainGeometry(float terrainSize, TerrainVertex *vertices, uint32_t *
   }
 }
 
-SDL_GPUBuffer *createBuffer(SDL_GPUDevice *device, SDL_GPUBufferUsageFlags usage, uint32_t size) {
+// The frame's command buffer, acquired by the frame's first upload or by drawFrame. Null after
+// logging when none can be acquired.
+SDL_GPUCommandBuffer *frameCommands(Renderer &renderer) {
+  if (renderer.Commands == nullptr) {
+    renderer.Commands = SDL_AcquireGPUCommandBuffer(renderer.Device);
+    if (renderer.Commands == nullptr) {
+      logError("Cannot acquire command buffer");
+    }
+  }
+  return renderer.Commands;
+}
+
+void releaseKept(SDL_GPUDevice *device, KeptBuffer &kept) {
+  // SDL_GPU defers the release until the GPU no longer uses the buffers.
+  SDL_ReleaseGPUBuffer(device, kept.Buffer);
+  SDL_ReleaseGPUTransferBuffer(device, kept.Transfer);
+  kept = KeptBuffer{};
+}
+
+// Makes the kept buffer hold at least the bytes. It keeps the buffers it holds when they are large
+// enough, and otherwise replaces them with ones twice the bytes, so a mesh that grows a little, as
+// the guests' does when more arrive, fits without new buffers until it has doubled.
+bool fitBuffer(Renderer &renderer, KeptBuffer &kept, SDL_GPUBufferUsageFlags usage,
+               uint32_t bytes) {
+  if (bytes <= kept.Capacity) {
+    return true;
+  }
+  const uint32_t capacity = 2 * bytes;
+  releaseKept(renderer.Device, kept);
   SDL_GPUBufferCreateInfo info = {};
   info.usage = usage;
-  info.size = size;
-  return SDL_CreateGPUBuffer(device, &info);
-}
-
-// Creates a vertex and an index buffer and uploads their contents in one copy pass.
-bool uploadMesh(SDL_GPUDevice *device, const void *vertices, uint32_t vertexBytes,
-                const void *indices, uint32_t indexBytes, SDL_GPUBuffer *&vertexBuffer,
-                SDL_GPUBuffer *&indexBuffer) {
-  vertexBuffer = createBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, vertexBytes);
-  indexBuffer = createBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, indexBytes);
-
+  info.size = capacity;
+  kept.Buffer = SDL_CreateGPUBuffer(renderer.Device, &info);
   SDL_GPUTransferBufferCreateInfo transferInfo = {};
   transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-  transferInfo.size = vertexBytes + indexBytes;
-  SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
-  if (vertexBuffer == nullptr || indexBuffer == nullptr || transfer == nullptr) {
-    logError("Cannot create mesh buffers");
-    SDL_ReleaseGPUTransferBuffer(device, transfer);
+  transferInfo.size = capacity;
+  kept.Transfer = SDL_CreateGPUTransferBuffer(renderer.Device, &transferInfo);
+  if (kept.Buffer == nullptr || kept.Transfer == nullptr) {
+    logError("Cannot create a kept buffer");
+    releaseKept(renderer.Device, kept);
     return false;
   }
-
-  auto *mapped = static_cast<uint8_t *>(SDL_MapGPUTransferBuffer(device, transfer, false));
-  if (mapped == nullptr) {
-    logError("Cannot map mesh transfer buffer");
-    SDL_ReleaseGPUTransferBuffer(device, transfer);
-    return false;
-  }
-  SDL_memcpy(mapped, vertices, vertexBytes);
-  SDL_memcpy(mapped + vertexBytes, indices, indexBytes);
-  SDL_UnmapGPUTransferBuffer(device, transfer);
-
-  SDL_GPUCommandBuffer *commands = SDL_AcquireGPUCommandBuffer(device);
-  if (commands == nullptr) {
-    logError("Cannot acquire command buffer");
-    SDL_ReleaseGPUTransferBuffer(device, transfer);
-    return false;
-  }
-  SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(commands);
-
-  SDL_GPUTransferBufferLocation source = {};
-  source.transfer_buffer = transfer;
-  SDL_GPUBufferRegion destination = {};
-  destination.buffer = vertexBuffer;
-  destination.size = vertexBytes;
-  SDL_UploadToGPUBuffer(copy, &source, &destination, false);
-
-  source.offset = vertexBytes;
-  destination.buffer = indexBuffer;
-  destination.size = indexBytes;
-  SDL_UploadToGPUBuffer(copy, &source, &destination, false);
-
-  SDL_EndGPUCopyPass(copy);
-  const bool submitted = SDL_SubmitGPUCommandBuffer(commands);
-  SDL_ReleaseGPUTransferBuffer(device, transfer);
-  if (!submitted) {
-    logError("Cannot submit mesh upload");
-  }
-  return submitted;
+  kept.Capacity = capacity;
+  return true;
 }
 
-// Creates a storage buffer the graphics shaders read and uploads the words into it.
-bool uploadStorage(SDL_GPUDevice *device, const std::vector<uint32_t> &words,
-                   SDL_GPUBuffer *&buffer) {
-  const auto bytes = static_cast<uint32_t>(words.size() * sizeof(uint32_t));
-  buffer = createBuffer(device, SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, bytes);
-  SDL_GPUTransferBufferCreateInfo transferInfo = {};
-  transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-  transferInfo.size = bytes;
-  SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
-  if (buffer == nullptr || transfer == nullptr) {
-    logError("Cannot create storage buffer");
-    SDL_ReleaseGPUTransferBuffer(device, transfer);
+// Uploads the bytes write gives into the start of the kept buffer, on the frame's command buffer.
+// Both the transfer buffer and the buffer cycle, so a frame the GPU still draws keeps its data.
+template <typename Write>
+bool uploadKept(Renderer &renderer, KeptBuffer &kept, SDL_GPUBufferUsageFlags usage, uint32_t bytes,
+                Write write) {
+  if (bytes == 0) {
+    return true;
+  }
+  if (!fitBuffer(renderer, kept, usage, bytes)) {
     return false;
   }
-  void *mapped = SDL_MapGPUTransferBuffer(device, transfer, false);
-  if (mapped == nullptr) {
-    logError("Cannot map storage transfer buffer");
-    SDL_ReleaseGPUTransferBuffer(device, transfer);
-    return false;
-  }
-  SDL_memcpy(mapped, words.data(), bytes);
-  SDL_UnmapGPUTransferBuffer(device, transfer);
-  SDL_GPUCommandBuffer *commands = SDL_AcquireGPUCommandBuffer(device);
+  SDL_GPUCommandBuffer *commands = frameCommands(renderer);
   if (commands == nullptr) {
-    logError("Cannot acquire command buffer");
-    SDL_ReleaseGPUTransferBuffer(device, transfer);
     return false;
   }
+  void *mapped = SDL_MapGPUTransferBuffer(renderer.Device, kept.Transfer, true);
+  if (mapped == nullptr) {
+    logError("Cannot map a transfer buffer");
+    return false;
+  }
+  write(mapped);
+  SDL_UnmapGPUTransferBuffer(renderer.Device, kept.Transfer);
   SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(commands);
   SDL_GPUTransferBufferLocation source = {};
-  source.transfer_buffer = transfer;
+  source.transfer_buffer = kept.Transfer;
   SDL_GPUBufferRegion destination = {};
-  destination.buffer = buffer;
+  destination.buffer = kept.Buffer;
   destination.size = bytes;
-  SDL_UploadToGPUBuffer(copy, &source, &destination, false);
+  SDL_UploadToGPUBuffer(copy, &source, &destination, true);
   SDL_EndGPUCopyPass(copy);
-  const bool submitted = SDL_SubmitGPUCommandBuffer(commands);
-  SDL_ReleaseGPUTransferBuffer(device, transfer);
-  if (!submitted) {
-    logError("Cannot submit storage upload");
+  return true;
+}
+
+// Uploads a mesh's vertices and indices into its kept buffers. An empty mesh keeps the buffers and
+// draws nothing.
+bool uploadMesh(Renderer &renderer, KeptMesh &mesh, const void *vertices, uint32_t vertexBytes,
+                std::span<const uint32_t> indices) {
+  mesh.IndexCount = 0;
+  if (indices.empty()) {
+    return true;
   }
-  return submitted;
+  const auto indexBytes = static_cast<uint32_t>(indices.size_bytes());
+  if (!uploadKept(renderer, mesh.Vertices, SDL_GPU_BUFFERUSAGE_VERTEX, vertexBytes,
+                  [&](void *to) { SDL_memcpy(to, vertices, vertexBytes); }) ||
+      !uploadKept(renderer, mesh.Indices, SDL_GPU_BUFFERUSAGE_INDEX, indexBytes,
+                  [&](void *to) { SDL_memcpy(to, indices.data(), indexBytes); })) {
+    return false;
+  }
+  mesh.IndexCount = static_cast<uint32_t>(indices.size());
+  return true;
+}
+
+bool uploadMesh(Renderer &renderer, KeptMesh &kept, const ParkMesh &mesh) {
+  return uploadMesh(renderer, kept, mesh.Vertices.data(),
+                    static_cast<uint32_t>(mesh.Vertices.size() * sizeof(ParkVertex)), mesh.Indices);
 }
 
 uint32_t wordOf(double value) { return std::bit_cast<uint32_t>(static_cast<float>(value)); }
 
+// The words writeShapeWords writes.
+uint32_t shapeWordCount(const OverlayShape &shape) {
+  constexpr size_t PIECE_WORDS = 2 * std::tuple_size_v<decltype(OverlayPiece::Corners)> + 5;
+  return static_cast<uint32_t>(5 + PIECE_WORDS * shape.Pieces.size() + shape.LineRefs.size() +
+                               2 * shape.Lines.size() + 3 * shape.Points.size() +
+                               shape.Overlaps.size());
+}
+
 // The shape as overlay.frag reads it: five offsets, to the pieces, the line references, the
 // lines, the points, and the overlaps, then each of them in turn.
-std::vector<uint32_t> shapeWords(const OverlayShape &shape) {
-  std::vector<uint32_t> words(5, 0);
-  words[0] = static_cast<uint32_t>(words.size());
+void writeShapeWords(const OverlayShape &shape, uint32_t *words) {
+  uint32_t *at = words + 5;
+  const auto offset = [&] { return static_cast<uint32_t>(at - words); };
+  words[0] = offset();
   for (const OverlayPiece &piece : shape.Pieces) {
     for (const ParkPoint &corner : piece.Corners) {
-      words.push_back(wordOf(corner.X));
-      words.push_back(wordOf(corner.Z));
+      *at++ = wordOf(corner.X);
+      *at++ = wordOf(corner.Z);
     }
-    words.insert(words.end(), {piece.Count, piece.FirstLine, piece.LineCount, piece.FirstOverlap,
-                               piece.OverlapCount});
+    *at++ = piece.Count;
+    *at++ = piece.FirstLine;
+    *at++ = piece.LineCount;
+    *at++ = piece.FirstOverlap;
+    *at++ = piece.OverlapCount;
   }
-  words[1] = static_cast<uint32_t>(words.size());
-  words.insert(words.end(), shape.LineRefs.begin(), shape.LineRefs.end());
-  words[2] = static_cast<uint32_t>(words.size());
+  words[1] = offset();
+  at = std::copy(shape.LineRefs.begin(), shape.LineRefs.end(), at);
+  words[2] = offset();
   for (const OverlayLine &line : shape.Lines) {
-    words.insert(words.end(), {line.FirstPoint, line.PointCount});
+    *at++ = line.FirstPoint;
+    *at++ = line.PointCount;
   }
-  words[3] = static_cast<uint32_t>(words.size());
+  words[3] = offset();
   for (const CarrierPoint &point : shape.Points) {
-    words.insert(words.end(), {wordOf(point.X), wordOf(point.Z), wordOf(point.Distance)});
+    *at++ = wordOf(point.X);
+    *at++ = wordOf(point.Z);
+    *at++ = wordOf(point.Distance);
   }
-  words[4] = static_cast<uint32_t>(words.size());
-  words.insert(words.end(), shape.Overlaps.begin(), shape.Overlaps.end());
-  return words;
+  words[4] = offset();
+  std::copy(shape.Overlaps.begin(), shape.Overlaps.end(), at);
+}
+
+// The words writeShadeWords writes.
+uint32_t shadeWordCount(const OverlayShades &shades) {
+  return static_cast<uint32_t>(1 + shades.FirstKnots.size() + 2 * shades.Knots.size());
 }
 
 // The shades as overlay.frag reads them: the offset to the knots, where each line's knots begin
 // and where the last ends, then each knot's distance and value.
-std::vector<uint32_t> shadeWords(const OverlayShades &shades) {
-  std::vector<uint32_t> words;
-  words.reserve(1 + shades.FirstKnots.size() + 2 * shades.Knots.size());
-  words.push_back(static_cast<uint32_t>(1 + shades.FirstKnots.size()));
-  words.insert(words.end(), shades.FirstKnots.begin(), shades.FirstKnots.end());
+void writeShadeWords(const OverlayShades &shades, uint32_t *words) {
+  uint32_t *at = words;
+  *at++ = static_cast<uint32_t>(1 + shades.FirstKnots.size());
+  at = std::copy(shades.FirstKnots.begin(), shades.FirstKnots.end(), at);
   for (const OverlayKnot &knot : shades.Knots) {
-    words.push_back(wordOf(knot.Distance));
-    words.push_back(wordOf(knot.Value));
+    *at++ = wordOf(knot.Distance);
+    *at++ = wordOf(knot.Value);
   }
-  return words;
 }
 
 bool createTerrainMesh(Renderer &renderer, float terrainSize) {
   std::vector<TerrainVertex> vertices(TERRAIN_VERTEX_COUNT);
   std::vector<uint32_t> indices(TERRAIN_INDEX_COUNT);
   writeTerrainGeometry(terrainSize, vertices.data(), indices.data());
-  if (!uploadMesh(renderer.Device, vertices.data(), TERRAIN_VERTEX_BYTES, indices.data(),
-                  TERRAIN_INDEX_BYTES, renderer.TerrainVertices, renderer.TerrainIndices)) {
-    return false;
-  }
-  renderer.TerrainIndexCount = TERRAIN_INDEX_COUNT;
-  return true;
+  // Recorded on the frame's command buffer, so it reaches the GPU with the first frame.
+  return uploadMesh(renderer, renderer.Terrain, vertices.data(), TERRAIN_VERTEX_BYTES, indices);
 }
 
 // (Re)creates the offscreen color and depth targets when the swapchain size changes.
@@ -618,6 +629,9 @@ void destroyRenderer(Renderer &renderer) {
   if (renderer.Device == nullptr) {
     return;
   }
+  if (renderer.Commands != nullptr) {
+    SDL_SubmitGPUCommandBuffer(renderer.Commands);
+  }
   SDL_WaitForGPUIdle(renderer.Device);
   if (renderer.UiInitialized) {
     ImGui_ImplSDLGPU3_Shutdown();
@@ -627,26 +641,17 @@ void destroyRenderer(Renderer &renderer) {
   SDL_ReleaseGPUTexture(renderer.Device, renderer.DepthTarget);
   SDL_ReleaseGPUSampler(renderer.Device, renderer.SceneSampler);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.TonemapPipeline);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.TerrainVertices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.TerrainIndices);
+  for (KeptMesh *mesh : {&renderer.Terrain, &renderer.Park, &renderer.Guests, &renderer.Ghost,
+                         &renderer.Tints, &renderer.Marks, &renderer.Overlay}) {
+    releaseKept(renderer.Device, mesh->Vertices);
+    releaseKept(renderer.Device, mesh->Indices);
+  }
+  releaseKept(renderer.Device, renderer.OverlayShape);
+  releaseKept(renderer.Device, renderer.OverlayShades);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.TerrainPipeline);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayVertices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayIndices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayShape);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayShades);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.OverlayPipeline);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkVertices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.ParkIndices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.GuestVertices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.GuestIndices);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.ParkPipeline);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.GhostVertices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.GhostIndices);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.GhostPipeline);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.TintVertices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.TintIndices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.MarkVertices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.MarkIndices);
   SDL_ReleaseGPUGraphicsPipeline(renderer.Device, renderer.MarksPipeline);
   if (renderer.Window != nullptr) {
     SDL_ReleaseWindowFromGPUDevice(renderer.Device, renderer.Window);
@@ -655,79 +660,39 @@ void destroyRenderer(Renderer &renderer) {
   renderer = Renderer{};
 }
 
-namespace {
-
-// Replaces a mesh's buffers with the mesh's, or with none when it is empty.
-bool replaceMesh(Renderer &renderer, const ParkMesh &mesh, SDL_GPUBuffer *&vertices,
-                 SDL_GPUBuffer *&indices, uint32_t &indexCount) {
-  // SDL_GPU defers the release until the GPU no longer uses the buffers.
-  SDL_ReleaseGPUBuffer(renderer.Device, vertices);
-  SDL_ReleaseGPUBuffer(renderer.Device, indices);
-  vertices = nullptr;
-  indices = nullptr;
-  indexCount = 0;
-  if (mesh.Indices.empty()) {
-    return true;
-  }
-  const auto vertexBytes = static_cast<uint32_t>(mesh.Vertices.size() * sizeof(ParkVertex));
-  const auto indexBytes = static_cast<uint32_t>(mesh.Indices.size() * sizeof(uint32_t));
-  if (!uploadMesh(renderer.Device, mesh.Vertices.data(), vertexBytes, mesh.Indices.data(),
-                  indexBytes, vertices, indices)) {
-    return false;
-  }
-  indexCount = static_cast<uint32_t>(mesh.Indices.size());
-  return true;
-}
-
-} // namespace
-
 bool setParkMesh(Renderer &renderer, const ParkMesh &mesh) {
-  return replaceMesh(renderer, mesh, renderer.ParkVertices, renderer.ParkIndices,
-                     renderer.ParkIndexCount);
+  return uploadMesh(renderer, renderer.Park, mesh);
 }
 
 bool setOverlayShape(Renderer &renderer, const OverlayShape &shape) {
-  // SDL_GPU defers the release until the GPU no longer uses the buffers.
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayVertices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayIndices);
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayShape);
-  renderer.OverlayVertices = nullptr;
-  renderer.OverlayIndices = nullptr;
-  renderer.OverlayShape = nullptr;
-  renderer.OverlayIndexCount = 0;
+  if (!uploadMesh(renderer, renderer.Overlay, shape.Vertices.data(),
+                  static_cast<uint32_t>(shape.Vertices.size() * sizeof(OverlayVertex)),
+                  shape.Indices)) {
+    return false;
+  }
   if (shape.Indices.empty()) {
     return true;
   }
-  const auto vertexBytes = static_cast<uint32_t>(shape.Vertices.size() * sizeof(OverlayVertex));
-  const auto indexBytes = static_cast<uint32_t>(shape.Indices.size() * sizeof(uint32_t));
-  if (!uploadMesh(renderer.Device, shape.Vertices.data(), vertexBytes, shape.Indices.data(),
-                  indexBytes, renderer.OverlayVertices, renderer.OverlayIndices) ||
-      !uploadStorage(renderer.Device, shapeWords(shape), renderer.OverlayShape)) {
-    return false;
-  }
-  renderer.OverlayIndexCount = static_cast<uint32_t>(shape.Indices.size());
-  return true;
+  return uploadKept(renderer, renderer.OverlayShape, SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
+                    shapeWordCount(shape) * static_cast<uint32_t>(sizeof(uint32_t)),
+                    [&](void *to) { writeShapeWords(shape, static_cast<uint32_t *>(to)); });
 }
 
 bool setOverlayShades(Renderer &renderer, const OverlayShades &shades) {
-  SDL_ReleaseGPUBuffer(renderer.Device, renderer.OverlayShades);
-  renderer.OverlayShades = nullptr;
   renderer.OverlayHalf = static_cast<float>(shades.Half);
-  return uploadStorage(renderer.Device, shadeWords(shades), renderer.OverlayShades);
+  return uploadKept(renderer, renderer.OverlayShades, SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
+                    shadeWordCount(shades) * static_cast<uint32_t>(sizeof(uint32_t)),
+                    [&](void *to) { writeShadeWords(shades, static_cast<uint32_t *>(to)); });
 }
 
 bool setGhostMesh(Renderer &renderer, const GhostMesh &ghost) {
-  return replaceMesh(renderer, ghost.Tints, renderer.TintVertices, renderer.TintIndices,
-                     renderer.TintIndexCount) &&
-         replaceMesh(renderer, ghost.Lit, renderer.GhostVertices, renderer.GhostIndices,
-                     renderer.GhostIndexCount) &&
-         replaceMesh(renderer, ghost.Marks, renderer.MarkVertices, renderer.MarkIndices,
-                     renderer.MarkIndexCount);
+  return uploadMesh(renderer, renderer.Tints, ghost.Tints) &&
+         uploadMesh(renderer, renderer.Ghost, ghost.Lit) &&
+         uploadMesh(renderer, renderer.Marks, ghost.Marks);
 }
 
 bool setGuestMesh(Renderer &renderer, const ParkMesh &mesh) {
-  return replaceMesh(renderer, mesh, renderer.GuestVertices, renderer.GuestIndices,
-                     renderer.GuestIndexCount);
+  return uploadMesh(renderer, renderer.Guests, mesh);
 }
 
 void beginUiFrame() { ImGui_ImplSDLGPU3_NewFrame(); }
@@ -735,33 +700,32 @@ void beginUiFrame() { ImGui_ImplSDLGPU3_NewFrame(); }
 namespace {
 
 // Draws a mesh's triangles through a pipeline, or nothing for an empty mesh.
-void drawMesh(SDL_GPURenderPass *pass, SDL_GPUGraphicsPipeline *pipeline, SDL_GPUBuffer *vertices,
-              SDL_GPUBuffer *indices, uint32_t indexCount) {
-  if (indexCount == 0) {
+void drawMesh(SDL_GPURenderPass *pass, SDL_GPUGraphicsPipeline *pipeline, const KeptMesh &mesh) {
+  if (mesh.IndexCount == 0) {
     return;
   }
   SDL_BindGPUGraphicsPipeline(pass, pipeline);
-  const SDL_GPUBufferBinding vertexBinding = {vertices, 0};
+  const SDL_GPUBufferBinding vertexBinding = {mesh.Vertices.Buffer, 0};
   SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
-  const SDL_GPUBufferBinding indexBinding = {indices, 0};
+  const SDL_GPUBufferBinding indexBinding = {mesh.Indices.Buffer, 0};
   SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-  SDL_DrawGPUIndexedPrimitives(pass, indexCount, 1, 0, 0, 0);
+  SDL_DrawGPUIndexedPrimitives(pass, mesh.IndexCount, 1, 0, 0, 0);
 }
 
 // Draws the paving overlay's pieces, colored from its shape and shades, or nothing without them.
 void drawOverlay(SDL_GPURenderPass *pass, const Renderer &renderer) {
-  if (renderer.OverlayIndexCount == 0 || renderer.OverlayShape == nullptr ||
-      renderer.OverlayShades == nullptr) {
+  if (renderer.Overlay.IndexCount == 0 || renderer.OverlayShape.Buffer == nullptr ||
+      renderer.OverlayShades.Buffer == nullptr) {
     return;
   }
-  SDL_GPUBuffer *storage[2] = {renderer.OverlayShape, renderer.OverlayShades};
+  SDL_GPUBuffer *storage[2] = {renderer.OverlayShape.Buffer, renderer.OverlayShades.Buffer};
   SDL_BindGPUGraphicsPipeline(pass, renderer.OverlayPipeline);
   SDL_BindGPUFragmentStorageBuffers(pass, 0, storage, 2);
-  const SDL_GPUBufferBinding vertexBinding = {renderer.OverlayVertices, 0};
+  const SDL_GPUBufferBinding vertexBinding = {renderer.Overlay.Vertices.Buffer, 0};
   SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
-  const SDL_GPUBufferBinding indexBinding = {renderer.OverlayIndices, 0};
+  const SDL_GPUBufferBinding indexBinding = {renderer.Overlay.Indices.Buffer, 0};
   SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-  SDL_DrawGPUIndexedPrimitives(pass, renderer.OverlayIndexCount, 1, 0, 0, 0);
+  SDL_DrawGPUIndexedPrimitives(pass, renderer.Overlay.IndexCount, 1, 0, 0, 0);
 }
 
 void copyRgb(Rgb color, float (&to)[4]) {
@@ -827,16 +791,13 @@ void drawLitScene(const Renderer &renderer, SDL_GPUCommandBuffer *commands,
   depthTarget.cycle = true;
 
   SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(commands, &colorTarget, 1, &depthTarget);
-  drawMesh(pass, renderer.TerrainPipeline, renderer.TerrainVertices, renderer.TerrainIndices,
-           renderer.TerrainIndexCount);
+  drawMesh(pass, renderer.TerrainPipeline, renderer.Terrain);
   // The camera and light uniforms pushed before the pass serve these pipelines too. Guests are
   // opaque boxes, drawn as the park's are, but take only the light's brightness.
-  drawMesh(pass, renderer.ParkPipeline, renderer.ParkVertices, renderer.ParkIndices,
-           renderer.ParkIndexCount);
+  drawMesh(pass, renderer.ParkPipeline, renderer.Park);
   const LightUniforms brightness = lightUniforms(light, true);
   SDL_PushGPUFragmentUniformData(commands, 0, &brightness, sizeof(brightness));
-  drawMesh(pass, renderer.ParkPipeline, renderer.GuestVertices, renderer.GuestIndices,
-           renderer.GuestIndexCount);
+  drawMesh(pass, renderer.ParkPipeline, renderer.Guests);
   SDL_EndGPURenderPass(pass);
 }
 
@@ -882,12 +843,9 @@ void drawOverlayAndGhost(const Renderer &renderer, SDL_GPUCommandBuffer *command
   // the scene's depth holds. Ghosts come after it, so they blend over it.
   SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(commands, &colorTarget, 1, &depthTarget);
   drawOverlay(pass, renderer);
-  drawMesh(pass, renderer.MarksPipeline, renderer.TintVertices, renderer.TintIndices,
-           renderer.TintIndexCount);
-  drawMesh(pass, renderer.GhostPipeline, renderer.GhostVertices, renderer.GhostIndices,
-           renderer.GhostIndexCount);
-  drawMesh(pass, renderer.MarksPipeline, renderer.MarkVertices, renderer.MarkIndices,
-           renderer.MarkIndexCount);
+  drawMesh(pass, renderer.MarksPipeline, renderer.Tints);
+  drawMesh(pass, renderer.GhostPipeline, renderer.Ghost);
+  drawMesh(pass, renderer.MarksPipeline, renderer.Marks);
   SDL_EndGPURenderPass(pass);
 }
 
@@ -922,9 +880,11 @@ void blitToSwapchain(const Renderer &renderer, SDL_GPUCommandBuffer *commands,
 bool drawFrame(Renderer &renderer, const CameraView &camera, const DayLight &light, ImDrawData *ui,
                const char *capturePath) {
   TPJ_PROFILE_ZONE();
-  SDL_GPUCommandBuffer *commands = SDL_AcquireGPUCommandBuffer(renderer.Device);
+  // The frame's uploads are already recorded on its command buffer. The next upload acquires the
+  // next frame's.
+  SDL_GPUCommandBuffer *commands = frameCommands(renderer);
+  renderer.Commands = nullptr;
   if (commands == nullptr) {
-    logError("Cannot acquire command buffer");
     return false;
   }
 
@@ -934,7 +894,8 @@ bool drawFrame(Renderer &renderer, const CameraView &camera, const DayLight &lig
   if (!SDL_WaitAndAcquireGPUSwapchainTexture(commands, renderer.Window, &swapchain, &width,
                                              &height)) {
     logError("Cannot acquire swapchain texture");
-    SDL_CancelGPUCommandBuffer(commands);
+    // Submitted rather than cancelled, so the uploads recorded on it still reach the GPU.
+    SDL_SubmitGPUCommandBuffer(commands);
     return false;
   }
   // A hidden window has no swapchain texture, but its frames are still drawn, at its size, for
@@ -945,7 +906,7 @@ bool drawFrame(Renderer &renderer, const CameraView &camera, const DayLight &lig
     int pixelHeight = 0;
     if (!SDL_GetWindowSizeInPixels(renderer.Window, &pixelWidth, &pixelHeight)) {
       logError("Cannot read the window's size");
-      SDL_CancelGPUCommandBuffer(commands);
+      SDL_SubmitGPUCommandBuffer(commands);
       return false;
     }
     width = static_cast<uint32_t>(pixelWidth);

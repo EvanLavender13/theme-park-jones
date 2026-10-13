@@ -6,19 +6,24 @@
 // each need's with no edit, and food's with a guest path the world refuses, also synced twice.
 // Last come the tools: each tool's frame work with the pointer held still, and the look's marks
 // built again for a look that changes at each tick, as a moving pointer changes it. Then come the
-// panels' data, with a guest, a shop, a bench, and a toilet block inspected. Before all of that,
-// the check adds guest paths with a rounded corner and a taper, which full.park lacks.
+// panels' data, with a guest, a shop, a bench, and a toilet block inspected. After each sync of the
+// scene or of a held preview, the check uploads what the app's frame uploads and draws the frame,
+// in a hidden window, with SDL's allocations counted too. Before all of that, the check adds guest
+// paths with a rounded corner and a taper, which full.park lacks.
 
 #include "watch.h"
 
 #include "app/input/interaction.h"
 #include "app/input/orbit_camera.h"
 #include "app/scene/scene_sync.h"
+#include "app/scene/scene_uploads.h"
 #include "app/session/park_session.h"
 #include "app/ui/panel_data.h"
 #include "legible/arrivals.h"
 #include "legible/inspect.h"
 #include "legible/preview.h"
+#include "render/day_light.h"
+#include "render/renderer.h"
 #include "sim/entity_key.h"
 #include "sim/guests/guests.h"
 #include "sim/park/edits.h"
@@ -29,6 +34,9 @@
 #include "sim/save.h"
 #include "sim/world.h"
 #include "tools/tools.h"
+
+#include <SDL3/SDL.h>
+#include <imgui.h>
 
 #include <algorithm>
 #include <array>
@@ -63,9 +71,86 @@ std::string readText(const char *path) {
   return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
+// A hidden window and the renderer that draws into it, as the app makes them for --capture.
+class HiddenFrame {
+public:
+  HiddenFrame() {
+    Video = SDL_Init(SDL_INIT_VIDEO);
+    if (Video) {
+      Window = SDL_CreateWindow("allocation check", 1280, 720, SDL_WINDOW_HIDDEN);
+    }
+    if (Window != nullptr) {
+      ImGui::CreateContext();
+      Ui = true;
+      Ready = tpj::createRenderer(Gpu, Window, 256.0f);
+    }
+    if (!Ready) {
+      const std::string error = SDL_GetError();
+      release();
+      throw std::runtime_error("cannot create the hidden window and renderer: " + error);
+    }
+  }
+  ~HiddenFrame() { release(); }
+  HiddenFrame(const HiddenFrame &) = delete;
+  HiddenFrame &operator=(const HiddenFrame &) = delete;
+  HiddenFrame(HiddenFrame &&) = delete;
+  HiddenFrame &operator=(HiddenFrame &&) = delete;
+
+  tpj::Renderer Gpu;
+  tpj::OrbitCamera Camera;
+
+private:
+  void release() {
+    tpj::destroyRenderer(Gpu);
+    if (Ui) {
+      ImGui::DestroyContext();
+      Ui = false;
+    }
+    if (Window != nullptr) {
+      SDL_DestroyWindow(Window);
+      Window = nullptr;
+    }
+    if (Video) {
+      SDL_Quit();
+      Video = false;
+    }
+  }
+
+  bool Video = false;
+  SDL_Window *Window = nullptr;
+  bool Ui = false;
+  bool Ready = false;
+};
+
+// Draws the frame after its uploads, as drawFrame does for the app, then waits for the GPU to
+// finish it. The wait keeps one frame in flight. A hidden window's frames don't wait for the
+// screen, so without it SDL's cycling would make new internal buffers whenever the GPU fell
+// further behind than in the warm-up, and the result would depend on GPU timing.
+void drawWaited(HiddenFrame &frame, const tpj::ParkSession &session, bool uploaded,
+                const char *work) {
+  tpj::check::watchWork("the drawing");
+  if (!uploaded ||
+      !tpj::drawFrame(frame.Gpu, tpj::orbitCameraView(frame.Camera),
+                      tpj::dayLightOf(session.world()), nullptr, nullptr) ||
+      !SDL_WaitForGPUIdle(frame.Gpu.Device)) {
+    throw std::runtime_error("the hidden frame failed to upload or draw");
+  }
+  tpj::check::watchWork(work);
+}
+
 // The scene's sync after a frame, as the app runs it.
-void syncScene(tpj::SceneSync &scene, const tpj::ParkSession &session) {
-  scene.syncWorld(session.world(), session.generation(), session.edits());
+tpj::WorldMeshes syncScene(tpj::SceneSync &scene, const tpj::ParkSession &session) {
+  return scene.syncWorld(session.world(), session.generation(), session.edits());
+}
+
+// The frame after a sync of the scene, as the app's frame runs it: the uploads, then the drawing.
+// Sets the watch's work back to the work given.
+void drawScene(HiddenFrame &frame, const tpj::SceneSync &scene, const tpj::ParkSession &session,
+               const tpj::WorldMeshes &meshes, const char *work) {
+  tpj::check::watchWork("the uploads");
+  const bool uploaded =
+      tpj::uploadWorldMeshes(frame.Gpu, session.world(), meshes, scene.guestMesh(), frame.Camera);
+  drawWaited(frame, session, uploaded, work);
 }
 
 // An edit held still and the look around it, with the scene that keeps its preview.
@@ -75,10 +160,16 @@ struct HeldPreview {
   tpj::PreviewLook Look;
 };
 
+// What a held preview's sync gives the frame's uploads.
+struct SyncedPreview {
+  tpj::PreviewMeshes Meshes;
+  bool ShapeChanged = false;
+};
+
 // The held preview's sync after a frame, as the app runs it: the scene's world, the preview,
 // following ticks while an overlay shows, the overlay's shape before and after the panels, and the
 // ghost and shades.
-void syncPreview(HeldPreview &held, const tpj::ParkSession &session) {
+SyncedPreview syncPreview(HeldPreview &held, const tpj::ParkSession &session) {
   const tpj::World &world = session.world();
   held.Scene.syncWorld(world, session.generation(), session.edits());
   const bool shown = held.Look.Overlay.has_value();
@@ -88,7 +179,24 @@ void syncPreview(HeldPreview &held, const tpj::ParkSession &session) {
   shapeChanged =
       held.Scene.syncOverlayShape(tpj::previewedWorld(world, held.Scene.preview()), shown) ||
       shapeChanged;
-  static_cast<void>(held.Scene.syncLook(world, remade, held.Look, shapeChanged));
+  return {held.Scene.syncLook(world, remade, held.Look, shapeChanged), shapeChanged};
+}
+
+// The frame after a held preview's sync, as the app's frame runs it: the uploads, then the
+// drawing. Sets the watch's work back to the work given.
+void drawPreview(HiddenFrame &frame, const HeldPreview &held, const tpj::ParkSession &session,
+                 const SyncedPreview &synced, const char *work) {
+  tpj::check::watchWork("the uploads");
+  const bool uploaded =
+      tpj::uploadPreviewMeshes(frame.Gpu, held.Scene, synced.Meshes, synced.ShapeChanged);
+  drawWaited(frame, session, uploaded, work);
+}
+
+// A held preview's sync and the frame after it.
+void syncAndDraw(HiddenFrame &frame, HeldPreview &held, const tpj::ParkSession &session,
+                 const char *work) {
+  const SyncedPreview synced = syncPreview(held, session);
+  drawPreview(frame, held, session, synced, work);
 }
 
 // The look around a held edit: its box or point highlighted, a handle of each kind there, the
@@ -471,6 +579,7 @@ void panelFrame(HeldPanel &held, const tpj::ParkSession &session, const PanelPla
 // The scene and the previews steady play keeps, each synced after every tick as the app syncs it,
 // the held tools, and the held panels.
 struct SteadyPlay {
+  HiddenFrame Frame;
   tpj::SceneSync Scene;
   std::vector<HeldPreview> Held = std::vector<HeldPreview>(2);
   std::vector<HeldPreview> Overlays = std::vector<HeldPreview>(tpj::NEEDS.size() + 1);
@@ -512,33 +621,49 @@ void syncTools(SteadyPlay &play, const tpj::ParkSession &session) {
     toolFrame(held, session);
   }
   play.Moving.Look = play.MovingLooks.at(session.world().Tick % 2);
-  syncPreview(play.Moving, session);
+  syncAndDraw(play.Frame, play.Moving, session, "the tools");
 }
 
-// Steps the park through the warm-up, syncing as the watched ticks do, so the kept lists grow to
-// what the park needs. Throws when the held shop move shows no connected shop context, or the held
-// panels would check nothing.
+// One tick of steady play and the frames after it, as the warm-up and the watched ticks both run
+// it: the tick, the scene's sync, the held previews, the overlays at every OVERLAY_TICKS ticks, the
+// tools, and the panels, with each sync's frame uploaded and drawn.
+void steadyTick(SteadyPlay &play, tpj::ParkSession &session, uint64_t tick) {
+  tpj::check::watchWork("the tick");
+  session.step();
+  tpj::check::watchWork("the scene's sync");
+  for (int frame = 0; frame < 2; ++frame) {
+    const tpj::WorldMeshes meshes = syncScene(play.Scene, session);
+    drawScene(play.Frame, play.Scene, session, meshes, "the scene's sync");
+  }
+  tpj::check::watchWork("the preview");
+  for (HeldPreview &edit : play.Held) {
+    syncAndDraw(play.Frame, edit, session, "the preview");
+    syncAndDraw(play.Frame, edit, session, "the preview");
+  }
+  if (tick % OVERLAY_TICKS == 0) {
+    tpj::check::watchWork("the overlay");
+    for (HeldPreview &overlay : play.Overlays) {
+      syncAndDraw(play.Frame, overlay, session, "the overlay");
+      syncAndDraw(play.Frame, overlay, session, "the overlay");
+    }
+  }
+  tpj::check::watchWork("the tools");
+  syncTools(play, session);
+  tpj::check::watchWork("the panels");
+  syncPanels(play, session);
+}
+
+// Steps the park through the warm-up as the watched ticks step it, so the kept lists and the
+// renderer's buffers and pools grow to what the park needs. Throws when the held shop move shows no
+// connected shop context, or the held panels would check nothing.
 void warmUp(SteadyPlay &play, tpj::ParkSession &session) {
   for (uint64_t tick = 0; tick < WARM_TICKS; ++tick) {
-    session.step();
-    syncScene(play.Scene, session);
-    for (HeldPreview &edit : play.Held) {
-      syncPreview(edit, session);
-    }
+    steadyTick(play, session, tick);
     if (tick == 0) {
       const tpj::Preview &moved = play.Held[0].Scene.preview();
       if (!moved.Candidate || !moved.Shop || !moved.Shop->Connection) {
         throw std::runtime_error("the held shop move has no connected shop context");
       }
-    }
-    if (tick % OVERLAY_TICKS == 0) {
-      for (HeldPreview &overlay : play.Overlays) {
-        syncPreview(overlay, session);
-      }
-    }
-    syncTools(play, session);
-    syncPanels(play, session);
-    if (tick == 0) {
       requireShownPanels(play, session);
     }
   }
@@ -560,10 +685,9 @@ int report() {
     }
     return 1;
   }
-  std::cout
-      << "allocation check: " << WATCHED_TICKS
-      << " ticks of full.park, the scene's sync, the preview, the overlays, the tools, and the "
-         "panels freed no block they allocated\n";
+  std::cout << "allocation check: " << WATCHED_TICKS
+            << " ticks of full.park, the scene's sync, the preview, the overlays, the tools, the "
+               "panels, the uploads, and the drawing freed no block they allocated\n";
   return 0;
 }
 
@@ -584,27 +708,7 @@ int checkTicks(tpj::ParkSession &session) {
   tpj::check::startWatching(session.world().Tick);
   for (uint64_t tick = 0; tick < WATCHED_TICKS; ++tick) {
     tpj::check::watchTick(session.world().Tick);
-    tpj::check::watchWork("the tick");
-    session.step();
-    tpj::check::watchWork("the scene's sync");
-    syncScene(play.Scene, session);
-    syncScene(play.Scene, session);
-    tpj::check::watchWork("the preview");
-    for (HeldPreview &edit : play.Held) {
-      syncPreview(edit, session);
-      syncPreview(edit, session);
-    }
-    if (tick % OVERLAY_TICKS == 0) {
-      tpj::check::watchWork("the overlay");
-      for (HeldPreview &overlay : play.Overlays) {
-        syncPreview(overlay, session);
-        syncPreview(overlay, session);
-      }
-    }
-    tpj::check::watchWork("the tools");
-    syncTools(play, session);
-    tpj::check::watchWork("the panels");
-    syncPanels(play, session);
+    steadyTick(play, session, tick);
   }
   tpj::check::stopWatching();
   return report();
@@ -613,6 +717,11 @@ int checkTicks(tpj::ParkSession &session) {
 } // namespace
 
 int main() {
+  if (!SDL_SetMemoryFunctions(tpj::check::watchedMalloc, tpj::check::watchedCalloc,
+                              tpj::check::watchedRealloc, tpj::check::watchedFree)) {
+    std::cout << "allocation check: cannot give SDL the watched memory functions\n";
+    return 2;
+  }
   try {
     const std::string text = readText(TPJ_PARKS_DIR "/stress/full.park");
     tpj::World world = tpj::loadWorld(tpj::makeParkSchema(), text);

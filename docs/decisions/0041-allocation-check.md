@@ -16,7 +16,7 @@ CLAUDE.md says that if a machine can check a rule, the rule goes into a test, ho
 
 A mechanical check joins tests/checks: the allocation check. It is its own executable, so it can count every heap allocation and free by replacing the global operator new and operator delete. It runs in ctest with windows-debug, so the pre-push hook blocks a change that breaks it.
 
-The check covers all the work the app repeats in steady play: the park running with nothing changing but the clock, the pointer's hover, and the views. That includes the tick, the scene's sync, the guest mesh, the pointer and the tool's hover, the kept preview, the overlay and the ghost, the panels' data, the Inspector, and the tooltips. It runs each piece of that work on tests/parks/stress/full.park after a warm-up, repeated with the same buffers, and fails if a heap block is both allocated and freed during the repeats. A list growing is the one exception, since the conventions let a list grow while it is smaller than its largest. If the heap call just before a free allocated a larger block, still live, that holds the freed block's contents as a growing vector leaves them, the free is that list moving, and it passes. Only uploading meshes, drawing, and ImGui's own drawing stay outside it.
+The check covers all the work the app repeats in steady play: the park running with nothing changing but the clock, the pointer's hover, and the views. That includes the tick, the scene's sync, the guest mesh, the pointer and the tool's hover, the kept preview, the overlay and the ghost, the panels' data, the Inspector, and the tooltips. It runs each piece of that work on tests/parks/stress/full.park after a warm-up, repeated with the same buffers, and fails if a heap block is both allocated and freed during the repeats. A list growing is the one exception, since the conventions let a list grow while it is smaller than its largest. If the heap call just before a free allocated a larger block, still live, that holds the freed block's contents as a growing vector leaves them, the free is that list moving, and it passes. The check also creates a hidden window and a renderer, uploads what the app's frame uploads after each sync, and draws the frame. It counts SDL's allocations as well as operator new, by giving SDL its memory functions, so a GPU buffer made and released is found. Only ImGui's own drawing stays outside it.
 
 The check lands area by area. Each feature that adds an area to the check makes that area pass in the same change, so the check never fails on main.
 
@@ -25,6 +25,8 @@ Previews of an edit that changes every frame, such as dragging a path, resolve a
 ## Consequences
 
 docs/testing.md's list of mechanical checks gains the allocation check. A feature doesn't add its own allocation test. If a feature adds to the tick, the check covers it once full.park holds what the feature adds, as keeping full.park current already requires. If it adds other work to steady play, such as a panel's data or a tool's hover, the feature adds that work to the check.
+
+Code the check doesn't run follows the rule all the same. If a milestone leaves work outside the check, it reads that code before it closes.
 
 scalable-runtime's allocation-free-loops milestone builds the check and fixes steady play area by area. Its changing-previews milestone extends the check to previews of a changing edit and to the preview an overlay makes again at each tick. Features in other capabilities wait until allocation-free-loops closes.
 

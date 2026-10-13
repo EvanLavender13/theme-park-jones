@@ -10,10 +10,12 @@
 
 struct ImDrawData;
 struct SDL_GPUBuffer;
+struct SDL_GPUCommandBuffer;
 struct SDL_GPUDevice;
 struct SDL_GPUGraphicsPipeline;
 struct SDL_GPUSampler;
 struct SDL_GPUTexture;
+struct SDL_GPUTransferBuffer;
 struct SDL_Window;
 
 namespace tpj {
@@ -26,40 +28,42 @@ struct CameraView {
   float FarZ = 2000.0f;
 };
 
+// A GPU buffer the renderer keeps, the transfer buffer that fills it, and the bytes both hold.
+struct KeptBuffer {
+  SDL_GPUBuffer *Buffer = nullptr;
+  SDL_GPUTransferBuffer *Transfer = nullptr;
+  uint32_t Capacity = 0;
+};
+
+// A mesh's kept vertex and index buffers, and the indices last uploaded.
+struct KeptMesh {
+  KeptBuffer Vertices;
+  KeptBuffer Indices;
+  uint32_t IndexCount = 0;
+};
+
 // The scene renders in linear light into a float target, which is tonemapped into an offscreen
 // color target. The overlay, ghosts, and UI draw over that, and it is then blitted to the
 // swapchain, which lets any frame be read back for captures.
 struct Renderer {
   SDL_Window *Window = nullptr;
   SDL_GPUDevice *Device = nullptr;
+  // The frame's command buffer, once an upload or drawFrame has acquired it. drawFrame submits it.
+  SDL_GPUCommandBuffer *Commands = nullptr;
   SDL_GPUGraphicsPipeline *TerrainPipeline = nullptr;
-  SDL_GPUBuffer *TerrainVertices = nullptr;
-  SDL_GPUBuffer *TerrainIndices = nullptr;
-  uint32_t TerrainIndexCount = 0;
+  KeptMesh Terrain;
   SDL_GPUGraphicsPipeline *ParkPipeline = nullptr;
-  SDL_GPUBuffer *ParkVertices = nullptr;
-  SDL_GPUBuffer *ParkIndices = nullptr;
-  uint32_t ParkIndexCount = 0;
-  SDL_GPUBuffer *GuestVertices = nullptr;
-  SDL_GPUBuffer *GuestIndices = nullptr;
-  uint32_t GuestIndexCount = 0;
+  KeptMesh Park;
+  KeptMesh Guests;
   SDL_GPUGraphicsPipeline *GhostPipeline = nullptr;
-  SDL_GPUBuffer *GhostVertices = nullptr;
-  SDL_GPUBuffer *GhostIndices = nullptr;
-  uint32_t GhostIndexCount = 0;
+  KeptMesh Ghost;
   SDL_GPUGraphicsPipeline *MarksPipeline = nullptr;
-  SDL_GPUBuffer *TintVertices = nullptr;
-  SDL_GPUBuffer *TintIndices = nullptr;
-  SDL_GPUBuffer *MarkVertices = nullptr;
-  SDL_GPUBuffer *MarkIndices = nullptr;
-  uint32_t TintIndexCount = 0;
-  uint32_t MarkIndexCount = 0;
+  KeptMesh Tints;
+  KeptMesh Marks;
   SDL_GPUGraphicsPipeline *OverlayPipeline = nullptr;
-  SDL_GPUBuffer *OverlayVertices = nullptr;
-  SDL_GPUBuffer *OverlayIndices = nullptr;
-  uint32_t OverlayIndexCount = 0;
-  SDL_GPUBuffer *OverlayShape = nullptr;
-  SDL_GPUBuffer *OverlayShades = nullptr;
+  KeptMesh Overlay;
+  KeptBuffer OverlayShape;
+  KeptBuffer OverlayShades;
   float OverlayHalf = 1.0f;
   SDL_GPUGraphicsPipeline *TonemapPipeline = nullptr;
   SDL_GPUSampler *SceneSampler = nullptr;
@@ -78,24 +82,30 @@ struct Renderer {
 bool createRenderer(Renderer &renderer, SDL_Window *window, float terrainSize);
 void destroyRenderer(Renderer &renderer);
 
-// Uploads the park mesh drawn from now on, replacing the one before. An empty mesh draws
-// nothing. Returns false and logs through SDL on failure.
+// Uploads the park mesh drawn from the next frame on, replacing the one before. An empty mesh
+// draws nothing. Returns false and logs through SDL on failure. It reuses the buffers the renderer
+// keeps, and makes larger ones only when the data outgrows them.
 bool setParkMesh(Renderer &renderer, const ParkMesh &mesh);
 
-// Uploads the paving overlay's shape drawn from now on, replacing the one before, drawn opaque over
-// the guest paving and under its edge lines. An empty shape draws nothing. Returns false and logs
-// through SDL on failure.
+// Uploads the paving overlay's shape drawn from the next frame on, replacing the one before, drawn
+// opaque over the guest paving and under its edge lines. An empty shape draws nothing. Returns
+// false and logs through SDL on failure. It reuses the buffers the renderer keeps, and makes larger
+// ones only when the data outgrows them.
 bool setOverlayShape(Renderer &renderer, const OverlayShape &shape);
-// Uploads the shades the overlay's shape is colored by from now on, replacing the ones before. They
-// must be the shades of the shape last set. Returns false and logs through SDL on failure.
+// Uploads the shades the overlay's shape is colored by from the next frame on, replacing the ones
+// before. They must be the shades of the shape last set. Returns false and logs through SDL on
+// failure. It reuses the buffers the renderer keeps, and makes larger ones only
+// when the data outgrows them.
 bool setOverlayShades(Renderer &renderer, const OverlayShades &shades);
 
-// Uploads the translucent ghost drawn from now on, its tints, the park it previews, and its marks,
-// replacing the one before. An empty part draws nothing. Returns false and logs through SDL on
-// failure.
+// Uploads the translucent ghost drawn from the next frame on, its tints, the park it previews, and
+// its marks, replacing the one before. An empty part draws nothing. Returns false and logs through
+// SDL on failure. It reuses the buffers the renderer keeps, and makes larger ones only
+// when the data outgrows them.
 bool setGhostMesh(Renderer &renderer, const GhostMesh &ghost);
-// Uploads the guests' mesh drawn from now on, replacing the one before. An empty mesh draws
-// nothing. Returns false and logs through SDL on failure.
+// Uploads the guests' mesh drawn from the next frame on, replacing the one before. An empty mesh
+// draws nothing. Returns false and logs through SDL on failure. It reuses the buffers the renderer
+// keeps, and makes larger ones only when the data outgrows them.
 bool setGuestMesh(Renderer &renderer, const ParkMesh &mesh);
 
 // Starts the GPU backend's part of an ImGui frame. Call before ImGui::NewFrame.
