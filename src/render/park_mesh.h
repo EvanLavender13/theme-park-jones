@@ -9,6 +9,7 @@
 #include "sim/world.h"
 
 #include <optional>
+#include <span>
 #include <stdint.h>
 #include <vector>
 
@@ -148,8 +149,10 @@ inline constexpr double SIDE_MARK_WIDTH = 0.3;
 // Adds a strip along the inside of each side of the segment, in the color, twice GHOST_LIFT above
 // its kind's paths. Nothing when it has no ground line.
 void appendSides(ParkMesh &mesh, const ParkSegment &segment, Rgba color);
-// The same strips for the segment the key holds. Nothing when the key holds no segment.
-void appendSides(ParkMesh &mesh, const World &world, EntityKey segment, Rgba color);
+// The same strips for the segment the key holds among the segments, as parkSegments gives them.
+// Nothing when the key holds no segment. Allocates nothing once the mesh has grown.
+void appendSides(ParkMesh &mesh, std::span<const ParkSegment> segments, EntityKey segment,
+                 Rgba color);
 
 // Ghost and highlighted segments lie this far above the park's paths, so they never tie in depth
 // with the ribbons and joints beneath them.
@@ -211,6 +214,10 @@ ParkMesh buildParkMesh(const World &world);
 // draws it, a segment as its own pieces of the paved surface GHOST_LIFT higher, and a path point
 // as a flat disc of JOIN_MARK_RADIUS at JOIN_MARK_LIFT. Nothing when the key holds none of these.
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
+// As appendEntity, reading the boxes and path points from lists as parkBoxes and parkPathPoints
+// give them. Allocates nothing once the mesh has grown.
+void appendEntity(ParkMesh &mesh, const World &world, std::span<const ParkBox> boxes,
+                  std::span<const ParkPathPoint> points, EntityKey key, Rgba color);
 
 // Adds more's triangles after the mesh's, with their indices offset by the mesh's vertex count.
 void appendMesh(ParkMesh &mesh, const ParkMesh &more);

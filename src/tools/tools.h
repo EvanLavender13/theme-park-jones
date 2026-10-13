@@ -7,8 +7,12 @@
 #include "sim/routes/networks.h"
 #include "sim/world.h"
 
+#include <array>
+#include <memory>
 #include <numbers>
 #include <optional>
+#include <span>
+#include <stddef.h>
 #include <stdint.h>
 #include <vector>
 
@@ -136,14 +140,17 @@ struct SnapHold {
   bool operator==(const SnapHold &) const = default;
 };
 
-// The snap in effect: where the stop or point lands, the stop it makes, the guides it shows, and
-// what it holds to. While snapping is off, it lands at the pointer as a new point, with no guides
-// and no holds.
+// The snap in effect: where the stop or point lands, the stop it makes, the first GuideCount
+// guides it shows, and the first HoldCount things it holds to. While snapping is off, it lands at
+// the pointer as a new point, with no guides and no holds. No snap has more than two of either, so
+// a snap is a plain value.
 struct PointerSnap {
   ParkPoint At;
   PathStop Stop;
-  std::vector<SnapGuide> Guides;
-  std::vector<SnapHold> Holds;
+  std::array<SnapGuide, 2> Guides{};
+  size_t GuideCount = 0;
+  std::array<SnapHold, 2> Holds{};
+  size_t HoldCount = 0;
 
   bool operator==(const PointerSnap &) const = default;
 };
@@ -210,31 +217,65 @@ struct ToolState {
   FurnishChoice Furnish;
 };
 
+// The lists the tools reuse from call to call, private to the tools.
+struct ToolLists;
+
+// The park as the tools read it: its path points, segments, corners, edges, tapers, and boxes, in
+// the order sim/park gives them, and the doors serving each kind, as parkDoors gives them, with the
+// lists the tools reuse from call to call. The caller keeps it and fills it again with keepToolPark
+// whenever the world's intent changes. It can be moved but not copied.
+struct ToolPark {
+  ToolPark();
+  ~ToolPark();
+  ToolPark(ToolPark &&) noexcept;
+  ToolPark &operator=(ToolPark &&) noexcept;
+  ToolPark(const ToolPark &) = delete;
+  ToolPark &operator=(const ToolPark &) = delete;
+
+  std::vector<ParkPathPoint> Points;
+  std::vector<ParkSegment> Segments;
+  std::vector<ParkCorner> Corners;
+  std::vector<ParkEdge> Edges;
+  std::vector<ParkTaper> Tapers;
+  std::vector<ParkBox> Boxes;
+  std::vector<ParkDoor> GuestDoors;
+  std::vector<ParkDoor> BackstageDoors;
+  std::unique_ptr<ToolLists> Lists;
+};
+
+// Fills the park from the world's intent.
+void keepToolPark(const World &world, ToolPark &park);
+
 // Sets the tool, dropping any hold without committing.
 void selectTool(ToolState &tool, ToolKind kind);
 // Records the pointer's sample: where it meets the ground, or none off the ground or over a panel,
 // the meters a pixel spans there, and whether snapping is off. Then finds the snap in effect.
-void movePointer(ToolState &tool, const World &world, const PointerSample &pointer);
+void movePointer(ToolState &tool, ToolPark &park, const World &world, const PointerSample &pointer);
 // The primary button went down. A path tool adds no stop that would make the world refuse its path.
-void pressPointer(ToolState &tool, const World &world);
+void pressPointer(ToolState &tool, ToolPark &park, const World &world);
 // The primary button went up: the edit to commit, which is the tentative edit of the moment
 // before when the press took hold.
-std::optional<ParkEdit> releasePointer(ToolState &tool, const World &world);
+std::optional<ParkEdit> releasePointer(ToolState &tool, ToolPark &park, const World &world);
 
 // Sets what the Furnish tool lays.
 void setFurnishChoice(ToolState &tool, const FurnishChoice &choice);
 
+// Puts the edit the ghost shows in edit. If edit holds an AddPath and the tool's edit is one, it
+// refills that AddPath's stops in place, so they allocate nothing once grown.
+void tentativeEdit(const ToolState &tool, ToolPark &park, const World &world,
+                   std::optional<ParkEdit> &edit);
 // The edit the ghost shows.
-std::optional<ParkEdit> tentativeEdit(const ToolState &tool, const World &world);
+std::optional<ParkEdit> tentativeEdit(const ToolState &tool, ToolPark &park, const World &world);
 // The entity the tool marks.
-std::optional<EntityKey> highlightedEntity(const ToolState &tool, const World &world);
+std::optional<EntityKey> highlightedEntity(const ToolState &tool, const ToolPark &park,
+                                           const World &world);
 
 // The first box in key order whose footprint holds the point.
-std::optional<EntityKey> boxAt(const World &world, ParkPoint point);
+std::optional<EntityKey> boxAt(const ToolPark &park, ParkPoint point);
 // The first segment in key order whose ground line passes within half its width of the point.
-std::optional<EntityKey> segmentAt(const World &world, ParkPoint point);
+std::optional<EntityKey> segmentAt(const ToolPark &park, ParkPoint point);
 // The path point nearest the point within POINT_REACH, of either kind. Ties go to the lower key.
-std::optional<EntityKey> pointAt(const World &world, ParkPoint point);
+std::optional<EntityKey> pointAt(const ToolPark &park, ParkPoint point);
 // Where the corner's radius handle lies.
 ParkPoint radiusHandleOf(const ParkCorner &corner);
 // Where the taper's handle lies.
@@ -242,26 +283,32 @@ ParkPoint taperHandleOf(const ParkTaper &taper);
 // The radius handle, edge handle, or taper handle that lies nearest the point within HANDLE_REACH,
 // with At where it lies. Ties go to a radius handle, then to the lower point key, then to the
 // lower segment key.
-std::optional<EditHandle> handleAt(const World &world, ParkPoint point);
+std::optional<EditHandle> handleAt(const ToolPark &park, ParkPoint point);
 // The segment with a ground line whose side lies nearest the point within SIDE_REACH. Ties go to
 // the lower key.
-std::optional<EntityKey> sideAt(const World &world, ParkPoint point);
+std::optional<EntityKey> sideAt(const ToolPark &park, ParkPoint point);
 // The pose of a box of the kind that fronts the paving near the point: backstage paving for a
 // depot, and guest paving for every other kind. None when no such paving is near.
 std::optional<Pose> frontagePose(const World &world, BoxKind kind, ParkPoint point);
+// As the three-argument form, reading the edge lines from the park, as keepToolPark fills them,
+// and keeping its lists in the park's.
+std::optional<Pose> frontagePose(const World &world, ToolPark &park, BoxKind kind, ParkPoint point);
 // Every path point's marker, in key order, then every corner's radius handle, in key order of its
 // point, then every edge handle, in the order parkEdges gives the edges, then every taper handle,
 // in the order parkTapers gives the tapers, while EditPath is chosen and nothing is held. Only the
-// markers while RemovePoint is chosen and nothing is held. Empty otherwise.
-std::vector<EditHandle> editHandles(const ToolState &tool, const World &world);
+// markers while RemovePoint is chosen and nothing is held. Empty otherwise. Into a list the caller
+// keeps, which it clears first.
+void editHandles(const ToolState &tool, const ToolPark &park, std::vector<EditHandle> &handles);
 // The radius, edge, or taper handle, or the segment's sides under the pointer that a press with
 // EditPath would take, while nothing is held. None otherwise.
-std::optional<EditHandle> hoveredHandle(const ToolState &tool, const World &world);
+std::optional<EditHandle> hoveredHandle(const ToolState &tool, const ToolPark &park);
 // The guides of the snap in effect, or none.
-std::vector<SnapGuide> snapGuides(const ToolState &tool);
+std::span<const SnapGuide> snapGuides(const ToolState &tool);
 // From the last stop of the path being drawn to where a press would add the next, or from the
-// other end of each segment at a dragged point to where it would land. Empty otherwise.
-std::vector<MeasuredLength> measuredLengths(const ToolState &tool, const World &world);
+// other end of each segment at a dragged point to where it would land. Empty otherwise. Into a list
+// the caller keeps, which it clears first.
+void measuredLengths(const ToolState &tool, ToolPark &park, const World &world,
+                     std::vector<MeasuredLength> &lengths);
 
 // Where a path tool's first click would start the path, its kind, and whether it would join a
 // point or segment there.
@@ -275,11 +322,11 @@ struct PathStart {
 
 // The path's start before its first click, or none when the tool draws no path, has a stop drawn,
 // or the pointer is off the ground.
-std::optional<PathStart> pathStart(const ToolState &tool, const World &world);
+std::optional<PathStart> pathStart(const ToolState &tool, ToolPark &park, const World &world);
 
 // Where a press would finish and commit the drawn path: its last stop's position, when at least two
 // stops are drawn and the pointer lies within FINISH_REACH of it. None otherwise.
-std::optional<ParkPoint> pathFinish(const ToolState &tool, const World &world);
+std::optional<ParkPoint> pathFinish(const ToolState &tool, ToolPark &park, const World &world);
 
 } // namespace tpj
 

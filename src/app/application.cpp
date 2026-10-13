@@ -27,7 +27,7 @@ constexpr float PARK_SIZE_METERS = 256.0f;
 Application::Application(const Options &options, World start)
     : Window(Video, options.FrameTimes || options.CapturePath != nullptr), Gui(Window),
       Gpu(Window, Gui, PARK_SIZE_METERS), Session(std::move(start)),
-      Interactions(Session.generation()),
+      Interactions(Session.world(), Session.generation(), Session.edits()),
       Ui({options.ShowGraph, options.Overlay}, GameSpeed(options.Speed),
          LightPreview{options.LightHour.has_value(), options.LightHour.value_or(0) * 3600}),
       Clock(SDL_GetPerformanceCounter(), SDL_GetPerformanceFrequency()), Dialogs(Window.get()),
@@ -63,7 +63,7 @@ bool Application::runFrames() {
     }
     Ui.speed().use(input.Speed);
     Session.useFileRequest(Dialogs.take(), Dialogs);
-    Interactions.follow(Session.generation());
+    Interactions.follow(Session.world(), Session.generation(), Session.edits());
 
     const FrameStep step = Clock.advance(SDL_GetPerformanceCounter(), Ui.speed().multiplier());
     Frames.add(step.Nanoseconds);
@@ -90,6 +90,8 @@ bool Application::runFrames() {
     if (Ui.speed().paused()) {
       Session.applyWithoutTick();
     }
+    // The tools read the park the ticks left.
+    Interactions.follow(Session.world(), Session.generation(), Session.edits());
     const WorldMeshes meshes =
         Scene.syncWorld(Session.world(), Session.generation(), Session.edits());
     if (!uploadWorldMeshes(renderer, Session.world(), meshes, Scene.guestMesh(), Camera)) {
@@ -125,14 +127,8 @@ bool Application::runFrames() {
     const LightPreview &preview = Ui.lightPreview();
     const DayLight light = preview.On ? dayLightAt(preview.Second) : dayLightOf(Session.world());
     // The meshes are updated after the panels, so a change of the Overlay row shows in this frame.
-    const PreviewLook look{Interactions.highlighted(Session.world()),
-                           Interactions.subject(),
-                           Ui.shown().Overlay,
-                           Interactions.pathStart(Session.world()),
-                           Interactions.pathFinish(Session.world()),
-                           Interactions.editHandles(Session.world()),
-                           Interactions.hoveredHandle(Session.world())};
-    const PreviewMeshes previewMeshes = Scene.syncLook(Session.world(), remade, look, shapeChanged);
+    fillLook(Interactions, Session.world(), Ui.shown().Overlay, Look);
+    const PreviewMeshes previewMeshes = Scene.syncLook(Session.world(), remade, Look, shapeChanged);
     if (!uploadPreviewMeshes(renderer, Scene, previewMeshes, shapeChanged) ||
         !drawFrame(renderer, view, light, drawData, lastFrame ? CapturePath : nullptr)) {
       return false;

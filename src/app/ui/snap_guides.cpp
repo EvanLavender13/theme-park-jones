@@ -6,6 +6,7 @@
 
 #include <math.h>
 #include <optional>
+#include <span>
 #include <stdio.h>
 
 namespace tpj {
@@ -152,8 +153,8 @@ void drawLength(ImDrawList *list, const CameraView &view, const MeasuredLength &
 
 } // namespace
 
-void drawSnapGuides(const std::vector<SnapGuide> &guides,
-                    const std::vector<MeasuredLength> &lengths, const CameraView &view) {
+void drawSnapGuides(std::span<const SnapGuide> guides, std::span<const MeasuredLength> lengths,
+                    const CameraView &view) {
   ImDrawList *list = ImGui::GetBackgroundDrawList();
   for (const SnapGuide &guide : guides) {
     drawGuide(list, view, guide);

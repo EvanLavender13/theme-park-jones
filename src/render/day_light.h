@@ -7,7 +7,7 @@
 
 namespace tpj {
 
-struct World;
+class World;
 
 // A color in linear light.
 struct Rgb {

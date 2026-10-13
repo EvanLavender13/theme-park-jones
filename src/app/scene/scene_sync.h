@@ -1,6 +1,7 @@
 #ifndef TPJ_APP_SCENE_SCENE_SYNC_H
 #define TPJ_APP_SCENE_SCENE_SYNC_H
 
+#include "app/input/interaction.h"
 #include "legible/inspect.h"
 #include "legible/preview.h"
 #include "render/guest_mesh.h"
@@ -42,6 +43,11 @@ struct PreviewLook {
 
   bool operator==(const PreviewLook &) const = default;
 };
+
+// Puts the frame's look in look: the interaction's highlight, subject, path start and finish,
+// handles, and hovered handle, and the overlay. Refills the handles' list in place.
+void fillLook(Interaction &interaction, const World &world, std::optional<GuestNeed> overlay,
+              PreviewLook &look);
 
 // Which of the preview's meshes a frame rebuilt: the ghost and the overlay's shades.
 struct PreviewMeshes {
@@ -109,8 +115,12 @@ private:
   bool GuestsRebuilt = false;
   KeptPreview Kept;
   std::optional<PreviewLook> Look;
-  // The edit count the look's marks were built at.
+  // The edit count the look's marks were built at, and the boxes, path points, and segments they
+  // read, filled when it changes.
   std::optional<uint64_t> LookEdits;
+  std::vector<ParkBox> LookBoxes;
+  std::vector<ParkPathPoint> LookPoints;
+  std::vector<ParkSegment> LookSegments;
   // The ghost's parts, and the ghost put together from them. The look's marks use only Lit and
   // Marks.
   GhostMesh EditGhost;

@@ -236,20 +236,24 @@ void appendEdgeLine(ParkMesh &mesh, std::span<const ParkPoint> points, float lif
   }
 }
 
+// Adds the piece, the lift above its kind's paths, in the color.
+void appendPiece(ParkMesh &mesh, const SurfacePiece &piece, float lift, Rgba color) {
+  const float height = pathLift(piece.Kind) + lift;
+  const auto first = static_cast<uint32_t>(mesh.Vertices.size());
+  for (const ParkPoint &corner : pieceCorners(piece)) {
+    addVertex(mesh, corner.X, height, corner.Z, {}, 1.0f, color);
+  }
+  for (uint32_t k = 1; k + 1 < piece.Count; ++k) {
+    mesh.Indices.insert(mesh.Indices.end(), {first, first + k, first + k + 1});
+  }
+}
+
 // Adds each piece of the surface, the lift above its kind's paths, in the color colorOf gives for
 // its kind, and then each edge line EDGE_LIFT higher in that color's edgeColor.
 template <typename ColorOf>
 void appendSurface(ParkMesh &mesh, const PavedSurface &surface, float lift, ColorOf colorOf) {
   for (const SurfacePiece &piece : surface.Pieces) {
-    const float height = pathLift(piece.Kind) + lift;
-    const Rgba color = colorOf(piece.Kind);
-    const auto first = static_cast<uint32_t>(mesh.Vertices.size());
-    for (const ParkPoint &corner : pieceCorners(piece)) {
-      addVertex(mesh, corner.X, height, corner.Z, {}, 1.0f, color);
-    }
-    for (uint32_t k = 1; k + 1 < piece.Count; ++k) {
-      mesh.Indices.insert(mesh.Indices.end(), {first, first + k, first + k + 1});
-    }
+    appendPiece(mesh, piece, lift, colorOf(piece.Kind));
   }
   for (const EdgeLine &edge : surface.Edges) {
     appendEdgeLine(mesh, edgePoints(surface, edge), pathLift(edge.Kind) + lift + EDGE_LIFT,
@@ -408,8 +412,9 @@ void appendSides(ParkMesh &mesh, const ParkSegment &segment, Rgba color) {
   appendBand(mesh, segment.Line, half - inset, half, lift, color);
 }
 
-void appendSides(ParkMesh &mesh, const World &world, EntityKey segment, Rgba color) {
-  for (const ParkSegment &candidate : parkSegments(world)) {
+void appendSides(ParkMesh &mesh, std::span<const ParkSegment> segments, EntityKey segment,
+                 Rgba color) {
+  for (const ParkSegment &candidate : segments) {
     if (candidate.Key == segment) {
       appendSides(mesh, candidate, color);
     }
@@ -535,23 +540,28 @@ void appendMesh(ParkMesh &mesh, const ParkMesh &more) {
 }
 
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color) {
-  for (const ParkBox &box : parkBoxes(world)) {
+  appendEntity(mesh, world, parkBoxes(world), parkPathPoints(world), key, color);
+}
+
+void appendEntity(ParkMesh &mesh, const World &world, std::span<const ParkBox> boxes,
+                  std::span<const ParkPathPoint> points, EntityKey key, Rgba color) {
+  for (const ParkBox &box : boxes) {
     if (box.Key == key) {
       appendBox(mesh, box.At, boxSize(box.Kind), boxHeight(box.Kind), color);
       return;
     }
   }
-  PavedSurface own;
+  bool owned = false;
   for (const SurfacePiece &piece : resolvedSurface(world).Pieces) {
     if (piece.Owner == key) {
-      own.Pieces.push_back(piece);
+      appendPiece(mesh, piece, GHOST_LIFT, color);
+      owned = true;
     }
   }
-  if (!own.Pieces.empty()) {
-    appendSurface(mesh, own, GHOST_LIFT, [color](PathKind /*kind*/) { return color; });
+  if (owned) {
     return;
   }
-  for (const ParkPathPoint &point : parkPathPoints(world)) {
+  for (const ParkPathPoint &point : points) {
     if (point.Key == key) {
       appendDisc(mesh, point.At, JOIN_MARK_RADIUS, JOIN_MARK_LIFT, color);
       return;

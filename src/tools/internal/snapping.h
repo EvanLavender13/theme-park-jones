@@ -29,8 +29,36 @@ struct SnapQuery {
   std::span<const SnapHold> Held;
 };
 
-// The snap for the query, as tools/SPEC.md's Snapping section states.
-PointerSnap findSnap(const World &world, const SnapQuery &query);
+// An anchor guides run from: its position, and where its unit directions, in which segments arrive
+// at it, start in the list of arrivals, and how many there are.
+struct Anchor {
+  ParkPoint At;
+  size_t First = 0;
+  size_t Count = 0;
+};
+
+// A ray guides run along: its anchor's index and position, and its unit direction.
+struct Guide {
+  size_t Anchor = 0;
+  ParkPoint From;
+  ParkPoint Direction;
+};
+
+// The lists one findSnap call fills, kept from call to call: the drawn stops' positions, which
+// segments and drawn segments are left out, the anchors, every anchor's arrivals one after
+// another, and the guides.
+struct SnapLists {
+  std::vector<ParkPoint> Drawn;
+  std::vector<bool> LeftOut;
+  std::vector<bool> DrawnLeftOut;
+  std::vector<Anchor> Anchors;
+  std::vector<ParkPoint> Arrivals;
+  std::vector<Guide> Guides;
+};
+
+// The snap for the query, as tools/SPEC.md's Snapping section states, reading the park and
+// filling its snapping lists.
+PointerSnap findSnap(const World &world, ToolPark &park, const SnapQuery &query);
 
 // A stop a pointer snaps to, how far from the pointer it lies, where it lands, the first
 // GuideCount guides it shows, and the first HoldCount things it holds to. No snap has more than two
