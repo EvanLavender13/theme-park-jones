@@ -142,6 +142,25 @@ void forget(void *block) {
   }
 }
 
+// Removes the block's entry, if it has one, without reporting it, for a block that realloc moved or
+// resized.
+void moved(void *block) {
+  if (!Watching || block == nullptr) {
+    return;
+  }
+  LastAllocated = Noted{};
+  if (NotedCount == 0) {
+    return;
+  }
+  for (size_t at = homeOf(block); Table[at].Address != nullptr;
+       at = (at + 1) & (TRACKED_BLOCKS - 1)) {
+    if (Table[at].Address == block) {
+      removeAt(at);
+      return;
+    }
+  }
+}
+
 void *allocate(size_t size) {
   void *block = std::malloc(size == 0 ? 1 : size);
   note(block, size);
@@ -182,6 +201,31 @@ void *orThrow(void *block) {
 }
 
 } // namespace
+
+void *watchedMalloc(size_t size) { return allocate(size); }
+
+void *watchedCalloc(size_t count, size_t size) {
+  void *block = allocate(count * size);
+  if (block != nullptr) {
+    std::memset(block, 0, count * size);
+  }
+  return block;
+}
+
+void *watchedRealloc(void *block, size_t size) {
+  // The entry goes first, since the old block can't be read once realloc moved it. If realloc
+  // fails, the block stays unnoted, which can hide a free but never reports a false one.
+  moved(block);
+  void *resized = std::realloc(block, size == 0 ? 1 : size);
+  if (resized != nullptr) {
+    note(resized, size);
+    // A realloc frees nothing the next free could be a move to.
+    LastAllocated = Noted{};
+  }
+  return resized;
+}
+
+void watchedFree(void *block) { release(block); }
 
 void startWatching(uint64_t tick) {
   Table.fill(Noted{});

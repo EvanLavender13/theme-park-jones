@@ -1,7 +1,7 @@
 # The allocation check (decision 0041). It is an executable of its own because it replaces
 # operator new and delete for the whole program.
 add_executable(tpj_allocation_check allocation_check.cpp watch.cpp)
-target_link_libraries(tpj_allocation_check PRIVATE tpj_app_core tpj_sim)
+target_link_libraries(tpj_allocation_check PRIVATE tpj_app_core tpj_sim SDL3::SDL3)
 target_compile_definitions(tpj_allocation_check PRIVATE
     TPJ_PARKS_DIR="${CMAKE_SOURCE_DIR}/tests/parks")
 tpj_configure_target(tpj_allocation_check)
