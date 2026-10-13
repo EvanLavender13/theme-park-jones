@@ -4,6 +4,7 @@
 #include "sim/park/intent.h"
 #include "sim/park/surface.h"
 #include "sim/routes/networks.h"
+#include "sim/tick_buffers.h"
 
 #include <algorithm>
 #include <math.h>
@@ -280,12 +281,21 @@ std::optional<Place> overlayPlace(const OverlayShape &shape, GroundPoint point) 
 
 OverlayShades shadeOverlay(const OverlayShape &shape, std::span<const Place> places,
                            std::span<const double> values, double half) {
+  ShadeLists lists;
   OverlayShades shades;
+  shadeOverlay(shape, places, values, half, lists, shades);
+  return shades;
+}
+
+void shadeOverlay(const OverlayShape &shape, std::span<const Place> places,
+                  std::span<const double> values, double half, ShadeLists &lists,
+                  OverlayShades &shades) {
   shades.Half = half;
-  shades.FirstKnots.assign(shape.Lines.size() + 1, 0);
+  fillGrowing(shades.FirstKnots, shape.Lines.size() + 1, uint32_t{0});
   // Each place's line, or NO_LINE when it is on none of the shape's.
   constexpr uint32_t NO_LINE = UINT32_MAX;
-  std::vector<uint32_t> lineOfPlace(places.size(), NO_LINE);
+  std::vector<uint32_t> &lineOfPlace = lists.LineOfPlace;
+  fillGrowing(lineOfPlace, places.size(), NO_LINE);
   for (size_t i = 0; i < places.size(); ++i) {
     if (const std::optional<uint32_t> line = lineOf(shape, places[i].Carrier)) {
       lineOfPlace[i] = *line;
@@ -295,20 +305,29 @@ OverlayShades shadeOverlay(const OverlayShape &shape, std::span<const Place> pla
   for (size_t line = 0; line < shape.Lines.size(); ++line) {
     shades.FirstKnots[line + 1] += shades.FirstKnots[line];
   }
-  shades.Knots.resize(shades.FirstKnots.back());
-  std::vector<uint32_t> next(shades.FirstKnots.begin(), shades.FirstKnots.end() - 1);
+  fillGrowing(shades.Knots, shades.FirstKnots.back(), OverlayKnot{});
+  std::vector<uint32_t> &next = lists.Next;
+  copyGrowing(next, std::span<const uint32_t>(shades.FirstKnots).first(shape.Lines.size()));
   for (size_t i = 0; i < places.size(); ++i) {
     if (lineOfPlace[i] != NO_LINE) {
       shades.Knots[next[lineOfPlace[i]]++] = {places[i].Distance, values[i]};
     }
   }
+  // An insertion sort by distance on each line: stable, as equal distances keep the places' order,
+  // and it allocates nothing. Places that come in order take one pass.
   for (size_t line = 0; line < shape.Lines.size(); ++line) {
-    std::stable_sort(
-        shades.Knots.begin() + shades.FirstKnots[line],
-        shades.Knots.begin() + shades.FirstKnots[line + 1],
-        [](const OverlayKnot &a, const OverlayKnot &b) { return a.Distance < b.Distance; });
+    const auto first = shades.Knots.begin() + shades.FirstKnots[line];
+    const auto last = shades.Knots.begin() + shades.FirstKnots[line + 1];
+    for (auto at = first; at != last; ++at) {
+      const OverlayKnot knot = *at;
+      auto hole = at;
+      while (hole != first && knot.Distance < (hole - 1)->Distance) {
+        *hole = *(hole - 1);
+        --hole;
+      }
+      *hole = knot;
+    }
   }
-  return shades;
 }
 
 } // namespace tpj

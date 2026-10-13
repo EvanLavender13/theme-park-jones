@@ -745,6 +745,29 @@ void sampleFieldAtPlaces(const World &world, const Network &network, std::span<c
   }
 }
 
+// As sampleFieldAtPlaces, keeping its working lists in the sample, for a field that isn't kept.
+// Allocates nothing once they have grown.
+template <FieldDefinition F, typename Visit>
+void sampleFieldAtPlaces(const World &world, const Network &network, std::span<const Place> places,
+                         Visit visit, FieldSample<typename F::Entry> &sample) {
+  using Entry = typename F::Entry;
+  using Slot = FieldSlot<Entry>;
+  static_assert(!KeptFieldDefinition<F>, "a kept field samples with a KeptFieldSample");
+  const EntityKey holder = fieldKey(F::Name);
+  if (world.isLive(holder)) {
+    layeredSlots<F>(world, holder, sample.Slots);
+  } else {
+    sample.Slots.clear();
+  }
+  sampleSlotsAt<F>(
+      network, places, std::span<const Slot *const>(sample.Slots),
+      [](const Slot &slot) { return [&slot](uint32_t i) { return slot.Entries[i].Value; }; },
+      [&network](const Slot &slot, uint32_t node, SampleScratch<Entry> &scratch,
+                 std::vector<SampledEntry<Entry>> &sampled,
+                 auto read) { sampleSlotAtNode(network, slot, node, scratch, sampled, read); },
+      visit, sample.Lists);
+}
+
 // The first of the source's entries that sampleField gives at the node's nodePlace, or none.
 // Throws std::out_of_range for a node not below the node count. Allocates nothing but the slot's
 // order by place, when it is the slot's first reader.

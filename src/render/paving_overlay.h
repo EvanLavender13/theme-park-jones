@@ -92,6 +92,18 @@ struct OverlayShades {
 OverlayShades shadeOverlay(const OverlayShape &shape, std::span<const Place> places,
                            std::span<const double> values, double half);
 
+// The lists shading reuses: each place's line, and the next free knot of each line.
+struct ShadeLists {
+  std::vector<uint32_t> LineOfPlace;
+  std::vector<uint32_t> Next;
+};
+
+// As the returning form, into shades and lists the caller keeps. Allocates nothing once they have
+// grown.
+void shadeOverlay(const OverlayShape &shape, std::span<const Place> places,
+                  std::span<const double> values, double half, ShadeLists &lists,
+                  OverlayShades &shades);
+
 } // namespace tpj
 
 #endif

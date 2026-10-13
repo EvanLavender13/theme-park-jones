@@ -17,6 +17,7 @@
 #include <span>
 #include <stddef.h>
 #include <stdint.h>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -2229,6 +2230,17 @@ bool isPhysicallyValid(const World &world) {
 
 bool isAccepted(const World &world, const ParkEdit &edit) {
   return std::visit([&world](const auto &command) { return isAccepted(world, command); }, edit);
+}
+
+bool changesPaths(const ParkEdit &edit) {
+  return std::visit(
+      []<typename T>(const T & /*command*/) {
+        // A new kind of edit counts as changing paths until it is listed here.
+        return !(std::is_same_v<T, AddBox> || std::is_same_v<T, MoveBox> ||
+                 std::is_same_v<T, DeleteBox> || std::is_same_v<T, SetShopStock> ||
+                 std::is_same_v<T, SetOpeningHours>);
+      },
+      edit);
 }
 
 void queueEdit(CommandQueue &queue, const ParkEdit &edit) {

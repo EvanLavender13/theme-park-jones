@@ -526,6 +526,14 @@ std::optional<GroundBounds> meshBounds(const ParkMesh &mesh) {
   return bounds;
 }
 
+void appendMesh(ParkMesh &mesh, const ParkMesh &more) {
+  const auto offset = static_cast<uint32_t>(mesh.Vertices.size());
+  mesh.Vertices.insert(mesh.Vertices.end(), more.Vertices.begin(), more.Vertices.end());
+  for (const uint32_t index : more.Indices) {
+    mesh.Indices.push_back(offset + index);
+  }
+}
+
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color) {
   for (const ParkBox &box : parkBoxes(world)) {
     if (box.Key == key) {

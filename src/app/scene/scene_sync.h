@@ -4,12 +4,14 @@
 #include "legible/inspect.h"
 #include "legible/preview.h"
 #include "render/guest_mesh.h"
+#include "render/park_mesh.h"
 #include "render/paving_overlay.h"
 #include "sim/guests/guests.h"
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/world.h"
 #include "tools/tools.h"
+#include "views/availability_overlay.h"
 
 #include <optional>
 #include <stdint.h>
@@ -41,6 +43,14 @@ struct PreviewLook {
   bool operator==(const PreviewLook &) const = default;
 };
 
+// Which of the preview's meshes a frame rebuilt: the ghost and the overlay's shades.
+struct PreviewMeshes {
+  bool Ghost = false;
+  bool Shades = false;
+
+  bool operator==(const PreviewMeshes &) const = default;
+};
+
 // What the scene's meshes were last built from, and the kept preview, so that each frame rebuilds
 // exactly the meshes whose sources changed. A world of a generation it has not seen rebuilds every
 // mesh.
@@ -63,14 +73,28 @@ public:
   // when asked, returning whether it was made again.
   bool syncPreview(const World &world, const std::optional<ParkEdit> &edit, bool followTicks);
   [[nodiscard]] const Preview &preview() const { return Kept.Made; }
-  // After the panels: whether the ghost and overlay meshes need building, which they do at the
-  // first call, when the preview was just made again, when the look differs from the last call's,
-  // or, while the Inspector's subject is a guest, when the last syncWorld rebuilt the guests, so
-  // the guest's mark follows it. Remembers the look.
-  bool syncLook(bool remade, const PreviewLook &look);
-  // Keeps the overlay's shape for the previewed world: while shown, built again when the
-  // world's path points or segments differ from those it was last built from, and while not
-  // shown, empty. Returns whether the shape changed.
+  // After the panels: builds the parts of the ghost whose sources changed, and the overlay's
+  // shades, and says which of the two it rebuilt. The edit's ghost, the preview's edit with its
+  // candidate's walkways and starved marks, is built at the first call and when the preview was
+  // just made again. The look's marks are built when the look or the edit count differs from those
+  // they were built at: where a path tool's first click would start the path, where a click would
+  // finish it, the highlight, the point markers, Edit path's radius and edge handles, the handle or
+  // sides under the pointer, and an inspected shop, bench, or toilet block. The inspected guest's
+  // mark is built when either of those is, or when the last syncWorld rebuilt the guests while the
+  // subject is a guest, so the mark follows the guest where the seated guests draw it. When any
+  // part is built, the ghost is put together from them in that order. While the look shows a need's
+  // overlay, the shades are the previewed world's availability of that need over the overlay's
+  // shape, built again when the preview was just made again, the shape changed, or the need or the
+  // previewed world's tick differs from those they were built for. Remembers the look. Once its
+  // lists have grown, a call frees no memory it allocated.
+  PreviewMeshes syncLook(const World &world, bool remade, const PreviewLook &look,
+                         bool shapeChanged);
+  [[nodiscard]] const GhostMesh &ghost() const { return Ghost; }
+  [[nodiscard]] const OverlayShades &shades() const { return ShadeLists.Shades; }
+  // Keeps the overlay's shape for the previewed world: while shown, built again when the edit
+  // count differs from the one it was built at, or when the preview's edit differs while the
+  // preview holds a candidate of an edit that can change paths. These fix the previewed world's
+  // path points and segments. While not shown, it is empty. Returns whether the shape changed.
   bool syncOverlayShape(const World &previewed, bool shown);
   [[nodiscard]] const OverlayShape &overlayShape() const { return Shape; }
 
@@ -85,15 +109,29 @@ private:
   bool GuestsRebuilt = false;
   KeptPreview Kept;
   std::optional<PreviewLook> Look;
-  // The path points and segments the overlay's shape was built from, while it is shown.
-  struct ShapedPaths {
-    std::vector<ParkPathPoint> Points;
-    std::vector<ParkSegment> Segments;
-
-    bool operator==(const ShapedPaths &) const = default;
+  // The edit count the look's marks were built at.
+  std::optional<uint64_t> LookEdits;
+  // The ghost's parts, and the ghost put together from them. The look's marks use only Lit and
+  // Marks.
+  GhostMesh EditGhost;
+  GhostMesh LookMarks;
+  ParkMesh SubjectMark;
+  GhostMesh Ghost;
+  // What the overlay's shape was built for, while it is shown: the edit count, and the preview's
+  // edit when the preview held a candidate of an edit that can change paths.
+  struct ShapedFor {
+    std::optional<uint64_t> Edits;
+    std::optional<ParkEdit> Edit;
   };
-  std::optional<ShapedPaths> Shaped;
+  std::optional<ShapedFor> Shaped;
   OverlayShape Shape;
+  // The previewed world's tick and the need the shades were built for, while an overlay is shown.
+  struct ShadedFor {
+    uint64_t Tick = 0;
+    GuestNeed Need = GuestNeed::Hunger;
+  };
+  std::optional<ShadedFor> Shaded;
+  AvailabilityShadeLists ShadeLists;
 };
 
 } // namespace tpj

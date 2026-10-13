@@ -155,7 +155,7 @@ double HungryFootfall::readKept(double value, uint64_t ticks) {
   return value * simExp(static_cast<double>(ticks) * simLog(perTick));
 }
 
-std::vector<double> HungryFootfall::sampleNode(const NodeSample &sample) {
+void HungryFootfall::sampleNode(const NodeSample &sample, std::vector<double> &out) {
   double sum = 0.0;
   for (const NodeEnd &end : sample.Ends) {
     double stretch = 0.0;
@@ -164,7 +164,7 @@ std::vector<double> HungryFootfall::sampleNode(const NodeSample &sample) {
     }
     sum += stretch;
   }
-  return {sum / static_cast<double>(sample.Ends.size())};
+  out.push_back(sum / static_cast<double>(sample.Ends.size()));
 }
 
 void addFootfall(WorldSchema &schema) {

@@ -2,6 +2,7 @@
 #define TPJ_LEGIBLE_PREVIEW_H
 
 #include "sim/entity_key.h"
+#include "sim/medium/kept_field.h"
 #include "sim/medium/network.h"
 #include "sim/operations/operations.h"
 #include "sim/park/edits.h"
@@ -38,20 +39,24 @@ Preview previewEdit(const World &world, const std::optional<ParkEdit> &edit);
 // The preview's candidate when it holds one, and the world otherwise.
 const World &previewedWorld(const World &world, const Preview &preview);
 
-// A preview kept between frames, and the tick of the world it was made from, or none before the
-// first.
+// A preview kept between frames, the tick of the world it was made from, or none before the
+// first, and the lists that reading the shop context's footfall again reuses.
 struct KeptPreview {
   std::optional<uint64_t> Tick;
   Preview Made;
+  KeptFieldSample Footfall;
 };
 
 // Makes the kept preview again, as previewEdit gives it, when nothing is kept, when the edit
-// differs from the kept one's, or, when following ticks, when the world's tick differs, and
-// returns whether it did. Otherwise it reads the shop context's footfall from the world again.
-// Ticks change the world's state but nothing it derives from intent, so a preview kept across
-// ticks still shows what the edit derives exactly; follow ticks to show the candidate's state.
-// The kept preview holds only while the world changes just by ticking: empty it when the world is
-// replaced, or changed without a tick, as edits applied while paused change it.
+// differs from the kept one's, or, when following ticks and the kept preview holds a candidate,
+// when the world's tick differs, and returns whether it did. Otherwise it reads the shop context's
+// footfall from the world again. Ticks change the world's state but nothing it derives from
+// intent, so a preview kept across ticks still shows what the edit derives exactly; follow ticks
+// to show the candidate's state. A preview without a candidate holds nothing a tick changes,
+// since whether the world accepts an edit depends only on the park's intent. Keeping the preview
+// allocates nothing once its lists have grown. The kept preview holds only while the world changes
+// just by ticking: empty it when the world is replaced, or changed without a tick, as edits applied
+// while paused change it.
 bool keepPreview(KeptPreview &kept, const World &world, const std::optional<ParkEdit> &edit,
                  bool followTicks);
 

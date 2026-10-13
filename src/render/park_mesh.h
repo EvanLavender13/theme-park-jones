@@ -212,6 +212,9 @@ ParkMesh buildParkMesh(const World &world);
 // as a flat disc of JOIN_MARK_RADIUS at JOIN_MARK_LIFT. Nothing when the key holds none of these.
 void appendEntity(ParkMesh &mesh, const World &world, EntityKey key, Rgba color);
 
+// Adds more's triangles after the mesh's, with their indices offset by the mesh's vertex count.
+void appendMesh(ParkMesh &mesh, const ParkMesh &more);
+
 // A ghost in three parts, drawn in order. Tints and Marks keep their colors at every hour, and Lit
 // is lit as the park is, so the park it previews looks as the park will.
 struct GhostMesh {

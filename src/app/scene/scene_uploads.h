@@ -3,9 +3,7 @@
 
 #include "app/input/orbit_camera.h"
 #include "app/scene/scene_sync.h"
-#include "legible/preview.h"
 #include "render/guest_mesh.h"
-#include "render/paving_overlay.h"
 #include "render/renderer.h"
 #include "sim/world.h"
 
@@ -16,14 +14,11 @@ namespace tpj {
 // and the mesh has vertices. False if an upload failed.
 bool uploadWorldMeshes(Renderer &renderer, const World &world, const WorldMeshes &meshes,
                        const ParkMesh &guests, OrbitCamera &camera);
-// Builds the ghost, meaning the preview's edit with its candidate's walkways and starved marks,
-// then the look's highlight, then its inspected guest's or box's mark, and gives it to the
-// renderer, with the overlay's shape when it changed, and while the look shows a need's overlay,
-// the shape's shades by the previewed world's availability of that need. An inspected guest is
-// marked where the seated guests draw it. False if an upload failed.
-bool uploadPreviewMeshes(Renderer &renderer, const World &world, const Preview &preview,
-                         const PreviewLook &look, const SeatedGuests &seated,
-                         const OverlayShape &shape, bool shapeChanged);
+// Gives the renderer the preview meshes the scene's sync built: the ghost when the frame rebuilt
+// it, the overlay's shape when it changed, and the overlay's shades when the frame rebuilt them.
+// False if an upload failed.
+bool uploadPreviewMeshes(Renderer &renderer, const SceneSync &scene, PreviewMeshes meshes,
+                         bool shapeChanged);
 
 } // namespace tpj
 

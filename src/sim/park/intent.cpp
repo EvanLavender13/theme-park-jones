@@ -83,6 +83,16 @@ void parkBoxes(const World &world, std::vector<ParkBox> &boxes) {
   });
 }
 
+void parkSegmentKeys(const World &world, PathKind kind, std::vector<EntityKey> &keys) {
+  keys.clear();
+  world.forEachWith<PathSegmentIntent>(
+      [kind, &keys](EntityKey key, const PathSegmentIntent &segment) {
+        if (segment.Kind == kind) {
+          keys.push_back(key);
+        }
+      });
+}
+
 OpeningHours parkHours(const World &world) {
   std::optional<OpeningHours> first;
   world.forEachWith<OpeningHoursIntent>(

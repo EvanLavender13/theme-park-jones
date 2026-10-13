@@ -26,9 +26,9 @@ struct HungryFootfall {
   // ignoring those at its nodes.
   static void sampleEdge(const EdgeSample<double> &sample, std::vector<double> &out);
 
-  // The mean, over the node's edge ends, of each end's stretch value: the sum of the values of
-  // the entries strictly inside its edge.
-  static std::vector<double> sampleNode(const NodeSample &sample);
+  // Appends the mean, over the node's edge ends, of each end's stretch value: the sum of the
+  // values of the entries strictly inside its edge.
+  static void sampleNode(const NodeSample &sample, std::vector<double> &out);
 };
 
 // The moving average's time constant, in ticks: each tick a stretch's value moves 1/FOOTFALL_TIME
