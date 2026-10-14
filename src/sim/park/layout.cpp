@@ -10,6 +10,7 @@
 #include <optional>
 #include <span>
 #include <stddef.h>
+#include <stdexcept>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -116,62 +117,30 @@ const PathPointIntent *findPoint(const PathLayout &layout, EntityKey key) {
   return found != layout.Points.end() && found->Key == key ? &found->Intent : nullptr;
 }
 
-// Puts the straight ground line between the segment's points in line: empty unless they are two
-// different path points and its width is finite and above zero.
-void straightLine(const PathLayout &layout, const PathSegmentIntent &segment,
-                  std::vector<CarrierPoint> &line) {
-  line.clear();
-  const PathPointIntent *from = findPoint(layout, segment.From);
-  const PathPointIntent *to = findPoint(layout, segment.To);
-  if (from == nullptr || to == nullptr || segment.From == segment.To ||
-      !std::isfinite(segment.Width) || !(segment.Width > 0.0)) {
-    return;
+// The index in the layout's points of the point the key holds. Throws std::logic_error when the
+// layout holds no such point.
+size_t pointIndex(const PathLayout &layout, EntityKey key) {
+  const auto found = std::ranges::lower_bound(layout.Points, key, {}, &LayoutPoint::Key);
+  if (found == layout.Points.end() || found->Key != key) {
+    throw std::logic_error("a bend's far point isn't in its layout");
   }
-  segmentLine(from->At, to->At, line);
+  return static_cast<size_t>(found - layout.Points.begin());
 }
 
-// A corner, and its two segments as indices into the layout's segments. For each segment, the
-// points of its ground line from the arc's middle to where the arc touches it lie in a shared arc
-// buffer, from HalfBegin up to HalfEnd.
-struct Rounding {
-  ParkCorner Corner;
-  std::array<size_t, 2> Segments{};
-  std::array<size_t, 2> HalfBegin{};
-  std::array<size_t, 2> HalfEnd{};
-};
-
-// How a point turns between its two segments, the lower-keyed first: each one's far end, the unit
-// direction toward it, and its straight length, and the dot and cross products of the two
-// directions.
-struct Bend {
-  EntityKey Key = NULL_KEY;
-  ParkPoint At;
-  double Asked = 0.0;
-  std::array<size_t, 2> Segments{};
-  std::array<EntityKey, 2> FarKeys{};
-  std::array<ParkPoint, 2> Along{};
-  std::array<double, 2> Lengths{};
-  double Dot = 0.0;
-  double Cross = 0.0;
-
-  // The tangent length the radius gives.
-  double tangentOf(double radius) const { return radius * Cross / (1.0 - Dot); }
-};
-
-// The bend the point makes with its two segments, each with a straight ground line. None where
-// their far ends are one point or too close, or the segments run straight on or fold straight back.
-std::optional<Bend> bendOf(const PathLayout &layout, EntityKey key, const PathPointIntent &point,
-                           std::array<size_t, 2> segments) {
+// The bend the point makes with the two ends, each with a straight ground line. None where their
+// far ends are one point or too close, or the segments run straight on or fold straight back.
+std::optional<Bend> bendOf(EntityKey key, const PathPointIntent &point,
+                           std::span<const ArmInput> ends) {
   Bend bend;
   bend.Key = key;
   bend.At = point.At;
   bend.Asked = std::isfinite(point.Radius) && point.Radius >= 0.0 ? point.Radius : 0.0;
-  bend.Segments = segments;
   std::array<ParkPoint, 2> far{};
   for (size_t k = 0; k < 2; ++k) {
-    const PathSegmentIntent &segment = layout.Segments[segments[k]].Intent;
+    const PathSegmentIntent &segment = *ends[k].Intent;
+    bend.Segments[k] = ends[k].Segment;
     bend.FarKeys[k] = segment.From == key ? segment.To : segment.From;
-    far[k] = findPoint(layout, bend.FarKeys[k])->At;
+    far[k] = ends[k].Far->At;
   }
   if (bend.FarKeys[0] == bend.FarKeys[1] || distanceBetween(far[0], far[1]) < MIN_SEGMENT_LENGTH ||
       lineDistance(bend.At, far[0], far[1]) <= MIN_SEGMENT_LENGTH) {
@@ -186,76 +155,22 @@ std::optional<Bend> bendOf(const PathLayout &layout, EntityKey key, const PathPo
   return bend;
 }
 
-// The corner the bend makes, with its halves appended to the arc buffer. needed gives how far from
-// a point along one of its segments that point's own arc and paving reach at least. Each segment
-// allows the arc its length less what its far end needs, or half its length if that is more.
-template <typename Needed>
-Rounding roundingOf(const Bend &bend, const Needed &needed, std::vector<ParkPoint> &arcs) {
-  double allowed = 0.0;
-  for (size_t k = 0; k < 2; ++k) {
-    const double length = bend.Lengths[k];
-    const double allowance =
-        std::max(length - needed(bend.FarKeys[k], bend.Segments[k]), length / 2.0);
-    allowed = k == 0 ? allowance : std::min(allowed, allowance);
-  }
-  const double maxRadius = allowed * (1.0 - bend.Dot) / bend.Cross;
-  const double radius = std::min(bend.Asked, maxRadius);
-  const double tangent = bend.tangentOf(radius);
-  const ParkPoint sum{bend.Along[0].X + bend.Along[1].X, bend.Along[0].Z + bend.Along[1].Z};
-  const double sumLength = std::sqrt(sum.X * sum.X + sum.Z * sum.Z);
-  const ParkPoint toward{sum.X / sumLength, sum.Z / sumLength};
-  // The arc's center lies along toward, as far from the point as the hypotenuse of the tangent
-  // length and the radius. The arc's middle lies the radius nearer the point.
-  const double centerDepth = std::sqrt(tangent * tangent + radius * radius);
-  const ParkPoint middle = stepFrom(bend.At, toward, centerDepth - radius);
-  Rounding rounding{ParkCorner{bend.Key, bend.At, bend.Along, toward, radius, maxRadius, middle},
-                    bend.Segments,
-                    {},
-                    {}};
-  for (size_t k = 0; k < 2; ++k) {
-    rounding.HalfBegin[k] = arcs.size();
-    if (radius > 0.0) {
-      appendArc(arcs, stepFrom(bend.At, toward, centerDepth), radius, middle,
-                stepFrom(bend.At, bend.Along[k], tangent));
-    } else {
-      arcs.push_back(bend.At);
-    }
-    rounding.HalfEnd[k] = arcs.size();
-  }
-  return rounding;
-}
-
-// Puts each straight ground line in lines, by the segment's index in the layout, keeping the lines
-// it no longer needs in spare.
-void straightLines(const PathLayout &layout, std::vector<std::vector<CarrierPoint>> &lines,
-                   std::vector<std::vector<CarrierPoint>> &spare) {
-  resizeKeeping(lines, layout.Segments.size(), spare);
-  for (size_t i = 0; i < layout.Segments.size(); ++i) {
-    straightLine(layout, layout.Segments[i].Intent, lines[i]);
-  }
-}
-
 // Directions whose cross product is within this of zero run along one line.
 constexpr double PARALLEL = 1e-9;
 
-// A segment's end at a point, as pavingReaches sees it: the segment's index, its unit direction
+// A segment's end at a point, as the paving reaches see it: the segment's key, its unit direction
 // away from the point, and its half width.
 struct ReachArm {
-  size_t Segment = 0;
+  EntityKey Segment = NULL_KEY;
   ParkPoint Along;
   double Half = 0.0;
   // The edge radius held at the point, for the edge starting from the segment's left side.
   double Edge = 0.0;
 };
 
-// The lists finding the roundings reuses: each segment end, by its point's key and then by the
-// segment's index, the bends, the paving reaches, the arms at one point, and the roundings.
-struct RoundingLists {
-  std::vector<std::pair<EntityKey, size_t>> Ends;
-  std::vector<Bend> Bends;
-  std::vector<std::tuple<EntityKey, size_t, double>> Reaches;
+// The arms at one point, which armsAt reuses.
+struct ReachArms {
   std::vector<ReachArm> Arms;
-  std::vector<Rounding> Roundings;
 };
 
 // Whether the outline would step straight across from the first arm's left side to the second's
@@ -300,81 +215,83 @@ std::optional<size_t> taperArm(const PathPointIntent &point, const std::vector<R
   return arms[0].Half < arms[1].Half ? 0 : 1;
 }
 
-// How far along each segment from each of its points with two or more segments that point's paving
-// reaches: the farther of where the inner edges on the segment's two sides touch it, each with the
-// radius it is held at, or 0. At a point with two segments, the inner edge's radius is the point's
-// radius less the narrower half width. Where the narrower of two segments may curve out to the
-// wider one, its reach is the taper length the point holds farther. By the point's key,
-// then the segment's index, in reaches. arms is a list it reuses.
-void pavingReaches(const PathLayout &layout, const std::vector<std::pair<EntityKey, size_t>> &ends,
-                   const std::vector<std::vector<CarrierPoint>> &straight,
-                   std::vector<std::tuple<EntityKey, size_t, double>> &reaches,
-                   std::vector<ReachArm> &arms) {
+// How far along each of the point's segments with a straight ground line its paving reaches, when
+// it has two or more: the farther of where the inner edges on the segment's two sides touch it,
+// each with the radius it is held at, or 0. At a point with two segments, the inner edge's radius
+// is the point's radius less the narrower half width. Where the narrower of two segments may curve
+// out to the wider one, its reach is the taper length the point holds farther. In reaches, by the
+// segment's key. arms is a list it reuses.
+void pavingReaches(EntityKey key, const PathPointIntent &point, std::span<const ArmInput> ends,
+                   std::vector<SegmentReach> &reaches, std::vector<ReachArm> &arms) {
   reaches.clear();
-  for (size_t first = 0; first < ends.size();) {
-    size_t last = first;
-    while (last < ends.size() && ends[last].first == ends[first].first) {
-      ++last;
-    }
-    const EntityKey key = ends[first].first;
-    const PathPointIntent *point = findPoint(layout, key);
-    arms.clear();
-    for (size_t i = first; i < last && point != nullptr; ++i) {
-      const size_t segment = ends[i].second;
-      const PathSegmentIntent &intent = layout.Segments[segment].Intent;
-      if (straight[segment].empty()) {
-        continue;
-      }
-      const PathPointIntent *far = findPoint(layout, intent.From == key ? intent.To : intent.From);
-      const double edge = intent.From == key ? intent.FromEdge : intent.ToEdge;
-      arms.push_back(ReachArm{segment, unitToward(point->At, far->At), intent.Width / 2.0,
-                              std::isfinite(edge) && edge > 0.0 ? edge : 0.0});
-    }
-    first = last;
-    if (arms.size() < 2) {
+  arms.clear();
+  for (const ArmInput &end : ends) {
+    if (!end.Straight) {
       continue;
     }
-    std::ranges::sort(arms, [](const ReachArm &x, const ReachArm &y) {
-      if (comesBefore(x.Along, y.Along) != comesBefore(y.Along, x.Along)) {
-        return comesBefore(x.Along, y.Along);
-      }
-      return x.Segment < y.Segment;
-    });
-    const std::optional<size_t> tapered = taperArm(*point, arms);
-    for (size_t i = 0; i < arms.size(); ++i) {
-      const ReachArm &arm = arms[i];
-      const ReachArm &next = arms[(i + 1) % arms.size()];
-      const ReachArm &previous = arms[(i + arms.size() - 1) % arms.size()];
-      // An inner edge of radius r between two segments touches the first
-      // (b.Half + a.Half cos + (1 + cos) r) / sine from the point, and the second the same with the
-      // halves swapped, when the second lies less than half a turn on.
-      const auto touch = [&](const ReachArm &a, const ReachArm &b, bool onFirst) {
-        const double sine = ccwOf(a.Along, b.Along);
-        const double cosine = a.Along.X * b.Along.X + a.Along.Z * b.Along.Z;
-        if (sine <= PARALLEL) {
-          return 0.0;
-        }
-        const double held =
-            arms.size() == 2 ? std::max(point->Radius - std::min(a.Half, b.Half), 0.0) : a.Edge;
-        const double radius = std::isfinite(held) ? held : 0.0;
-        const double grow = (1.0 + cosine) * radius;
-        return onFirst ? (b.Half + a.Half * cosine + grow) / sine
-                       : (a.Half + b.Half * cosine + grow) / sine;
-      };
-      const double reach = std::max({0.0, touch(arm, next, true), touch(previous, arm, false)});
-      const bool curves = tapered.has_value() && tapered.value_or(0) == i;
-      reaches.emplace_back(key, arm.Segment, curves ? reach + point->Taper : reach);
-    }
+    const PathSegmentIntent &intent = *end.Intent;
+    const double edge = intent.From == key ? intent.FromEdge : intent.ToEdge;
+    arms.push_back(ReachArm{end.Segment, unitToward(point.At, end.Far->At), intent.Width / 2.0,
+                            std::isfinite(edge) && edge > 0.0 ? edge : 0.0});
   }
-  std::ranges::sort(reaches);
+  if (arms.size() < 2) {
+    return;
+  }
+  std::ranges::sort(arms, [](const ReachArm &x, const ReachArm &y) {
+    if (comesBefore(x.Along, y.Along) != comesBefore(y.Along, x.Along)) {
+      return comesBefore(x.Along, y.Along);
+    }
+    return x.Segment < y.Segment;
+  });
+  const std::optional<size_t> tapered = taperArm(point, arms);
+  for (size_t i = 0; i < arms.size(); ++i) {
+    const ReachArm &arm = arms[i];
+    const ReachArm &next = arms[(i + 1) % arms.size()];
+    const ReachArm &previous = arms[(i + arms.size() - 1) % arms.size()];
+    // An inner edge of radius r between two segments touches the first
+    // (b.Half + a.Half cos + (1 + cos) r) / sine from the point, and the second the same with the
+    // halves swapped, when the second lies less than half a turn on.
+    const auto touch = [&](const ReachArm &a, const ReachArm &b, bool onFirst) {
+      const double sine = ccwOf(a.Along, b.Along);
+      const double cosine = a.Along.X * b.Along.X + a.Along.Z * b.Along.Z;
+      if (sine <= PARALLEL) {
+        return 0.0;
+      }
+      const double held =
+          arms.size() == 2 ? std::max(point.Radius - std::min(a.Half, b.Half), 0.0) : a.Edge;
+      const double radius = std::isfinite(held) ? held : 0.0;
+      const double grow = (1.0 + cosine) * radius;
+      return onFirst ? (b.Half + a.Half * cosine + grow) / sine
+                     : (a.Half + b.Half * cosine + grow) / sine;
+    };
+    const double reach = std::max({0.0, touch(arm, next, true), touch(previous, arm, false)});
+    const bool curves = tapered.has_value() && tapered.value_or(0) == i;
+    reaches.push_back(SegmentReach{arm.Segment, curves ? reach + point.Taper : reach});
+  }
+  std::ranges::sort(reaches, [](const SegmentReach &x, const SegmentReach &y) {
+    return std::tuple{x.Segment, x.Reach} < std::tuple{y.Segment, y.Reach};
+  });
 }
 
-// Each corner the layout's points make, in ascending key order of its point, with their halves in
-// the arc buffer. Every bend is found first, so each corner knows what the points at its segments'
+// The lists deriving the corners reuses: each segment end, by its point's key and then by the
+// segment's index, one point's ends, each point's arms, by the point's index, the indices of the
+// points that bend, and the roundings, in ascending key order of their points.
+struct RoundingLists {
+  std::vector<std::pair<EntityKey, size_t>> Ends;
+  std::vector<ArmInput> Inputs;
+  std::vector<PointArms> Arms;
+  std::vector<PointArms> SpareArms;
+  std::vector<size_t> Bent;
+  std::vector<Rounding> Roundings;
+  std::vector<Rounding> SpareRoundings;
+};
+
+// Puts each corner the layout's points make in lists.Roundings, in ascending key order of its
+// point. Every point's arms are found first, so each corner knows what the points at its segments'
 // far ends need: the tangent length a bend's own radius asks for, and the reach of its paving's
-// inner edges. The roundings are put in lists.Roundings.
+// inner edges.
 void roundingsOf(const PathLayout &layout, const std::vector<std::vector<CarrierPoint>> &straight,
-                 std::vector<ParkPoint> &arcs, RoundingLists &lists) {
+                 TickBuffers &scratch, RoundingLists &lists) {
   std::vector<std::pair<EntityKey, size_t>> &ends = lists.Ends;
   ends.clear();
   for (size_t i = 0; i < layout.Segments.size(); ++i) {
@@ -382,39 +299,36 @@ void roundingsOf(const PathLayout &layout, const std::vector<std::vector<Carrier
     ends.emplace_back(layout.Segments[i].Intent.To, i);
   }
   std::ranges::sort(ends);
-  std::vector<Bend> &bends = lists.Bends;
-  bends.clear();
-  for (size_t first = 0; first < ends.size();) {
-    size_t last = first;
-    while (last < ends.size() && ends[last].first == ends[first].first) {
-      ++last;
+  resizeKeeping(lists.Arms, layout.Points.size(), lists.SpareArms);
+  lists.Bent.clear();
+  size_t first = 0;
+  for (size_t p = 0; p < layout.Points.size(); ++p) {
+    const auto &[key, point] = layout.Points[p];
+    while (first < ends.size() && ends[first].first < key) {
+      ++first;
     }
-    const EntityKey key = ends[first].first;
-    const PathPointIntent *point = findPoint(layout, key);
-    if (last - first == 2 && point != nullptr && !straight[ends[first].second].empty() &&
-        !straight[ends[first + 1].second].empty()) {
-      if (std::optional<Bend> bend =
-              bendOf(layout, key, *point, {ends[first].second, ends[first + 1].second})) {
-        bends.push_back(*bend);
-      }
+    lists.Inputs.clear();
+    for (; first < ends.size() && ends[first].first == key; ++first) {
+      const LayoutSegment &segment = layout.Segments[ends[first].second];
+      const EntityKey far = segment.Intent.From == key ? segment.Intent.To : segment.Intent.From;
+      lists.Inputs.push_back(ArmInput{segment.Key, &segment.Intent,
+                                      !straight[ends[first].second].empty(),
+                                      findPoint(layout, far)});
     }
-    first = last;
+    armsAt(key, point, lists.Inputs, scratch, lists.Arms[p]);
+    if (lists.Arms[p].HasBend) {
+      lists.Bent.push_back(p);
+    }
   }
-  const std::vector<std::tuple<EntityKey, size_t, double>> &sharp = lists.Reaches;
-  pavingReaches(layout, ends, straight, lists.Reaches, lists.Arms);
-  const auto needed = [&bends, &sharp](EntityKey key, size_t segment) {
-    const auto bend = std::ranges::lower_bound(bends, key, {}, &Bend::Key);
-    const double asked =
-        bend != bends.end() && bend->Key == key ? bend->tangentOf(bend->Asked) : 0.0;
-    const auto reach = std::ranges::lower_bound(sharp, std::tuple{key, segment, 0.0});
-    const bool found =
-        reach != sharp.end() && std::get<0>(*reach) == key && std::get<1>(*reach) == segment;
-    return std::max(asked, found ? std::get<2>(*reach) : 0.0);
-  };
-  lists.Roundings.clear();
-  lists.Roundings.reserve(bends.size());
-  for (const Bend &bend : bends) {
-    lists.Roundings.push_back(roundingOf(bend, needed, arcs));
+  resizeKeeping(lists.Roundings, lists.Bent.size(), lists.SpareRoundings);
+  for (size_t b = 0; b < lists.Bent.size(); ++b) {
+    const PointArms &arms = lists.Arms[lists.Bent[b]];
+    std::array<double, 2> needed{};
+    for (size_t k = 0; k < 2; ++k) {
+      needed[k] =
+          neededAt(lists.Arms[pointIndex(layout, arms.Bent.FarKeys[k])], arms.Bent.Segments[k]);
+    }
+    cornerAt(arms, needed, lists.Roundings[b]);
   }
 }
 
@@ -439,39 +353,42 @@ void layoutOf(const World &world, PathLayout &layout) {
 
 namespace {
 
-// Puts the ground line of the segment at index i in line, where a corner at either end is rounded:
-// from the start's arc, or from the straight line's start, to the end's arc, or to its end.
-void roundedLine(std::vector<CarrierPoint> &line, size_t i, ParkPoint from, ParkPoint to,
-                 const Rounding *start, const Rounding *end, const std::vector<ParkPoint> &arcs) {
+// Puts the ground line of the segment in line, where a corner at either end is rounded: from the
+// start's arc, or from the straight line's start, to the end's arc, or to its end.
+void roundedLine(std::vector<CarrierPoint> &line, EntityKey key, ParkPoint from, ParkPoint to,
+                 const Rounding *start, const Rounding *end) {
   line.clear();
   if (start != nullptr) {
     // From the arc's middle to where it touches this segment.
-    const size_t k = start->Segments[0] == i ? 0 : 1;
-    for (size_t j = start->HalfBegin[k]; j < start->HalfEnd[k]; ++j) {
-      extendLine(line, arcs[j]);
+    const std::vector<ParkPoint> &half = start->Halves[start->Segments[0] == key ? 0 : 1];
+    for (const ParkPoint &point : half) {
+      extendLine(line, point);
     }
   } else {
     extendLine(line, from);
   }
   if (end != nullptr) {
     // From where the arc touches this segment back to its middle.
-    const size_t k = end->Segments[0] == i ? 0 : 1;
-    for (size_t j = end->HalfEnd[k] - 1; j > end->HalfBegin[k]; --j) {
-      extendLine(line, arcs[j]);
+    const std::vector<ParkPoint> &half = end->Halves[end->Segments[0] == key ? 0 : 1];
+    for (size_t j = half.size() - 1; j > 0; --j) {
+      extendLine(line, half[j]);
     }
-    endLine(line, arcs[end->HalfBegin[k]]);
+    endLine(line, half[0]);
   } else {
     endLine(line, to);
   }
 }
 
-// Puts the layout's ground in lists.Ground. When the lists are kept, each segment's line is copied
-// from its straight line, so both keep their memory. Otherwise the straight line moves into it.
-void fillGround(const PathLayout &layout, GroundLists &lists, bool kept) {
-  straightLines(layout, lists.Lines, lists.SpareLines);
-  lists.Arcs.clear();
+// Puts the layout's ground in lists.Ground.
+void fillGround(const PathLayout &layout, GroundLists &lists) {
+  resizeKeeping(lists.Lines, layout.Segments.size(), lists.SpareLines);
+  for (size_t i = 0; i < layout.Segments.size(); ++i) {
+    const PathSegmentIntent &segment = layout.Segments[i].Intent;
+    straightLineOf(segment, findPoint(layout, segment.From), findPoint(layout, segment.To),
+                   lists.Lines[i]);
+  }
   RoundingLists &found = lists.Scratch.get<RoundingLists>();
-  roundingsOf(layout, lists.Lines, lists.Arcs, found);
+  roundingsOf(layout, lists.Lines, lists.Scratch, found);
   const std::vector<Rounding> &roundings = found.Roundings;
   // The rounded corner at the point, or null.
   const auto roundingAt = [&roundings](EntityKey point) -> const Rounding * {
@@ -483,33 +400,10 @@ void fillGround(const PathLayout &layout, GroundLists &lists, bool kept) {
   resizeKeeping(ground.Segments, layout.Segments.size(), lists.SpareSegments);
   for (size_t i = 0; i < layout.Segments.size(); ++i) {
     const auto &[key, intent] = layout.Segments[i];
-    std::vector<CarrierPoint> &straight = lists.Lines[i];
-    ParkSegment &segment = ground.Segments[i];
-    std::vector<CarrierPoint> &line = segment.Line;
+    const std::vector<CarrierPoint> &straight = lists.Lines[i];
     const Rounding *start = straight.empty() ? nullptr : roundingAt(intent.From);
     const Rounding *end = straight.empty() ? nullptr : roundingAt(intent.To);
-    if (start == nullptr && end == nullptr) {
-      if (kept) {
-        copyGrowing(line, std::span<const CarrierPoint>(straight));
-      } else {
-        line = std::move(straight);
-      }
-    } else {
-      const ParkPoint from{straight.front().X, straight.front().Z};
-      const ParkPoint to{straight.back().X, straight.back().Z};
-      if (!kept) {
-        line = std::move(straight);
-      }
-      roundedLine(line, i, from, to, start, end, lists.Arcs);
-    }
-    segment.Key = key;
-    segment.Kind = intent.Kind;
-    segment.From = intent.From;
-    segment.To = intent.To;
-    segment.Width = intent.Width;
-    segment.FromEdge = intent.FromEdge;
-    segment.ToEdge = intent.ToEdge;
-    segment.Furnished = {};
+    groundLineOf(key, intent, straight, start, end, ground.Segments[i]);
   }
   ground.Corners.clear();
   ground.Corners.reserve(roundings.size());
@@ -520,16 +414,100 @@ void fillGround(const PathLayout &layout, GroundLists &lists, bool kept) {
 
 } // namespace
 
+[[gnu::noinline]] void straightLineOf(const PathSegmentIntent &segment, const PathPointIntent *from,
+                                      const PathPointIntent *to, std::vector<CarrierPoint> &line) {
+  line.clear();
+  if (from == nullptr || to == nullptr || segment.From == segment.To ||
+      !std::isfinite(segment.Width) || !(segment.Width > 0.0)) {
+    return;
+  }
+  segmentLine(from->At, to->At, line);
+}
+
+[[gnu::noinline]] void armsAt(EntityKey key, const PathPointIntent &point,
+                              std::span<const ArmInput> ends, TickBuffers &scratch,
+                              PointArms &arms) {
+  arms.HasBend = false;
+  arms.Bent = Bend{};
+  if (ends.size() == 2 && ends[0].Straight && ends[1].Straight) {
+    if (const std::optional<Bend> bend = bendOf(key, point, ends)) {
+      arms.HasBend = true;
+      arms.Bent = *bend;
+    }
+  }
+  pavingReaches(key, point, ends, arms.Reaches, scratch.get<ReachArms>().Arms);
+}
+
+double neededAt(const PointArms &far, EntityKey segment) {
+  const double asked = far.HasBend ? far.Bent.tangentOf(far.Bent.Asked) : 0.0;
+  const auto reach = std::ranges::lower_bound(
+      far.Reaches, std::tuple{segment, 0.0}, {},
+      [](const SegmentReach &each) { return std::tuple{each.Segment, each.Reach}; });
+  const bool found = reach != far.Reaches.end() && reach->Segment == segment;
+  return std::max(asked, found ? reach->Reach : 0.0);
+}
+
+// Each segment allows the arc its length less what its far end needs, or half its length if that
+// is more.
+[[gnu::noinline]] void cornerAt(const PointArms &arms, std::array<double, 2> needed,
+                                Rounding &rounding) {
+  const Bend &bend = arms.Bent;
+  double allowed = 0.0;
+  for (size_t k = 0; k < 2; ++k) {
+    const double length = bend.Lengths[k];
+    const double allowance = std::max(length - needed[k], length / 2.0);
+    allowed = k == 0 ? allowance : std::min(allowed, allowance);
+  }
+  const double maxRadius = allowed * (1.0 - bend.Dot) / bend.Cross;
+  const double radius = std::min(bend.Asked, maxRadius);
+  const double tangent = bend.tangentOf(radius);
+  const ParkPoint sum{bend.Along[0].X + bend.Along[1].X, bend.Along[0].Z + bend.Along[1].Z};
+  const double sumLength = std::sqrt(sum.X * sum.X + sum.Z * sum.Z);
+  const ParkPoint toward{sum.X / sumLength, sum.Z / sumLength};
+  // The arc's center lies along toward, as far from the point as the hypotenuse of the tangent
+  // length and the radius. The arc's middle lies the radius nearer the point.
+  const double centerDepth = std::sqrt(tangent * tangent + radius * radius);
+  const ParkPoint middle = stepFrom(bend.At, toward, centerDepth - radius);
+  rounding.Corner = ParkCorner{bend.Key, bend.At, bend.Along, toward, radius, maxRadius, middle};
+  rounding.Segments = bend.Segments;
+  for (size_t k = 0; k < 2; ++k) {
+    std::vector<ParkPoint> &half = rounding.Halves[k];
+    half.clear();
+    if (radius > 0.0) {
+      appendArc(half, stepFrom(bend.At, toward, centerDepth), radius, middle,
+                stepFrom(bend.At, bend.Along[k], tangent));
+    } else {
+      half.push_back(bend.At);
+    }
+  }
+}
+
+[[gnu::noinline]] void groundLineOf(EntityKey key, const PathSegmentIntent &segment,
+                                    std::span<const CarrierPoint> straight, const Rounding *start,
+                                    const Rounding *end, ParkSegment &out) {
+  if (start == nullptr && end == nullptr) {
+    copyGrowing(out.Line, straight);
+  } else {
+    const ParkPoint from{straight.front().X, straight.front().Z};
+    const ParkPoint to{straight.back().X, straight.back().Z};
+    roundedLine(out.Line, key, from, to, start, end);
+  }
+  out.Key = key;
+  out.Kind = segment.Kind;
+  out.From = segment.From;
+  out.To = segment.To;
+  out.Width = segment.Width;
+  out.FromEdge = segment.FromEdge;
+  out.ToEdge = segment.ToEdge;
+  out.Furnished = {};
+}
+
 PathGround groundOf(const PathLayout &layout) {
   GroundLists lists;
-  fillGround(layout, lists, false);
+  fillGround(layout, lists);
   return std::move(lists.Ground);
 }
 
-void groundOf(const PathLayout &layout, GroundLists &lists) { fillGround(layout, lists, true); }
-
-std::vector<ParkSegment> segmentsOf(const PathLayout &layout) { return groundOf(layout).Segments; }
-
-std::vector<ParkCorner> cornersOf(const PathLayout &layout) { return groundOf(layout).Corners; }
+void groundOf(const PathLayout &layout, GroundLists &lists) { fillGround(layout, lists); }
 
 } // namespace tpj

@@ -1,5 +1,7 @@
 #include "sim/world.h"
 
+#include "sim/unit_space.h"
+
 #include <bit>
 #include <limits>
 #include <stdexcept>
@@ -38,6 +40,10 @@ bool isDefaultFloatEnvironment() {
 
 World::World() : World(std::make_shared<const WorldSchema>(), 0) {}
 
+World::World(World &&) noexcept = default;
+World &World::operator=(World &&) noexcept = default;
+World::~World() = default;
+
 World::World(std::shared_ptr<const WorldSchema> schema, uint64_t seed)
     : Seed(seed), Schema(std::move(schema)) {
   if (!Schema) {
@@ -47,6 +53,7 @@ World::World(std::shared_ptr<const WorldSchema> schema, uint64_t seed)
   for (const ComponentType &type : Schema->components()) {
     Stores.push_back(type.MakeStore());
   }
+  Units = std::make_unique<UnitSpace>(*Schema);
   if (WORLD_CHECKS && !isDefaultFloatEnvironment()) {
     throw WorldInvariantError(
         "the floating-point environment is not the default: round-to-nearest, "
@@ -107,11 +114,20 @@ bool World::destroyEntity(EntityKey key) {
     SpareRecords.reserve(ByKey.size() + SpareRecords.size());
   }
   SpareRecords.push_back(ByKey.extract(found));
-  for (const std::unique_ptr<ComponentStore> &store : Stores) {
-    store->erase(key);
+  for (size_t index = 0; index < Stores.size(); ++index) {
+    if (Units->isLogged(index) && Stores[index]->has(key)) {
+      Units->noteChange(index, key);
+    }
+    Stores[index]->erase(key);
   }
   return true;
 }
+
+void World::noteChange(size_t store, EntityKey key) { Units->noteChange(store, key); }
+
+UnitSpace &unitSpaceOf(World &world) { return *world.Units; }
+
+const UnitSpace &unitSpaceOf(const World &world) { return *world.Units; }
 
 std::vector<EntityKey> World::keys() const {
   std::vector<EntityKey> result;

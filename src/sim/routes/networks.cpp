@@ -517,8 +517,14 @@ template <typename Visitor> void visitFields(Visitor &visitor, PreviousNetwork &
   visitor.field("network", previous.Held);
 }
 
-void resolvePathNetworks(World &world, TickBuffers & /*buffers*/) {
-  const std::vector<ParkSegment> segments = parkSegments(world);
+// The segments resolvePathNetworks reads, kept from one resolution to the next.
+struct NetworkSegments {
+  std::vector<ParkSegment> Segments;
+};
+
+void resolvePathNetworks(World &world, TickBuffers &buffers) {
+  std::vector<ParkSegment> &segments = buffers.get<NetworkSegments>().Segments;
+  parkSegments(world, segments, buffers);
   const std::vector<ParkEntrance> entrances = parkEntrances(world);
   const std::vector<ParkBox> boxes = parkBoxes(world);
   const PavedSurface &surface = resolvedSurface(world);
@@ -545,13 +551,13 @@ template <typename Visitor> void visitFields(Visitor &visitor, WalkedSurface &wa
 
 inline constexpr uint64_t WALKED_SURFACE_PURPOSE = hashName("walked-surface");
 
-void resolveWalkedSurface(World &world, TickBuffers & /*buffers*/) {
+void resolveWalkedSurface(World &world, TickBuffers &buffers) {
   std::vector<Walkway> walkways = connectorWalkways(world, PathKind::Guest);
   for (const Walkway &walkway : connectorWalkways(world, PathKind::Backstage)) {
     walkways.push_back(walkway);
   }
   const EntityKey key = world.createDerivedEntity(NULL_KEY, WALKED_SURFACE_PURPOSE, 0);
-  world.emplaceOrReplace<WalkedSurface>(key, WalkedSurface{parkSurface(world, walkways)});
+  world.emplaceOrReplace<WalkedSurface>(key, WalkedSurface{parkSurface(world, walkways, buffers)});
 }
 
 // Removes both kinds' previous networks, so no resolution ends holding one.

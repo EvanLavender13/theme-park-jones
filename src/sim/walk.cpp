@@ -1,9 +1,11 @@
 #include "sim/world.h"
 
 #include "sim/mix.h"
+#include "sim/unit_space.h"
 
 #include <cmath>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -43,20 +45,31 @@ public:
 
 std::string keyText(EntityKey key) { return std::to_string(static_cast<uint64_t>(key)); }
 
+// Throws WorldInvariantError when a component of the store holds a NaN.
+class NanCheck final : public KeyVisitor {
+public:
+  NanCheck(const ComponentStore &store, const ComponentType &type) : Store(&store), Type(&type) {}
+  void key(EntityKey key) override {
+    NanFinder finder;
+    Store->emit(key, finder);
+    if (finder.Field) {
+      throw WorldInvariantError("NaN in field '" + *finder.Field + "' of component '" + Type->Name +
+                                "' on entity " + keyText(key));
+    }
+  }
+
+private:
+  const ComponentStore *Store;
+  const ComponentType *Type;
+};
+
 } // namespace
 
 void validateWorld(const World &world) {
   const std::vector<ComponentType> &types = world.Schema->components();
   for (size_t index = 0; index < types.size(); ++index) {
-    const ComponentStore &store = *world.Stores[index];
-    for (const EntityKey key : store.keys()) {
-      NanFinder finder;
-      store.emit(key, finder);
-      if (finder.Field) {
-        throw WorldInvariantError("NaN in field '" + *finder.Field + "' of component '" +
-                                  types[index].Name + "' on entity " + keyText(key));
-      }
-    }
+    NanCheck check(*world.Stores[index], types[index]);
+    world.Stores[index]->visitKeys(check);
   }
 }
 
@@ -126,7 +139,26 @@ World copyWorld(const World &world) {
   for (size_t index = 0; index < world.Stores.size(); ++index) {
     copy.Stores[index] = world.Stores[index]->clone();
   }
+  copy.Units = world.Units->clone();
   return copy;
+}
+
+void copyWorld(const World &world, World &into) {
+  if (into.Schema != world.Schema) {
+    throw std::invalid_argument("copyWorld refills only a world on the same schema object");
+  }
+  if constexpr (WORLD_CHECKS) {
+    validateWorld(world);
+  }
+  into.Tick = world.Tick;
+  into.Seed = world.Seed;
+  into.NextKey = world.NextKey;
+  into.ResolvePending = world.ResolvePending;
+  assignKeyed(into.ByKey, world.ByKey, into.SpareRecords);
+  for (size_t index = 0; index < world.Stores.size(); ++index) {
+    into.Stores[index]->assignFrom(*world.Stores[index]);
+  }
+  into.Units->assignFrom(*world.Units);
 }
 
 } // namespace tpj

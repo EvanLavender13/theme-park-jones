@@ -17,13 +17,15 @@ benchPark times the stages a player waits on, on a loaded park, in this order:
 - resolution of a park already resolved, as an edit's resolution is, with buffers kept across repetitions, as the app keeps them
 - a preview of an edit that leaves the park as it is, and its ghost (only when the park has a box)
 - a guest path edit's acceptance check, its preview, and its ghost (only when the park has a guest segment with a ground line). The edit is a path from the middle of a guest segment to a place PATH_SPUR_LENGTH beyond the segment's side. It uses the first such path the world accepts, trying segments in ascending key order and, on each, first the side a quarter turn counter-clockwise from the segment's direction and then the other.
+- shop-drag, only when the park holds a shop: a drag of the lowest-keyed shop along its face, DRAG_STEP metres a frame, out to DRAG_SPAN from where it stands and back, on a copy of the park that steps one tick before each frame. Each frame times keepPreview with the frame's MoveBox and buildGhostMesh of what it made.
+- path-drag, only when the guest path edit's stages run: a guest path drawn from the middle of their segment, toward their side, to a point that starts DRAG_START_REACH beyond that side and moves DRAG_STEP further out each frame, on its own stepped copy, timed as shop-drag's frames are.
 - the food overlay's shape
 - the food overlay's shades
 - the park mesh
 - the guest mesh
 - a run of ticks with no commands
 
-It leaves the loaded world unchanged. Each stage except ticks is warmed up and then repeated. Ticks times each of its calls. Each stage gives the median, least, and greatest of its times in nanoseconds. It also gives a result computed from its work: a hash, a vertex count, or a count of values. The acceptance check's count is 1. The result keeps the work from being optimized away. If a build did different work, its result is different. If the park has a guest segment with a ground line but the world accepts no such path on any, benchPark throws.
+It leaves the loaded world unchanged. Each stage except ticks is warmed up and then repeated. Ticks times each of its calls. Each stage gives the median, least, and greatest of its times in nanoseconds. It also gives a result computed from its work: a hash, a vertex count, or a count of values. The acceptance check's count is 1. The result keeps the work from being optimized away. If a build did different work, its result is different. If the park has a guest segment with a ground line but the world accepts no such path on any, benchPark throws. The drag stages each run WARM_UPS + REPETITIONS frames and time the last REPETITIONS. Each one's result is the last candidate's hash. benchPark throws std::runtime_error naming the shop or the segment when the world refuses a frame's edit.
 
 ## tpj_bench
 

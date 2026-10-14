@@ -18,6 +18,7 @@
 #include "sim/routes/networks.h"
 #include "sim/save.h"
 #include "sim/schema.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -32,6 +33,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <stddef.h>
 #include <stdint.h>
 #include <string>
 #include <string_view>
@@ -288,6 +290,76 @@ ChosenEdit deletingShop(const World &before) {
   REQUIRE_FALSE(supplies.Packets.empty());
   REQUIRE_FALSE(supplies.Stocks.empty());
   return {"deleting the shop", DeleteBox{shop}};
+}
+
+// The unit direction along the pose's face: its facing turned a quarter.
+ParkPoint alongFaceOf(const Pose &pose) {
+  const double length = std::hypot(pose.FacingX, pose.FacingZ);
+  REQUIRE(length > 0.0);
+  return {-pose.FacingZ / length, pose.FacingX / length};
+}
+
+// The pose moved the distance along its face, facing as it did.
+Pose movedAlongFace(const Pose &pose, double distance) {
+  const ParkPoint along = alongFaceOf(pose);
+  return {pose.X + (distance * along.X), pose.Z + (distance * along.Z), pose.FacingX, pose.FacingZ};
+}
+
+ParkBox boxWithKey(const World &world, EntityKey key) {
+  const std::optional<ParkBox> box = parkBox(world, key);
+  REQUIRE(box.has_value());
+  return box.value_or(ParkBox{});
+}
+
+// The two ends of the box's connector on the guest network, or none when it has none.
+std::optional<std::array<ParkPoint, 2>> guestConnectorEnds(const World &world, EntityKey box) {
+  for (const Carrier &carrier : parkNetwork(world, PathKind::Guest).carriers()) {
+    if ((carrier.Key == connectorKey(box, Face::Front) ||
+         carrier.Key == connectorKey(box, Face::Back)) &&
+        !carrier.Points.empty()) {
+      const CarrierPoint &first = carrier.Points.front();
+      const CarrierPoint &last = carrier.Points.back();
+      return std::array<ParkPoint, 2>{ParkPoint{first.X, first.Z}, ParkPoint{last.X, last.Z}};
+    }
+  }
+  return std::nullopt;
+}
+
+bool sharesAnEnd(const std::array<ParkPoint, 2> &left, const std::array<ParkPoint, 2> &right) {
+  return std::ranges::any_of(left, [&](const ParkPoint &end) {
+    return std::ranges::any_of(
+        right, [&](const ParkPoint &other) { return end.X == other.X && end.Z == other.Z; });
+  });
+}
+
+// The shop keeps its key, kind, and facing and moves 1 m along its face, so its door's connection
+// meets the guest path at a new place. The move goes whichever way along the face the world accepts
+// first.
+ChosenEdit movingShopAlongFace(const World &before) {
+  const EntityKey shop = firstShop(before);
+  REQUIRE(shop != NULL_KEY);
+  const Pose at = boxWithKey(before, shop).At;
+  const std::optional<std::array<ParkPoint, 2>> beforeEnds = guestConnectorEnds(before, shop);
+  REQUIRE(beforeEnds.has_value());
+  constexpr double DISTANCE = 1.0;
+  for (const double side : {1.0, -1.0}) {
+    const MoveBox move{shop, movedAlongFace(at, side * DISTANCE)};
+    if (!isAccepted(before, ParkEdit{move})) {
+      continue;
+    }
+    // Without the connection moving along the guest path, the networks would join the shop where
+    // they did before, and the move would check less of what a moved box changes.
+    const World candidate = makeCandidate(before, queueOf(ParkEdit{move}));
+    const std::optional<std::array<ParkPoint, 2>> movedEnds = guestConnectorEnds(candidate, shop);
+    REQUIRE(movedEnds.has_value());
+    REQUIRE_FALSE(sharesAnEnd(beforeEnds.value_or(std::array<ParkPoint, 2>{}),
+                              movedEnds.value_or(std::array<ParkPoint, 2>{})));
+    return {"moving the shop 1 m along its face, so its guest connection meets the guest path at a "
+            "new place",
+            move};
+  }
+  FAIL("neither way along the shop's face accepts moving it 1 m");
+  return {};
 }
 
 bool someGuestStandsOn(const World &world, EntityKey segment) {
@@ -620,6 +692,7 @@ std::vector<ChosenEdit> warmChosenEdits(const World &before) {
                                 addingPathCrossingGuestSegment(before),
                                 addingShop(before),
                                 deletingShop(before),
+                                movingShopAlongFace(before),
                                 movingPointUnderGuests(before),
                                 insertingPointUnderGuests(before),
                                 removingPointUnderGuests(before),
@@ -906,6 +979,98 @@ TEST_CASE("Each chosen edit's candidate, made from noon.park as a cycle leaves i
           "the park, equals the world that queuing the edit for that cycle gives and the world "
           "that committing it without a cycle gives") {
   checkCandidatesEqualCommits(EDITED_PARKS[1]);
+}
+
+// Frames in each drag, and how much further each frame's edit reaches than the last's.
+constexpr size_t DRAG_FRAMES = 8;
+constexpr double DRAG_STEP = 0.5;
+
+bool acceptsEvery(const World &world, const std::vector<ParkEdit> &frames) {
+  return std::ranges::all_of(frames, [&](const ParkEdit &edit) { return isAccepted(world, edit); });
+}
+
+// Each frame's edit of a drag of the lowest-keyed shop along its face, DRAG_STEP further on each
+// frame, whichever way along the face the world accepts every frame.
+std::vector<ParkEdit> shopDragFrames(const World &start) {
+  const EntityKey shop = firstShop(start);
+  REQUIRE(shop != NULL_KEY);
+  const Pose at = boxWithKey(start, shop).At;
+  for (const double side : {1.0, -1.0}) {
+    std::vector<ParkEdit> frames;
+    for (size_t frame = 1; frame <= DRAG_FRAMES; ++frame) {
+      const double distance = side * DRAG_STEP * static_cast<double>(frame);
+      frames.emplace_back(MoveBox{shop, movedAlongFace(at, distance)});
+    }
+    if (acceptsEvery(start, frames)) {
+      return frames;
+    }
+  }
+  FAIL("neither way along the shop's face accepts every frame of the drag");
+  return {};
+}
+
+// Each frame's edit of a guest path drawn from the middle of a guest segment, its end square to the
+// segment and DRAG_STEP further out on each frame. The segment is the first under a guest heading
+// to a shop, and the side the first, where the world accepts every frame.
+std::vector<ParkEdit> pathDragFrames(const World &start) {
+  constexpr double START_REACH = 6.0;
+  for (const EntityKey segmentKey : guestSegmentsUnderGuestsHeadingToShop(start)) {
+    const OnSegment middle{segmentKey, 0.5};
+    const std::optional<ParkPoint> middlePosition = stopPosition(start, middle);
+    REQUIRE(middlePosition.has_value());
+    const ParkPoint middlePoint = middlePosition.value_or(ParkPoint{});
+    const ParkPoint square = squareToSegment(start, segmentKey);
+    for (const double side : {1.0, -1.0}) {
+      std::vector<ParkEdit> frames;
+      for (size_t frame = 1; frame <= DRAG_FRAMES; ++frame) {
+        const double reach = side * (START_REACH + (DRAG_STEP * static_cast<double>(frame)));
+        const ParkPoint end{middlePoint.X + (reach * square.X), middlePoint.Z + (reach * square.Z)};
+        frames.emplace_back(AddPath{PathKind::Guest, {middle, NewPoint{end}}});
+      }
+      if (acceptsEvery(start, frames)) {
+        return frames;
+      }
+    }
+  }
+  FAIL("no guest segment under a guest heading to a shop accepts every frame of a path drawn out "
+       "from its middle");
+  return {};
+}
+
+// Refills one kept candidate on each frame, as the preview does, after the world steps a tick. A
+// world loaded from the kept candidate's save derives every unit from nothing, so it differs from
+// the kept candidate if the candidate kept a stale unit from an earlier frame.
+void checkKeptCandidateThroughDrag(const World &opened, const std::vector<ParkEdit> &frames) {
+  World world = copyWorld(opened);
+  World kept = copyWorld(opened);
+  TickBuffers stepBuffers;
+  TickBuffers buffers;
+  CommandQueue commands;
+  for (size_t frame = 0; frame < frames.size(); ++frame) {
+    INFO("frame " << (frame + 1));
+    stepWorld(world, stepBuffers);
+    REQUIRE(isAccepted(world, frames[frame]));
+    commands.clear();
+    queueEdit(commands, frames[frame]);
+    makeCandidate(world, commands, buffers, kept);
+    CHECK(worldsEqual(kept, makeCandidate(world, commands)));
+    World loaded = loadWorld(makeParkSchema(), saveWorld(kept));
+    resolveWorld(loaded);
+    CHECK(worldsEqual(kept, loaded));
+  }
+}
+
+TEST_CASE("A candidate kept and refilled on each frame of a drag on warm.park, with a tick before "
+          "each frame, equals the candidate made new for the frame's edit and the world loaded "
+          "from its save") {
+  const World opened = openParkNamed("warm.park");
+  const World start = steppedOnce(opened);
+  SECTION("dragging the shop along its face") {
+    checkKeptCandidateThroughDrag(opened, shopDragFrames(start));
+  }
+  SECTION("drawing a guest path out from the middle of a guest segment") {
+    checkKeptCandidateThroughDrag(opened, pathDragFrames(start));
+  }
 }
 
 // Whether some guest in both worlds stands at a different place in the second.

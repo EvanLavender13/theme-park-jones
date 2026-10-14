@@ -9,6 +9,7 @@
 #include "sim/park/intent.h"
 #include "views/availability_overlay.h"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <chrono>
@@ -82,12 +83,29 @@ uint64_t ghostVertices(const GhostMesh &ghost) {
   return ghost.Tints.Vertices.size() + ghost.Lit.Vertices.size() + ghost.Marks.Vertices.size();
 }
 
-// The path edit the path stages preview: a guest path from the middle of a guest segment to a
-// place PATH_SPUR_LENGTH beyond its side, the first the world accepts, trying segments in ascending
-// key order and, on each, the side a quarter turn counter-clockwise from its direction before the
-// other. None when the park has no guest segment with a ground line. Throws std::runtime_error when
-// it has one but the world accepts no such path.
-std::optional<AddPath> pathSpur(const World &park) {
+// The guest segment the path stages draw from, and the side they draw toward: the segment's key,
+// its line's middle, the unit normal toward the accepted side, and its half width.
+struct SpurChoice {
+  EntityKey Segment = NULL_KEY;
+  ParkPoint Middle;
+  ParkPoint Normal;
+  double Half = 0.0;
+};
+
+// The guest path from the choice's segment to the point the distance beyond its side.
+AddPath spurPath(const SpurChoice &spur, double distance) {
+  const double reach = spur.Half + distance;
+  return AddPath{PathKind::Guest,
+                 {OnSegment{spur.Segment, 0.5}, NewPoint{{spur.Middle.X + spur.Normal.X * reach,
+                                                          spur.Middle.Z + spur.Normal.Z * reach}}}};
+}
+
+// The segment and side of the path edit the path stages preview: a guest path from the middle of a
+// guest segment to a place PATH_SPUR_LENGTH beyond its side, the first the world accepts, trying
+// segments in ascending key order and, on each, the side a quarter turn counter-clockwise from its
+// direction before the other. None when the park has no guest segment with a ground line. Throws
+// std::runtime_error when it has one but the world accepts no such path.
+std::optional<SpurChoice> spurChoice(const World &park) {
   bool tried = false;
   for (const ParkSegment &segment : parkSegments(park)) {
     if (segment.Kind != PathKind::Guest || segment.Line.size() < 2) {
@@ -99,15 +117,12 @@ std::optional<AddPath> pathSpur(const World &park) {
     const double length = std::hypot(last.X - first.X, last.Z - first.Z);
     const double normalX = -(last.Z - first.Z) / length;
     const double normalZ = (last.X - first.X) / length;
-    const double middleX = 0.5 * (first.X + last.X);
-    const double middleZ = 0.5 * (first.Z + last.Z);
-    const double reach = 0.5 * segment.Width + PATH_SPUR_LENGTH;
+    const ParkPoint middle{0.5 * (first.X + last.X), 0.5 * (first.Z + last.Z)};
     for (const double side : {1.0, -1.0}) {
-      AddPath path{PathKind::Guest,
-                   {OnSegment{segment.Key, 0.5}, NewPoint{{middleX + normalX * side * reach,
-                                                           middleZ + normalZ * side * reach}}}};
-      if (isAccepted(park, ParkEdit{path})) {
-        return path;
+      const SpurChoice spur{
+          segment.Key, middle, {normalX * side, normalZ * side}, 0.5 * segment.Width};
+      if (isAccepted(park, ParkEdit{spurPath(spur, PATH_SPUR_LENGTH)})) {
+        return spur;
       }
     }
   }
@@ -138,6 +153,107 @@ void previewStages(std::vector<StageResult> &stages, const World &park, const Pa
       StageResult{prefix + "ghost", ghost.Times, ResultKind::Vertices, ghostVertices(ghost.Last)});
 }
 
+// Times a drag through a kept preview, on a copy of the park that steps one tick before each of
+// WARM_UPS + REPETITIONS frames. Each frame times keepPreview with editAt(frame) and the ghost of
+// what it made, and only the frames after the warm-ups count. The result is the last candidate's
+// hash. Throws std::runtime_error with the message, naming the frame, when the world refuses a
+// frame's edit.
+template <typename EditAt>
+StageResult timeDrag(std::string name, const World &park, EditAt editAt,
+                     const std::string &refused) {
+  World stepped = copyWorld(park);
+  TickBuffers buffers;
+  KeptPreview kept;
+  std::vector<int64_t> times;
+  times.reserve(REPETITIONS);
+  for (size_t frame = 0; frame < WARM_UPS + REPETITIONS; ++frame) {
+    stepWorld(stepped, buffers);
+    const ParkEdit edit = editAt(frame);
+    if (!isAccepted(stepped, edit)) {
+      throw std::runtime_error(refused + " at frame " + std::to_string(frame));
+    }
+    const std::optional<ParkEdit> held = edit;
+    const Clock::time_point start = Clock::now();
+    keepPreview(kept, stepped, held, false);
+    if (kept.Made.Candidate) {
+      const GhostMesh ghost = buildGhostMesh(stepped, edit, kept.Made.Candidate);
+    }
+    const Clock::time_point end = Clock::now();
+    if (frame >= WARM_UPS) {
+      times.push_back(nanosecondsBetween(start, end));
+    }
+  }
+  if (!kept.Made.Candidate) {
+    throw std::runtime_error(refused + ": the last frame has no candidate");
+  }
+  return StageResult{std::move(name), summarizeTimes(times), ResultKind::Hash,
+                     hashWorld(*kept.Made.Candidate)};
+}
+
+// The shop drag: the shop moved along its face, its facing kept, DRAG_STEP further each frame out
+// to DRAG_SPAN and back. A pose's facing need not be a unit vector, so the direction is
+// normalized.
+[[gnu::noinline]] StageResult timeShopDrag(const World &park, const ParkBox &shop) {
+  const double facing = std::hypot(shop.At.FacingX, shop.At.FacingZ);
+  const ParkPoint along{-shop.At.FacingZ / facing, shop.At.FacingX / facing};
+  const auto steps = static_cast<size_t>(DRAG_SPAN / DRAG_STEP);
+  return timeDrag(
+      "shop-drag", park,
+      [&shop, along, steps](size_t frame) {
+        const size_t phase = (frame + 1) % (2 * steps);
+        const size_t out = phase <= steps ? phase : 2 * steps - phase;
+        const double offset = DRAG_STEP * static_cast<double>(out);
+        Pose pose = shop.At;
+        pose.X += along.X * offset;
+        pose.Z += along.Z * offset;
+        return ParkEdit{MoveBox{shop.Key, pose}};
+      },
+      "moving shop " + std::to_string(static_cast<uint64_t>(shop.Key)) +
+          " along its face is refused");
+}
+
+// The path drag: a guest path from the middle of the choice's segment, its end starting
+// DRAG_START_REACH beyond the segment's side and moving DRAG_STEP further out each frame.
+[[gnu::noinline]] StageResult timePathDrag(const World &park, const SpurChoice &spur) {
+  return timeDrag(
+      "path-drag", park,
+      [&spur](size_t frame) {
+        return ParkEdit{spurPath(spur, DRAG_START_REACH + DRAG_STEP * static_cast<double>(frame))};
+      },
+      "a path from segment " + std::to_string(static_cast<uint64_t>(spur.Segment)) + " is refused");
+}
+
+// The stages of edits on the resolved park: the preview and ghost of a box left where it stands,
+// the path edit's acceptance check, preview, and ghost, and the two drags.
+void editStages(std::vector<StageResult> &stages, const World &park) {
+  const std::vector<ParkBox> boxes = parkBoxes(park);
+  if (!boxes.empty()) {
+    previewStages(stages, park, ParkEdit{MoveBox{boxes.front().Key, boxes.front().At}}, "",
+                  "moving box " + std::to_string(static_cast<uint64_t>(boxes.front().Key)) +
+                      " to its own pose is refused, so the park has no preview");
+  }
+
+  const std::optional<SpurChoice> spur = spurChoice(park);
+  if (spur) {
+    const ParkEdit edit{spurPath(*spur, PATH_SPUR_LENGTH)};
+    const auto acceptance = timeRepeated(nothing, [&park, &edit](Nothing /*input*/) {
+      return static_cast<uint64_t>(isAccepted(park, edit) ? 1 : 0);
+    });
+    stages.push_back(
+        StageResult{"path-acceptance", acceptance.Times, ResultKind::Values, acceptance.Last});
+    previewStages(stages, park, edit, "path-",
+                  "the accepted path from a guest segment's side has no preview");
+  }
+
+  const auto shop = std::ranges::find(boxes, BoxKind::Shop, &ParkBox::Kind);
+  if (shop != boxes.end()) {
+    stages.push_back(timeShopDrag(park, *shop));
+  }
+  if (spur) {
+    stages.push_back(timePathDrag(park, *spur));
+  }
+}
+
 } // namespace
 
 std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
@@ -158,23 +274,7 @@ std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
   const World &park = resolved;
   stages.push_back(StageResult{"resolution", resolution.Times, ResultKind::Hash, hashWorld(park)});
 
-  const std::vector<ParkBox> boxes = parkBoxes(park);
-  if (!boxes.empty()) {
-    previewStages(stages, park, ParkEdit{MoveBox{boxes.front().Key, boxes.front().At}}, "",
-                  "moving box " + std::to_string(static_cast<uint64_t>(boxes.front().Key)) +
-                      " to its own pose is refused, so the park has no preview");
-  }
-
-  if (const std::optional<AddPath> spur = pathSpur(park)) {
-    const ParkEdit edit{*spur};
-    const auto acceptance = timeRepeated(nothing, [&park, &edit](Nothing /*input*/) {
-      return static_cast<uint64_t>(isAccepted(park, edit) ? 1 : 0);
-    });
-    stages.push_back(
-        StageResult{"path-acceptance", acceptance.Times, ResultKind::Values, acceptance.Last});
-    previewStages(stages, park, edit, "path-",
-                  "the accepted path from a guest segment's side has no preview");
-  }
+  editStages(stages, park);
 
   OverlayShapeLists shapeLists;
   stages.push_back(meshStage("food-overlay-shape", park, shapeLists,

@@ -5,6 +5,7 @@
 #include "sim/park/geometry.h"
 #include "sim/park/internal/components.h"
 #include "sim/park/internal/curves.h"
+#include "sim/park/internal/ground_units.h"
 #include "sim/park/internal/layout.h"
 #include "sim/park/internal/meetings.h"
 
@@ -1730,12 +1731,12 @@ std::vector<ParkPoint> pathCrossings(const World &world, const RemovePoint &remo
 
 namespace {
 
-// The pieces of the park's surface that can reach the solid. Every piece of a point's or of a
-// segment's lies within the longer of one of the point's segments' length and the widest width,
-// plus the widest width, from the point, so only the points that near the solid's bounds and their
-// segments are built.
-std::vector<SurfacePiece> piecesNear(const PathLayout &layout, const Solid &solid) {
-  const PathGround ground = groundOf(layout);
+// The pieces of the surface of the layout, with its ground, that can reach the solid. Every piece
+// of a point's or of a segment's lies within the longer of one of the point's segments' length and
+// the widest width, plus the widest width, from the point, so only the points that near the solid's
+// bounds and their segments are built.
+std::vector<SurfacePiece> piecesNear(const PathLayout &layout, const PathGround &ground,
+                                     const Solid &solid) {
   const auto [leastX, greatestX] = extentOf(solid.Shape.Corners, ParkPoint{1.0, 0.0});
   const auto [leastZ, greatestZ] = extentOf(solid.Shape.Corners, ParkPoint{0.0, 1.0});
   const auto positionOf = [&layout](EntityKey key) {
@@ -1957,9 +1958,13 @@ bool isRestoreAccepted(const World &world, const RestoreIntent &command) {
   if (!pathsFit) {
     return false;
   }
+  std::optional<PathGround> afterGround;
   const auto boxFits = [&](EntityKey key, const ParkBox &box) {
     const std::optional<Solid> solid = solidOf(key, box.At, boxSize(box.Kind));
-    return solid && fits(*solid, solids, piecesNear(after, *solid));
+    if (solid && !afterGround) {
+      afterGround = groundOf(after);
+    }
+    return solid && fits(*solid, solids, piecesNear(after, *afterGround, *solid));
   };
   for (const ParkBox &box : command.Set.Boxes) {
     if (!boxFits(box.Key, box)) {
@@ -2018,7 +2023,12 @@ bool isAccepted(const World &world, const AddBox &command) {
     return false;
   }
   const std::optional<Solid> solid = solidOf(NULL_KEY, command.At, boxSize(command.Kind));
-  return solid && fits(*solid, solidsOf(world), piecesNear(layoutOf(world), *solid));
+  if (!solid) {
+    return false;
+  }
+  GroundLists lists;
+  worldGround(world, lists);
+  return fits(*solid, solidsOf(world), piecesNear(lists.Layout, lists.Ground, *solid));
 }
 
 bool isAccepted(const World &world, const MoveBox &command) {
@@ -2027,7 +2037,12 @@ bool isAccepted(const World &world, const MoveBox &command) {
     return false;
   }
   const std::optional<Solid> solid = solidOf(command.Box, command.At, boxSize(box->Kind));
-  return solid && fits(*solid, solidsOf(world), piecesNear(layoutOf(world), *solid));
+  if (!solid) {
+    return false;
+  }
+  GroundLists lists;
+  worldGround(world, lists);
+  return fits(*solid, solidsOf(world), piecesNear(lists.Layout, lists.Ground, *solid));
 }
 
 bool isAccepted(const World &world, const DeleteSegment &command) {

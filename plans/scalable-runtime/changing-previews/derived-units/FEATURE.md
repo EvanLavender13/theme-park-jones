@@ -53,6 +53,11 @@ The feature also adds two bench stages, a scripted shop drag and a scripted path
 
     After each frame, the kept candidate equals the candidate the returning makeCandidate gives for the same edit, and it equals the world loaded from its own save and resolved. Each frame's edit must be accepted. The second comparison is what catches a kept world that holds stale units from an earlier frame, because a loaded world derives every unit from nothing.
 
+Spec decisions from the test pass:
+
+- The kept candidate starts as copyWorld(world) of the opened park, since that is the only public way to make a world on the same schema object. The preview does the same.
+- The path drag's end starts 6 m from the segment's middle, the offset the existing path edits use.
+
 ## Medium
 
 None. Units, indexes, change logs, and recorded reads are how resolution stores its work. They never appear in the walk, so they add no field or flow and change no value the simulation or the display gives.

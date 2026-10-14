@@ -35,6 +35,14 @@ commitCommands(world, commands) applies the queued commands in submission order 
 
 isStepping, isResolving, and isFinishing are each true exactly while their stage runs. If a function is meant for one stage, it can use them to refuse callers from any other stage.
 
+## Units
+
+A module can register unit kinds and indexes with the schema, in its resolver order. A unit kind derives one value for each entity that holds a given intent component. Its derivation reads intent components, earlier kinds' units, and the keys an index files under a key, each by key, and nothing else. An index files each entity that holds a given intent component under the keys it names for that component.
+
+Resolution keeps each unit's value and what its derivation read. A unit derives again only when its entity gains or loses the component, or when something it read has changed since. A command's use of an intent component counts as a change to it. If a unit derives again and its value comes out equal, word for word as the walk compares values, the units that read it don't derive again for it. So a resolution gives the same units as deriving every unit, whatever units the world kept.
+
+A new world and a loaded world hold no units, so their first resolution derives every unit. copyWorld carries the units and what they read, so a copy resolves only what changed since. copyWorld(world, into) makes into equal to the world, units included, reusing into's memory. It throws std::invalid_argument when into doesn't share the world's schema object. makeCandidate(world, commands, buffers, into) makes into the candidate. Units are never part of the walk, so hashes, saves, and comparisons never see them. unitValue gives a unit's value as the last resolution left it. unitsCurrent says whether a kind's units hold every change made to the world.
+
 ## The clock
 
 parkTime(tick) gives the park's time at a tick, a ParkTime: its Day, counted from 1, and its Second of that day, from 0 to 86399. Tick 0 is 9:00 on day 1. Each tick adds GAME_SECONDS_PER_TICK to the clock, so a day is DAY_TICKS ticks, and a new day starts at midnight. A park's time is parkTime of its World::Tick. The clock is computed in whole numbers from the tick alone, so it is the same on every build, and it adds nothing to a world's state or save.

@@ -3,6 +3,7 @@
 #include "sim/mix.h"
 #include "sim/park/geometry.h"
 #include "sim/park/internal/around.h"
+#include "sim/park/internal/ground_units.h"
 #include "sim/park/internal/layout.h"
 #include "sim/schema.h"
 #include "sim/tick_buffers.h"
@@ -1386,17 +1387,24 @@ std::vector<EntityKey> pointsAffected(const PathLayout &layout, const PathGround
 }
 
 PavedSurface parkSurface(const World &world) {
-  const PathLayout layout = layoutOf(world);
-  return surfaceOf(layout, groundOf(layout));
+  GroundLists lists;
+  worldGround(world, lists);
+  return surfaceOf(lists.Layout, lists.Ground);
+}
+
+PavedSurface parkSurface(const World &world, TickBuffers &buffers) {
+  GroundLists &lists = buffers.get<GroundLists>();
+  worldGround(world, lists);
+  return surfaceOf(lists.Layout, lists.Ground);
 }
 
 namespace {
 
 inline constexpr uint64_t SURFACE_PURPOSE = hashName("paved-surface");
 
-void resolvePavedSurface(World &world, TickBuffers & /*buffers*/) {
+void resolvePavedSurface(World &world, TickBuffers &buffers) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, SURFACE_PURPOSE, 0);
-  world.emplaceOrReplace<PavedSurface>(key, parkSurface(world));
+  world.emplaceOrReplace<PavedSurface>(key, parkSurface(world, buffers));
 }
 
 } // namespace
@@ -1412,9 +1420,11 @@ void addPavedSurface(WorldSchema &schema) {
   schema.addResolver("paved-surface", &resolvePavedSurface);
 }
 
-PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways) {
-  const PathLayout layout = layoutOf(world);
-  const PathGround ground = groundOf(layout);
+namespace {
+
+// The paved surface of the layout with its ground, with the walkways added.
+PavedSurface walkedSurfaceOf(const PathLayout &layout, const PathGround &ground,
+                             std::span<const Walkway> walkways) {
   PavedSurface surface = buildSurface(layout, ground, nullptr, true);
   for (const Walkway &walkway : walkways) {
     addWalkway(surface, ground, walkway);
@@ -1425,6 +1435,21 @@ PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways) 
   Joins joins(ground);
   hideJoined(surface, pieces, joins);
   return surface;
+}
+
+} // namespace
+
+PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways) {
+  GroundLists lists;
+  worldGround(world, lists);
+  return walkedSurfaceOf(lists.Layout, lists.Ground, walkways);
+}
+
+PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways,
+                         TickBuffers &buffers) {
+  GroundLists &lists = buffers.get<GroundLists>();
+  worldGround(world, lists);
+  return walkedSurfaceOf(lists.Layout, lists.Ground, walkways);
 }
 
 namespace {
@@ -1531,8 +1556,9 @@ std::vector<ParkTaper> parkTapers(const World &world) {
   if (lists.Candidates.empty()) {
     return tapers;
   }
-  const PathLayout layout = layoutOf(world);
-  fitTapers(layout, groundOf(layout), lists.Candidates, lists, tapers);
+  GroundLists ground;
+  worldGround(world, ground);
+  fitTapers(ground.Layout, ground.Ground, lists.Candidates, lists, tapers);
   return tapers;
 }
 
@@ -1544,20 +1570,19 @@ void parkTapers(const World &world, std::vector<ParkTaper> &tapers, TickBuffers 
     return;
   }
   GroundLists &ground = buffers.get<GroundLists>();
-  layoutOf(world, ground.Layout);
-  groundOf(ground.Layout, ground);
+  worldGround(world, ground);
   fitTapers(ground.Layout, ground.Ground, lists.Candidates, lists, tapers);
 }
 
 std::vector<ParkEdge> parkEdges(const World &world) {
-  const PathLayout layout = layoutOf(world);
-  return edgesOf(layout, groundOf(layout));
+  GroundLists ground;
+  worldGround(world, ground);
+  return edgesOf(ground.Layout, ground.Ground);
 }
 
 void parkEdges(const World &world, std::vector<ParkEdge> &edges, TickBuffers &buffers) {
   GroundLists &ground = buffers.get<GroundLists>();
-  layoutOf(world, ground.Layout);
-  groundOf(ground.Layout, ground);
+  worldGround(world, ground);
   fitEdges(ground.Layout, ground.Ground, buffers.get<EdgeLists>(), edges);
 }
 
