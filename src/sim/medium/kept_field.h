@@ -349,7 +349,11 @@ void sampleKeptSlotAtNode(const Network &network, const KeptSlot &slot, uint32_t
   NodeSample &sample = kept.Node;
   sample.Node = node;
   sample.AtNode.clear();
-  // Moving an end keeps its list's memory for a later end.
+  // Moving an end keeps its list's memory for a later end. Ends hold lists, so a list of them grows
+  // in steps, which rarely move them.
+  if (kept.SpareEnds.capacity() < kept.SpareEnds.size() + sample.Ends.size()) {
+    reserveGrowing(kept.SpareEnds, kept.SpareEnds.size() + sample.Ends.size());
+  }
   while (!sample.Ends.empty()) {
     kept.SpareEnds.push_back(std::move(sample.Ends.back()));
     sample.Ends.pop_back();
@@ -359,7 +363,11 @@ void sampleKeptSlotAtNode(const Network &network, const KeptSlot &slot, uint32_t
     sample.AtNode.push_back(read(i));
   }
   bool any = !sample.AtNode.empty();
-  for (const EdgeEnd &end : network.edgeEnds(node)) {
+  const std::span<const EdgeEnd> ends = network.edgeEnds(node);
+  if (sample.Ends.capacity() < ends.size()) {
+    reserveGrowing(sample.Ends, ends.size());
+  }
+  for (const EdgeEnd &end : ends) {
     const NetworkEdge &edge = network.edges()[end.Edge];
     if (kept.SpareEnds.empty()) {
       sample.Ends.emplace_back();

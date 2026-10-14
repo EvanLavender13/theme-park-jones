@@ -1,6 +1,7 @@
 #ifndef TPJ_LEGIBLE_ARRIVALS_H
 #define TPJ_LEGIBLE_ARRIVALS_H
 
+#include "legible/preview.h"
 #include "sim/clock.h"
 #include "sim/park/intent.h"
 #include "sim/world.h"
@@ -22,11 +23,15 @@ using ArrivalDay = std::array<double, ARRIVAL_SAMPLES>;
 struct KeptArrivalDay {
   std::optional<OpeningHours> Hours;
   ArrivalDay Day{};
+  // The preview of the hours the day was last made for, when they differ from the park's.
+  KeptPreview Preview;
 };
 
 // Makes the kept day again for the hours when nothing is kept or the kept day's hours differ, and
 // returns whether it did: arrivalCurve's samples of a candidate with only a SetOpeningHours of the
-// hours queued, or of the world itself when it has those hours. Changes nothing.
+// hours queued, or of the world itself when it has those hours. Changes nothing. Allocates nothing
+// once the kept preview's lists have grown, apart from the resolvers and finishers no feature has
+// moved yet.
 bool keepArrivalDay(KeptArrivalDay &kept, const World &world, OpeningHours hours);
 
 } // namespace tpj

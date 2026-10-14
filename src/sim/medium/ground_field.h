@@ -83,6 +83,17 @@ void visitFields(Visitor &visitor, GroundEntries<F> &entries) {
   visitor.field("changing", entries.Changing);
 }
 
+// Makes mine equal to other, keeping its lists' memory, as copying a world refills it.
+template <GroundFieldDefinition F>
+void keepAssign(GroundEntries<F> &mine, const GroundEntries<F> &other) {
+  using Entry = GroundEntry<typename F::Entry>;
+  copyGrowing(mine.Readable, std::span<const Entry>(other.Readable));
+  copyGrowing(mine.Next, std::span<const Entry>(other.Next));
+  mine.Changing = other.Changing;
+  copyGrowing(mine.ByCell, std::span<const GroundCell>(other.ByCell));
+  mine.CellsCurrent = other.CellsCurrent;
+}
+
 // An entry a sample found: its entity's key, its position, and its value.
 template <typename Entry> struct GroundSample {
   EntityKey Key = NULL_KEY;

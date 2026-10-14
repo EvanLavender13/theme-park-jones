@@ -8,12 +8,14 @@
 #include "sim/park/internal/ground_units.h"
 #include "sim/park/internal/layout.h"
 #include "sim/park/internal/meetings.h"
+#include "sim/park/internal/plan.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stddef.h>
@@ -28,20 +30,6 @@ namespace tpj {
 namespace {
 
 constexpr double HALF_PARK = PARK_SIZE / 2.0;
-
-// A footprint the check compares, with the pose and size it came from.
-struct Solid {
-  EntityKey Key = NULL_KEY;
-  Pose At;
-  FootprintSize Size;
-  Footprint Shape;
-};
-
-// A path's ground line, with half the path's width.
-struct Line {
-  std::vector<CarrierPoint> Points;
-  double HalfWidth = 0.0;
-};
 
 std::optional<Solid> solidOf(EntityKey key, const Pose &pose, FootprintSize size) {
   const std::optional<Footprint> shape = footprintOf(pose, size);
@@ -59,19 +47,31 @@ std::optional<Line> lineOf(const ParkSegment &segment) {
   return Line{segment.Line, segment.Width / 2.0};
 }
 
-// Every entrance's and box's footprint, skipping any with none.
-std::vector<Solid> solidsOf(const World &world) {
-  std::vector<Solid> solids;
-  for (const ParkEntrance &entrance : parkEntrances(world)) {
+// Puts every entrance's and box's footprint in solids, skipping any with none. entrances and boxes
+// are lists it reuses.
+void solidsOf(const World &world, std::vector<ParkEntrance> &entrances, std::vector<ParkBox> &boxes,
+              std::vector<Solid> &solids) {
+  parkEntrances(world, entrances);
+  parkBoxes(world, boxes);
+  solids.clear();
+  for (const ParkEntrance &entrance : entrances) {
     if (const std::optional<Solid> solid = solidOf(entrance.Key, entrance.At, ENTRANCE_SIZE)) {
       solids.push_back(*solid);
     }
   }
-  for (const ParkBox &box : parkBoxes(world)) {
+  for (const ParkBox &box : boxes) {
     if (const std::optional<Solid> solid = solidOf(box.Key, box.At, boxSize(box.Kind))) {
       solids.push_back(*solid);
     }
   }
+}
+
+// Every entrance's and box's footprint, skipping any with none.
+std::vector<Solid> solidsOf(const World &world) {
+  std::vector<ParkEntrance> entrances;
+  std::vector<ParkBox> boxes;
+  std::vector<Solid> solids;
+  solidsOf(world, entrances, boxes, solids);
   return solids;
 }
 
@@ -239,93 +239,6 @@ bool fits(const SurfacePiece &piece, const std::vector<Solid> &solids) {
   return std::ranges::none_of(solids, [&piece](const Solid &solid) { return meets(piece, solid); });
 }
 
-// A point an edit's segments run through: an existing path point, or, when Existing is NULL_KEY, a
-// point the edit adds.
-struct PlanPoint {
-  ParkPoint At;
-  EntityKey Existing = NULL_KEY;
-  // The radius a point the edit adds takes.
-  double Radius = DEFAULT_CORNER_RADIUS;
-};
-
-// A plan point on a segment, Along of the way from the segment's first end to its second.
-struct PlacedPoint {
-  size_t Point = 0;
-  double Along = 0.0;
-};
-
-// A segment of the world that an edit leaves in place but splits, and the plan points it splits
-// at.
-struct Split {
-  EntityKey Segment = NULL_KEY;
-  std::vector<PlacedPoint> At;
-};
-
-// A corner of the world that an edit splits at places on its arc: the corner, its segment along its
-// first direction and then the other, and the plan points at the places, each with its fraction
-// along the arc. Points holds the plan points finishPlan adds where the lines touching the arc
-// meet, in order along it, the last on the second segment's line.
-struct BendSplit {
-  ParkCorner Corner;
-  std::array<EntityKey, 2> Segments{};
-  std::vector<PlacedPoint> At;
-  std::vector<size_t> Points;
-};
-
-// A segment an edit adds or reshapes: the one Key holds, or, when Key is NULL_KEY, a new one. It
-// runs from plan point From to plan point To and splits at the points it runs Through, in order of
-// Along. FromEdge and ToEdge are its edge radii at From and To. FromAdded and ToAdded say whether
-// the edit adds that end at a path point that already has segments, rather than keeping or moving
-// an end that was there.
-struct PlanLine {
-  EntityKey Key = NULL_KEY;
-  PathKind Kind = PathKind::Guest;
-  double Width = 0.0;
-  size_t From = 0;
-  size_t To = 0;
-  std::vector<PlacedPoint> Through;
-  double FromEdge = DEFAULT_EDGE_RADIUS;
-  double ToEdge = DEFAULT_EDGE_RADIUS;
-  bool FromAdded = false;
-  bool ToAdded = false;
-};
-
-// What an accepted edit makes. Points holds the points its lines and splits run through: for
-// AddPath, each stop's point in stop order, a RepeatStop sharing its earlier stop's, then each
-// point a meeting adds, in the order found. Stops gives each AddPath stop's entry in Points.
-// Splits holds the segments the edit leaves in place but splits, in ascending key order, each
-// with its points in order of Along. Lines holds the segments it adds or reshapes: for AddPath,
-// the one from stop i to stop i + 1 at index i. Crossings holds the entries in Points where a
-// meeting splits a segment, in the order found. Destroyed holds the keys it destroys, segments
-// first. Moves holds each existing point that moves, with where it moves to. BendSplits holds the
-// corners the edit splits, in ascending key order of their points. If Rounded is not NULL_KEY,
-// that existing point's radius becomes RoundedTo. Curves holds the radii written last, so that
-// the edit keeps every curve. If Edged is not NULL_KEY, that existing
-// segment's edge radius at its From end, when EdgedAtFrom, or else at its To end, becomes EdgedTo.
-// If Tapered is not NULL_KEY, that existing point's taper length becomes TaperedTo. If Inheritor
-// is not NULL_KEY, each side of that existing segment that has no furnishing takes that side of
-// Inherits, as a merged segment takes the other's.
-struct EditPlan {
-  std::vector<PlanPoint> Points;
-  std::vector<size_t> Stops;
-  std::vector<Split> Splits;
-  std::vector<PlanLine> Lines;
-  std::vector<size_t> Crossings;
-  std::vector<EntityKey> Destroyed;
-  std::vector<std::pair<EntityKey, ParkPoint>> Moves;
-  std::vector<BendSplit> BendSplits;
-  EntityKey Rounded = NULL_KEY;
-  double RoundedTo = 0.0;
-  EntityKey Edged = NULL_KEY;
-  bool EdgedAtFrom = false;
-  double EdgedTo = 0.0;
-  EntityKey Tapered = NULL_KEY;
-  double TaperedTo = 0.0;
-  CurveWrites Curves;
-  EntityKey Inheritor = NULL_KEY;
-  Furnishing Inherits;
-};
-
 // Whether the key holds a path point that some segment uses, every such segment of the kind.
 bool isPointOfKind(const World &world, const std::vector<ParkSegment> &segments, EntityKey point,
                    PathKind kind) {
@@ -354,20 +267,25 @@ bool endsAt(const ParkSegment &segment, EntityKey point) {
   return segment.From == point || segment.To == point;
 }
 
-// The segments that end at the point, in ascending key order.
-std::vector<ParkSegment> segmentsAt(const std::vector<ParkSegment> &segments, EntityKey point) {
-  std::vector<ParkSegment> at;
-  std::ranges::copy_if(segments, std::back_inserter(at),
-                       [point](const ParkSegment &segment) { return endsAt(segment, point); });
-  return at;
-}
+// Two segments in ascending key order.
+using SegmentPair = std::array<const ParkSegment *, 2>;
 
-// The segments that don't end at the point, in ascending key order.
-std::vector<ParkSegment> segmentsNotAt(const std::vector<ParkSegment> &segments, EntityKey point) {
-  std::vector<ParkSegment> notAt;
-  std::ranges::copy_if(segments, std::back_inserter(notAt),
-                       [point](const ParkSegment &segment) { return !endsAt(segment, point); });
-  return notAt;
+// The two segments that end at the point, in ascending key order, leaving out each that ends at
+// skip when skip isn't NULL_KEY, or none unless exactly two do.
+std::optional<SegmentPair> twoAt(const std::vector<ParkSegment> &segments, EntityKey point,
+                                 EntityKey skip = NULL_KEY) {
+  SegmentPair two{};
+  size_t count = 0;
+  for (const ParkSegment &segment : segments) {
+    if (!endsAt(segment, point) || (skip != NULL_KEY && endsAt(segment, skip))) {
+      continue;
+    }
+    if (count == 2) {
+      return std::nullopt;
+    }
+    two[count++] = &segment;
+  }
+  return count == 2 ? std::optional<SegmentPair>(two) : std::nullopt;
 }
 
 // The segment's edge radius at the point, one of its two.
@@ -375,14 +293,14 @@ double edgeAt(const ParkSegment &segment, EntityKey point) {
   return segment.From == point ? segment.FromEdge : segment.ToEdge;
 }
 
-// The corner the path point makes, when it is rounded with a radius above 0, or none.
-std::optional<ParkCorner> roundedCorner(const World &world, EntityKey point) {
-  for (const ParkCorner &corner : parkCorners(world)) {
-    if (corner.Point == point && corner.Radius > 0.0) {
-      return corner;
-    }
+// The corner the path point makes, when it is rounded with a radius above 0, or none. The corners
+// are in ascending key order of their points, as parkCorners gives them.
+std::optional<ParkCorner> roundedIn(std::span<const ParkCorner> corners, EntityKey point) {
+  const auto found = std::ranges::lower_bound(corners, point, {}, &ParkCorner::Point);
+  if (found == corners.end() || found->Point != point || !(found->Radius > 0.0)) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  return *found;
 }
 
 // The segment's end that is not the point.
@@ -395,6 +313,62 @@ PathStop stopOf(const PointTarget &target) {
   return std::visit([](const auto &stop) { return PathStop{stop}; }, target);
 }
 
+// The stop's ground position, as stopPosition gives it, finding an OnBend's corner with the corner
+// finder, which gives the rounded corner at a point or none.
+template <typename FindCorner>
+std::optional<ParkPoint> positionWith(const World &world, const PathStop &stop,
+                                      FindCorner findCorner) {
+  if (const auto *at = std::get_if<NewPoint>(&stop)) {
+    return at->At;
+  }
+  if (const auto *on = std::get_if<OnPoint>(&stop)) {
+    const PathPointIntent *point = findIntent<PathPointIntent>(world, on->Point);
+    return point == nullptr ? std::nullopt : std::optional<ParkPoint>(point->At);
+  }
+  if (const auto *on = std::get_if<OnBend>(&stop)) {
+    const std::optional<ParkCorner> corner = findCorner(on->Point);
+    if (!corner || !std::isfinite(on->Along) || on->Along <= 0.0 || on->Along >= 1.0) {
+      return std::nullopt;
+    }
+    return bendPlace(*corner, on->Along);
+  }
+  if (std::holds_alternative<RepeatStop>(stop) || std::holds_alternative<OnDrawnSegment>(stop)) {
+    return std::nullopt;
+  }
+  const auto &on = std::get<OnSegment>(stop);
+  const PathSegmentIntent *segment = findIntent<PathSegmentIntent>(world, on.Segment);
+  if (segment == nullptr) {
+    return std::nullopt;
+  }
+  const PathPointIntent *from = findIntent<PathPointIntent>(world, segment->From);
+  const PathPointIntent *to = findIntent<PathPointIntent>(world, segment->To);
+  if (from == nullptr || to == nullptr) {
+    return std::nullopt;
+  }
+  return ParkPoint{from->At.X + on.Along * (to->At.X - from->At.X),
+                   from->At.Z + on.Along * (to->At.Z - from->At.Z)};
+}
+
+// The stop's ground position, as stopPosition gives it, reading the corners from a list as
+// parkCorners gives them.
+std::optional<ParkPoint> positionIn(const World &world, std::span<const ParkCorner> corners,
+                                    const PathStop &stop) {
+  return positionWith(world, stop,
+                      [corners](EntityKey point) { return roundedIn(corners, point); });
+}
+
+// The furnishing the segment the key holds has on each side.
+Furnishing furnishingOf(const World &world, EntityKey key) {
+  Furnishing furnishing;
+  if (const auto *left = world.tryGet<LeftFurnishingIntent>(key)) {
+    furnishing.Left = left->Held;
+  }
+  if (const auto *right = world.tryGet<RightFurnishingIntent>(key)) {
+    furnishing.Right = right->Held;
+  }
+  return furnishing;
+}
+
 // The position of the path point the key holds, or none.
 std::optional<ParkPoint> positionOf(const World &world, EntityKey key) {
   const PathPointIntent *point = findIntent<PathPointIntent>(world, key);
@@ -403,31 +377,32 @@ std::optional<ParkPoint> positionOf(const World &world, EntityKey key) {
 
 // The two segments a deleted point merges, the lower key first: exactly two segments use the
 // point, and their far ends are different points other than it.
-std::optional<std::pair<ParkSegment, ParkSegment>> mergingPair(const std::vector<ParkSegment> &at,
-                                                               EntityKey point) {
-  if (at.size() != 2) {
+std::optional<SegmentPair> mergingPair(const std::vector<ParkSegment> &segments, EntityKey point) {
+  const std::optional<SegmentPair> two = twoAt(segments, point);
+  if (!two) {
     return std::nullopt;
   }
-  const EntityKey lowFar = farEnd(at[0], point);
-  const EntityKey highFar = farEnd(at[1], point);
+  const EntityKey lowFar = farEnd(*(*two)[0], point);
+  const EntityKey highFar = farEnd(*(*two)[1], point);
   if (lowFar == highFar || lowFar == point || highFar == point) {
     return std::nullopt;
   }
-  return std::pair{at[0], at[1]};
+  return two;
 }
 
 // Whether the OnBend names a place on the arc of a corner with a radius above 0 whose two segments
 // both have the kind, or one kind when kind is none.
-bool isBendOfKind(const World &world, const std::vector<ParkSegment> &segments, const OnBend &on,
+bool isBendOfKind(const World &world, const std::vector<ParkSegment> &segments,
+                  std::span<const ParkCorner> corners, const OnBend &on,
                   std::optional<PathKind> kind) {
-  const std::vector<ParkSegment> at = segmentsAt(segments, on.Point);
-  return stopPosition(world, on).has_value() && at.size() == 2 && at[0].Kind == at[1].Kind &&
-         (!kind || at[0].Kind == *kind);
+  const std::optional<SegmentPair> two = twoAt(segments, on.Point);
+  return positionIn(world, corners, on).has_value() && two && (*two)[0]->Kind == (*two)[1]->Kind &&
+         (!kind || (*two)[0]->Kind == *kind);
 }
 
 // Whether the stop names what it lands on, of the kind.
 bool isStopOfKind(const World &world, const std::vector<ParkSegment> &segments,
-                  const PathStop &stop, PathKind kind) {
+                  std::span<const ParkCorner> corners, const PathStop &stop, PathKind kind) {
   if (const auto *on = std::get_if<OnPoint>(&stop)) {
     return isPointOfKind(world, segments, on->Point, kind);
   }
@@ -440,9 +415,58 @@ bool isStopOfKind(const World &world, const std::vector<ParkSegment> &segments,
     return std::isfinite(on->Along) && on->Along > 0.0 && on->Along < 1.0;
   }
   if (const auto *on = std::get_if<OnBend>(&stop)) {
-    return isBendOfKind(world, segments, *on, kind);
+    return isBendOfKind(world, segments, corners, *on, kind);
   }
   return true;
+}
+
+// Adds an element to one of a plan's lists, taking a spare one when there is one, so that its own
+// lists keep their memory. The caller sets every field.
+template <typename T> T &addKept(std::vector<T> &list, std::vector<T> &spare) {
+  resizeKeeping(list, list.size() + 1, spare);
+  return list.back();
+}
+
+// Empties the plan, keeping the memory of its lists and of their elements' lists.
+void clearPlan(PlanLists &kept) {
+  EditPlan &plan = kept.Plan;
+  plan.Points.clear();
+  plan.Stops.clear();
+  resizeKeeping(plan.Splits, 0, kept.SpareSplits);
+  resizeKeeping(plan.Lines, 0, kept.SpareLines);
+  resizeKeeping(plan.BendSplits, 0, kept.SpareBends);
+  plan.Crossings.clear();
+  plan.Destroyed.clear();
+  plan.Moves.clear();
+  plan.Rounded = NULL_KEY;
+  plan.RoundedTo = 0.0;
+  plan.Edged = NULL_KEY;
+  plan.EdgedAtFrom = false;
+  plan.EdgedTo = 0.0;
+  plan.Tapered = NULL_KEY;
+  plan.TaperedTo = 0.0;
+  plan.Curves.Radii.clear();
+  plan.Curves.Edges.clear();
+  plan.Inheritor = NULL_KEY;
+  plan.Inherits = {};
+}
+
+// Adds a line to the plan, running through no points yet, with neither end added.
+PlanLine &addLine(PlanLists &kept, EntityKey key, PathKind kind, double width, size_t from,
+                  size_t to, double fromEdge = DEFAULT_EDGE_RADIUS,
+                  double toEdge = DEFAULT_EDGE_RADIUS) {
+  PlanLine &line = addKept(kept.Plan.Lines, kept.SpareLines);
+  line.Key = key;
+  line.Kind = kind;
+  line.Width = width;
+  line.From = from;
+  line.To = to;
+  line.Through.clear();
+  line.FromEdge = fromEdge;
+  line.ToEdge = toEdge;
+  line.FromAdded = false;
+  line.ToAdded = false;
+  return line;
 }
 
 // The entry in the plan's points for the existing path point, added at its position if there is
@@ -466,31 +490,39 @@ bool place(std::vector<PlacedPoint> &on, size_t point, double along) {
 }
 
 // The points the world's segment splits at, starting none.
-std::vector<PlacedPoint> &splitOf(EditPlan &plan, EntityKey segment) {
+std::vector<PlacedPoint> &splitOf(PlanLists &kept, EntityKey segment) {
+  EditPlan &plan = kept.Plan;
   const auto found = std::ranges::find(plan.Splits, segment, &Split::Segment);
   if (found != plan.Splits.end()) {
     return found->At;
   }
-  plan.Splits.push_back(Split{segment, {}});
-  return plan.Splits.back().At;
+  Split &split = addKept(plan.Splits, kept.SpareSplits);
+  split.Segment = segment;
+  split.At.clear();
+  return split.At;
 }
 
 // The places a plan splits the corner at the point at, the corner added to the plan's bend splits
-// if it isn't there yet. The corner is rounded with a radius above 0, and exactly two segments
-// end at its point.
-std::vector<PlacedPoint> &bendSplitOf(const World &world, const std::vector<ParkSegment> &segments,
-                                      EditPlan &plan, EntityKey point) {
+// if it isn't there yet. The corner is rounded with a radius above 0, and exactly two of the
+// segments end at its point, leaving out those that end at skip.
+std::vector<PlacedPoint> &bendSplitOf(std::span<const ParkCorner> corners,
+                                      const std::vector<ParkSegment> &segments, EntityKey skip,
+                                      PlanLists &kept, EntityKey point) {
+  EditPlan &plan = kept.Plan;
   const auto found = std::ranges::find_if(
       plan.BendSplits, [point](const BendSplit &bend) { return bend.Corner.Point == point; });
   if (found != plan.BendSplits.end()) {
     return found->At;
   }
-  const std::vector<ParkSegment> at = segmentsAt(segments, point);
   // The corner's first direction runs along its lower-keyed segment, the first of these. Callers
   // have checked that the corner is there.
-  plan.BendSplits.push_back(BendSplit{
-      roundedCorner(world, point).value_or(ParkCorner{}), {at[0].Key, at[1].Key}, {}, {}});
-  return plan.BendSplits.back().At;
+  const SegmentPair two = twoAt(segments, point, skip).value_or(SegmentPair{});
+  BendSplit &bend = addKept(plan.BendSplits, kept.SpareBends);
+  bend.Corner = roundedIn(corners, point).value_or(ParkCorner{});
+  bend.Segments = {two[0]->Key, two[1]->Key};
+  bend.At.clear();
+  bend.Points.clear();
+  return bend.At;
 }
 
 void markCrossing(EditPlan &plan, size_t point) {
@@ -515,11 +547,11 @@ size_t crossingPoint(EditPlan &plan, ParkPoint at) {
 }
 
 // The plan's stop points, a line between each two stops, and the points of OnSegment and
-// OnDrawnSegment stops on the segments they name.
-EditPlan planStops(const World &world, const std::vector<ParkSegment> &segments,
-                   const AddPath &command, const std::vector<ParkPoint> &positions) {
-  EditPlan plan;
-  std::vector<std::vector<PlacedPoint>> drawn(command.Stops.size() - 1);
+// OnDrawnSegment stops on the segments they name. An OnDrawnSegment names a segment between two
+// earlier stops, so its line is there before it.
+void planStops(std::span<const ParkCorner> corners, const std::vector<ParkSegment> &segments,
+               PlanLists &kept, const AddPath &command, const std::vector<ParkPoint> &positions) {
+  EditPlan &plan = kept.Plan;
   for (size_t i = 0; i < command.Stops.size(); ++i) {
     const PathStop &stop = command.Stops[i];
     if (const auto *on = std::get_if<OnPoint>(&stop)) {
@@ -530,22 +562,21 @@ EditPlan planStops(const World &world, const std::vector<ParkSegment> &segments,
       plan.Points.push_back(PlanPoint{positions[i], NULL_KEY});
       plan.Stops.push_back(plan.Points.size() - 1);
     }
+    if (i > 0) {
+      PlanLine &line = addLine(kept, NULL_KEY, command.Kind, pathWidth(command.Kind),
+                               plan.Stops[i - 1], plan.Stops[i]);
+      line.FromAdded = plan.Points[line.From].Existing != NULL_KEY;
+      line.ToAdded = plan.Points[line.To].Existing != NULL_KEY;
+    }
     if (const auto *onSegment = std::get_if<OnSegment>(&stop)) {
-      place(splitOf(plan, onSegment->Segment), plan.Stops[i], onSegment->Along);
+      place(splitOf(kept, onSegment->Segment), plan.Stops[i], onSegment->Along);
     } else if (const auto *onDrawn = std::get_if<OnDrawnSegment>(&stop)) {
-      place(drawn[onDrawn->Stop], plan.Stops[i], onDrawn->Along);
+      place(plan.Lines[onDrawn->Stop].Through, plan.Stops[i], onDrawn->Along);
     } else if (const auto *onBend = std::get_if<OnBend>(&stop)) {
-      place(bendSplitOf(world, segments, plan, onBend->Point), plan.Stops[i], onBend->Along);
+      place(bendSplitOf(corners, segments, NULL_KEY, kept, onBend->Point), plan.Stops[i],
+            onBend->Along);
     }
   }
-  for (size_t i = 0; i + 1 < command.Stops.size(); ++i) {
-    PlanLine line{NULL_KEY,      command.Kind,      pathWidth(command.Kind),
-                  plan.Stops[i], plan.Stops[i + 1], std::move(drawn[i])};
-    line.FromAdded = plan.Points[line.From].Existing != NULL_KEY;
-    line.ToAdded = plan.Points[line.To].Existing != NULL_KEY;
-    plan.Lines.push_back(std::move(line));
-  }
-  return plan;
 }
 
 // The ends of the plan's line k.
@@ -553,11 +584,12 @@ std::pair<ParkPoint, ParkPoint> lineEnds(const EditPlan &plan, size_t k) {
   return {plan.Points[plan.Lines[k].From].At, plan.Points[plan.Lines[k].To].At};
 }
 
-// Whether every line of the plan has a ground line between its ends.
-bool linesHaveGround(const EditPlan &plan) {
+// Whether every line of the plan has a ground line between its ends. line is a list it reuses.
+bool linesHaveGround(const EditPlan &plan, std::vector<CarrierPoint> &line) {
   for (size_t k = 0; k < plan.Lines.size(); ++k) {
     const auto [from, to] = lineEnds(plan, k);
-    if (segmentLine(from, to).empty()) {
+    segmentLine(from, to, line);
+    if (line.empty()) {
       return false;
     }
   }
@@ -583,8 +615,9 @@ double tangentAt(const std::vector<ParkCorner> &corners, EntityKey point) {
 
 // Adds the point where the plan's line k meets the straight part of the world's segment, if they
 // meet. The straight part runs between where the arcs at its ends touch it.
-void meetWorldSegment(const World &world, EditPlan &plan, size_t k, const ParkSegment &segment,
+void meetWorldSegment(const World &world, PlanLists &kept, size_t k, const ParkSegment &segment,
                       const std::vector<ParkCorner> &corners) {
+  EditPlan &plan = kept.Plan;
   const auto [a0, a1] = lineEnds(plan, k);
   // The segment has a ground line, so both of its ends are path points.
   const ParkPoint b0 = findIntent<PathPointIntent>(world, segment.From)->At;
@@ -609,7 +642,7 @@ void meetWorldSegment(const World &world, EditPlan &plan, size_t k, const ParkSe
   bool placed = false;
   if (meeting->Kind == MeetingKind::AEndOnB) {
     point = meeting->End == 0 ? plan.Lines[k].From : plan.Lines[k].To;
-    placed = place(splitOf(plan, segment.Key), point, alongB);
+    placed = place(splitOf(kept, segment.Key), point, alongB);
   } else if (meeting->Kind == MeetingKind::BEndOnA && tangents[meeting->End] == 0.0) {
     point = pointEntry(plan, meeting->End == 0 ? segment.From : segment.To, meeting->At);
     placed = place(plan.Lines[k].Through, point, meeting->AlongA);
@@ -617,7 +650,7 @@ void meetWorldSegment(const World &world, EditPlan &plan, size_t k, const ParkSe
     // A crossing, or an end of the straight part where an arc touches it, which is no point.
     point = crossingPoint(plan, meeting->At);
     placed = place(plan.Lines[k].Through, point, meeting->AlongA);
-    placed = place(splitOf(plan, segment.Key), point, alongB) || placed;
+    placed = place(splitOf(kept, segment.Key), point, alongB) || placed;
   }
   if (placed) {
     markCrossing(plan, point);
@@ -627,8 +660,11 @@ void meetWorldSegment(const World &world, EditPlan &plan, size_t k, const ParkSe
 // Adds the points where the plan's line k meets the arc of the world's corner, whose two segments
 // the plan leaves in place. A place within MIN_SEGMENT_LENGTH of where the arc touches a segment
 // splits that segment there instead.
-void meetCorner(const World &world, EditPlan &plan, size_t k, const ParkCorner &corner,
-                const std::vector<ParkSegment> &segments) {
+// The corner's two segments are those that end at its point, leaving out each that ends at skip.
+void meetCorner(const World &world, PlanLists &kept, size_t k, const ParkCorner &corner,
+                const std::vector<ParkSegment> &segments, EntityKey skip,
+                std::span<const ParkCorner> corners) {
+  EditPlan &plan = kept.Plan;
   const auto [a0, a1] = lineEnds(plan, k);
   const CornerArc arc = arcOf(corner);
   const ParkPoint d{a1.X - a0.X, a1.Z - a0.Z};
@@ -647,7 +683,7 @@ void meetCorner(const World &world, EditPlan &plan, size_t k, const ParkCorner &
     return (at.X - arc.Center.X) * middle.X + (at.Z - arc.Center.Z) * middle.Z;
   };
   const double spanToward = towardMiddle(arc.Touch[0]);
-  const std::vector<ParkSegment> at = segmentsAt(segments, corner.Point);
+  const SegmentPair at = twoAt(segments, corner.Point, skip).value_or(SegmentPair{});
   for (const double sign : {-1.0, 1.0}) {
     const double s = (-b + sign * std::sqrt(disc)) / (2.0 * a);
     if (s < -tolerance || s > 1.0 + tolerance) {
@@ -677,13 +713,13 @@ void meetCorner(const World &world, EditPlan &plan, size_t k, const ParkCorner &
     }
     if (touched < 2) {
       // The touched segment is the corner's first, the lower-keyed, or its second.
-      const ParkSegment &segment = at[touched];
+      const ParkSegment &segment = *at[touched];
       const ParkPoint from = findIntent<PathPointIntent>(world, segment.From)->At;
       const ParkPoint to = findIntent<PathPointIntent>(world, segment.To)->At;
       const double along = distanceOf(from, where) / distanceOf(from, to);
-      placed = place(splitOf(plan, segment.Key), point, along) || placed;
+      placed = place(splitOf(kept, segment.Key), point, along) || placed;
     } else {
-      placed = place(bendSplitOf(world, segments, plan, corner.Point), point,
+      placed = place(bendSplitOf(corners, segments, skip, kept, corner.Point), point,
                      bendAlong(corner, where)) ||
                placed;
     }
@@ -721,32 +757,38 @@ void meetLines(EditPlan &plan, size_t m, size_t k) {
 
 // Adds the points where each of the plan's lines meets a segment of its kind that the edit leaves
 // in place, in ascending key order, then the arc of each corner of its kind the edit leaves in
-// place, and then each of the plan's earlier lines. A segment of the world meets along the straight
-// part of its ground line.
-void addMeetings(const World &world, EditPlan &plan, const std::vector<ParkSegment> &kept) {
-  const std::vector<ParkCorner> corners = parkCorners(world);
+// place, and then each of the plan's earlier lines. The edit leaves in place each segment that
+// doesn't end at skip, or every segment when skip is NULL_KEY. A segment of the world meets along
+// the straight part of its ground line. meeting is a list it reuses.
+void addMeetings(const World &world, PlanLists &kept, const std::vector<ParkSegment> &segments,
+                 EntityKey skip, const std::vector<ParkCorner> &corners,
+                 std::vector<ParkCorner> &meeting) {
+  EditPlan &plan = kept.Plan;
+  const auto leftInPlace = [skip](const ParkSegment &segment) {
+    return skip == NULL_KEY || !endsAt(segment, skip);
+  };
   // The corners that meet: rounded, with both of their segments kept, at a point the plan neither
   // joins nor moves.
-  std::vector<ParkCorner> meeting;
+  meeting.clear();
   for (const ParkCorner &corner : corners) {
     const bool joined = std::ranges::any_of(
         plan.Points, [&corner](const PlanPoint &point) { return point.Existing == corner.Point; });
     const bool moved = std::ranges::any_of(
         plan.Moves, [&corner](const auto &move) { return move.first == corner.Point; });
-    if (corner.Radius > 0.0 && !joined && !moved && segmentsAt(kept, corner.Point).size() == 2) {
+    if (corner.Radius > 0.0 && !joined && !moved && twoAt(segments, corner.Point, skip)) {
       meeting.push_back(corner);
     }
   }
   for (size_t k = 0; k < plan.Lines.size(); ++k) {
-    for (const ParkSegment &segment : kept) {
-      if (segment.Kind == plan.Lines[k].Kind && !segment.Line.empty()) {
-        meetWorldSegment(world, plan, k, segment, corners);
+    for (const ParkSegment &segment : segments) {
+      if (leftInPlace(segment) && segment.Kind == plan.Lines[k].Kind && !segment.Line.empty()) {
+        meetWorldSegment(world, kept, k, segment, corners);
       }
     }
     for (const ParkCorner &corner : meeting) {
-      const std::vector<ParkSegment> at = segmentsAt(kept, corner.Point);
-      if (at[0].Kind == plan.Lines[k].Kind && at[1].Kind == plan.Lines[k].Kind) {
-        meetCorner(world, plan, k, corner, kept);
+      const SegmentPair at = twoAt(segments, corner.Point, skip).value_or(SegmentPair{});
+      if (at[0]->Kind == plan.Lines[k].Kind && at[1]->Kind == plan.Lines[k].Kind) {
+        meetCorner(world, kept, k, corner, segments, skip, corners);
       }
     }
     for (size_t m = 0; m < k; ++m) {
@@ -798,9 +840,9 @@ void placeBendPoints(EditPlan &plan, BendSplit &bend) {
   bend.Points.push_back(plan.Points.size() - 1);
 }
 
-// The plan with its meetings sorted and its bend splits' corner points placed, or none when a
-// corner it splits is also a point it joins or a segment it reshapes or destroys.
-std::optional<EditPlan> finishPlan(EditPlan plan) {
+// Sorts the plan's meetings and places its bend splits' corner points. False when a corner it
+// splits is also a point it joins or a segment it reshapes or destroys.
+bool finishPlan(EditPlan &plan) {
   for (Split &split : plan.Splits) {
     std::ranges::sort(split.At, {}, &PlacedPoint::Along);
   }
@@ -820,69 +862,129 @@ std::optional<EditPlan> finishPlan(EditPlan plan) {
       return key == point || key == bend.Segments[0] || key == bend.Segments[1];
     });
     if (joined || reshaped || destroyed) {
-      return std::nullopt;
+      return false;
     }
     std::ranges::sort(bend.At, {}, &PlacedPoint::Along);
     placeBendPoints(plan, bend);
   }
-  return plan;
+  return true;
 }
 
-// The plan of an AddPath that names what it acts on, or none.
-std::optional<EditPlan> planPath(const World &world, const AddPath &command) {
+// The lists planning and checking an edit reuse, kept in the caller's TickBuffers:
+// - the meeting corners, the stop positions, and a ground line;
+// - the plan points' keys, the segment ends a plan adds, and the chain a bend split builds;
+// - the layout withCurves applies the plan to before its curves are known;
+// - the entrances, boxes, and solids;
+// - the point lists of editedBetween, and the surfaces before and after an edit and of what it
+//   changes;
+// - the indexes of the edited segments in the after ground;
+// - a restore's names, added keys, and extra points;
+// - the focus and the surface of the pieces near a solid.
+struct EditLists {
+  std::vector<ParkCorner> Meeting;
+  std::vector<ParkPoint> Positions;
+  std::vector<CarrierPoint> Line;
+  std::vector<EntityKey> Keys;
+  std::vector<SegmentEnd> Added;
+  std::vector<EntityKey> Chain;
+  PathLayout Curved;
+  std::vector<ParkEntrance> Entrances;
+  std::vector<ParkBox> Boxes;
+  std::vector<Solid> Solids;
+  std::vector<EntityKey> Points;
+  std::vector<EntityKey> Changed;
+  std::vector<EntityKey> Near;
+  PavedSurface Before;
+  PavedSurface After;
+  PavedSurface Edited;
+  std::vector<size_t> EditedSegments;
+  std::vector<EntityKey> Names;
+  std::vector<std::pair<EntityKey, EntityKey>> AddedKeys;
+  std::vector<EntityKey> Extra;
+  std::vector<EntityKey> Focus;
+  PavedSurface NearSolid;
+  std::vector<ParkSegment> SpareSegments;
+};
+
+// The plan of an AddPath that names what it acts on, in kept. False when it names nothing.
+bool planPath(const World &world, PlanLists &kept, EditLists &lists, const AddPath &command) {
   if (!isKnown(command.Kind) || command.Stops.size() < 2) {
-    return std::nullopt;
+    return false;
   }
-  const std::vector<ParkSegment> segments = parkSegments(world);
-  const std::optional<std::vector<ParkPoint>> positions = stopPositions(world, command);
-  if (!positions || !std::ranges::all_of(command.Stops, [&](const PathStop &stop) {
-        return isStopOfKind(world, segments, stop, command.Kind);
+  const std::vector<ParkSegment> &segments = kept.World.Ground.Segments;
+  const std::vector<ParkCorner> &corners = kept.World.Ground.Corners;
+  std::vector<ParkPoint> &positions = lists.Positions;
+  positions.clear();
+  for (const PathStop &stop : command.Stops) {
+    if (!appendStopPosition(world, corners, stop, positions)) {
+      return false;
+    }
+  }
+  if (!std::ranges::all_of(command.Stops, [&](const PathStop &stop) {
+        return isStopOfKind(world, segments, corners, stop, command.Kind);
       })) {
-    return std::nullopt;
+    return false;
   }
-  EditPlan plan = planStops(world, segments, command, *positions);
-  if (!linesHaveGround(plan)) {
-    return std::nullopt;
+  planStops(corners, segments, kept, command, positions);
+  if (!linesHaveGround(kept.Plan, lists.Line)) {
+    return false;
   }
-  addMeetings(world, plan, segments);
-  return finishPlan(std::move(plan));
+  addMeetings(world, kept, segments, NULL_KEY, corners, lists.Meeting);
+  return finishPlan(kept.Plan);
 }
 
 // Whether the MovePoint's target names what it lands on, of the kind, other than the moved point
 // and the segments at it.
 bool isTargetOfKind(const World &world, const std::vector<ParkSegment> &segments,
-                    const MovePoint &command, PathKind kind) {
+                    std::span<const ParkCorner> corners, const MovePoint &command, PathKind kind) {
   if (const auto *on = std::get_if<OnPoint>(&command.To)) {
     return on->Point != command.Point && isPointOfKind(world, segments, on->Point, kind);
   }
   if (const auto *on = std::get_if<OnSegment>(&command.To)) {
-    return isStopOfKind(world, segments, *on, kind) &&
+    return isStopOfKind(world, segments, corners, *on, kind) &&
            !endsAt(*findSegment(segments, on->Segment), command.Point);
   }
   if (const auto *on = std::get_if<OnBend>(&command.To)) {
-    return isBendOfKind(world, segments, *on, kind) &&
-           std::ranges::none_of(segmentsAt(segments, on->Point), [&](const ParkSegment &segment) {
-             return endsAt(segment, command.Point);
+    return isBendOfKind(world, segments, corners, *on, kind) &&
+           std::ranges::none_of(segments, [&](const ParkSegment &segment) {
+             return endsAt(segment, on->Point) && endsAt(segment, command.Point);
            });
   }
   return true;
 }
 
-// The plan of a MovePoint that names what it acts on, or none.
-std::optional<EditPlan> planMove(const World &world, const MovePoint &command) {
-  const std::vector<ParkSegment> segments = parkSegments(world);
-  const std::vector<ParkSegment> at = segmentsAt(segments, command.Point);
-  if (findIntent<PathPointIntent>(world, command.Point) == nullptr || at.empty() ||
-      std::ranges::any_of(
-          at, [&at](const ParkSegment &segment) { return segment.Kind != at.front().Kind; })) {
-    return std::nullopt;
+// The kind of every segment at the point, or none when no segment ends there or two of them differ.
+std::optional<PathKind> kindAt(const std::vector<ParkSegment> &segments, EntityKey point) {
+  std::optional<PathKind> kind;
+  for (const ParkSegment &segment : segments) {
+    if (!endsAt(segment, point)) {
+      continue;
+    }
+    if (kind && *kind != segment.Kind) {
+      return std::nullopt;
+    }
+    kind = segment.Kind;
   }
-  const std::optional<ParkPoint> position = stopPosition(world, stopOf(command.To));
-  if (!isTargetOfKind(world, segments, command, at.front().Kind) || !position) {
-    return std::nullopt;
+  return kind;
+}
+
+// The plan of a MovePoint that names what it acts on, in kept. False when it names nothing.
+bool planMove(const World &world, PlanLists &kept, EditLists &lists, const MovePoint &command) {
+  const std::vector<ParkSegment> &segments = kept.World.Ground.Segments;
+  const std::vector<ParkCorner> &corners = kept.World.Ground.Corners;
+  const auto atPoint = [&command](const ParkSegment &segment) {
+    return endsAt(segment, command.Point);
+  };
+  const std::optional<PathKind> kind = kindAt(segments, command.Point);
+  if (findIntent<PathPointIntent>(world, command.Point) == nullptr || !kind) {
+    return false;
+  }
+  const std::optional<ParkPoint> position = positionIn(world, corners, stopOf(command.To));
+  if (!isTargetOfKind(world, segments, corners, command, *kind) || !position) {
+    return false;
   }
   const auto *onPoint = std::get_if<OnPoint>(&command.To);
-  EditPlan plan;
+  EditPlan &plan = kept.Plan;
   size_t moved = 0;
   if (onPoint != nullptr) {
     moved = pointEntry(plan, onPoint->Point, *position);
@@ -890,7 +992,10 @@ std::optional<EditPlan> planMove(const World &world, const MovePoint &command) {
     plan.Points.push_back(PlanPoint{*position, command.Point});
     plan.Moves.emplace_back(command.Point, *position);
   }
-  for (const ParkSegment &segment : at) {
+  for (const ParkSegment &segment : segments) {
+    if (!atPoint(segment)) {
+      continue;
+    }
     const EntityKey far = farEnd(segment, command.Point);
     if (onPoint != nullptr && far == onPoint->Point) {
       plan.Destroyed.push_back(segment.Key);
@@ -898,133 +1003,130 @@ std::optional<EditPlan> planMove(const World &world, const MovePoint &command) {
     }
     const std::optional<ParkPoint> farAt = positionOf(world, far);
     if (far == command.Point || !farAt) {
-      return std::nullopt;
+      return false;
     }
     const size_t farEntry = pointEntry(plan, far, *farAt);
-    plan.Lines.push_back(PlanLine{segment.Key,
-                                  segment.Kind,
-                                  segment.Width,
-                                  segment.From == command.Point ? moved : farEntry,
-                                  segment.To == command.Point ? moved : farEntry,
-                                  {},
-                                  segment.FromEdge,
-                                  segment.ToEdge});
+    PlanLine &line =
+        addLine(kept, segment.Key, segment.Kind, segment.Width,
+                segment.From == command.Point ? moved : farEntry,
+                segment.To == command.Point ? moved : farEntry, segment.FromEdge, segment.ToEdge);
     // Ends that arrive at the target point are added there.
-    plan.Lines.back().FromAdded = onPoint != nullptr && segment.From == command.Point;
-    plan.Lines.back().ToAdded = onPoint != nullptr && segment.To == command.Point;
+    line.FromAdded = onPoint != nullptr && segment.From == command.Point;
+    line.ToAdded = onPoint != nullptr && segment.To == command.Point;
   }
-  const std::vector<ParkSegment> kept = segmentsNotAt(segments, command.Point);
   if (onPoint != nullptr) {
     plan.Destroyed.push_back(command.Point);
     // A target left with no segment goes too.
     const bool targetUsed =
-        !plan.Lines.empty() || std::ranges::any_of(kept, [onPoint](const ParkSegment &segment) {
-          return endsAt(segment, onPoint->Point);
+        !plan.Lines.empty() || std::ranges::any_of(segments, [&](const ParkSegment &segment) {
+          return !atPoint(segment) && endsAt(segment, onPoint->Point);
         });
     if (!targetUsed) {
       plan.Destroyed.push_back(onPoint->Point);
     }
   }
   if (const auto *onSegment = std::get_if<OnSegment>(&command.To)) {
-    place(splitOf(plan, onSegment->Segment), moved, onSegment->Along);
+    place(splitOf(kept, onSegment->Segment), moved, onSegment->Along);
   } else if (const auto *onBend = std::get_if<OnBend>(&command.To)) {
-    place(bendSplitOf(world, segments, plan, onBend->Point), moved, onBend->Along);
+    place(bendSplitOf(corners, segments, NULL_KEY, kept, onBend->Point), moved, onBend->Along);
   }
-  if (!linesHaveGround(plan)) {
-    return std::nullopt;
+  if (!linesHaveGround(plan, lists.Line)) {
+    return false;
   }
-  addMeetings(world, plan, kept);
-  return finishPlan(std::move(plan));
+  addMeetings(world, kept, segments, command.Point, corners, lists.Meeting);
+  return finishPlan(plan);
 }
 
-// The plan of an InsertPoint that names what it acts on, or none. The parts lie along the segment,
-// or along the arc and the lines touching it, which have met everything they meet already, so the
-// plan finds no meetings.
-std::optional<EditPlan> planInsert(const World &world, const InsertPoint &command) {
-  const std::vector<ParkSegment> segments = parkSegments(world);
+// The plan of an InsertPoint that names what it acts on, in kept. False when it names nothing. The
+// parts lie along the segment, or along the arc and the lines touching it, which have met
+// everything they meet already, so the plan finds no meetings.
+bool planInsert(const World &world, PlanLists &kept, const InsertPoint &command) {
+  const std::vector<ParkSegment> &segments = kept.World.Ground.Segments;
+  const std::vector<ParkCorner> &corners = kept.World.Ground.Corners;
+  EditPlan &plan = kept.Plan;
   if (const auto *onBend = std::get_if<OnBend>(&command.At)) {
-    if (!isBendOfKind(world, segments, *onBend, std::nullopt)) {
-      return std::nullopt;
+    if (!isBendOfKind(world, segments, corners, *onBend, std::nullopt)) {
+      return false;
     }
-    const std::optional<ParkPoint> at = stopPosition(world, *onBend);
+    const std::optional<ParkPoint> at = positionIn(world, corners, *onBend);
     if (!at) {
-      return std::nullopt;
+      return false;
     }
-    EditPlan plan;
     plan.Points.push_back(PlanPoint{*at, NULL_KEY});
-    place(bendSplitOf(world, segments, plan, onBend->Point), 0, onBend->Along);
-    return finishPlan(std::move(plan));
+    place(bendSplitOf(corners, segments, NULL_KEY, kept, onBend->Point), 0, onBend->Along);
+    return finishPlan(plan);
   }
   const auto *on = std::get_if<OnSegment>(&command.At);
   const ParkSegment *segment = findSegment(segments, on->Segment);
   if (segment == nullptr || segment->Line.empty() || !std::isfinite(on->Along) ||
       on->Along <= 0.0 || on->Along >= 1.0) {
-    return std::nullopt;
+    return false;
   }
-  const std::optional<ParkPoint> at = stopPosition(world, *on);
+  const std::optional<ParkPoint> at = positionIn(world, corners, *on);
   if (!at) {
-    return std::nullopt;
+    return false;
   }
-  EditPlan plan;
   plan.Points.push_back(PlanPoint{*at, NULL_KEY});
-  place(splitOf(plan, on->Segment), 0, on->Along);
-  return finishPlan(std::move(plan));
+  place(splitOf(kept, on->Segment), 0, on->Along);
+  return finishPlan(plan);
 }
 
-// The plan of a RemovePoint whose point has two segments it can merge, or none.
-std::optional<EditPlan> planRemove(const World &world, const RemovePoint &command) {
+// The plan of a RemovePoint whose point has two segments it can merge, in kept. False when it has
+// none.
+bool planRemove(const World &world, PlanLists &kept, EditLists &lists, const RemovePoint &command) {
   if (findIntent<PathPointIntent>(world, command.Point) == nullptr) {
-    return std::nullopt;
+    return false;
   }
-  const std::vector<ParkSegment> segments = parkSegments(world);
-  const auto pair = mergingPair(segmentsAt(segments, command.Point), command.Point);
+  const std::vector<ParkSegment> &segments = kept.World.Ground.Segments;
+  const std::vector<ParkCorner> &corners = kept.World.Ground.Corners;
+  const std::optional<SegmentPair> pair = mergingPair(segments, command.Point);
   if (!pair) {
-    return std::nullopt;
+    return false;
   }
-  const auto &[low, high] = *pair;
+  const ParkSegment &low = *(*pair)[0];
+  const ParkSegment &high = *(*pair)[1];
   const EntityKey lowFar = farEnd(low, command.Point);
   const EntityKey highFar = farEnd(high, command.Point);
   const std::optional<ParkPoint> lowAt = positionOf(world, lowFar);
   const std::optional<ParkPoint> highAt = positionOf(world, highFar);
   if (!lowAt || !highAt) {
-    return std::nullopt;
+    return false;
   }
-  EditPlan plan;
+  EditPlan &plan = kept.Plan;
   const size_t lowEntry = pointEntry(plan, lowFar, *lowAt);
   const size_t highEntry = pointEntry(plan, highFar, *highAt);
   // The end at the point takes the high segment's far end, with its edge radius there.
   const double highEdge = edgeAt(high, highFar);
-  plan.Lines.push_back(PlanLine{low.Key,
-                                low.Kind,
-                                std::max(low.Width, high.Width),
-                                low.From == command.Point ? highEntry : lowEntry,
-                                low.To == command.Point ? highEntry : lowEntry,
-                                {},
-                                low.From == command.Point ? highEdge : low.FromEdge,
-                                low.To == command.Point ? highEdge : low.ToEdge});
+  addLine(kept, low.Key, low.Kind, std::max(low.Width, high.Width),
+          low.From == command.Point ? highEntry : lowEntry,
+          low.To == command.Point ? highEntry : lowEntry,
+          low.From == command.Point ? highEdge : low.FromEdge,
+          low.To == command.Point ? highEdge : low.ToEdge);
   // The merged segment runs as low does, so high's furnishing turns when high ran the other way.
-  if (isFurnished(high.Furnished)) {
+  const Furnishing highFurnished = furnishingOf(world, high.Key);
+  if (isFurnished(highFurnished)) {
     const bool sameWay = (low.To == command.Point) == (high.From == command.Point);
     plan.Inheritor = low.Key;
-    plan.Inherits = sameWay ? high.Furnished : turned(high.Furnished);
+    plan.Inherits = sameWay ? highFurnished : turned(highFurnished);
   }
-  plan.Destroyed = {high.Key, command.Point};
-  if (!linesHaveGround(plan)) {
-    return std::nullopt;
+  plan.Destroyed.push_back(high.Key);
+  plan.Destroyed.push_back(command.Point);
+  if (!linesHaveGround(plan, lists.Line)) {
+    return false;
   }
-  addMeetings(world, plan, segmentsNotAt(segments, command.Point));
-  return finishPlan(std::move(plan));
+  addMeetings(world, kept, segments, command.Point, corners, lists.Meeting);
+  return finishPlan(plan);
 }
 
-// The plan of a DeleteSegment that names a segment: the segment, and each of its points no other
-// segment uses.
-std::optional<EditPlan> planDeleteSegment(const World &world, const DeleteSegment &command) {
+// The plan of a DeleteSegment that names a segment, in kept: the segment, and each of its points
+// no other segment uses. False when it names none.
+bool planDeleteSegment(const World &world, PlanLists &kept, const DeleteSegment &command) {
   if (findIntent<PathSegmentIntent>(world, command.Segment) == nullptr) {
-    return std::nullopt;
+    return false;
   }
-  const std::vector<ParkSegment> segments = parkSegments(world);
+  const std::vector<ParkSegment> &segments = kept.World.Ground.Segments;
   const ParkSegment &segment = *findSegment(segments, command.Segment);
-  EditPlan plan;
+  EditPlan &plan = kept.Plan;
   plan.Destroyed.push_back(segment.Key);
   for (const EntityKey point : {segment.From, segment.To}) {
     const bool used = std::ranges::any_of(segments, [&](const ParkSegment &other) {
@@ -1035,76 +1137,65 @@ std::optional<EditPlan> planDeleteSegment(const World &world, const DeleteSegmen
       plan.Destroyed.push_back(point);
     }
   }
-  return plan;
+  return true;
 }
 
 // The plan of a SetCornerRadius that names a path point with a radius finite and at least 0.
-std::optional<EditPlan> planRadius(const World &world, const SetCornerRadius &command) {
+bool planRadius(const World &world, PlanLists &kept, const SetCornerRadius &command) {
   if (findIntent<PathPointIntent>(world, command.Point) == nullptr ||
       !std::isfinite(command.Radius) || command.Radius < 0.0) {
-    return std::nullopt;
+    return false;
   }
-  EditPlan plan;
-  plan.Rounded = command.Point;
-  plan.RoundedTo = command.Radius;
-  return plan;
+  kept.Plan.Rounded = command.Point;
+  kept.Plan.RoundedTo = command.Radius;
+  return true;
 }
 
 // The plan of a SetTaperLength that names a path point with a length finite and at least 0.
-std::optional<EditPlan> planTaper(const World &world, const SetTaperLength &command) {
+bool planTaper(const World &world, PlanLists &kept, const SetTaperLength &command) {
   if (findIntent<PathPointIntent>(world, command.Point) == nullptr ||
       !std::isfinite(command.Length) || command.Length < 0.0) {
-    return std::nullopt;
+    return false;
   }
-  EditPlan plan;
-  plan.Tapered = command.Point;
-  plan.TaperedTo = command.Length;
-  return plan;
+  kept.Plan.Tapered = command.Point;
+  kept.Plan.TaperedTo = command.Length;
+  return true;
 }
 
 // The plan of a SetEdgeRadius that names a segment with a ground line, one of its two points, and a
 // radius finite and at least 0.
-std::optional<EditPlan> planEdge(const World &world, const SetEdgeRadius &command) {
-  const std::vector<ParkSegment> segments = parkSegments(world);
-  const ParkSegment *segment = findSegment(segments, command.Segment);
+bool planEdge(PlanLists &kept, const SetEdgeRadius &command) {
+  const ParkSegment *segment = findSegment(kept.World.Ground.Segments, command.Segment);
   if (segment == nullptr || segment->Line.empty() || !endsAt(*segment, command.Point) ||
       !std::isfinite(command.Radius) || command.Radius < 0.0) {
-    return std::nullopt;
+    return false;
   }
-  EditPlan plan;
-  plan.Edged = segment->Key;
-  plan.EdgedAtFrom = segment->From == command.Point;
-  plan.EdgedTo = command.Radius;
-  return plan;
+  kept.Plan.Edged = segment->Key;
+  kept.Plan.EdgedAtFrom = segment->From == command.Point;
+  kept.Plan.EdgedTo = command.Radius;
+  return true;
 }
 
 // The plan of a SetSegmentWidth that names a segment with a ground line and a width finite and
 // above zero: the segment reshaped between its own points, at the width. It meets nothing it
 // didn't meet before.
-std::optional<EditPlan> planWidth(const World &world, const SetSegmentWidth &command) {
-  const std::vector<ParkSegment> segments = parkSegments(world);
-  const ParkSegment *segment = findSegment(segments, command.Segment);
+bool planWidth(const World &world, PlanLists &kept, const SetSegmentWidth &command) {
+  const ParkSegment *segment = findSegment(kept.World.Ground.Segments, command.Segment);
   if (segment == nullptr || segment->Line.empty() || !std::isfinite(command.Width) ||
       !(command.Width > 0.0)) {
-    return std::nullopt;
+    return false;
   }
   const std::optional<ParkPoint> fromAt = positionOf(world, segment->From);
   const std::optional<ParkPoint> toAt = positionOf(world, segment->To);
   if (!fromAt || !toAt) {
-    return std::nullopt;
+    return false;
   }
-  EditPlan plan;
+  EditPlan &plan = kept.Plan;
   const size_t from = pointEntry(plan, segment->From, *fromAt);
   const size_t to = pointEntry(plan, segment->To, *toAt);
-  plan.Lines.push_back(PlanLine{segment->Key,
-                                segment->Kind,
-                                command.Width,
-                                from,
-                                to,
-                                {},
-                                segment->FromEdge,
-                                segment->ToEdge});
-  return plan;
+  addLine(kept, segment->Key, segment->Kind, command.Width, from, to, segment->FromEdge,
+          segment->ToEdge);
+  return true;
 }
 
 // Where applyPlan makes a plan's changes: a world.
@@ -1203,7 +1294,7 @@ private:
 // corner's outside edge radius, held by whichever of its two ends starts it.
 template <typename Store>
 void applyBendSplit(Store &store, const BendSplit &bend, const std::vector<EntityKey> &keys,
-                    const AddedEnds &report) {
+                    const AddedEnds &report, std::vector<EntityKey> &chain) {
   const EntityKey point = bend.Corner.Point;
   const PathSegmentIntent first = store.segment(bend.Segments[0]);
   PathSegmentIntent &second = store.segment(bend.Segments[1]);
@@ -1226,7 +1317,8 @@ void applyBendSplit(Store &store, const BendSplit &bend, const std::vector<Entit
   (second.From == point ? second.From : second.To) = keys[bend.Points.back()];
   const double width = second.Width;
   // The corner's point, then each place followed by the corner point after it.
-  std::vector<EntityKey> chain{point};
+  chain.clear();
+  chain.push_back(point);
   for (size_t i = 0; i < bend.At.size(); ++i) {
     chain.push_back(keys[bend.At[i].Point]);
     chain.push_back(keys[bend.Points[i]]);
@@ -1311,14 +1403,14 @@ void applyLine(Store &store, const PlanLine &line, const std::vector<EntityKey> 
 // the rest to its old end. Each line runs through its points: a reshaped line keeps its key for
 // its first part, and every other part takes a new key. The plan's curve writes come last. When
 // added is given, it receives each segment end the plan adds at a point that was already a path
-// point.
+// point. keys and chain are lists it reuses.
 template <typename Store>
-void applyPlan(Store &store, const EditPlan &plan, std::vector<SegmentEnd> *added = nullptr) {
+void applyPlan(Store &store, const EditPlan &plan, std::vector<EntityKey> &keys,
+               std::vector<EntityKey> &chain, std::vector<SegmentEnd> *added = nullptr) {
   for (const EntityKey key : plan.Destroyed) {
     store.destroy(key);
   }
-  std::vector<EntityKey> keys;
-  keys.reserve(plan.Points.size());
+  keys.clear();
   for (const PlanPoint &point : plan.Points) {
     keys.push_back(point.Existing != NULL_KEY
                        ? point.Existing
@@ -1339,7 +1431,7 @@ void applyPlan(Store &store, const EditPlan &plan, std::vector<SegmentEnd> *adde
     (plan.EdgedAtFrom ? edged.FromEdge : edged.ToEdge) = plan.EdgedTo;
   }
   for (const BendSplit &bend : plan.BendSplits) {
-    applyBendSplit(store, bend, keys, report);
+    applyBendSplit(store, bend, keys, report, chain);
   }
   for (const Split &split : plan.Splits) {
     applySplit(store, split, keys, report);
@@ -1363,17 +1455,24 @@ void applyPlan(Store &store, const EditPlan &plan, std::vector<SegmentEnd> *adde
   }
 }
 
-// What a plan changes, as it would lie after the plan: each segment it adds or whose ground line or
-// width it changes, and the surface of each owner whose part of the surface it changes, each in
-// ascending key order.
-struct Edited {
-  std::vector<ParkSegment> Segments;
-  PavedSurface Surface;
-};
+// Sorts the keys and drops repeats.
+void sortUnique(std::vector<EntityKey> &keys) {
+  std::ranges::sort(keys);
+  keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+}
 
-// The pieces and edge lines of after whose owner's pieces or edge lines differ from before's. Both
-// hold the surface of the same owners.
-PavedSurface changedOwners(const PavedSurface &before, const PavedSurface &after) {
+// Empties the surface's lists, keeping their memory.
+void clearSurface(PavedSurface &surface) {
+  surface.Pieces.clear();
+  surface.Edges.clear();
+  surface.EdgePoints.clear();
+  surface.Sides.clear();
+  surface.SidePoints.clear();
+}
+
+// Puts in changed the pieces and edge lines of after whose owner's pieces or edge lines differ from
+// before's. Both hold the surface of the same owners.
+void changedOwners(const PavedSurface &before, const PavedSurface &after, PavedSurface &changed) {
   // Each owner's run of items in a list in ascending owner order.
   const auto runOf = [](const auto &items, EntityKey owner) {
     return std::ranges::equal_range(items, owner, {}, [](const auto &item) { return item.Owner; });
@@ -1383,7 +1482,7 @@ PavedSurface changedOwners(const PavedSurface &before, const PavedSurface &after
       return x.Kind == y.Kind && std::ranges::equal(edgePoints(before, x), edgePoints(after, y));
     });
   };
-  PavedSurface changed;
+  clearSurface(changed);
   for (auto first = after.Pieces.begin(); first != after.Pieces.end();) {
     const auto run = runOf(after.Pieces, first->Owner);
     if (!std::ranges::equal(runOf(before.Pieces, first->Owner), run)) {
@@ -1403,44 +1502,42 @@ PavedSurface changedOwners(const PavedSurface &before, const PavedSurface &after
     }
     first = run.end();
   }
-  return changed;
 }
 
-// The points whose surface an edit can change: each end of each segment it adds, removes, or
-// changes, before and after it.
-std::vector<EntityKey> pointsChanged(const std::vector<ParkSegment> &before,
-                                     const std::vector<ParkSegment> &after) {
-  std::vector<EntityKey> points;
-  const auto differs = [](const ParkSegment *was, const ParkSegment &is) {
-    return was == nullptr || was->From != is.From || was->To != is.To || was->Line != is.Line ||
-           was->Width != is.Width || was->FromEdge != is.FromEdge || was->ToEdge != is.ToEdge;
-  };
+// Whether the segment's record or line differs from the one before holds under its key, or before
+// holds none.
+bool differs(const std::vector<ParkSegment> &before, const ParkSegment &segment) {
+  const ParkSegment *was = findSegment(before, segment.Key);
+  return was == nullptr || was->From != segment.From || was->To != segment.To ||
+         was->Line != segment.Line || was->Width != segment.Width ||
+         was->FromEdge != segment.FromEdge || was->ToEdge != segment.ToEdge;
+}
+
+// Puts in points the points whose surface an edit can change: each end of each segment it adds,
+// removes, or changes, before and after it.
+void pointsChanged(const std::vector<ParkSegment> &before, const std::vector<ParkSegment> &after,
+                   std::vector<EntityKey> &points) {
+  points.clear();
   for (const ParkSegment &segment : after) {
-    if (differs(findSegment(before, segment.Key), segment)) {
+    if (differs(before, segment)) {
       points.push_back(segment.From);
       points.push_back(segment.To);
     }
   }
   for (const ParkSegment &segment : before) {
-    if (differs(findSegment(after, segment.Key), segment)) {
+    if (differs(after, segment)) {
       points.push_back(segment.From);
       points.push_back(segment.To);
     }
   }
-  std::ranges::sort(points);
-  points.erase(std::unique(points.begin(), points.end()), points.end());
-  return points;
+  sortUnique(points);
 }
 
-// What editedBy finds: only the pieces of the surface it changes, which is all the validity check
-// needs, or the pieces and edge lines, as the edit would be drawn.
-enum class Wanted { Pieces, Drawing };
-
-// The points, and the other end of each segment at one of them, before or after.
-std::vector<EntityKey> withFarEnds(const std::vector<ParkSegment> &before,
-                                   const std::vector<ParkSegment> &after,
-                                   std::vector<EntityKey> points) {
-  const std::vector<EntityKey> changed = points;
+// Puts in points the changed points, which are sorted, and the other end of each segment at one of
+// them, before or after.
+void withFarEnds(const std::vector<ParkSegment> &before, const std::vector<ParkSegment> &after,
+                 const std::vector<EntityKey> &changed, std::vector<EntityKey> &points) {
+  copyGrowing(points, std::span<const EntityKey>(changed));
   for (const std::vector<ParkSegment> *segments : {&before, &after}) {
     for (const ParkSegment &segment : *segments) {
       if (std::ranges::binary_search(changed, segment.From) ||
@@ -1450,156 +1547,180 @@ std::vector<EntityKey> withFarEnds(const std::vector<ParkSegment> &before,
       }
     }
   }
-  std::ranges::sort(points);
-  points.erase(std::unique(points.begin(), points.end()), points.end());
-  return points;
+  sortUnique(points);
 }
 
-// What changes from one layout to another. Extra holds points whose paving can change though no
-// segment at them does, as when a taper length changes.
-Edited editedBetween(const PathLayout &before, const PathLayout &after,
-                     const std::vector<EntityKey> &extra, Wanted wanted) {
-  const PathGround groundBefore = groundOf(before);
-  PathGround groundAfter = groundOf(after);
-  std::vector<EntityKey> points = pointsChanged(groundBefore.Segments, groundAfter.Segments);
-  points.insert(points.end(), extra.begin(), extra.end());
-  std::ranges::sort(points);
-  points.erase(std::unique(points.begin(), points.end()), points.end());
+// What editedBetween finds: only the pieces of the surface it changes, which is all the validity
+// check needs, or the pieces and edge lines, as the edit would be drawn.
+enum class Wanted { Pieces, Drawing };
+
+// Puts in lists.Edited what changes from before, the world's layout and ground, to after, whose
+// ground is groundAfter, and in lists.EditedSegments the index in groundAfter of each segment the
+// change adds or whose ground line or width it changes. Extra holds points whose paving can change
+// though no segment at them does, as when a taper length changes.
+void editedBetween(const GroundLists &before, const PathLayout &after,
+                   const PathGround &groundAfter, std::span<const EntityKey> extra, Wanted wanted,
+                   EditLists &lists, TickBuffers &buffers) {
+  const PathGround &groundBefore = before.Ground;
+  std::vector<EntityKey> &changed = lists.Changed;
+  std::vector<EntityKey> &points = lists.Points;
+  pointsChanged(groundBefore.Segments, groundAfter.Segments, changed);
+  changed.insert(changed.end(), extra.begin(), extra.end());
+  sortUnique(changed);
   // A segment's paving at one end depends on whether its other end is free, which can change
   // whenever a changed point loses or gains a segment.
-  points = withFarEnds(groundBefore.Segments, groundAfter.Segments, points);
+  withFarEnds(groundBefore.Segments, groundAfter.Segments, changed, points);
   const bool drawing = wanted == Wanted::Drawing;
   if (drawing) {
     // Paving that changes can hide or show the edge lines of paving near it, before and after.
-    const std::vector<EntityKey> nearBefore = pointsAffected(before, groundBefore, points);
-    const std::vector<EntityKey> nearAfter = pointsAffected(after, groundAfter, points);
-    points.insert(points.end(), nearBefore.begin(), nearBefore.end());
-    points.insert(points.end(), nearAfter.begin(), nearAfter.end());
-    std::ranges::sort(points);
-    points.erase(std::unique(points.begin(), points.end()), points.end());
+    copyGrowing(changed, std::span<const EntityKey>(points));
+    pointsAffected(before.Layout, groundBefore, points, lists.Near, buffers);
+    changed.insert(changed.end(), lists.Near.begin(), lists.Near.end());
+    pointsAffected(after, groundAfter, points, lists.Near, buffers);
+    changed.insert(changed.end(), lists.Near.begin(), lists.Near.end());
+    sortUnique(changed);
+    points.swap(changed);
   }
-  Edited edited;
-  edited.Surface = changedOwners(surfaceAround(before, groundBefore, points, drawing),
-                                 surfaceAround(after, groundAfter, points, drawing));
-  for (ParkSegment &segment : groundAfter.Segments) {
+  surfaceAround(before.Layout, groundBefore, points, drawing, lists.Before, buffers);
+  surfaceAround(after, groundAfter, points, drawing, lists.After, buffers);
+  changedOwners(lists.Before, lists.After, lists.Edited);
+  lists.EditedSegments.clear();
+  for (size_t i = 0; i < groundAfter.Segments.size(); ++i) {
+    const ParkSegment &segment = groundAfter.Segments[i];
     const ParkSegment *was = findSegment(groundBefore.Segments, segment.Key);
     if (was == nullptr || was->Line != segment.Line || was->Width != segment.Width) {
-      edited.Segments.push_back(std::move(segment));
+      lists.EditedSegments.push_back(i);
     }
   }
-  return edited;
 }
 
-Edited editedBy(const World &world, const EditPlan &plan, Wanted wanted) {
-  const PathLayout before = layoutOf(world);
-  PathLayout after = before;
-  LayoutStore store(after, world.nextKey());
-  applyPlan(store, plan);
+// Applies the plan to a copy of the world's layout in kept.After, derives its ground in
+// kept.AfterGround, and finds what changes, as editedBetween does.
+void editedBy(const World &world, PlanLists &kept, EditLists &lists, TickBuffers &buffers,
+              Wanted wanted) {
+  kept.After = kept.World.Layout;
+  LayoutStore store(kept.After, world.nextKey());
+  applyPlan(store, kept.Plan, lists.Keys, lists.Chain);
+  groundOf(kept.After, kept.AfterGround);
   // A taper length changes no segment, but it changes the paving at its point.
-  std::vector<EntityKey> extra;
-  if (plan.Tapered != NULL_KEY) {
-    extra.push_back(plan.Tapered);
+  lists.Extra.clear();
+  if (kept.Plan.Tapered != NULL_KEY) {
+    lists.Extra.push_back(kept.Plan.Tapered);
   }
-  return editedBetween(before, after, extra, wanted);
+  editedBetween(kept.World, kept.After, kept.AfterGround.Ground, lists.Extra, wanted, lists,
+                buffers);
 }
 
-// The plan when the world accepts it: every segment it adds or changes has a ground line that stays
-// in the park, and every piece of the surface it adds or changes stays in the park and meets no
-// solid.
-std::optional<EditPlan> acceptedPlan(const World &world, std::optional<EditPlan> plan) {
-  if (!plan) {
-    return std::nullopt;
-  }
-  const std::vector<Solid> solids = solidsOf(world);
-  const Edited edited = editedBy(world, *plan, Wanted::Pieces);
-  const bool fitting =
-      std::ranges::all_of(edited.Segments,
-                          [](const ParkSegment &segment) {
-                            const std::optional<Line> line = lineOf(segment);
-                            return line && !leavesPark(*line);
-                          }) &&
-      std::ranges::all_of(edited.Surface.Pieces, [&solids](const SurfacePiece &piece) {
-        return !leavesPark(piece) && fits(piece, solids);
-      });
-  return fitting ? std::move(plan) : std::nullopt;
+// Whether the ground line, held by a path of the width, lies past the park's edge.
+bool lineLeavesPark(std::span<const CarrierPoint> points, double width) {
+  const double limit = (HALF_PARK - width / 2.0) + CONTACT_TOLERANCE;
+  return std::ranges::any_of(points, [limit](const CarrierPoint &point) {
+    return std::abs(point.X) > limit || std::abs(point.Z) > limit;
+  });
 }
 
-// The plan with the curve writes that keep every curve through its joins and splits, found by
-// trying it on a copy of the world's layout.
-std::optional<EditPlan> withCurves(const World &world, std::optional<EditPlan> plan) {
-  if (!plan) {
-    return plan;
-  }
-  const PathLayout before = layoutOf(world);
-  PathLayout after = before;
-  LayoutStore store(after, world.nextKey());
-  std::vector<SegmentEnd> added;
-  applyPlan(store, *plan, &added);
-  plan->Curves = keptCurves(before, after, added);
-  return plan;
+// Whether what editedBetween found fits: every edited segment in the ground after has a ground
+// line that stays in the park, and every piece of the surface it edits stays in the park and meets
+// no solid in lists.Solids.
+bool editedFits(const PathGround &groundAfter, const EditLists &lists) {
+  return std::ranges::all_of(lists.EditedSegments,
+                             [&groundAfter](size_t i) {
+                               const ParkSegment &segment = groundAfter.Segments[i];
+                               return !segment.Line.empty() &&
+                                      !lineLeavesPark(segment.Line, segment.Width);
+                             }) &&
+         std::ranges::all_of(lists.Edited.Pieces, [&lists](const SurfacePiece &piece) {
+           return !leavesPark(piece) && fits(piece, lists.Solids);
+         });
 }
 
-// Each path command's plan, and none for box commands, which have no plan.
-std::optional<EditPlan> planOf(const World &world, const AddPath &command) {
-  return withCurves(world, planPath(world, command));
-}
-std::optional<EditPlan> planOf(const World & /*world*/, const AddBox & /*command*/) {
-  return std::nullopt;
-}
-std::optional<EditPlan> planOf(const World & /*world*/, const MoveBox & /*command*/) {
-  return std::nullopt;
-}
-std::optional<EditPlan> planOf(const World &world, const DeleteSegment &command) {
-  return withCurves(world, planDeleteSegment(world, command));
-}
-std::optional<EditPlan> planOf(const World & /*world*/, const DeleteBox & /*command*/) {
-  return std::nullopt;
-}
-std::optional<EditPlan> planOf(const World &world, const MovePoint &command) {
-  return withCurves(world, planMove(world, command));
-}
-std::optional<EditPlan> planOf(const World &world, const InsertPoint &command) {
-  return withCurves(world, planInsert(world, command));
-}
-std::optional<EditPlan> planOf(const World &world, const RemovePoint &command) {
-  return withCurves(world, planRemove(world, command));
-}
-std::optional<EditPlan> planOf(const World &world, const SetCornerRadius &command) {
-  return planRadius(world, command);
-}
-std::optional<EditPlan> planOf(const World &world, const SetSegmentWidth &command) {
-  return planWidth(world, command);
-}
-std::optional<EditPlan> planOf(const World &world, const SetEdgeRadius &command) {
-  return planEdge(world, command);
-}
-std::optional<EditPlan> planOf(const World &world, const SetTaperLength &command) {
-  return planTaper(world, command);
-}
-std::optional<EditPlan> planOf(const World & /*world*/, const SetShopStock & /*command*/) {
-  return std::nullopt;
-}
-std::optional<EditPlan> planOf(const World & /*world*/, const SetOpeningHours & /*command*/) {
-  return std::nullopt;
-}
-std::optional<EditPlan> planOf(const World & /*world*/, const SetFurnishing & /*command*/) {
-  return std::nullopt;
-}
-// RestoreIntent has no plan, and it shows no ghost.
-std::optional<EditPlan> planOf(const World & /*world*/, const RestoreIntent & /*command*/) {
-  return std::nullopt;
+// Whether the world accepts the plan kept holds: every segment it adds or changes has a ground line
+// that stays in the park, and every piece of the surface it adds or changes stays in the park and
+// meets no solid.
+bool planFits(const World &world, PlanLists &kept, EditLists &lists, TickBuffers &buffers) {
+  solidsOf(world, lists.Entrances, lists.Boxes, lists.Solids);
+  editedBy(world, kept, lists, buffers, Wanted::Pieces);
+  return editedFits(kept.AfterGround.Ground, lists);
 }
 
-// The ground position of each of the plan's crossings, or none without a plan.
-std::vector<ParkPoint> crossingsOf(const std::optional<EditPlan> &plan) {
-  std::vector<ParkPoint> crossings;
-  if (plan) {
-    for (const size_t point : plan->Crossings) {
-      crossings.push_back(plan->Points[point].At);
-    }
-  }
-  return crossings;
+// Adds to the plan kept holds the curve writes that keep every curve through its joins and splits,
+// found by trying it on a copy of the world's layout.
+void withCurves(const World &world, PlanLists &kept, EditLists &lists, TickBuffers &buffers) {
+  lists.Curved = kept.World.Layout;
+  LayoutStore store(lists.Curved, world.nextKey());
+  lists.Added.clear();
+  applyPlan(store, kept.Plan, lists.Keys, lists.Chain, &lists.Added);
+  keptCurves(kept.World.Layout, kept.World.Ground, lists.Curved, lists.Added, kept.Plan.Curves,
+             buffers);
 }
+
+// Each path command's plan in kept, with the world's layout and ground in kept.World. False when
+// the command names nothing it acts on.
+bool planOf(const World &world, const AddPath &command, PlanLists &kept, EditLists &lists,
+            TickBuffers &buffers) {
+  if (!planPath(world, kept, lists, command)) {
+    return false;
+  }
+  withCurves(world, kept, lists, buffers);
+  return true;
+}
+bool planOf(const World &world, const DeleteSegment &command, PlanLists &kept, EditLists &lists,
+            TickBuffers &buffers) {
+  if (!planDeleteSegment(world, kept, command)) {
+    return false;
+  }
+  withCurves(world, kept, lists, buffers);
+  return true;
+}
+bool planOf(const World &world, const MovePoint &command, PlanLists &kept, EditLists &lists,
+            TickBuffers &buffers) {
+  if (!planMove(world, kept, lists, command)) {
+    return false;
+  }
+  withCurves(world, kept, lists, buffers);
+  return true;
+}
+bool planOf(const World &world, const InsertPoint &command, PlanLists &kept, EditLists &lists,
+            TickBuffers &buffers) {
+  if (!planInsert(world, kept, command)) {
+    return false;
+  }
+  withCurves(world, kept, lists, buffers);
+  return true;
+}
+bool planOf(const World &world, const RemovePoint &command, PlanLists &kept, EditLists &lists,
+            TickBuffers &buffers) {
+  if (!planRemove(world, kept, lists, command)) {
+    return false;
+  }
+  withCurves(world, kept, lists, buffers);
+  return true;
+}
+bool planOf(const World &world, const SetCornerRadius &command, PlanLists &kept,
+            EditLists & /*lists*/, TickBuffers & /*buffers*/) {
+  return planRadius(world, kept, command);
+}
+bool planOf(const World &world, const SetSegmentWidth &command, PlanLists &kept,
+            EditLists & /*lists*/, TickBuffers & /*buffers*/) {
+  return planWidth(world, kept, command);
+}
+bool planOf(const World & /*world*/, const SetEdgeRadius &command, PlanLists &kept,
+            EditLists & /*lists*/, TickBuffers & /*buffers*/) {
+  return planEdge(kept, command);
+}
+bool planOf(const World &world, const SetTaperLength &command, PlanLists &kept,
+            EditLists & /*lists*/, TickBuffers & /*buffers*/) {
+  return planTaper(world, kept, command);
+}
+
+// The commands planned as a change to the path layout. Box commands, SetShopStock,
+// SetOpeningHours, SetFurnishing, and RestoreIntent have no plan, and RestoreIntent shows no ghost.
+template <typename T>
+constexpr bool IS_PLANNED = std::is_same_v<T, AddPath> || std::is_same_v<T, DeleteSegment> ||
+                            std::is_same_v<T, MovePoint> || std::is_same_v<T, InsertPoint> ||
+                            std::is_same_v<T, RemovePoint> || std::is_same_v<T, SetCornerRadius> ||
+                            std::is_same_v<T, SetSegmentWidth> ||
+                            std::is_same_v<T, SetEdgeRadius> || std::is_same_v<T, SetTaperLength>;
 
 } // namespace
 
@@ -1622,49 +1743,9 @@ void addParkEdits(WorldSchema &schema) {
   schema.addCommand<RestoreIntent>();
 }
 
-namespace {
-
-// The stop's ground position, as stopPosition gives it, finding an OnBend's corner with the corner
-// finder, which gives the rounded corner at a point or none.
-template <typename FindCorner>
-std::optional<ParkPoint> positionWith(const World &world, const PathStop &stop,
-                                      FindCorner findCorner) {
-  if (const auto *at = std::get_if<NewPoint>(&stop)) {
-    return at->At;
-  }
-  if (const auto *on = std::get_if<OnPoint>(&stop)) {
-    const PathPointIntent *point = findIntent<PathPointIntent>(world, on->Point);
-    return point == nullptr ? std::nullopt : std::optional<ParkPoint>(point->At);
-  }
-  if (const auto *on = std::get_if<OnBend>(&stop)) {
-    const std::optional<ParkCorner> corner = findCorner(on->Point);
-    if (!corner || !std::isfinite(on->Along) || on->Along <= 0.0 || on->Along >= 1.0) {
-      return std::nullopt;
-    }
-    return bendPlace(*corner, on->Along);
-  }
-  if (std::holds_alternative<RepeatStop>(stop) || std::holds_alternative<OnDrawnSegment>(stop)) {
-    return std::nullopt;
-  }
-  const auto &on = std::get<OnSegment>(stop);
-  const PathSegmentIntent *segment = findIntent<PathSegmentIntent>(world, on.Segment);
-  if (segment == nullptr) {
-    return std::nullopt;
-  }
-  const PathPointIntent *from = findIntent<PathPointIntent>(world, segment->From);
-  const PathPointIntent *to = findIntent<PathPointIntent>(world, segment->To);
-  if (from == nullptr || to == nullptr) {
-    return std::nullopt;
-  }
-  return ParkPoint{from->At.X + on.Along * (to->At.X - from->At.X),
-                   from->At.Z + on.Along * (to->At.Z - from->At.Z)};
-}
-
-} // namespace
-
 std::optional<ParkPoint> stopPosition(const World &world, const PathStop &stop) {
   return positionWith(world, stop,
-                      [&world](EntityKey point) { return roundedCorner(world, point); });
+                      [&world](EntityKey point) { return roundedIn(parkCorners(world), point); });
 }
 
 bool appendStopPosition(const World &world, std::span<const ParkCorner> corners,
@@ -1686,14 +1767,7 @@ bool appendStopPosition(const World &world, std::span<const ParkCorner> corners,
         ParkPoint{from.X + on->Along * (to.X - from.X), from.Z + on->Along * (to.Z - from.Z)});
     return true;
   }
-  const std::optional<ParkPoint> position =
-      positionWith(world, stop, [corners](EntityKey point) -> std::optional<ParkCorner> {
-        const auto found = std::ranges::lower_bound(corners, point, {}, &ParkCorner::Point);
-        if (found == corners.end() || found->Point != point || !(found->Radius > 0.0)) {
-          return std::nullopt;
-        }
-        return *found;
-      });
+  const std::optional<ParkPoint> position = positionIn(world, corners, stop);
   if (!position) {
     return false;
   }
@@ -1717,26 +1791,14 @@ std::optional<std::vector<ParkPoint>> stopPositions(const World &world, const Ad
   return positions;
 }
 
-std::vector<ParkPoint> pathCrossings(const World &world, const AddPath &path) {
-  return crossingsOf(acceptedPlan(world, planOf(world, path)));
-}
-
-std::vector<ParkPoint> pathCrossings(const World &world, const MovePoint &move) {
-  return crossingsOf(acceptedPlan(world, planOf(world, move)));
-}
-
-std::vector<ParkPoint> pathCrossings(const World &world, const RemovePoint &remove) {
-  return crossingsOf(acceptedPlan(world, planOf(world, remove)));
-}
-
 namespace {
 
 // The pieces of the surface of the layout, with its ground, that can reach the solid. Every piece
 // of a point's or of a segment's lies within the longer of one of the point's segments' length and
 // the widest width, plus the widest width, from the point, so only the points that near the solid's
-// bounds and their segments are built.
-std::vector<SurfacePiece> piecesNear(const PathLayout &layout, const PathGround &ground,
-                                     const Solid &solid) {
+// bounds and their segments are built. Puts them in lists.NearSolid's pieces.
+void piecesNear(const PathLayout &layout, const PathGround &ground, const Solid &solid,
+                EditLists &lists, TickBuffers &buffers) {
   const auto [leastX, greatestX] = extentOf(solid.Shape.Corners, ParkPoint{1.0, 0.0});
   const auto [leastZ, greatestZ] = extentOf(solid.Shape.Corners, ParkPoint{0.0, 1.0});
   const auto positionOf = [&layout](EntityKey key) {
@@ -1748,7 +1810,8 @@ std::vector<SurfacePiece> piecesNear(const PathLayout &layout, const PathGround 
       widest = std::max(widest, segment.Width);
     }
   }
-  std::vector<EntityKey> focus;
+  std::vector<EntityKey> &focus = lists.Focus;
+  focus.clear();
   for (const ParkSegment &segment : ground.Segments) {
     if (segment.Line.empty()) {
       continue;
@@ -1767,9 +1830,8 @@ std::vector<SurfacePiece> piecesNear(const PathLayout &layout, const PathGround 
       }
     }
   }
-  std::ranges::sort(focus);
-  focus.erase(std::unique(focus.begin(), focus.end()), focus.end());
-  return surfaceAround(layout, ground, focus, false).Pieces;
+  sortUnique(focus);
+  surfaceAround(layout, ground, focus, false, lists.NearSolid, buffers);
 }
 
 bool isListed(const std::vector<EntityKey> &keys, EntityKey key) {
@@ -1796,7 +1858,8 @@ bool areHoursValid(const OpeningHours &hours) {
 
 // Whether the restore names what it acts on, as the spec's RestoreIntent acceptance lists, apart
 // from physical validity. Before is the world's layout.
-bool namesValid(const World &world, const PathLayout &before, const RestoreIntent &command) {
+bool namesValid(const World &world, const PathLayout &before, const RestoreIntent &command,
+                std::vector<EntityKey> &names) {
   const auto removed = [&command](EntityKey key) { return isListed(command.Remove, key); };
   if (command.Add.Hours || (command.Set.Hours && !areHoursValid(*command.Set.Hours))) {
     return false;
@@ -1820,8 +1883,7 @@ bool namesValid(const World &world, const PathLayout &before, const RestoreInten
                 [&world](EntityKey key) { return findIntent<BoxIntent>(world, key); })) {
     return false;
   }
-  std::vector<EntityKey> names;
-  names.reserve(command.Add.Points.size() + command.Add.Segments.size() + command.Add.Boxes.size());
+  names.clear();
   for (const ParkPathPoint &point : command.Add.Points) {
     names.push_back(point.Key);
   }
@@ -1865,19 +1927,24 @@ bool namesValid(const World &world, const PathLayout &before, const RestoreInten
 
 // Makes the restore's changes to path points and segments in the store: removes, then adds points
 // and segments, which take keys in that order, then sets. Removing a box's key in a layout changes
-// nothing.
-template <typename Store> void applyRestore(Store &store, const RestoreIntent &command) {
+// nothing. added is a list it reuses, of each added point's record key and its new key.
+template <typename Store>
+void applyRestore(Store &store, const RestoreIntent &command,
+                  std::vector<std::pair<EntityKey, EntityKey>> &added) {
   for (const EntityKey key : command.Remove) {
     store.destroy(key);
   }
-  std::map<EntityKey, EntityKey> added;
+  added.clear();
   for (const ParkPathPoint &point : command.Add.Points) {
-    added[point.Key] = store.addPoint(PathPointIntent{point.At, point.Radius, point.Taper});
+    added.emplace_back(point.Key,
+                       store.addPoint(PathPointIntent{point.At, point.Radius, point.Taper}));
   }
+  std::ranges::sort(added);
   const auto intentOf = [&added](const SegmentRecord &segment) {
     const auto keyOf = [&added](EntityKey key) {
-      const auto found = added.find(key);
-      return found == added.end() ? key : found->second;
+      const auto found =
+          std::ranges::lower_bound(added, key, {}, &std::pair<EntityKey, EntityKey>::first);
+      return found != added.end() && found->first == key ? found->second : key;
     };
     return PathSegmentIntent{segment.Kind,  keyOf(segment.From), keyOf(segment.To),
                              segment.Width, segment.FromEdge,    segment.ToEdge};
@@ -1894,18 +1961,17 @@ template <typename Store> void applyRestore(Store &store, const RestoreIntent &c
   }
 }
 
-// The solids after the restore: the world's, less the boxes it removes, with the poses it sets, and
-// with the boxes it adds, keyed from firstBoxKey on.
-std::vector<Solid> restoredSolids(const World &world, const RestoreIntent &command,
-                                  uint64_t firstBoxKey) {
-  std::vector<Solid> solids;
-  for (const Solid &solid : solidsOf(world)) {
+// Puts in solids the solids after the restore: the world's, less the boxes it removes, with the
+// poses it sets, and with the boxes it adds, keyed from firstBoxKey on.
+void restoredSolids(const World &world, const RestoreIntent &command, uint64_t firstBoxKey,
+                    EditLists &lists) {
+  std::vector<Solid> &solids = lists.Solids;
+  solidsOf(world, lists.Entrances, lists.Boxes, solids);
+  std::erase_if(solids, [&command](const Solid &solid) {
     const bool set =
         std::ranges::find(command.Set.Boxes, solid.Key, &ParkBox::Key) != command.Set.Boxes.end();
-    if (!set && !isListed(command.Remove, solid.Key)) {
-      solids.push_back(solid);
-    }
-  }
+    return set || isListed(command.Remove, solid.Key);
+  });
   for (const ParkBox &box : command.Set.Boxes) {
     if (const std::optional<Solid> solid = solidOf(box.Key, box.At, boxSize(box.Kind))) {
       solids.push_back(*solid);
@@ -1918,53 +1984,51 @@ std::vector<Solid> restoredSolids(const World &world, const RestoreIntent &comma
       solids.push_back(*solid);
     }
   }
-  return solids;
+}
+
+// Whether the solid stays in the park and conflicts with no other solid in lists.Solids and no
+// piece of the layout's surface, with its ground.
+bool solidFits(const PathLayout &layout, const PathGround &ground, const Solid &solid,
+               EditLists &lists, TickBuffers &buffers) {
+  piecesNear(layout, ground, solid, lists, buffers);
+  return fits(solid, lists.Solids, lists.NearSolid.Pieces);
 }
 
 // Whether the world accepts the restore: it names what it acts on, every segment it adds or
 // changes has a ground line that stays in the park, every piece of the surface it adds or changes
 // stays in the park and meets no solid, and every box it sets or adds stays in the park and
-// conflicts with no other solid and no piece of the surface.
-bool isRestoreAccepted(const World &world, const RestoreIntent &command) {
-  const PathLayout before = layoutOf(world);
-  if (!namesValid(world, before, command)) {
+// conflicts with no other solid and no piece of the surface. Keeps the layouts and grounds before
+// and after in kept.
+bool isRestoreAccepted(const World &world, const RestoreIntent &command, PlanLists &kept,
+                       EditLists &lists, TickBuffers &buffers) {
+  worldGround(world, kept.World);
+  const PathLayout &before = kept.World.Layout;
+  if (!namesValid(world, before, command, lists.Names)) {
     return false;
   }
-  PathLayout after = before;
-  LayoutStore store(after, world.nextKey());
-  applyRestore(store, command);
+  kept.After = before;
+  LayoutStore store(kept.After, world.nextKey());
+  applyRestore(store, command, lists.AddedKeys);
   // A point's radius or taper can change the paving at it without changing a segment's record.
-  std::vector<EntityKey> extra;
-  extra.reserve(command.Set.Points.size() + command.Add.Points.size());
+  lists.Extra.clear();
   for (const ParkPathPoint &point : command.Set.Points) {
-    extra.push_back(point.Key);
+    lists.Extra.push_back(point.Key);
   }
   for (size_t i = 0; i < command.Add.Points.size(); ++i) {
-    extra.push_back(EntityKey{world.nextKey() + i});
+    lists.Extra.push_back(EntityKey{world.nextKey() + i});
   }
   const uint64_t firstBoxKey =
       world.nextKey() + command.Add.Points.size() + command.Add.Segments.size();
-  const std::vector<Solid> solids = restoredSolids(world, command, firstBoxKey);
-  const Edited edited = editedBetween(before, after, extra, Wanted::Pieces);
-  const bool pathsFit =
-      std::ranges::all_of(edited.Segments,
-                          [](const ParkSegment &segment) {
-                            const std::optional<Line> line = lineOf(segment);
-                            return line && !leavesPark(*line);
-                          }) &&
-      std::ranges::all_of(edited.Surface.Pieces, [&solids](const SurfacePiece &piece) {
-        return !leavesPark(piece) && fits(piece, solids);
-      });
-  if (!pathsFit) {
+  restoredSolids(world, command, firstBoxKey, lists);
+  groundOf(kept.After, kept.AfterGround);
+  const PathGround &groundAfter = kept.AfterGround.Ground;
+  editedBetween(kept.World, kept.After, groundAfter, lists.Extra, Wanted::Pieces, lists, buffers);
+  if (!editedFits(groundAfter, lists)) {
     return false;
   }
-  std::optional<PathGround> afterGround;
   const auto boxFits = [&](EntityKey key, const ParkBox &box) {
     const std::optional<Solid> solid = solidOf(key, box.At, boxSize(box.Kind));
-    if (solid && !afterGround) {
-      afterGround = groundOf(after);
-    }
-    return solid && fits(*solid, solids, piecesNear(after, *afterGround, *solid));
+    return solid && solidFits(kept.After, groundAfter, *solid, lists, buffers);
   };
   for (const ParkBox &box : command.Set.Boxes) {
     if (!boxFits(box.Key, box)) {
@@ -1979,6 +2043,19 @@ bool isRestoreAccepted(const World &world, const RestoreIntent &command) {
   return true;
 }
 
+// Whether the box of the size at the pose stays in the park and conflicts with no other solid and
+// no piece of the surface. A box with the key is the one being moved, so it is skipped.
+bool boxFits(const World &world, EntityKey key, const Pose &at, FootprintSize size, PlanLists &kept,
+             EditLists &lists, TickBuffers &buffers) {
+  const std::optional<Solid> solid = solidOf(key, at, size);
+  if (!solid) {
+    return false;
+  }
+  worldGround(world, kept.World);
+  solidsOf(world, lists.Entrances, lists.Boxes, lists.Solids);
+  return solidFits(kept.World.Layout, kept.World.Ground, *solid, lists, buffers);
+}
+
 // Gives the box the stock: removes its ShopStockIntent for food, so a shop at food saves as one
 // never set, and holds the stock otherwise.
 void setStock(World &world, EntityKey box, ShopStock stock) {
@@ -1991,15 +2068,11 @@ void setStock(World &world, EntityKey box, ShopStock stock) {
 
 // Gives the park the hours: destroys the entity holding them for DEFAULT_HOURS, so a park at the
 // default saves as one never set, and otherwise sets them on that entity, creating it if none holds
-// them.
-void setHours(World &world, const OpeningHours &hours) {
-  std::optional<EntityKey> holder;
-  for (const EntityKey key : world.keys()) {
-    if (findIntent<OpeningHoursIntent>(world, key) != nullptr) {
-      holder = key;
-      break;
-    }
-  }
+// them. holders is a list it reuses.
+void setHours(World &world, const OpeningHours &hours, std::vector<EntityKey> &holders) {
+  world.keysWith<OpeningHoursIntent>(holders);
+  const std::optional<EntityKey> holder =
+      holders.empty() ? std::nullopt : std::optional<EntityKey>(holders.front());
   if (hours == DEFAULT_HOURS) {
     if (holder) {
       world.destroyEntity(*holder);
@@ -2012,41 +2085,106 @@ void setHours(World &world, const OpeningHours &hours) {
   }
 }
 
+// Plans the command into kept: whether it has a plan, whether the world accepts it, and the
+// positions of its crossings when it does.
+template <typename T>
+void planInto(const World &world, const T &command, PlanLists &kept, EditLists &lists,
+              TickBuffers &buffers) {
+  kept.HasPlan = false;
+  kept.Accepted = false;
+  kept.Crossings.clear();
+  if constexpr (IS_PLANNED<T>) {
+    clearPlan(kept);
+    worldGround(world, kept.World);
+    kept.HasPlan = planOf(world, command, kept, lists, buffers);
+    kept.Accepted = kept.HasPlan && planFits(world, kept, lists, buffers);
+    if (kept.Accepted) {
+      for (const size_t point : kept.Plan.Crossings) {
+        kept.Crossings.push_back(kept.Plan.Points[point].At);
+      }
+    }
+  } else if constexpr (std::is_same_v<T, AddBox>) {
+    kept.Accepted = isKnown(command.Kind) && boxFits(world, NULL_KEY, command.At,
+                                                     boxSize(command.Kind), kept, lists, buffers);
+  } else if constexpr (std::is_same_v<T, MoveBox>) {
+    const BoxIntent *box = findIntent<BoxIntent>(world, command.Box);
+    kept.Accepted = box != nullptr && boxFits(world, command.Box, command.At, boxSize(box->Kind),
+                                              kept, lists, buffers);
+  } else if constexpr (std::is_same_v<T, RestoreIntent>) {
+    kept.Accepted = isRestoreAccepted(world, command, kept, lists, buffers);
+  } else {
+    kept.Accepted = isAccepted(world, command);
+  }
+}
+
+// Makes the change applying the command makes, from its plan in kept, when the world accepted it.
+template <typename T>
+void applyInto(World &world, const T &command, const PlanLists &kept, EditLists &lists) {
+  if (!kept.Accepted) {
+    return;
+  }
+  if constexpr (IS_PLANNED<T>) {
+    WorldStore store(world);
+    applyPlan(store, kept.Plan, lists.Keys, lists.Chain);
+  } else if constexpr (std::is_same_v<T, AddBox>) {
+    const EntityKey key = world.createEntity();
+    world.emplace<BoxIntent>(key, BoxIntent{command.Kind, command.At});
+  } else if constexpr (std::is_same_v<T, MoveBox>) {
+    world.get<BoxIntent>(command.Box).At = command.At;
+  } else if constexpr (std::is_same_v<T, DeleteBox>) {
+    world.destroyEntity(command.Box);
+  } else if constexpr (std::is_same_v<T, SetShopStock>) {
+    setStock(world, command.Shop, command.Stock);
+  } else if constexpr (std::is_same_v<T, SetOpeningHours>) {
+    setHours(world, command.Hours, lists.Names);
+  } else if constexpr (std::is_same_v<T, SetFurnishing>) {
+    setFurnishingOf(world, command.Segment, command.To);
+  } else {
+    static_assert(std::is_same_v<T, RestoreIntent>, "every command is applied");
+    WorldStore store(world);
+    applyRestore(store, command, lists.AddedKeys);
+    for (const ParkBox &box : command.Set.Boxes) {
+      world.get<BoxIntent>(box.Key) = BoxIntent{box.Kind, box.At};
+      setStock(world, box.Key, box.Stock);
+    }
+    for (const ParkBox &box : command.Add.Boxes) {
+      const EntityKey key = world.createEntity();
+      world.emplace<BoxIntent>(key, BoxIntent{box.Kind, box.At});
+      setStock(world, key, box.Stock);
+    }
+    // Last, so the records added above take the keys the history expects.
+    if (command.Set.Hours) {
+      setHours(world, *command.Set.Hours, lists.Names);
+    }
+  }
+}
+
+// Whether the world accepts the command, planned with lists of its own.
+template <typename T> bool acceptsOnce(const World &world, const T &command) {
+  PlannedEdit planned;
+  TickBuffers buffers;
+  planInto(world, command, *planned.Lists, buffers.get<EditLists>(), buffers);
+  return planned.Lists->Accepted;
+}
+
+// Plans the command with lists kept in the buffers and applies it.
+template <typename T> void applyWith(World &world, const T &command, TickBuffers &buffers) {
+  PlanLists &kept = *buffers.get<PlannedEdit>().Lists;
+  EditLists &lists = buffers.get<EditLists>();
+  planInto(world, command, kept, lists, buffers);
+  applyInto(world, command, kept, lists);
+}
+
 } // namespace
 
-bool isAccepted(const World &world, const AddPath &command) {
-  return acceptedPlan(world, planOf(world, command)).has_value();
-}
+bool isAccepted(const World &world, const AddPath &command) { return acceptsOnce(world, command); }
 
-bool isAccepted(const World &world, const AddBox &command) {
-  if (!isKnown(command.Kind)) {
-    return false;
-  }
-  const std::optional<Solid> solid = solidOf(NULL_KEY, command.At, boxSize(command.Kind));
-  if (!solid) {
-    return false;
-  }
-  GroundLists lists;
-  worldGround(world, lists);
-  return fits(*solid, solidsOf(world), piecesNear(lists.Layout, lists.Ground, *solid));
-}
+bool isAccepted(const World &world, const AddBox &command) { return acceptsOnce(world, command); }
 
-bool isAccepted(const World &world, const MoveBox &command) {
-  const BoxIntent *box = findIntent<BoxIntent>(world, command.Box);
-  if (box == nullptr) {
-    return false;
-  }
-  const std::optional<Solid> solid = solidOf(command.Box, command.At, boxSize(box->Kind));
-  if (!solid) {
-    return false;
-  }
-  GroundLists lists;
-  worldGround(world, lists);
-  return fits(*solid, solidsOf(world), piecesNear(lists.Layout, lists.Ground, *solid));
-}
+bool isAccepted(const World &world, const MoveBox &command) { return acceptsOnce(world, command); }
 
 bool isAccepted(const World &world, const DeleteSegment &command) {
-  return acceptedPlan(world, planOf(world, command)).has_value();
+  return acceptsOnce(world, command);
 }
 
 bool isAccepted(const World &world, const DeleteBox &command) {
@@ -2054,31 +2192,31 @@ bool isAccepted(const World &world, const DeleteBox &command) {
 }
 
 bool isAccepted(const World &world, const MovePoint &command) {
-  return acceptedPlan(world, planOf(world, command)).has_value();
+  return acceptsOnce(world, command);
 }
 
 bool isAccepted(const World &world, const InsertPoint &command) {
-  return acceptedPlan(world, planOf(world, command)).has_value();
+  return acceptsOnce(world, command);
 }
 
 bool isAccepted(const World &world, const RemovePoint &command) {
-  return acceptedPlan(world, planOf(world, command)).has_value();
+  return acceptsOnce(world, command);
 }
 
 bool isAccepted(const World &world, const SetCornerRadius &command) {
-  return acceptedPlan(world, planOf(world, command)).has_value();
+  return acceptsOnce(world, command);
 }
 
 bool isAccepted(const World &world, const SetSegmentWidth &command) {
-  return acceptedPlan(world, planOf(world, command)).has_value();
+  return acceptsOnce(world, command);
 }
 
 bool isAccepted(const World &world, const SetEdgeRadius &command) {
-  return acceptedPlan(world, planOf(world, command)).has_value();
+  return acceptsOnce(world, command);
 }
 
 bool isAccepted(const World &world, const SetTaperLength &command) {
-  return acceptedPlan(world, planOf(world, command)).has_value();
+  return acceptsOnce(world, command);
 }
 
 bool isAccepted(const World &world, const SetShopStock &command) {
@@ -2097,158 +2235,216 @@ bool isAccepted(const World &world, const SetFurnishing &command) {
 }
 
 bool isAccepted(const World &world, const RestoreIntent &command) {
-  return isRestoreAccepted(world, command);
+  return acceptsOnce(world, command);
 }
 
 void applyCommand(World &world, const AddPath &command) {
-  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
-    WorldStore store(world);
-    applyPlan(store, *plan);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const AddPath &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const AddBox &command) {
-  if (!isAccepted(world, command)) {
-    return;
-  }
-  const EntityKey key = world.createEntity();
-  world.emplace<BoxIntent>(key, BoxIntent{command.Kind, command.At});
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const AddBox &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const MoveBox &command) {
-  if (!isAccepted(world, command)) {
-    return;
-  }
-  world.get<BoxIntent>(command.Box).At = command.At;
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const MoveBox &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const DeleteSegment &command) {
-  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
-    WorldStore store(world);
-    applyPlan(store, *plan);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const DeleteSegment &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const DeleteBox &command) {
-  if (isAccepted(world, command)) {
-    world.destroyEntity(command.Box);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const DeleteBox &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const MovePoint &command) {
-  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
-    WorldStore store(world);
-    applyPlan(store, *plan);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const MovePoint &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const InsertPoint &command) {
-  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
-    WorldStore store(world);
-    applyPlan(store, *plan);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const InsertPoint &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const RemovePoint &command) {
-  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
-    WorldStore store(world);
-    applyPlan(store, *plan);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const RemovePoint &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const SetCornerRadius &command) {
-  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
-    WorldStore store(world);
-    applyPlan(store, *plan);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const SetCornerRadius &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const SetSegmentWidth &command) {
-  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
-    WorldStore store(world);
-    applyPlan(store, *plan);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const SetSegmentWidth &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const SetEdgeRadius &command) {
-  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
-    WorldStore store(world);
-    applyPlan(store, *plan);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const SetEdgeRadius &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const SetTaperLength &command) {
-  if (const std::optional<EditPlan> plan = acceptedPlan(world, planOf(world, command))) {
-    WorldStore store(world);
-    applyPlan(store, *plan);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const SetTaperLength &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const SetShopStock &command) {
-  if (isAccepted(world, command)) {
-    setStock(world, command.Shop, command.Stock);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const SetShopStock &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const SetOpeningHours &command) {
-  if (isAccepted(world, command)) {
-    setHours(world, command.Hours);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const SetOpeningHours &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const SetFurnishing &command) {
-  if (isAccepted(world, command)) {
-    setFurnishingOf(world, command.Segment, command.To);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const SetFurnishing &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 void applyCommand(World &world, const RestoreIntent &command) {
-  if (!isRestoreAccepted(world, command)) {
-    return;
-  }
-  WorldStore store(world);
-  applyRestore(store, command);
-  for (const ParkBox &box : command.Set.Boxes) {
-    world.get<BoxIntent>(box.Key) = BoxIntent{box.Kind, box.At};
-    setStock(world, box.Key, box.Stock);
-  }
-  for (const ParkBox &box : command.Add.Boxes) {
-    const EntityKey key = world.createEntity();
-    world.emplace<BoxIntent>(key, BoxIntent{box.Kind, box.At});
-    setStock(world, key, box.Stock);
-  }
-  // Last, so the records added above take the keys the history expects.
-  if (command.Set.Hours) {
-    setHours(world, *command.Set.Hours);
-  }
+  TickBuffers buffers;
+  applyCommand(world, command, buffers);
+}
+
+void applyCommand(World &world, const RestoreIntent &command, TickBuffers &buffers) {
+  applyWith(world, command, buffers);
 }
 
 namespace {
 
-// What the edit changes, or nothing when it names nothing it acts on, or a segment it adds or
-// reshapes has no ground line, which leaves it nothing it can show.
-Edited editedOf(const World &world, const ParkEdit &edit) {
-  const std::optional<EditPlan> plan =
-      std::visit([&world](const auto &command) { return planOf(world, command); }, edit);
-  if (!plan) {
-    return {};
+// A plan of the edit made with lists of its own, for callers that ask about an edit once.
+struct OwnPlan {
+  PlannedEdit Planned;
+  TickBuffers Buffers;
+};
+
+OwnPlan planOnce(const World &world, const ParkEdit &edit) {
+  OwnPlan own;
+  planEdit(world, edit, own.Planned, own.Buffers);
+  return own;
+}
+
+// Each segment the PlanLists' after ground holds at an index in the list, refilled into a list
+// the caller keeps as parkSegments' kept form refills one, with no furnishing.
+void editedSegmentsOf(const PathGround &groundAfter, const std::vector<size_t> &indexes,
+                      std::vector<ParkSegment> &segments, std::vector<ParkSegment> &spare) {
+  resizeKeeping(segments, indexes.size(), spare);
+  for (size_t i = 0; i < indexes.size(); ++i) {
+    const ParkSegment &from = groundAfter.Segments[indexes[i]];
+    ParkSegment &segment = segments[i];
+    segment.Key = from.Key;
+    segment.Kind = from.Kind;
+    segment.From = from.From;
+    segment.To = from.To;
+    segment.Width = from.Width;
+    copyGrowing(segment.Line, std::span<const CarrierPoint>(from.Line));
+    segment.FromEdge = from.FromEdge;
+    segment.ToEdge = from.ToEdge;
+    segment.Furnished = {};
   }
-  Edited edited = editedBy(world, *plan, Wanted::Drawing);
-  if (std::ranges::any_of(edited.Segments,
-                          [](const ParkSegment &segment) { return segment.Line.empty(); })) {
-    return {};
-  }
-  return edited;
 }
 
 } // namespace
 
+std::vector<ParkPoint> pathCrossings(const World &world, const AddPath &path) {
+  const std::span<const ParkPoint> crossings = pathCrossings(planOnce(world, path).Planned);
+  return {crossings.begin(), crossings.end()};
+}
+
+std::vector<ParkPoint> pathCrossings(const World &world, const MovePoint &move) {
+  const std::span<const ParkPoint> crossings = pathCrossings(planOnce(world, move).Planned);
+  return {crossings.begin(), crossings.end()};
+}
+
+std::vector<ParkPoint> pathCrossings(const World &world, const RemovePoint &remove) {
+  const std::span<const ParkPoint> crossings = pathCrossings(planOnce(world, remove).Planned);
+  return {crossings.begin(), crossings.end()};
+}
+
 std::vector<ParkSegment> editedSegments(const World &world, const ParkEdit &edit) {
-  return editedOf(world, edit).Segments;
+  OwnPlan own = planOnce(world, edit);
+  EditedParts parts;
+  editedParts(world, own.Planned, parts, own.Buffers);
+  return std::move(parts.Segments);
 }
 
 PavedSurface editedSurface(const World &world, const ParkEdit &edit) {
-  return editedOf(world, edit).Surface;
+  OwnPlan own = planOnce(world, edit);
+  EditedParts parts;
+  editedParts(world, own.Planned, parts, own.Buffers);
+  return std::move(parts.Surface);
 }
 
 bool isPhysicallyValid(const World &world) {
@@ -2306,6 +2502,56 @@ void segmentRecords(const World &world, std::vector<SegmentRecord> &records) {
         }
         records.push_back(record);
       });
+}
+
+PlannedEdit::PlannedEdit() : Lists(std::make_unique<PlanLists>()) {}
+PlannedEdit::~PlannedEdit() = default;
+PlannedEdit::PlannedEdit(PlannedEdit &&) noexcept = default;
+PlannedEdit &PlannedEdit::operator=(PlannedEdit &&) noexcept = default;
+
+void planEdit(const World &world, const ParkEdit &edit, PlannedEdit &planned,
+              TickBuffers &buffers) {
+  EditLists &lists = buffers.get<EditLists>();
+  std::visit([&](const auto &command) { planInto(world, command, *planned.Lists, lists, buffers); },
+             edit);
+}
+
+bool isAccepted(const PlannedEdit &planned) { return planned.Lists->Accepted; }
+
+std::span<const ParkPoint> pathCrossings(const PlannedEdit &planned) {
+  return planned.Lists->Crossings;
+}
+
+void applyPlanned(World &world, const ParkEdit &edit, const PlannedEdit &planned,
+                  TickBuffers &buffers) {
+  EditLists &lists = buffers.get<EditLists>();
+  std::visit([&](const auto &command) { applyInto(world, command, *planned.Lists, lists); }, edit);
+}
+
+void editedParts(const World & /*world*/, const PlannedEdit &planned, EditedParts &parts,
+                 TickBuffers &buffers) {
+  const PlanLists &kept = *planned.Lists;
+  EditLists &lists = buffers.get<EditLists>();
+  clearSurface(parts.Surface);
+  resizeKeeping(parts.Segments, 0, lists.SpareSegments);
+  if (!kept.HasPlan) {
+    return;
+  }
+  // A taper length changes no segment, but it changes the paving at its point.
+  lists.Extra.clear();
+  if (kept.Plan.Tapered != NULL_KEY) {
+    lists.Extra.push_back(kept.Plan.Tapered);
+  }
+  const PathGround &groundAfter = kept.AfterGround.Ground;
+  editedBetween(kept.World, kept.After, groundAfter, lists.Extra, Wanted::Drawing, lists, buffers);
+  // An edit whose added or reshaped segment has no ground line shows nothing.
+  if (std::ranges::any_of(lists.EditedSegments, [&groundAfter](size_t i) {
+        return groundAfter.Segments[i].Line.empty();
+      })) {
+    return;
+  }
+  parts.Surface = lists.Edited;
+  editedSegmentsOf(groundAfter, lists.EditedSegments, parts.Segments, lists.SpareSegments);
 }
 
 void queueEdit(CommandQueue &queue, const ParkEdit &edit) {

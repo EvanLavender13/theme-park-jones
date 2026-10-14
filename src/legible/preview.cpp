@@ -1,8 +1,6 @@
 #include "legible/preview.h"
 
-#include "sim/command_queue.h"
 #include "sim/guests/footfall.h"
-#include "sim/medium/field.h"
 #include "sim/park/intent.h"
 #include "sim/routes/networks.h"
 
@@ -13,29 +11,38 @@
 namespace tpj {
 namespace {
 
+// The lists the shop context reuses: the world's boxes, the candidate's, and the keys of the
+// candidate's guest segments.
+struct ShopLists {
+  std::vector<ParkBox> Boxes;
+  std::vector<ParkBox> CandidateBoxes;
+  std::vector<EntityKey> GuestSegments;
+};
+
 bool holdsBox(const std::vector<ParkBox> &boxes, EntityKey key) {
   return std::ranges::any_of(boxes, [key](const ParkBox &box) { return box.Key == key; });
 }
 
 // The shop box the edit adds or moves: an AddBox's is the lowest key the candidate holds a box at
 // and the world does not, and a MoveBox's is its Box when the world holds a shop there.
-std::optional<EntityKey> ghostShop(const World &world, const World &candidate,
-                                   const ParkEdit &edit) {
-  const std::vector<ParkBox> boxes = parkBoxes(world);
+std::optional<EntityKey> ghostShop(const World &world, const World &candidate, const ParkEdit &edit,
+                                   ShopLists &lists) {
+  parkBoxes(world, lists.Boxes);
   if (const auto *add = std::get_if<AddBox>(&edit)) {
     if (add->Kind != BoxKind::Shop) {
       return std::nullopt;
     }
     // Boxes come in ascending key order, so the first new one has the lowest key.
-    for (const ParkBox &box : parkBoxes(candidate)) {
-      if (!holdsBox(boxes, box.Key)) {
+    parkBoxes(candidate, lists.CandidateBoxes);
+    for (const ParkBox &box : lists.CandidateBoxes) {
+      if (!holdsBox(lists.Boxes, box.Key)) {
         return box.Key;
       }
     }
     return std::nullopt;
   }
   if (const auto *move = std::get_if<MoveBox>(&edit)) {
-    for (const ParkBox &box : boxes) {
+    for (const ParkBox &box : lists.Boxes) {
       if (box.Key == move->Box && box.Kind == BoxKind::Shop) {
         return box.Key;
       }
@@ -46,7 +53,7 @@ std::optional<EntityKey> ghostShop(const World &world, const World &candidate,
 
 // Where the shop's guest connector meets a guest path in the candidate: the first place at its
 // last stop's node on a guest segment's carrier, or none.
-std::optional<Place> connectionPlace(const World &candidate, EntityKey shop) {
+std::optional<Place> connectionPlace(const World &candidate, EntityKey shop, ShopLists &lists) {
   const Network &network = parkNetwork(candidate, PathKind::Guest);
   const std::vector<Carrier> &carriers = network.carriers();
   const auto connector =
@@ -54,28 +61,32 @@ std::optional<Place> connectionPlace(const World &candidate, EntityKey shop) {
   if (connector == carriers.end() || connector->Stops.empty()) {
     return std::nullopt;
   }
-  const std::vector<ParkSegment> segments = parkSegments(candidate);
+  parkSegmentKeys(candidate, PathKind::Guest, lists.GuestSegments);
   for (const Place &place : network.stopPlaces(connector->Stops.back().Node)) {
-    const bool onGuestPath = std::ranges::any_of(segments, [&place](const ParkSegment &segment) {
-      return segment.Kind == PathKind::Guest && segment.Key == place.Carrier;
-    });
-    if (onGuestPath) {
+    if (std::ranges::binary_search(lists.GuestSegments, place.Carrier)) {
       return place;
     }
   }
   return std::nullopt;
 }
 
-// The world's hungry footfall at the place on its guest network.
-double footfallAt(const World &world, const Place &place) {
-  return fieldValue<HungryFootfall>(world, parkNetwork(world, PathKind::Guest), place);
+// What the preview's candidate applies: the edit's plan, with the lists applying it reuses.
+struct PlannedChange {
+  const ParkEdit *Edit = nullptr;
+  const PlannedEdit *Planned = nullptr;
+  TickBuffers *Buffers = nullptr;
+};
+
+void applyPlannedChange(World &into, const void *context) {
+  const auto &change = *static_cast<const PlannedChange *>(context);
+  applyPlanned(into, *change.Edit, *change.Planned, *change.Buffers);
 }
 
-// Makes preview the preview of the edit on the world. Its candidate is made in spare, which it
-// refills when spare holds a world on the world's schema, and then moves into the preview. A
-// candidate the preview held before moves into spare first. When the preview holds no candidate,
-// spare keeps the world it holds.
-void makePreview(Preview &preview, std::optional<World> &spare, CommandQueue &queue,
+// Makes preview the preview of the edit on the world, planning the edit once. Its candidate is made
+// in spare, which it refills when spare holds a world on the world's schema, and then moves into
+// the preview. A candidate the preview held before moves into spare first. When the preview holds
+// no candidate, spare keeps the world it holds.
+void makePreview(Preview &preview, std::optional<World> &spare, KeptFieldSample &footfall,
                  TickBuffers &buffers, const World &world, const std::optional<ParkEdit> &edit) {
   // Each preview that holds a candidate took it from spare and left spare empty, so the swap
   // destroys no world.
@@ -85,21 +96,21 @@ void makePreview(Preview &preview, std::optional<World> &spare, CommandQueue &qu
   }
   preview.Edit = edit;
   preview.Shop.reset();
-  if (!edit || !isAccepted(world, *edit)) {
+  if (!edit) {
     return;
   }
-  queue.clear();
-  queueEdit(queue, *edit);
-  if (spare && &spare->schema() == &world.schema()) {
-    makeCandidate(world, queue, buffers, *spare);
-  } else {
-    // A world on the world's schema can only be made by copying it, so the copy is the candidate's
-    // start, and committing the edit to it makes the candidate.
-    spare = copyWorld(world);
-    commitCommands(*spare, queue, buffers);
+  planEdit(world, *edit, preview.Planned, buffers);
+  if (!isAccepted(preview.Planned)) {
+    return;
   }
+  if (!spare || &spare->schema() != &world.schema()) {
+    // A world on the world's schema can only be made by copying it.
+    spare = copyWorld(world);
+  }
+  const PlannedChange change{&*edit, &preview.Planned, &buffers};
+  makeCandidate(world, applyPlannedChange, &change, buffers, *spare);
   preview.Candidate.swap(spare);
-  preview.Shop = shopContext(world, *preview.Candidate, *edit);
+  preview.Shop = shopContext(world, *preview.Candidate, *edit, footfall, buffers);
 }
 
 } // namespace
@@ -107,9 +118,9 @@ void makePreview(Preview &preview, std::optional<World> &spare, CommandQueue &qu
 Preview previewEdit(const World &world, const std::optional<ParkEdit> &edit) {
   Preview preview;
   std::optional<World> spare;
-  CommandQueue queue;
+  KeptFieldSample footfall;
   TickBuffers buffers;
-  makePreview(preview, spare, queue, buffers, world, edit);
+  makePreview(preview, spare, footfall, buffers, world, edit);
   return preview;
 }
 
@@ -128,25 +139,35 @@ bool keepPreview(KeptPreview &kept, const World &world, const std::optional<Park
     }
     return false;
   }
-  makePreview(kept.Made, kept.Spare, kept.Queue, kept.Buffers, world, edit);
+  makePreview(kept.Made, kept.Spare, kept.Footfall, kept.Buffers, world, edit);
   kept.Tick = world.Tick;
   return true;
 }
 
 std::optional<ShopContext> shopContext(const World &world, const World &candidate,
                                        const ParkEdit &edit) {
-  const std::optional<EntityKey> shop = ghostShop(world, candidate, edit);
+  KeptFieldSample footfall;
+  TickBuffers buffers;
+  return shopContext(world, candidate, edit, footfall, buffers);
+}
+
+std::optional<ShopContext> shopContext(const World &world, const World &candidate,
+                                       const ParkEdit &edit, KeptFieldSample &footfall,
+                                       TickBuffers &buffers) {
+  ShopLists &lists = buffers.get<ShopLists>();
+  const std::optional<EntityKey> shop = ghostShop(world, candidate, edit, lists);
   if (!shop) {
     return std::nullopt;
   }
   ShopContext context;
   context.Shop = *shop;
-  context.Connection = connectionPlace(candidate, *shop);
+  context.Connection = connectionPlace(candidate, *shop, lists);
   // Footfall is sampled in the committed world, since a candidate is never stepped.
   if (context.Connection) {
-    context.Footfall = footfallAt(world, *context.Connection);
+    context.Footfall = fieldValue<HungryFootfall>(world, parkNetwork(world, PathKind::Guest),
+                                                  *context.Connection, footfall);
   }
-  context.Supply = nearestDepot(candidate, *shop);
+  context.Supply = nearestDepot(candidate, *shop, buffers);
   return context;
 }
 

@@ -67,6 +67,17 @@ template <typename Node> void keepSpare(std::vector<Node> &spare, size_t held) {
   }
 }
 
+// Makes mine equal to other. When the value's type names keepAssign(mine, other), found by
+// argument-dependent lookup, that refills mine's lists keeping their memory. Otherwise the value's
+// copy assignment does it.
+template <typename Value> void assignKept(Value &mine, const Value &other) {
+  if constexpr (requires { keepAssign(mine, other); }) {
+    keepAssign(mine, other);
+  } else {
+    mine = other;
+  }
+}
+
 // Makes mine hold exactly the other's values. It assigns in place the value of each key both hold,
 // so the value's lists keep their memory, moves the node of each key only mine holds into spare,
 // and takes a node from spare for each key only the other holds. Allocates nothing once mine and
@@ -89,12 +100,12 @@ void assignKeyed(std::map<EntityKey, Value> &mine, const std::map<EntityKey, Val
         auto node = std::move(spare.back());
         spare.pop_back();
         node.key() = from->first;
-        node.mapped() = from->second;
+        assignKept(node.mapped(), from->second);
         mine.insert(at, std::move(node));
       }
       ++from;
     } else {
-      at->second = from->second;
+      assignKept(at->second, from->second);
       ++at;
       ++from;
     }

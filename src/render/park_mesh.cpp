@@ -346,10 +346,25 @@ void appendDeleted(ParkMesh &mesh, const World &world, const ParkEdit &edit, Gho
   }
 }
 
+// The position of the place a moved point's target or an inserted point names, as stopPosition
+// gives it, reading the corners only for an OnBend into lists.Corners. None where it gives none.
+std::optional<ParkPoint> keptPlace(const World &world, const PathStop &place, GhostLists &lists) {
+  lists.Corners.clear();
+  if (std::holds_alternative<OnBend>(place)) {
+    parkCorners(world, lists.Corners, lists.Buffers);
+  }
+  lists.Positions.clear();
+  if (!appendStopPosition(world, lists.Corners, place, lists.Positions)) {
+    return std::nullopt;
+  }
+  return lists.Positions.back();
+}
+
 // Adds a join mark at each stop where an added path joins a point, a segment, or an earlier stop,
 // at a moved point's target when it is a point or segment, at an inserted point's place, and at
-// each place pathCrossings gives.
-void appendJoinMarks(ParkMesh &mesh, const World &world, const ParkEdit &edit, GhostLists &lists) {
+// each place pathCrossings gives for the plan.
+void appendJoinMarks(ParkMesh &mesh, const World &world, const ParkEdit &edit,
+                     const PlannedEdit &planned, GhostLists &lists) {
   if (const auto *path = std::get_if<AddPath>(&edit)) {
     if (keptStopPositions(world, *path, lists)) {
       for (size_t i = 0; i < lists.Positions.size(); ++i) {
@@ -358,26 +373,26 @@ void appendJoinMarks(ParkMesh &mesh, const World &world, const ParkEdit &edit, G
         }
       }
     }
-    for (const ParkPoint &at : pathCrossings(world, *path)) {
+    for (const ParkPoint &at : pathCrossings(planned)) {
       appendJoinMark(mesh, at);
     }
   } else if (const auto *move = std::get_if<MovePoint>(&edit)) {
     if (!std::holds_alternative<NewPoint>(move->To)) {
       const PathStop target = std::visit([](const auto &stop) { return PathStop{stop}; }, move->To);
-      if (const std::optional<ParkPoint> at = stopPosition(world, target)) {
+      if (const std::optional<ParkPoint> at = keptPlace(world, target, lists)) {
         appendJoinMark(mesh, *at);
       }
     }
-    for (const ParkPoint &at : pathCrossings(world, *move)) {
+    for (const ParkPoint &at : pathCrossings(planned)) {
       appendJoinMark(mesh, at);
     }
   } else if (const auto *insert = std::get_if<InsertPoint>(&edit)) {
     const PathStop place = std::visit([](const auto &at) { return PathStop{at}; }, insert->At);
-    if (const std::optional<ParkPoint> at = stopPosition(world, place)) {
+    if (const std::optional<ParkPoint> at = keptPlace(world, place, lists)) {
       appendJoinMark(mesh, *at);
     }
-  } else if (const auto *remove = std::get_if<RemovePoint>(&edit)) {
-    for (const ParkPoint &at : pathCrossings(world, *remove)) {
+  } else if (std::holds_alternative<RemovePoint>(edit)) {
+    for (const ParkPoint &at : pathCrossings(planned)) {
       appendJoinMark(mesh, at);
     }
   }
@@ -647,14 +662,13 @@ void ownersOf(const PavedSurface &surface, std::vector<EntityKey> &owners) {
   owners.erase(first, last);
 }
 
-// Puts in lists.Owned the pieces and edge lines that belong to the segments editedSegments gives:
+// Puts in lists.Owned the pieces and edge lines that belong to the edited segments in lists.Parts:
 // from the candidate's surface with its walkways when there is one, so its walkways join their
-// segments as the committed park's do, and from editedSurface otherwise.
-void reshapedBy(const World &world, const ParkEdit &edit, const std::optional<World> &candidate,
-                GhostLists &lists) {
+// segments as the committed park's do, and from the edited surface otherwise.
+void reshapedBy(const std::optional<World> &candidate, GhostLists &lists) {
   std::vector<EntityKey> &reshaped = lists.Owners;
   reshaped.clear();
-  for (const ParkSegment &segment : editedSegments(world, edit)) {
+  for (const ParkSegment &segment : lists.Parts.Segments) {
     reshaped.push_back(segment.Key);
   }
   std::ranges::sort(reshaped);
@@ -662,7 +676,7 @@ void reshapedBy(const World &world, const ParkEdit &edit, const std::optional<Wo
     ownedBy(walkedSurface(*candidate), reshaped, lists.Owned);
     return;
   }
-  ownedBy(editedSurface(world, edit), reshaped, lists.Owned);
+  ownedBy(lists.Parts.Surface, reshaped, lists.Owned);
 }
 
 // Adds the candidate's walkways and starved marks, and the furniture the edit changes.
@@ -673,19 +687,9 @@ void appendCandidate(GhostMesh &ghost, const World &world, const World &candidat
   appendFurnitureChanges(ghost, world, candidate, lists);
 }
 
-} // namespace
-
-void buildGhostMesh(const World &world, const ParkEdit &edit, const std::optional<World> &candidate,
+// Adds the box an AddBox adds or a MoveBox moves, in its kind's color as the ghost shows it.
+void appendBoxGhost(ParkMesh &shape, const World &world, const ParkEdit &edit, bool accepted,
                     GhostLists &lists) {
-  GhostMesh &ghost = lists.Ghost;
-  for (ParkMesh *part : {&ghost.Tints, &ghost.Lit, &ghost.Marks}) {
-    part->Vertices.clear();
-    part->Indices.clear();
-  }
-  const bool accepted = isAccepted(world, edit);
-  // What the edit adds or changes previews the park, lit as it is, unless the world refuses it and
-  // it shows in the invalid tint.
-  ParkMesh &shape = accepted ? ghost.Lit : ghost.Tints;
   if (const auto *add = std::get_if<AddBox>(&edit)) {
     appendBox(shape, add->At, boxSize(add->Kind), boxHeight(add->Kind),
               ghostColor(accepted, boxColor(add->Kind)));
@@ -698,6 +702,23 @@ void buildGhostMesh(const World &world, const ParkEdit &edit, const std::optiona
       }
     }
   }
+}
+
+} // namespace
+
+void buildGhostMesh(const World &world, const ParkEdit &edit, const PlannedEdit &planned,
+                    const std::optional<World> &candidate, GhostLists &lists) {
+  GhostMesh &ghost = lists.Ghost;
+  for (ParkMesh *part : {&ghost.Tints, &ghost.Lit, &ghost.Marks}) {
+    part->Vertices.clear();
+    part->Indices.clear();
+  }
+  const bool accepted = isAccepted(planned);
+  editedParts(world, planned, lists.Parts, lists.Buffers);
+  // What the edit adds or changes previews the park, lit as it is, unless the world refuses it and
+  // it shows in the invalid tint.
+  ParkMesh &shape = accepted ? ghost.Lit : ghost.Tints;
+  appendBoxGhost(shape, world, edit, accepted, lists);
   const auto colorOf = [accepted](PathKind kind) { return ghostColor(accepted, pathColor(kind)); };
   if (const auto *del = std::get_if<DeleteSegment>(&edit)) {
     // A segment's deletion shows only what goes, and the segments whose line it reshapes.
@@ -705,7 +726,7 @@ void buildGhostMesh(const World &world, const ParkEdit &edit, const std::optiona
     parkPathPoints(world, lists.Points);
     appendEntity(ghost.Tints, world, lists.Boxes, lists.Points, del->Segment,
                  accepted ? DELETE_TINT : INVALID_TINT);
-    reshapedBy(world, edit, candidate, lists);
+    reshapedBy(candidate, lists);
     appendSurface(shape, lists.Owned, GHOST_LIFT, colorOf);
     if (candidate) {
       appendCandidate(ghost, world, *candidate, lists);
@@ -715,7 +736,7 @@ void buildGhostMesh(const World &world, const ParkEdit &edit, const std::optiona
   if (accepted) {
     appendDeleted(ghost.Tints, world, edit, lists);
   }
-  const PavedSurface edited = editedSurface(world, edit);
+  const PavedSurface &edited = lists.Parts.Surface;
   if (const auto *path = std::get_if<AddPath>(&edit); path != nullptr && edited.Pieces.empty()) {
     appendStraightPath(shape, world, *path, ghostColor(accepted, pathColor(path->Kind)), lists);
   }
@@ -729,11 +750,11 @@ void buildGhostMesh(const World &world, const ParkEdit &edit, const std::optiona
   // A narrower ghost lies inside the path it narrows, in the same color, so its new sides are
   // marked.
   if (std::holds_alternative<SetSegmentWidth>(edit)) {
-    for (const ParkSegment &segment : editedSegments(world, edit)) {
+    for (const ParkSegment &segment : lists.Parts.Segments) {
       appendSides(ghost.Marks, segment, JOIN_MARK_COLOR);
     }
   }
-  appendJoinMarks(ghost.Marks, world, edit, lists);
+  appendJoinMarks(ghost.Marks, world, edit, planned, lists);
   if (candidate) {
     appendCandidate(ghost, world, *candidate, lists);
   }
@@ -742,7 +763,9 @@ void buildGhostMesh(const World &world, const ParkEdit &edit, const std::optiona
 GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
                          const std::optional<World> &candidate) {
   GhostLists lists;
-  buildGhostMesh(world, edit, candidate, lists);
+  PlannedEdit planned;
+  planEdit(world, edit, planned, lists.Buffers);
+  buildGhostMesh(world, edit, planned, candidate, lists);
   return std::move(lists.Ghost);
 }
 

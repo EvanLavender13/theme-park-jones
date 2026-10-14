@@ -41,7 +41,7 @@ A module can register unit kinds and indexes with the schema, in its resolver or
 
 Resolution keeps each unit's value and what its derivation read. A unit derives again only when its entity gains or loses the component, or when something it read has changed since. A command's use of an intent component counts as a change to it. If a unit derives again and its value comes out equal, word for word as the walk compares values, the units that read it don't derive again for it. So a resolution gives the same units as deriving every unit, whatever units the world kept.
 
-A new world and a loaded world hold no units, so their first resolution derives every unit. copyWorld carries the units and what they read, so a copy resolves only what changed since. copyWorld(world, into) makes into equal to the world, units included, reusing into's memory. It throws std::invalid_argument when into doesn't share the world's schema object. makeCandidate(world, commands, buffers, into) makes into the candidate. Units are never part of the walk, so hashes, saves, and comparisons never see them. unitValue gives a unit's value as the last resolution left it. unitsCurrent says whether a kind's units hold every change made to the world.
+A new world and a loaded world hold no units, so their first resolution derives every unit. copyWorld carries the units and what they read, so a copy resolves only what changed since. copyWorld(world, into) makes into equal to the world, units included, reusing into's memory. It throws std::invalid_argument when into doesn't share the world's schema object. makeCandidate(world, commands, buffers, into) makes into the candidate. makeCandidate(world, change, context, buffers, into) makes into the candidate of a change that isn't a queued command. It refills into from the world, calls change(into, context), and resolves into. A caller that has already planned an edit uses it to apply the plan without planning it again. If the resolving caller's TickBuffers holds a ResolveTrace in its ResolveTraceSlot, resolution tells it each step's name as the step starts and ends: each resolver by its name, and the finishers together as finishers. Both makeCandidate forms that refill into also tell it copy-world around the refill. Units are never part of the walk, so hashes, saves, and comparisons never see them. unitValue gives a unit's value as the last resolution left it. unitsCurrent says whether a kind's units hold every change made to the world.
 
 ## The clock
 
@@ -87,6 +87,8 @@ In debug builds, if a registered component holds a NaN, the walk refuses the wor
 ## Commands
 
 Commands are values of types that their owning module registers with addCommand. The module applies them with its applyCommand. Commands wait in a CommandQueue outside the world, so copies, hashes, and saves never hold them. stepWorld empties the queue. A queue keeps the memory of the commands it has held. Queueing a command copies it into memory kept for commands of its type, and emptying the queue keeps that memory for later commands. Once the queue has grown to hold its commands, queueing them and emptying the queue allocate nothing. If a queue holds a command of an unregistered type, the queue is refused before anything changes.
+
+applyCommand can also take TickBuffers. When a command type has that form, stepWorld, makeCandidate, and commitCommands call it with their own buffers, so the command's module can keep the lists applying it works with.
 
 ## Resolution
 
@@ -139,4 +141,4 @@ The results also depend on the floating-point environment, which must be round-t
 
 Once its buffers have grown, a cycle with no commands frees no memory it allocated (decision 0041). The world keeps the memory of the entities and components it removes and reuses it for those it adds. Once the park has held as many as it holds, guests arriving and leaving and seat service starting and ending allocate nothing. The allocation check in tests/checks holds a stretch of full.park's ticks to the first sentence.
 
-Queueing commands and emptying the queue free no memory they allocated once the queue has grown. Applying a command resolves the world, which stays outside this. The allocation check holds the queue to it over each tool's release and each undo and redo on full.park.
+Queueing commands and emptying the queue free no memory they allocated once the queue has grown. Applying a command passes the cycle's buffers. The allocation check holds the queue to it over each tool's release and each undo and redo on full.park.

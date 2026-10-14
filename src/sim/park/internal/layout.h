@@ -181,20 +181,28 @@ struct GroundLists {
 PathGround groundOf(const PathLayout &layout);
 // As the returning form, into lists.Ground. Allocates nothing once the lists have grown.
 void groundOf(const PathLayout &layout, GroundLists &lists);
-// The paved surface the layout's segments make, given its ground.
-PavedSurface surfaceOf(const PathLayout &layout, const PathGround &ground);
-// The part of that surface that belongs to each point in focus, which is in ascending key order,
-// and to each segment that ends at one of them. Unless hide is true, its edge lines are left
-// whole, without hiding the parts that lie inside paving joined to them.
-PavedSurface surfaceAround(const PathLayout &layout, const PathGround &ground,
-                           const std::vector<EntityKey> &focus, bool hide);
+// Puts in surface the paved surface the layout's segments make, given its ground, refilling the
+// surface it is given and keeping the lists it works with in the scratch. Allocates nothing once
+// they have grown.
+void surfaceOf(const PathLayout &layout, const PathGround &ground, PavedSurface &surface,
+               TickBuffers &scratch);
+// Puts in surface the part of that surface that belongs to each point in focus, which is in
+// ascending key order, and to each segment that ends at one of them. Unless hide is true, its edge
+// lines are left whole, without hiding the parts that lie inside paving joined to them. Refills the
+// surface it is given and keeps the lists it works with in the scratch. Allocates nothing once
+// they have grown.
+void surfaceAround(const PathLayout &layout, const PathGround &ground,
+                   std::span<const EntityKey> focus, bool hide, PavedSurface &surface,
+                   TickBuffers &scratch);
 // Each edge the layout's segments make, as parkEdges gives them, given its ground.
 std::vector<ParkEdge> edgesOf(const PathLayout &layout, const PathGround &ground);
-// The points, in ascending key order, whose part of the surface can change when the segments at
-// the given points change: those points, and the points of each segment whose paving or edge
-// lines can reach theirs.
-std::vector<EntityKey> pointsAffected(const PathLayout &layout, const PathGround &ground,
-                                      const std::vector<EntityKey> &points);
+// Puts in affected the points, in ascending key order, whose part of the surface can change when
+// the segments at the given points change: those points, and the points of each segment whose
+// paving or edge lines can reach theirs. Refills the list it is given and keeps the lists it works
+// with in the scratch. Allocates nothing once they have grown.
+void pointsAffected(const PathLayout &layout, const PathGround &ground,
+                    std::span<const EntityKey> points, std::vector<EntityKey> &affected,
+                    TickBuffers &scratch);
 
 } // namespace tpj
 

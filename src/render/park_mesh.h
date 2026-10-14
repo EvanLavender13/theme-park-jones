@@ -275,15 +275,16 @@ struct GhostLists {
   std::vector<Walkway> Walkways;
   std::vector<EntityKey> Owners;
   PavedSurface Owned;
+  EditedParts Parts;
   TickBuffers Buffers;
   GhostMesh Ghost;
 };
 
-// The ghost buildGhostMesh(world, edit, candidate) gives, put in lists.Ghost, using lists the
-// caller keeps, which it clears first. Apart from what isAccepted, editedSurface, editedSegments,
-// and pathCrossings make, it allocates nothing once the lists have grown.
-void buildGhostMesh(const World &world, const ParkEdit &edit, const std::optional<World> &candidate,
-                    GhostLists &lists);
+// The ghost buildGhostMesh(world, edit, candidate) gives, from the edit's plan on the world, as
+// planEdit gives it, put in lists.Ghost, using lists the caller keeps, which it clears first.
+// Allocates nothing once the lists have grown.
+void buildGhostMesh(const World &world, const ParkEdit &edit, const PlannedEdit &planned,
+                    const std::optional<World> &candidate, GhostLists &lists);
 
 // A rectangle on the ground.
 struct GroundBounds {

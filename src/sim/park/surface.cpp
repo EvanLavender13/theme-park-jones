@@ -773,7 +773,7 @@ double heldTaper(const PathPointIntent &point) {
   return std::isfinite(point.Taper) && point.Taper > 0.0 ? point.Taper : 0.0;
 }
 
-bool touches(const ParkSegment &segment, const std::vector<EntityKey> &points) {
+bool touches(const ParkSegment &segment, std::span<const EntityKey> points) {
   return std::ranges::binary_search(points, segment.From) ||
          std::ranges::binary_search(points, segment.To);
 }
@@ -783,12 +783,13 @@ void sortUnique(std::vector<EntityKey> &keys) {
   keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
 }
 
-// The owners wanted for a focus: each point in it and each segment that ends at one. And the points
-// to build so that each wanted owner's trims are known: those and each wanted segment's other end.
-std::pair<std::vector<EntityKey>, std::vector<EntityKey>>
-focusOf(const PathGround &ground, const std::vector<EntityKey> &focus) {
-  std::vector<EntityKey> wanted = focus;
-  std::vector<EntityKey> built = focus;
+// Puts in wanted the owners wanted for a focus: each point in it and each segment that ends at one.
+// Puts in built the points to build so that each wanted owner's trims are known: those and each
+// wanted segment's other end.
+void focusOf(const PathGround &ground, std::span<const EntityKey> focus,
+             std::vector<EntityKey> &wanted, std::vector<EntityKey> &built) {
+  copyGrowing(wanted, focus);
+  copyGrowing(built, focus);
   for (const ParkSegment &segment : ground.Segments) {
     if (touches(segment, focus)) {
       wanted.push_back(segment.Key);
@@ -798,7 +799,6 @@ focusOf(const PathGround &ground, const std::vector<EntityKey> &focus) {
   }
   sortUnique(wanted);
   sortUnique(built);
-  return {std::move(wanted), std::move(built)};
 }
 
 // The shape of each segment with a ground line, or when loaded is given, of each that ends at a
@@ -826,13 +826,6 @@ void shapesOf(const PathLayout &layout, const PathGround &ground,
   }
 }
 
-std::vector<Shape> shapesOf(const PathLayout &layout, const PathGround &ground,
-                            const std::vector<EntityKey> *loaded) {
-  std::vector<Shape> shapes;
-  shapesOf(layout, ground, loaded, shapes);
-  return shapes;
-}
-
 // Each segment end, by its point's key, then by its segment's key, in ends.
 void endsOf(const std::vector<Shape> &shapes,
             std::vector<std::tuple<EntityKey, EntityKey, End>> &ends) {
@@ -846,12 +839,6 @@ void endsOf(const std::vector<Shape> &shapes,
     return std::tie(std::get<0>(x), std::get<1>(x), std::get<2>(x).Which) <
            std::tie(std::get<0>(y), std::get<1>(y), std::get<2>(y).Which);
   });
-}
-
-std::vector<std::tuple<EntityKey, EntityKey, End>> endsOf(const std::vector<Shape> &shapes) {
-  std::vector<std::tuple<EntityKey, EntityKey, End>> ends;
-  endsOf(shapes, ends);
-  return ends;
 }
 
 // Calls visit(key, corner) for each point in ascending key order, with its ends in scratch.Group,
@@ -887,12 +874,6 @@ void farEndsOf(const PathGround &ground, const std::vector<EntityKey> &points,
   sortUnique(reached);
 }
 
-std::vector<EntityKey> farEndsOf(const PathGround &ground, const std::vector<EntityKey> &points) {
-  std::vector<EntityKey> reached;
-  farEndsOf(ground, points, reached);
-  return reached;
-}
-
 // Sets what each segment end at the points asks for: every point when points is null. A point's
 // trims depend on what the far ends of its segments ask for, so those are found first.
 void askPoints(const PathLayout &layout,
@@ -906,23 +887,75 @@ void askPoints(const PathLayout &layout,
   });
 }
 
-// The surface of the owners wanted: every owner when focus is null, and otherwise those focusOf
-// gives. If edges is false, it has no edge lines.
-PavedSurface buildSurface(const PathLayout &layout, const PathGround &ground,
-                          const std::vector<EntityKey> *focus, bool edges) {
-  std::vector<EntityKey> wanted;
-  std::vector<EntityKey> built;
-  std::vector<EntityKey> asked;
-  if (focus != nullptr) {
-    std::tie(wanted, built) = focusOf(ground, *focus);
-    asked = farEndsOf(ground, built);
+// Empties the surface's lists, keeping their memory.
+void clearSurface(PavedSurface &surface) {
+  surface.Pieces.clear();
+  surface.Edges.clear();
+  surface.EdgePoints.clear();
+  surface.Sides.clear();
+  surface.SidePoints.clear();
+}
+
+// Puts the items in ascending order of their owners, keeping the order of items with the same
+// owner, as a stable sort does, without the buffer std::stable_sort allocates. order and sorted are
+// lists it reuses.
+template <typename Item>
+void sortByOwner(std::vector<Item> &items, std::vector<std::pair<EntityKey, size_t>> &order,
+                 std::vector<Item> &sorted) {
+  if (std::ranges::is_sorted(items, {}, [](const Item &item) { return item.Owner; })) {
+    return;
   }
-  std::vector<Shape> shapes = shapesOf(layout, ground, focus != nullptr ? &asked : nullptr);
-  const std::vector<std::tuple<EntityKey, EntityKey, End>> ends = endsOf(shapes);
-  PavedSurface surface;
+  order.clear();
+  for (size_t i = 0; i < items.size(); ++i) {
+    order.emplace_back(items[i].Owner, i);
+  }
+  std::ranges::sort(order);
+  sorted.clear();
+  for (const auto &[owner, i] : order) {
+    sorted.push_back(items[i]);
+  }
+  items.swap(sorted);
+}
+
+// The lists building a surface reuses: the owners it wants, the points it builds and asks for, the
+// shapes, their ends, the points' scratch, and the lists sorting by owner reuses.
+struct BuildLists {
+  std::vector<EntityKey> Wanted;
+  std::vector<EntityKey> Built;
+  std::vector<EntityKey> Asked;
+  std::vector<Shape> Shapes;
+  std::vector<std::tuple<EntityKey, EntityKey, End>> Ends;
+  Scratch Work;
+  std::vector<std::pair<EntityKey, size_t>> Order;
+  std::vector<SurfacePiece> SortedPieces;
+  std::vector<EdgeLine> SortedEdges;
+};
+
+// Puts in surface the paving of the owners wanted: every owner when focus is null, and otherwise
+// those focusOf gives. If edges is false, it has no edge lines. Refills the surface, keeping its
+// lists' memory, and allocates nothing once they and the lists have grown.
+void buildSurface(const PathLayout &layout, const PathGround &ground,
+                  const std::span<const EntityKey> *focus, bool edges, PavedSurface &surface,
+                  BuildLists &lists) {
+  std::vector<EntityKey> &wanted = lists.Wanted;
+  std::vector<EntityKey> &built = lists.Built;
+  std::vector<EntityKey> &asked = lists.Asked;
+  wanted.clear();
+  built.clear();
+  asked.clear();
+  if (focus != nullptr) {
+    focusOf(ground, *focus, wanted, built);
+    farEndsOf(ground, built, asked);
+  }
+  std::vector<Shape> &shapes = lists.Shapes;
+  shapesOf(layout, ground, focus != nullptr ? &asked : nullptr, shapes);
+  std::vector<std::tuple<EntityKey, EntityKey, End>> &ends = lists.Ends;
+  endsOf(shapes, ends);
+  clearSurface(surface);
   Output output(surface, wanted, focus == nullptr, edges);
-  Scratch scratch;
+  Scratch &scratch = lists.Work;
   scratch.Turns.assign(shapes.size(), {});
+  scratch.TurnPoints.clear();
   askPoints(layout, ends, ground, scratch, shapes, focus != nullptr ? &asked : nullptr);
   // Every segment's trims are set before any edge line is written, since an edge line runs to the
   // middle between a side's trims at both ends. The second pass sets the same trims again.
@@ -951,9 +984,8 @@ PavedSurface buildSurface(const PathLayout &layout, const PathGround &ground,
     output.side(shape, true, scratch.Turns[i], scratch.TurnPoints);
     output.side(shape, false, scratch.Turns[i], scratch.TurnPoints);
   }
-  std::ranges::stable_sort(surface.Pieces, {}, &SurfacePiece::Owner);
-  std::ranges::stable_sort(surface.Edges, {}, &EdgeLine::Owner);
-  return surface;
+  sortByOwner(surface.Pieces, lists.Order, lists.SortedPieces);
+  sortByOwner(surface.Edges, lists.Order, lists.SortedEdges);
 }
 
 // A rectangle on the ground, its sides along the axes.
@@ -990,7 +1022,11 @@ constexpr double LEAST_EDGE = 1e-3;
 // each of their points.
 class Joins {
 public:
-  explicit Joins(const PathGround &ground) {
+  // Finds the groups of the ground's segments again, keeping the lists' memory.
+  void reset(const PathGround &ground) {
+    Points.clear();
+    Parent.clear();
+    Segments.clear();
     for (const ParkSegment &segment : ground.Segments) {
       if (!segment.Line.empty()) {
         Points.push_back(segment.From);
@@ -998,7 +1034,7 @@ public:
       }
     }
     sortUnique(Points);
-    Parent.resize(Points.size());
+    Parent.resize(Points.size(), 0);
     for (size_t i = 0; i < Parent.size(); ++i) {
       Parent[i] = i;
     }
@@ -1132,11 +1168,22 @@ void writeStep(Visible &writer, ParkPoint p, ParkPoint q,
   show(1.0);
 }
 
+// The lists hiding reuses: each hider's bounds and group, the hiders near an edge line, the hidden
+// stretches of a step, and the surface the visible edge lines are written to.
+struct HideLists {
+  std::vector<std::pair<Bounds, size_t>> HiderBounds;
+  std::vector<size_t> Near;
+  std::vector<std::pair<double, double>> Hidden;
+  PavedSurface Visible;
+};
+
 // Hides each part of the surface's edge lines that lies inside a piece of the hiders joined to it:
-// one whose owner is in the edge line's group.
-void hideJoined(PavedSurface &surface, const std::vector<SurfacePiece> &hiders, Joins &joins) {
-  std::vector<std::pair<Bounds, size_t>> hiderBounds;
-  hiderBounds.reserve(hiders.size());
+// one whose owner is in the edge line's group. The hiders may be the surface's own pieces: their
+// memory moves with the swaps below, so a span over them stays valid and unchanged.
+void hideJoined(PavedSurface &surface, std::span<const SurfacePiece> hiders, Joins &joins,
+                HideLists &lists) {
+  std::vector<std::pair<Bounds, size_t>> &hiderBounds = lists.HiderBounds;
+  hiderBounds.clear();
   for (const SurfacePiece &piece : hiders) {
     Bounds bounds = Bounds::around(piece.Corners[0]);
     for (const ParkPoint &corner : pieceCorners(piece)) {
@@ -1144,13 +1191,14 @@ void hideJoined(PavedSurface &surface, const std::vector<SurfacePiece> &hiders, 
     }
     hiderBounds.emplace_back(bounds, joins.groupOf(piece.Owner));
   }
-  PavedSurface visible;
-  visible.Pieces = std::move(surface.Pieces);
-  visible.Sides = std::move(surface.Sides);
-  visible.SidePoints = std::move(surface.SidePoints);
+  PavedSurface &visible = lists.Visible;
+  clearSurface(visible);
+  visible.Pieces.swap(surface.Pieces);
+  visible.Sides.swap(surface.Sides);
+  visible.SidePoints.swap(surface.SidePoints);
   Visible writer(visible);
-  std::vector<size_t> near;
-  std::vector<std::pair<double, double>> hidden;
+  std::vector<size_t> &near = lists.Near;
+  std::vector<std::pair<double, double>> &hidden = lists.Hidden;
   for (const EdgeLine &edge : surface.Edges) {
     const std::span<const ParkPoint> points = edgePoints(surface, edge);
     Bounds bounds = Bounds::around(points[0]);
@@ -1176,7 +1224,8 @@ void hideJoined(PavedSurface &surface, const std::vector<SurfacePiece> &hiders, 
     }
     writer.close();
   }
-  surface = std::move(visible);
+  // Swapping keeps both surfaces' lists, so the next hiding reuses them.
+  std::swap(surface, visible);
 }
 
 // How far from each point its paving and edge lines can reach, in ascending key order of the
@@ -1185,7 +1234,9 @@ void hideJoined(PavedSurface &surface, const std::vector<SurfacePiece> &hiders, 
 // widest half width of where they touch.
 class PointReaches {
 public:
-  PointReaches(const PathLayout &layout, const PathGround &ground) {
+  // Finds the reaches of the layout's points again, keeping the list's memory.
+  void reset(const PathLayout &layout, const PathGround &ground) {
+    Reaches.clear();
     double widest = 0.0;
     for (const ParkSegment &segment : ground.Segments) {
       if (segment.Line.empty()) {
@@ -1229,11 +1280,11 @@ Bounds reachOf(const PathLayout &layout, const PointReaches &reaches, const Park
   return reach;
 }
 
-// The points of each segment whose paving, or whose points' paving, can reach into any of the
-// bounds, in ascending key order.
-std::vector<EntityKey> pointsNear(const PathLayout &layout, const PathGround &ground,
-                                  const PointReaches &reaches, const std::vector<Bounds> &bounds) {
-  std::vector<EntityKey> points;
+// Puts in points the points of each segment whose paving, or whose points' paving, can reach into
+// any of the bounds, in ascending key order.
+void pointsNear(const PathLayout &layout, const PathGround &ground, const PointReaches &reaches,
+                const std::vector<Bounds> &bounds, std::vector<EntityKey> &points) {
+  points.clear();
   for (const ParkSegment &segment : ground.Segments) {
     if (segment.Line.empty()) {
       continue;
@@ -1245,8 +1296,20 @@ std::vector<EntityKey> pointsNear(const PathLayout &layout, const PathGround &gr
     }
   }
   sortUnique(points);
-  return points;
 }
+
+// The lists building and hiding a surface reuse, kept in the caller's TickBuffers: the build's, the
+// groups, the hiding's, the surface of the pieces near a focus's edge lines, the points' reaches,
+// the bounds of edge lines or reaches, and the points near them.
+struct PavingLists {
+  BuildLists Build;
+  Joins Joined;
+  HideLists Hide;
+  PavedSurface Near;
+  PointReaches Reaches;
+  std::vector<Bounds> Boxes;
+  std::vector<EntityKey> NearPoints;
+};
 
 // A walkway's door end leans along its door's face only while its line leaves the face at least
 // this steeply, as the cosine between them.
@@ -1338,64 +1401,68 @@ double pieceDistance(const SurfacePiece &piece, ParkPoint point) {
   return inside ? 0.0 : nearest;
 }
 
-PavedSurface surfaceOf(const PathLayout &layout, const PathGround &ground) {
-  PavedSurface surface = buildSurface(layout, ground, nullptr, true);
-  const std::vector<SurfacePiece> pieces = surface.Pieces;
-  Joins joins(ground);
-  hideJoined(surface, pieces, joins);
-  return surface;
+void surfaceOf(const PathLayout &layout, const PathGround &ground, PavedSurface &surface,
+               TickBuffers &scratch) {
+  PavingLists &lists = scratch.get<PavingLists>();
+  buildSurface(layout, ground, nullptr, true, surface, lists.Build);
+  lists.Joined.reset(ground);
+  hideJoined(surface, surface.Pieces, lists.Joined, lists.Hide);
 }
 
-PavedSurface surfaceAround(const PathLayout &layout, const PathGround &ground,
-                           const std::vector<EntityKey> &focus, bool hide) {
-  PavedSurface surface = buildSurface(layout, ground, &focus, true);
+void surfaceAround(const PathLayout &layout, const PathGround &ground,
+                   std::span<const EntityKey> focus, bool hide, PavedSurface &surface,
+                   TickBuffers &scratch) {
+  PavingLists &lists = scratch.get<PavingLists>();
+  buildSurface(layout, ground, &focus, true, surface, lists.Build);
   if (!hide || surface.EdgePoints.empty()) {
-    return surface;
+    return;
   }
   // The pieces that can hide these edge lines are those of the segments near them, and of the
   // junctions at their points.
-  std::vector<Bounds> bounds;
-  bounds.reserve(surface.Edges.size());
+  lists.Boxes.clear();
   for (const EdgeLine &edge : surface.Edges) {
     const std::span<const ParkPoint> points = edgePoints(surface, edge);
     Bounds box = Bounds::around(points[0]);
     for (const ParkPoint &point : points) {
       box.add(point);
     }
-    bounds.push_back(box);
+    lists.Boxes.push_back(box);
   }
-  const std::vector<EntityKey> near =
-      pointsNear(layout, ground, PointReaches(layout, ground), bounds);
-  Joins joins(ground);
-  hideJoined(surface, buildSurface(layout, ground, &near, false).Pieces, joins);
-  return surface;
+  lists.Reaches.reset(layout, ground);
+  pointsNear(layout, ground, lists.Reaches, lists.Boxes, lists.NearPoints);
+  const std::span<const EntityKey> near = lists.NearPoints;
+  buildSurface(layout, ground, &near, false, lists.Near, lists.Build);
+  lists.Joined.reset(ground);
+  hideJoined(surface, lists.Near.Pieces, lists.Joined, lists.Hide);
 }
 
-std::vector<EntityKey> pointsAffected(const PathLayout &layout, const PathGround &ground,
-                                      const std::vector<EntityKey> &points) {
-  const PointReaches reaches(layout, ground);
-  std::vector<Bounds> bounds;
+void pointsAffected(const PathLayout &layout, const PathGround &ground,
+                    std::span<const EntityKey> points, std::vector<EntityKey> &affected,
+                    TickBuffers &scratch) {
+  PavingLists &lists = scratch.get<PavingLists>();
+  lists.Reaches.reset(layout, ground);
+  lists.Boxes.clear();
   for (const ParkSegment &segment : ground.Segments) {
     if (!segment.Line.empty() && touches(segment, points)) {
-      bounds.push_back(reachOf(layout, reaches, segment));
+      lists.Boxes.push_back(reachOf(layout, lists.Reaches, segment));
     }
   }
-  std::vector<EntityKey> affected = pointsNear(layout, ground, reaches, bounds);
+  pointsNear(layout, ground, lists.Reaches, lists.Boxes, affected);
   affected.insert(affected.end(), points.begin(), points.end());
   sortUnique(affected);
-  return affected;
 }
 
 PavedSurface parkSurface(const World &world) {
-  GroundLists lists;
-  worldGround(world, lists);
-  return surfaceOf(lists.Layout, lists.Ground);
+  TickBuffers buffers;
+  return parkSurface(world, buffers);
 }
 
 PavedSurface parkSurface(const World &world, TickBuffers &buffers) {
   GroundLists &lists = buffers.get<GroundLists>();
   worldGround(world, lists);
-  return surfaceOf(lists.Layout, lists.Ground);
+  PavedSurface surface;
+  surfaceOf(lists.Layout, lists.Ground, surface, buffers);
+  return surface;
 }
 
 namespace {
@@ -1422,34 +1489,35 @@ void addPavedSurface(WorldSchema &schema) {
 
 namespace {
 
-// The paved surface of the layout with its ground, with the walkways added.
+// The paved surface of the layout with its ground, with the walkways added, keeping the lists it
+// works with in the scratch.
 PavedSurface walkedSurfaceOf(const PathLayout &layout, const PathGround &ground,
-                             std::span<const Walkway> walkways) {
-  PavedSurface surface = buildSurface(layout, ground, nullptr, true);
+                             std::span<const Walkway> walkways, TickBuffers &scratch) {
+  PavingLists &lists = scratch.get<PavingLists>();
+  PavedSurface surface;
+  buildSurface(layout, ground, nullptr, true, surface, lists.Build);
   for (const Walkway &walkway : walkways) {
     addWalkway(surface, ground, walkway);
   }
   std::ranges::stable_sort(surface.Pieces, {}, &SurfacePiece::Owner);
   std::ranges::stable_sort(surface.Edges, {}, &EdgeLine::Owner);
-  const std::vector<SurfacePiece> pieces = surface.Pieces;
-  Joins joins(ground);
-  hideJoined(surface, pieces, joins);
+  lists.Joined.reset(ground);
+  hideJoined(surface, surface.Pieces, lists.Joined, lists.Hide);
   return surface;
 }
 
 } // namespace
 
 PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways) {
-  GroundLists lists;
-  worldGround(world, lists);
-  return walkedSurfaceOf(lists.Layout, lists.Ground, walkways);
+  TickBuffers buffers;
+  return parkSurface(world, walkways, buffers);
 }
 
 PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways,
                          TickBuffers &buffers) {
   GroundLists &lists = buffers.get<GroundLists>();
   worldGround(world, lists);
-  return walkedSurfaceOf(lists.Layout, lists.Ground, walkways);
+  return walkedSurfaceOf(lists.Layout, lists.Ground, walkways, buffers);
 }
 
 namespace {

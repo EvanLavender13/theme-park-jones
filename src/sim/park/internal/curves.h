@@ -3,6 +3,7 @@
 
 #include "sim/entity_key.h"
 #include "sim/park/internal/layout.h"
+#include "sim/tick_buffers.h"
 
 #include <stddef.h>
 #include <utility>
@@ -20,10 +21,12 @@ struct CurveWrites {
   std::vector<std::pair<SegmentEnd, double>> Edges;
 };
 
-// The writes that keep the curves of before in after, the layout an edit leaves. added lists the
-// segment ends the edit adds at points that were already path points.
-CurveWrites keptCurves(const PathLayout &before, const PathLayout &after,
-                       const std::vector<SegmentEnd> &added);
+// Puts in writes the writes that keep the curves of before, whose ground is groundBefore, in
+// after, the layout an edit leaves. added lists the segment ends the edit adds at points that were
+// already path points. Refills writes and keeps the lists it works with in the scratch, so it
+// allocates nothing once they have grown.
+void keptCurves(const PathLayout &before, const PathGround &groundBefore, const PathLayout &after,
+                const std::vector<SegmentEnd> &added, CurveWrites &writes, TickBuffers &scratch);
 
 } // namespace tpj
 
