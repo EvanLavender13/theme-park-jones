@@ -125,7 +125,7 @@ PreviewMeshes SceneSync::syncLook(const World &world, const ToolPark &park, bool
   if (editBuilt) {
     const Preview &preview = Kept.Made;
     if (preview.Edit) {
-      buildGhostMesh(world, *preview.Edit, preview.Candidate, EditGhost);
+      buildGhostMesh(world, *preview.Edit, preview.Planned, preview.Candidate, EditGhost);
     } else {
       clearMesh(EditGhost.Ghost.Tints);
       clearMesh(EditGhost.Ghost.Lit);

@@ -10,13 +10,15 @@ bool keepArrivalDay(KeptArrivalDay &kept, const World &world, OpeningHours hours
   if (kept.Hours == hours) {
     return false;
   }
-  std::optional<Preview> preview;
+  const World *read = &world;
   if (parkHours(world) != hours) {
-    preview = previewEdit(world, ParkEdit{SetOpeningHours{hours}});
+    // The world may have changed since the kept preview was made, so it is made again.
+    kept.Preview.Tick.reset();
+    keepPreview(kept.Preview, world, ParkEdit{SetOpeningHours{hours}}, false);
+    read = &previewedWorld(world, kept.Preview.Made);
   }
-  const World &read = preview ? previewedWorld(world, *preview) : world;
   for (size_t i = 0; i < ARRIVAL_SAMPLES; ++i) {
-    kept.Day[i] = arrivalCurve(read, static_cast<uint64_t>(i) * 60);
+    kept.Day[i] = arrivalCurve(*read, static_cast<uint64_t>(i) * 60);
   }
   kept.Hours = hours;
   return true;

@@ -6,8 +6,10 @@
 #include "sim/park/intent.h"
 #include "sim/park/surface.h"
 #include "sim/schema.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
+#include <memory>
 #include <optional>
 #include <span>
 #include <stddef.h>
@@ -285,6 +287,44 @@ std::vector<ParkSegment> editedSegments(const World &world, const ParkEdit &edit
 // boxes, of the opening hours, and of furnishing, and for RestoreIntent, which shows no ghost.
 PavedSurface editedSurface(const World &world, const ParkEdit &edit);
 
+struct PlanLists;
+
+// An edit planned on a world, which the caller keeps from frame to frame. planEdit fills it, and
+// planning again into it allocates nothing once its lists have grown. It can be moved but not
+// copied.
+struct PlannedEdit {
+  PlannedEdit();
+  ~PlannedEdit();
+  PlannedEdit(PlannedEdit &&) noexcept;
+  PlannedEdit &operator=(PlannedEdit &&) noexcept;
+  PlannedEdit(const PlannedEdit &) = delete;
+  PlannedEdit &operator=(const PlannedEdit &) = delete;
+
+  std::unique_ptr<PlanLists> Lists;
+};
+
+// Plans the edit on the world into planned, keeping the lists it works with in the buffers.
+void planEdit(const World &world, const ParkEdit &edit, PlannedEdit &planned, TickBuffers &buffers);
+// Whether the world the edit was planned on accepts it, as isAccepted on the edit gives.
+bool isAccepted(const PlannedEdit &planned);
+// The crossings pathCrossings on the edit gives, from its plan.
+std::span<const ParkPoint> pathCrossings(const PlannedEdit &planned);
+// Makes the change applyCommand makes for the edit, from its plan, without planning it again. The
+// world is the one the edit was planned on, or a copy of it. Changes nothing when the plan is
+// refused. Keeps the lists it works with in the buffers.
+void applyPlanned(World &world, const ParkEdit &edit, const PlannedEdit &planned,
+                  TickBuffers &buffers);
+
+// What editedSegments and editedSurface give for an edit, kept by the caller.
+struct EditedParts {
+  std::vector<ParkSegment> Segments;
+  PavedSurface Surface;
+};
+// Puts in parts what editedSegments and editedSurface give for the edit the plan holds, from the
+// plan, clearing them first and keeping the lists it works with in the buffers.
+void editedParts(const World &world, const PlannedEdit &planned, EditedParts &parts,
+                 TickBuffers &buffers);
+
 // Whether the command would be applied to the world: it describes a physical object, names what it
 // acts on, and conflicts with nothing: no footprints overlap, no segment comes within half its
 // width of a footprint, and nothing leaves the park's square.
@@ -333,6 +373,24 @@ void applyCommand(World &world, const SetShopStock &command);
 void applyCommand(World &world, const SetOpeningHours &command);
 void applyCommand(World &world, const SetFurnishing &command);
 void applyCommand(World &world, const RestoreIntent &command);
+// As above, keeping the lists applying works with in the buffers, so applying allocates nothing
+// once they have grown.
+void applyCommand(World &world, const AddPath &command, TickBuffers &buffers);
+void applyCommand(World &world, const AddBox &command, TickBuffers &buffers);
+void applyCommand(World &world, const MoveBox &command, TickBuffers &buffers);
+void applyCommand(World &world, const DeleteSegment &command, TickBuffers &buffers);
+void applyCommand(World &world, const DeleteBox &command, TickBuffers &buffers);
+void applyCommand(World &world, const MovePoint &command, TickBuffers &buffers);
+void applyCommand(World &world, const InsertPoint &command, TickBuffers &buffers);
+void applyCommand(World &world, const RemovePoint &command, TickBuffers &buffers);
+void applyCommand(World &world, const SetCornerRadius &command, TickBuffers &buffers);
+void applyCommand(World &world, const SetSegmentWidth &command, TickBuffers &buffers);
+void applyCommand(World &world, const SetEdgeRadius &command, TickBuffers &buffers);
+void applyCommand(World &world, const SetTaperLength &command, TickBuffers &buffers);
+void applyCommand(World &world, const SetShopStock &command, TickBuffers &buffers);
+void applyCommand(World &world, const SetOpeningHours &command, TickBuffers &buffers);
+void applyCommand(World &world, const SetFurnishing &command, TickBuffers &buffers);
+void applyCommand(World &world, const RestoreIntent &command, TickBuffers &buffers);
 
 // Whether every solid and line has its geometry, stays in the park, and conflicts with no other.
 bool isPhysicallyValid(const World &world);

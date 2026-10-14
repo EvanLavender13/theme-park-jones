@@ -57,6 +57,36 @@ void visitFields(Visitor &visitor, FieldSlot<Entry> &slot) {
   visitor.field("entries", slot.Entries);
 }
 
+// Makes mine equal to other, keeping mine's lists' memory.
+template <typename Entry> void keepAssign(FieldSlot<Entry> &mine, const FieldSlot<Entry> &other) {
+  mine.Source = other.Source;
+  copyGrowing(mine.Entries, std::span<const PlacedEntry<Entry>>(other.Entries));
+  copyGrowing(mine.ByPlace, std::span<const uint32_t>(other.ByPlace));
+  mine.Ordered = other.Ordered;
+}
+
+// Makes mine's slots equal to other's, keeping their lists' memory. Slots mine holds beyond
+// other's move to spare with their source and lists emptied, as retired slots are, and slots it
+// lacks come from spare first.
+template <typename Entry>
+void keepAssignSlots(std::vector<FieldSlot<Entry>> &mine,
+                     const std::vector<FieldSlot<Entry>> &other,
+                     std::vector<FieldSlot<Entry>> &spare) {
+  while (mine.size() > other.size()) {
+    FieldSlot<Entry> &extra = mine.back();
+    extra.Source = NULL_KEY;
+    extra.Entries.clear();
+    extra.ByPlace.clear();
+    extra.Ordered = false;
+    spare.push_back(std::move(extra));
+    mine.pop_back();
+  }
+  resizeKeeping(mine, other.size(), spare);
+  for (size_t i = 0; i < other.size(); ++i) {
+    keepAssign(mine[i], other[i]);
+  }
+}
+
 // Whether a's place orders before b's: by carrier key, then distance.
 inline bool placeBefore(const Place &a, const Place &b) {
   return a.Carrier != b.Carrier ? a.Carrier < b.Carrier : a.Distance < b.Distance;
@@ -193,6 +223,14 @@ void visitFields(Visitor &visitor, ResolvedEntries<F> &resolved) {
   visitor.field("previous", resolved.Previous);
 }
 
+// Makes mine equal to other, keeping its slots' memory, as copying a world refills it. Retired
+// keeps mine's spare slots.
+template <typename F> void keepAssign(ResolvedEntries<F> &mine, const ResolvedEntries<F> &other) {
+  keepAssignSlots(mine.Slots, other.Slots, mine.Retired);
+  mine.HasPrevious = other.HasPrevious;
+  keepAssignSlots(mine.Previous, other.Previous, mine.Retired);
+}
+
 // A field's stepped entries, sources in ascending key order. State. Readable holds what the last
 // swap made readable, and Pending what systems publish during the current tick.
 template <FieldDefinition F> struct SteppedEntries {
@@ -207,6 +245,13 @@ template <typename Visitor, typename F>
 void visitFields(Visitor &visitor, SteppedEntries<F> &stepped) {
   visitor.field("readable", stepped.Readable);
   visitor.field("pending", stepped.Pending);
+}
+
+// Makes mine equal to other, keeping its slots' memory, as copying a world refills it. Retired
+// keeps mine's spare slots.
+template <typename F> void keepAssign(SteppedEntries<F> &mine, const SteppedEntries<F> &other) {
+  keepAssignSlots(mine.Readable, other.Readable, mine.Retired);
+  keepAssignSlots(mine.Pending, other.Pending, mine.Retired);
 }
 
 // Collects the words the walk emits for a value, so values compare as worlds do.

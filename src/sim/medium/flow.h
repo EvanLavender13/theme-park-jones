@@ -10,6 +10,7 @@
 #include <compare>
 #include <concepts>
 #include <iterator>
+#include <span>
 #include <stdexcept>
 #include <stdint.h>
 #include <string>
@@ -113,6 +114,14 @@ template <typename Visitor> void visitFields(Visitor &visitor, Ledger &ledger) {
   visitor.field("stocks", ledger.Stocks);
   visitor.field("created", ledger.Created);
   visitor.field("consumed", ledger.Consumed);
+}
+
+// Makes mine equal to other, keeping its lists' memory, as copying a world refills it.
+inline void keepAssign(Ledger &mine, const Ledger &other) {
+  copyGrowing(mine.Packets, std::span<const FlowPacket>(other.Packets));
+  copyGrowing(mine.Stocks, std::span<const FlowStock>(other.Stocks));
+  mine.Created = other.Created;
+  copyGrowing(mine.Consumed, std::span<const FlowConsumption>(other.Consumed));
 }
 
 // The registered component holding kind K's ledger.

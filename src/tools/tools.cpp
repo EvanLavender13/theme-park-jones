@@ -137,15 +137,19 @@ std::optional<PathStop> nextStop(const ToolState &tool, ToolPark &park, const Wo
   return stop;
 }
 
-// Whether the world accepts the path through the stops so far and the next stop. Before the first
-// stop, there is no path to refuse.
-bool acceptsStop(const ToolState &tool, const World &world, const PathStop &next) {
+// Whether the world accepts the path through the stops so far and the next stop, planned in the
+// park's lists. Before the first stop, there is no path to refuse.
+bool acceptsStop(const ToolState &tool, ToolPark &park, const World &world, const PathStop &next) {
   if (tool.Drawn.empty()) {
     return true;
   }
-  AddPath path{drawnKind(tool.Kind), tool.Drawn};
+  ToolLists &lists = *park.Lists;
+  auto &path = std::get<AddPath>(lists.Pressed);
+  path.Kind = drawnKind(tool.Kind);
+  path.Stops = tool.Drawn;
   path.Stops.push_back(next);
-  return isAccepted(world, path);
+  planEdit(world, lists.Pressed, lists.Planned, lists.Buffers);
+  return isAccepted(lists.Planned);
 }
 
 // Makes the kept edit an AddPath, giving it the stops of the last path it held, and gives it.
@@ -577,7 +581,7 @@ void pressPointer(ToolState &tool, ToolPark &park, const World &world) {
     tool.Holding = true;
   } else if (isPathTool(tool.Kind) && tool.Pointer) {
     if (const std::optional<PathStop> next = nextStop(tool, park, world)) {
-      if (acceptsStop(tool, world, *next)) {
+      if (acceptsStop(tool, park, world, *next)) {
         tool.Drawn.push_back(*next);
       }
     } else {

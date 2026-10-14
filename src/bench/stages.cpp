@@ -170,16 +170,17 @@ StageResult timeDrag(std::string name, const World &park, EditAt editAt,
   for (size_t frame = 0; frame < WARM_UPS + REPETITIONS; ++frame) {
     stepWorld(stepped, buffers);
     const ParkEdit edit = editAt(frame);
-    if (!isAccepted(stepped, edit)) {
-      throw std::runtime_error(refused + " at frame " + std::to_string(frame));
-    }
     const std::optional<ParkEdit> held = edit;
     const Clock::time_point start = Clock::now();
     keepPreview(kept, stepped, held, false);
     if (kept.Made.Candidate) {
-      buildGhostMesh(stepped, edit, kept.Made.Candidate, ghost);
+      buildGhostMesh(stepped, edit, kept.Made.Planned, kept.Made.Candidate, ghost);
     }
     const Clock::time_point end = Clock::now();
+    // Asked after the timing, from the plan the preview made, so no frame plans the edit twice.
+    if (!isAccepted(kept.Made.Planned)) {
+      throw std::runtime_error(refused + " at frame " + std::to_string(frame));
+    }
     if (frame >= WARM_UPS) {
       times.push_back(nanosecondsBetween(start, end));
     }

@@ -106,17 +106,27 @@ struct ResolverType {
 };
 
 // A registered command type. Apply calls the owning module's applyCommand on a pointer to a queued
-// value.
+// value, with the applying cycle's buffers.
 struct CommandType {
   TypeId Id = nullptr;
-  void (*Apply)(World &world, const void *command) = nullptr;
+  void (*Apply)(World &world, const void *command, TickBuffers &buffers) = nullptr;
 };
 
-// A command type names the function that applies it, found by argument-dependent lookup,
+// A command type whose module applies it with the cycle's buffers, found by argument-dependent
+// lookup,
+//   void applyCommand(World &world, const PlacePath &command, TickBuffers &buffers);
+template <typename T>
+concept HasBufferedApplyCommand = requires(World &world, const T &command, TickBuffers &buffers) {
+  applyCommand(world, command, buffers);
+};
+
+// A command type names the function that applies it, found by argument-dependent lookup, either
+// with the cycle's buffers or as
 //   void applyCommand(World &world, const PlacePath &command);
 template <typename T>
-concept HasApplyCommand =
-    requires(World &world, const T &command) { applyCommand(world, command); };
+concept HasApplyCommand = HasBufferedApplyCommand<T> || requires(World &world, const T &command) {
+  applyCommand(world, command);
+};
 
 // The component types a world may hold, in registration order. Built once by explicit calls in a
 // written order, never by static self-registration, then shared by worlds as a const value.
@@ -308,8 +318,13 @@ template <typename T> void WorldSchema::addCommand() {
   static_assert(HasApplyCommand<T>, "a command type needs an applyCommand function");
   CommandType type;
   type.Id = typeIdOf<T>();
-  type.Apply = [](World &world, const void *command) {
-    applyCommand(world, *static_cast<const T *>(command));
+  type.Apply = [](World &world, const void *command, TickBuffers &buffers) {
+    if constexpr (HasBufferedApplyCommand<T>) {
+      applyCommand(world, *static_cast<const T *>(command), buffers);
+    } else {
+      static_cast<void>(buffers);
+      applyCommand(world, *static_cast<const T *>(command));
+    }
   };
   addCommandType(type);
 }

@@ -1037,22 +1037,39 @@ std::vector<ParkEdit> pathDragFrames(const World &start) {
   return {};
 }
 
-// Refills one kept candidate on each frame, as the preview does, after the world steps a tick. A
-// world loaded from the kept candidate's save derives every unit from nothing, so it differs from
-// the kept candidate if the candidate kept a stale unit from an earlier frame.
+// What applying a frame's plan to the refilled candidate needs.
+struct PlannedChange {
+  const ParkEdit *Edit = nullptr;
+  const PlannedEdit *Planned = nullptr;
+  TickBuffers *Buffers = nullptr;
+};
+
+void applyPlannedChange(World &into, const void *context) {
+  const auto &change = *static_cast<const PlannedChange *>(context);
+  applyPlanned(into, *change.Edit, *change.Planned, *change.Buffers);
+}
+
+// Plans each frame's edit once and refills one kept candidate by applying that plan, as the
+// preview does, after the world steps a tick. A world loaded from the kept candidate's save derives
+// every unit from nothing, so it differs from the kept candidate if the candidate kept a stale unit
+// from an earlier frame.
 void checkKeptCandidateThroughDrag(const World &opened, const std::vector<ParkEdit> &frames) {
   World world = copyWorld(opened);
   World kept = copyWorld(opened);
   TickBuffers stepBuffers;
   TickBuffers buffers;
+  PlannedEdit planned;
   CommandQueue commands;
   for (size_t frame = 0; frame < frames.size(); ++frame) {
     INFO("frame " << (frame + 1));
     stepWorld(world, stepBuffers);
-    REQUIRE(isAccepted(world, frames[frame]));
+    const ParkEdit &edit = frames[frame];
+    planEdit(world, edit, planned, buffers);
+    REQUIRE(isAccepted(planned));
+    const PlannedChange change{&edit, &planned, &buffers};
+    makeCandidate(world, applyPlannedChange, &change, buffers, kept);
     commands.clear();
-    queueEdit(commands, frames[frame]);
-    makeCandidate(world, commands, buffers, kept);
+    queueEdit(commands, edit);
     CHECK(worldsEqual(kept, makeCandidate(world, commands)));
     World loaded = loadWorld(makeParkSchema(), saveWorld(kept));
     resolveWorld(loaded);

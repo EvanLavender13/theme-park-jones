@@ -11,7 +11,10 @@
 // in a hidden window, with SDL's allocations counted too. Before all of that, the check adds guest
 // paths with a rounded corner and a taper, which full.park lacks. After the ticks, it undoes and
 // redoes a guest path, and watches the app's work after each, with the watch paused while the
-// session applies the command.
+// session applies the command. Then it drags a shop along its face and draws a guest path out and
+// back, a tick before each frame, through a kept preview and the ghost, and commits edits there
+// and back on a copy of the world. There it watches everything but the resolvers changing-previews
+// hasn't moved yet and the finishers, which a resolve trace pauses the watch around.
 
 #include "watch.h"
 
@@ -25,6 +28,7 @@
 #include "legible/inspect.h"
 #include "legible/preview.h"
 #include "render/day_light.h"
+#include "render/park_mesh.h"
 #include "render/renderer.h"
 #include "sim/entity_key.h"
 #include "sim/guests/guests.h"
@@ -51,6 +55,7 @@
 #include <stdexcept>
 #include <stdint.h>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -744,16 +749,14 @@ void pressAndRelease(EditRounds &rounds, const tpj::World &world, tpj::ToolKind 
 }
 
 // Draws a guest path of two stops and finishes it. The second stop's press asks the world whether
-// it accepts the path, which resolves, so it runs unwatched.
+// it accepts the path.
 void drawPath(EditRounds &rounds, const tpj::World &world) {
   const ToolPlaces &places = rounds.Places;
   rounds.Tools.selectTool(tpj::ToolKind::GuestPath);
   pointAt(rounds, world, places.Start);
   rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{true, false});
-  tpj::check::pauseWatching();
   pointAt(rounds, world, places.Along);
   rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{true, false});
-  tpj::check::resumeWatching();
   rounds.Tools.useButtons(world, rounds.Queued, tpj::PointerButtons{true, false});
   if (!rounds.Tools.tool().Holding) {
     throw std::runtime_error("the drawn path did not finish");
@@ -895,6 +898,264 @@ int checkEdits(SteadyPlay &play, tpj::ParkSession &session) {
   return reportFreed("the watched rounds");
 }
 
+// The steps of a resolution that changing-previews has moved, so the drags and commits watch them:
+// the candidate's refill and the path ground's units.
+constexpr std::array<std::string_view, 6> WATCHED_STEPS{
+    "copy-world", "segment-ends", "straight-lines", "point-arms", "corners", "ground-lines"};
+
+// Pauses the watch while a resolution step it doesn't hold runs: each resolver not moved yet, and
+// the finishers. It acts only while Watching is set.
+class WatchedSteps : public tpj::ResolveTrace {
+public:
+  bool Watching = false;
+
+  void started(std::string_view step) override {
+    if (Watching && !holds(step)) {
+      tpj::check::pauseWatching();
+    }
+  }
+  void ended(std::string_view step) override {
+    if (Watching && !holds(step)) {
+      tpj::check::resumeWatching();
+    }
+  }
+
+private:
+  static bool holds(std::string_view step) {
+    return std::ranges::find(WATCHED_STEPS, step) != WATCHED_STEPS.end();
+  }
+};
+
+// Frames of each drag to warm up, and to watch.
+constexpr size_t WARM_FRAMES = 8;
+constexpr size_t WATCHED_FRAMES = 16;
+// How far a drag moves its edit each frame, and how far out it goes before coming back, as
+// tpj_bench's drags move theirs.
+constexpr double DRAG_STEP = 0.5;
+constexpr double DRAG_SPAN = 2.0;
+// How far beyond its segment's side the dragged path's end starts.
+constexpr double DRAG_START_REACH = 4.0;
+
+// How far out a drag is at the frame: DRAG_STEP further each frame, out to DRAG_SPAN and back.
+double dragOffset(size_t frame) {
+  const auto steps = static_cast<size_t>(DRAG_SPAN / DRAG_STEP);
+  const size_t phase = (frame + 1) % (2 * steps);
+  const size_t out = phase <= steps ? phase : 2 * steps - phase;
+  return DRAG_STEP * static_cast<double>(out);
+}
+
+// A drag on its own copy of the world: the buffers its ticks use, its kept preview and ghost, the
+// edit it holds, refilled in place at each frame, and the trace its preview's resolutions tell.
+struct Drag {
+  tpj::World World;
+  tpj::TickBuffers Stepping;
+  tpj::KeptPreview Kept;
+  tpj::GhostLists Ghost;
+  std::optional<tpj::ParkEdit> Held;
+  WatchedSteps Steps;
+
+  explicit Drag(const tpj::World &world) : World(tpj::copyWorld(world)) {
+    Kept.Buffers.get<tpj::ResolveTraceSlot>().Trace = &Steps;
+  }
+};
+
+// The lowest-keyed shop.
+tpj::ParkBox lowestShop(const tpj::World &world) {
+  for (const tpj::ParkBox &box : tpj::parkBoxes(world)) {
+    if (box.Kind == tpj::BoxKind::Shop) {
+      return box;
+    }
+  }
+  throw std::runtime_error("full.park holds no shop");
+}
+
+// The shop's pose moved the distance along its face.
+tpj::Pose alongFace(const tpj::ParkBox &shop, double distance) {
+  const double facing = std::hypot(shop.At.FacingX, shop.At.FacingZ);
+  tpj::Pose pose = shop.At;
+  pose.X += -shop.At.FacingZ / facing * distance;
+  pose.Z += shop.At.FacingX / facing * distance;
+  return pose;
+}
+
+// A guest path from the middle of the first guest segment the world accepts one from, to the
+// point the distance beyond its side, trying the side a quarter turn counter-clockwise of its
+// direction first.
+tpj::AddPath spurPath(const tpj::World &world, double distance) {
+  for (const tpj::ParkSegment &segment : tpj::parkSegments(world)) {
+    if (segment.Kind != tpj::PathKind::Guest || segment.Line.size() < 2) {
+      continue;
+    }
+    const tpj::CarrierPoint &first = segment.Line.front();
+    const tpj::CarrierPoint &last = segment.Line.back();
+    const double length = std::hypot(last.X - first.X, last.Z - first.Z);
+    const tpj::ParkPoint middle{0.5 * (first.X + last.X), 0.5 * (first.Z + last.Z)};
+    for (const double side : {1.0, -1.0}) {
+      const double reach = 0.5 * segment.Width + distance;
+      const tpj::ParkPoint normal{-(last.Z - first.Z) / length * side,
+                                  (last.X - first.X) / length * side};
+      const tpj::AddPath path{
+          tpj::PathKind::Guest,
+          {tpj::OnSegment{segment.Key, 0.5},
+           tpj::NewPoint{{middle.X + normal.X * reach, middle.Z + normal.Z * reach}}}};
+      if (tpj::isAccepted(world, path)) {
+        return path;
+      }
+    }
+  }
+  throw std::runtime_error("full.park holds no guest segment that accepts a path from its side");
+}
+
+// Runs the frames of the drag: a tick, the kept preview of the edit at the frame, and its ghost.
+// editAt refills the drag's held edit for a frame.
+template <typename EditAt> void dragFrames(Drag &drag, size_t frames, EditAt editAt) {
+  for (size_t frame = 0; frame < frames; ++frame) {
+    tpj::check::watchTick(drag.World.Tick);
+    tpj::check::watchWork("the drag's tick");
+    tpj::stepWorld(drag.World, drag.Stepping);
+    if (!drag.Held) {
+      throw std::logic_error("a drag holds no edit");
+    }
+    tpj::ParkEdit &edit = *drag.Held;
+    editAt(edit, frame);
+    tpj::check::watchWork("the drag's preview");
+    tpj::keepPreview(drag.Kept, drag.World, drag.Held, false);
+    if (!tpj::isAccepted(drag.Kept.Made.Planned)) {
+      throw std::runtime_error("the world refuses a drag's edit");
+    }
+    tpj::check::watchWork("the drag's ghost");
+    tpj::buildGhostMesh(drag.World, edit, drag.Kept.Made.Planned, drag.Kept.Made.Candidate,
+                        drag.Ghost);
+  }
+}
+
+// Drags the lowest-keyed shop along its face and draws a guest path out and back from a guest
+// segment, each on its own copy of the world, and reports the blocks the watched frames freed.
+int checkDrags(const tpj::World &world) {
+  const tpj::ParkBox shop = lowestShop(world);
+  Drag shopDrag(world);
+  shopDrag.Held = tpj::MoveBox{shop.Key, shop.At};
+  const auto moveShop = [&shop](tpj::ParkEdit &edit, size_t frame) {
+    std::get<tpj::MoveBox>(edit).At = alongFace(shop, dragOffset(frame));
+  };
+  Drag pathDrag(world);
+  const tpj::AddPath start = spurPath(world, DRAG_START_REACH);
+  pathDrag.Held = start;
+  const tpj::ParkPoint from = std::get<tpj::NewPoint>(start.Stops[1]).At;
+  const std::optional<tpj::ParkPoint> middleAt = tpj::stopPosition(world, start.Stops[0]);
+  if (!middleAt) {
+    throw std::runtime_error("the dragged path's first stop has no position");
+  }
+  const tpj::ParkPoint middle = *middleAt;
+  const double reach = std::hypot(from.X - middle.X, from.Z - middle.Z);
+  const tpj::ParkPoint out{(from.X - middle.X) / reach, (from.Z - middle.Z) / reach};
+  const auto drawPathOut = [from, out](tpj::ParkEdit &edit, size_t frame) {
+    const double offset = dragOffset(frame);
+    std::get<tpj::AddPath>(edit).Stops[1] =
+        tpj::NewPoint{{from.X + out.X * offset, from.Z + out.Z * offset}};
+  };
+  dragFrames(shopDrag, WARM_FRAMES, moveShop);
+  dragFrames(pathDrag, WARM_FRAMES, drawPathOut);
+  tpj::check::startWatching(world.Tick);
+  shopDrag.Steps.Watching = true;
+  pathDrag.Steps.Watching = true;
+  dragFrames(shopDrag, WATCHED_FRAMES, moveShop);
+  dragFrames(pathDrag, WATCHED_FRAMES, drawPathOut);
+  shopDrag.Steps.Watching = false;
+  pathDrag.Steps.Watching = false;
+  tpj::check::stopWatching();
+  return reportFreed("the watched drags");
+}
+
+// Whether the world accepts the move of the point, with no crossings.
+bool movesClean(const tpj::World &world, const tpj::MovePoint &move) {
+  return tpj::isAccepted(world, move) && tpj::pathCrossings(world, move).empty();
+}
+
+// The first path point, in key order, that the world lets move 0.5 m along +x and back, with no
+// crossings either way: the move there, and the move back.
+std::pair<tpj::MovePoint, tpj::MovePoint> pointThereAndBack(const tpj::World &world) {
+  for (const tpj::ParkPathPoint &point : tpj::parkPathPoints(world)) {
+    const tpj::MovePoint there{point.Key, tpj::NewPoint{{point.At.X + 0.5, point.At.Z}}};
+    const tpj::MovePoint back{point.Key, tpj::NewPoint{point.At}};
+    if (!movesClean(world, there)) {
+      continue;
+    }
+    tpj::CommandQueue queue;
+    queue.push(there);
+    tpj::World moved = tpj::copyWorld(world);
+    tpj::commitCommands(moved, queue);
+    if (movesClean(moved, back)) {
+      return {there, back};
+    }
+  }
+  throw std::runtime_error("full.park holds no path point that moves there and back cleanly");
+}
+
+// The first guest segment's width set 0.5 m wider by a RestoreIntent, as an undo sets it, and the
+// RestoreIntent that sets it back.
+std::pair<tpj::RestoreIntent, tpj::RestoreIntent> widthThereAndBack(const tpj::World &world) {
+  std::vector<tpj::SegmentRecord> records;
+  tpj::segmentRecords(world, records);
+  for (const tpj::ParkSegment &segment : tpj::parkSegments(world)) {
+    if (segment.Kind != tpj::PathKind::Guest || segment.Line.empty()) {
+      continue;
+    }
+    const auto record = std::ranges::find(records, segment.Key, &tpj::SegmentRecord::Key);
+    tpj::RestoreIntent wider;
+    wider.Set.Segments.push_back(*record);
+    wider.Set.Segments.back().Width += 0.5;
+    tpj::RestoreIntent back;
+    back.Set.Segments.push_back(*record);
+    if (tpj::isAccepted(world, wider)) {
+      return {wider, back};
+    }
+  }
+  throw std::runtime_error("full.park holds no guest segment the world lets widen");
+}
+
+// Commits each edit there and back, round after round, on a copy of the world, and reports the
+// blocks the watched rounds freed.
+int checkCommits(const tpj::World &start) {
+  tpj::World world = tpj::copyWorld(start);
+  const tpj::ParkBox shop = lowestShop(world);
+  const tpj::MoveBox shopThere{shop.Key, alongFace(shop, DRAG_STEP)};
+  const tpj::MoveBox shopBack{shop.Key, shop.At};
+  if (!tpj::isAccepted(world, shopThere)) {
+    throw std::runtime_error("the world refuses the shop's move along its face");
+  }
+  const auto [pointThere, pointBack] = pointThereAndBack(world);
+  const auto [widthThere, widthBack] = widthThereAndBack(world);
+  tpj::TickBuffers buffers;
+  WatchedSteps steps;
+  buffers.get<tpj::ResolveTraceSlot>().Trace = &steps;
+  tpj::CommandQueue queue;
+  const auto round = [&]() {
+    const auto commit = [&](const auto &command) {
+      queue.push(command);
+      tpj::commitCommands(world, queue, buffers);
+    };
+    commit(shopThere);
+    commit(shopBack);
+    commit(pointThere);
+    commit(pointBack);
+    commit(widthThere);
+    commit(widthBack);
+  };
+  for (uint64_t warm = 0; warm < WARM_ROUNDS; ++warm) {
+    round();
+  }
+  tpj::check::startWatching(world.Tick);
+  tpj::check::watchWork("the commits");
+  steps.Watching = true;
+  for (uint64_t watched = 0; watched < WATCHED_ROUNDS; ++watched) {
+    round();
+  }
+  steps.Watching = false;
+  tpj::check::stopWatching();
+  return reportFreed("the watched commits");
+}
+
 } // namespace
 
 int main() {
@@ -909,14 +1170,17 @@ int main() {
     tpj::resolveWorld(world);
     tpj::ParkSession session(std::move(world));
     SteadyPlay play;
-    if (checkTicks(play, session) != 0 || checkEdits(play, session) != 0) {
+    if (checkTicks(play, session) != 0 || checkEdits(play, session) != 0 ||
+        checkDrags(session.world()) != 0 || checkCommits(session.world()) != 0) {
       return 1;
     }
     std::cout << "allocation check: " << WATCHED_TICKS
               << " ticks of full.park, the scene's sync, the preview, the overlays, the tools, the "
-                 "panels, the uploads, and the drawing, and "
+                 "panels, the uploads, and the drawing, "
+              << WATCHED_ROUNDS << " undos and redos with the app's work after each, "
+              << WATCHED_FRAMES << " frames each of the watched drags of a shop and a path, and "
               << WATCHED_ROUNDS
-              << " undos and redos with the app's work after each, freed no block they allocated\n";
+              << " rounds of the watched commits, freed no block they allocated\n";
     return 0;
   } catch (const std::exception &error) {
     std::cout << "allocation check: " << error.what() << '\n';

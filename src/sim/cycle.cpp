@@ -5,6 +5,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace tpj {
 
@@ -20,10 +21,40 @@ void requireRegistered(const World &world, const CommandQueue &commands) {
   }
 }
 
-void applyCommands(World &world, const CommandQueue &commands) {
+void applyCommands(World &world, const CommandQueue &commands, TickBuffers &buffers) {
   for (const QueuedCommand &command : commands.commands()) {
-    world.schema().findCommand(command.Id)->Apply(world, command.Value);
+    world.schema().findCommand(command.Id)->Apply(world, command.Value, buffers);
   }
+}
+
+// Tells the trace, when there is one, that a step starts, and that it ends when this goes out of
+// scope, by a return or an exception.
+class TracedStep {
+public:
+  TracedStep(ResolveTrace *trace, std::string_view step) : Trace(trace), Step(step) {
+    if (Trace != nullptr) {
+      Trace->started(Step);
+    }
+  }
+  TracedStep(const TracedStep &) = delete;
+  TracedStep &operator=(const TracedStep &) = delete;
+  TracedStep(TracedStep &&) = delete;
+  TracedStep &operator=(TracedStep &&) = delete;
+  ~TracedStep() {
+    if (Trace != nullptr) {
+      Trace->ended(Step);
+    }
+  }
+
+private:
+  ResolveTrace *Trace;
+  std::string_view Step;
+};
+
+// Refills into with copyWorld(world, into), telling the buffers' trace copy-world around it.
+void refillCandidate(const World &world, TickBuffers &buffers, World &into) {
+  const TracedStep step(buffers.get<ResolveTraceSlot>().Trace, "copy-world");
+  copyWorld(world, into);
 }
 
 } // namespace
@@ -34,9 +65,11 @@ void resolveWorld(World &world, TickBuffers &buffers) {
   // steps changed.
   UnitSpace &units = unitSpaceOf(world);
   units.beginResolution();
+  ResolveTrace *const trace = buffers.get<ResolveTraceSlot>().Trace;
   world.Resolving = true;
   try {
     for (const ResolverType &resolver : world.schema().resolvers()) {
+      const TracedStep step(trace, resolver.Name);
       resolver.Resolve(world, buffers);
     }
   } catch (...) {
@@ -47,6 +80,7 @@ void resolveWorld(World &world, TickBuffers &buffers) {
   // Finishers run with isResolving false, so they cannot publish after the comparisons they make.
   world.Finishing = true;
   try {
+    const TracedStep step(trace, "finishers");
     for (const ResolveFunction finish : world.schema().finishers()) {
       finish(world, buffers);
     }
@@ -85,7 +119,7 @@ void stepWorld(World &world, CommandQueue &commands, TickBuffers &buffers) {
     swap(world, buffers);
   }
   if (!commands.empty()) {
-    applyCommands(world, commands);
+    applyCommands(world, commands, buffers);
     world.ResolvePending = true;
     commands.clear();
   }
@@ -114,7 +148,7 @@ World makeCandidate(const World &world, const CommandQueue &commands, TickBuffer
   requireRegistered(world, commands);
   World candidate = copyWorld(world);
   if (!commands.empty()) {
-    applyCommands(candidate, commands);
+    applyCommands(candidate, commands, buffers);
     candidate.ResolvePending = true;
   }
   if (candidate.ResolvePending) {
@@ -127,14 +161,23 @@ void makeCandidate(const World &world, const CommandQueue &commands, TickBuffers
                    World &into) {
   TPJ_PROFILE_ZONE();
   requireRegistered(world, commands);
-  copyWorld(world, into);
+  refillCandidate(world, buffers, into);
   if (!commands.empty()) {
-    applyCommands(into, commands);
+    applyCommands(into, commands, buffers);
     into.ResolvePending = true;
   }
   if (into.ResolvePending) {
     resolveWorld(into, buffers);
   }
+}
+
+void makeCandidate(const World &world, void (*change)(World &into, const void *context),
+                   const void *context, TickBuffers &buffers, World &into) {
+  TPJ_PROFILE_ZONE();
+  refillCandidate(world, buffers, into);
+  change(into, context);
+  into.ResolvePending = true;
+  resolveWorld(into, buffers);
 }
 
 World makeCandidate(const World &world, const CommandQueue &commands) {
@@ -146,7 +189,7 @@ void commitCommands(World &world, CommandQueue &commands, TickBuffers &buffers) 
   TPJ_PROFILE_ZONE();
   requireRegistered(world, commands);
   if (!commands.empty()) {
-    applyCommands(world, commands);
+    applyCommands(world, commands, buffers);
     world.ResolvePending = true;
     commands.clear();
   }

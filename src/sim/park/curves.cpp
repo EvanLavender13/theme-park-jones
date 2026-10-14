@@ -29,7 +29,9 @@ const PathPointIntent *findPoint(const PathLayout &layout, EntityKey key) {
 // lines leave them out.
 class Ends {
 public:
-  explicit Ends(const PathLayout &layout) {
+  // Finds the layout's ends again, keeping the list's memory.
+  void reset(const PathLayout &layout) {
+    All.clear();
     for (const auto &[key, segment] : layout.Segments) {
       const PathPointIntent *from = findPoint(layout, segment.From);
       const PathPointIntent *to = findPoint(layout, segment.To);
@@ -61,25 +63,24 @@ public:
     });
   }
 
-  // The point's ends, counter-clockwise.
-  std::vector<PointEnd> at(EntityKey point) const {
-    std::vector<PointEnd> found;
+  // Puts the point's ends in found, counter-clockwise.
+  void at(EntityKey point, std::vector<PointEnd> &found) const {
+    found.clear();
     const auto run =
         std::ranges::equal_range(All, point, {}, [](const auto &x) { return x.first; });
     for (const auto &[key, end] : run) {
       found.push_back(end);
     }
-    return found;
   }
 
-  std::vector<EntityKey> points() const {
-    std::vector<EntityKey> keys;
+  // Puts the keys of the points with ends in keys, ascending.
+  void points(std::vector<EntityKey> &keys) const {
+    keys.clear();
     for (const auto &[key, end] : All) {
       if (keys.empty() || keys.back() != key) {
         keys.push_back(key);
       }
     }
-    return keys;
   }
 
 private:
@@ -114,14 +115,15 @@ double edgeOf(const CurveWrites &writes, const PointEnd &end) {
 
 // Each corner of before that has three or more segments in after keeps its inside curve as the
 // edge radius held for that edge.
+// now and two are lists it reuses.
 void keepInsides(CurveWrites &writes, const PathGround &groundBefore, const Ends &was,
-                 const Ends &is) {
+                 const Ends &is, std::vector<PointEnd> &now, std::vector<PointEnd> &two) {
   for (const ParkCorner &corner : groundBefore.Corners) {
-    const std::vector<PointEnd> now = is.at(corner.Point);
+    is.at(corner.Point, now);
     if (now.size() < 3) {
       continue;
     }
-    const std::vector<PointEnd> two = was.at(corner.Point);
+    was.at(corner.Point, two);
     const SegmentEnd inside = insideOf(two).End;
     if (std::ranges::any_of(now, [&inside](const PointEnd &end) { return end.End == inside; })) {
       writes.Edges.emplace_back(inside, std::max(corner.Radius - narrowerHalf(two), 0.0));
@@ -226,18 +228,35 @@ void closeGaps(CurveWrites &writes, const std::vector<PointEnd> &had,
   }
 }
 
+// The lists keptCurves reuses: the after layout's ground, both layouts' ends, the ends at a point
+// now and before, and the points.
+struct CurveLists {
+  GroundLists After;
+  Ends Was;
+  Ends Is;
+  std::vector<PointEnd> Now;
+  std::vector<PointEnd> Previous;
+  std::vector<EntityKey> Points;
+};
+
 } // namespace
 
-CurveWrites keptCurves(const PathLayout &before, const PathLayout &after,
-                       const std::vector<SegmentEnd> &added) {
-  const Ends was(before);
-  const Ends is(after);
-  const PathGround groundAfter = groundOf(after);
-  CurveWrites writes;
-  keepInsides(writes, groundOf(before), was, is);
-  for (const EntityKey point : is.points()) {
-    const std::vector<PointEnd> now = is.at(point);
-    const std::vector<PointEnd> previous = was.at(point);
+void keptCurves(const PathLayout &before, const PathGround &groundBefore, const PathLayout &after,
+                const std::vector<SegmentEnd> &added, CurveWrites &writes, TickBuffers &scratch) {
+  CurveLists &lists = scratch.get<CurveLists>();
+  lists.Was.reset(before);
+  lists.Is.reset(after);
+  groundOf(after, lists.After);
+  const PathGround &groundAfter = lists.After.Ground;
+  writes.Radii.clear();
+  writes.Edges.clear();
+  std::vector<PointEnd> &now = lists.Now;
+  std::vector<PointEnd> &previous = lists.Previous;
+  keepInsides(writes, groundBefore, lists.Was, lists.Is, now, previous);
+  lists.Is.points(lists.Points);
+  for (const EntityKey point : lists.Points) {
+    lists.Is.at(point, now);
+    lists.Was.at(point, previous);
     const size_t had = previous.size();
     // An edge's old touch is measured from where the point was, so only a point the edit leaves in
     // place closes its gaps. A point that moves, as a corner's point does when its bend splits,
@@ -264,7 +283,6 @@ CurveWrites keptCurves(const PathLayout &before, const PathLayout &after,
       writes.Radii.emplace_back(point, DEFAULT_CORNER_RADIUS);
     }
   }
-  return writes;
 }
 
 } // namespace tpj

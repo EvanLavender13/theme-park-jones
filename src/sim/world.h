@@ -159,6 +159,8 @@ private:
                              TickBuffers &buffers);
   friend void makeCandidate(const World &world, const CommandQueue &commands, TickBuffers &buffers,
                             World &into);
+  friend void makeCandidate(const World &world, void (*change)(World &into, const void *context),
+                            const void *context, TickBuffers &buffers, World &into);
   friend void commitCommands(World &world, CommandQueue &commands, TickBuffers &buffers);
   friend std::string saveWorld(const World &world);
   friend World loadWorld(std::shared_ptr<const WorldSchema> schema, std::string_view text);
@@ -295,6 +297,26 @@ uint64_t hashWorld(const World &world);
 // Throws WorldInvariantError if the walk cannot cover the world fully.
 void validateWorld(const World &world);
 
+// Told the name of each step of a resolution as it starts and as it ends: each resolver by its
+// name, the finishers together as "finishers", and "copy-world" while makeCandidate refills a
+// kept world.
+class ResolveTrace {
+public:
+  ResolveTrace() = default;
+  ResolveTrace(const ResolveTrace &) = default;
+  ResolveTrace &operator=(const ResolveTrace &) = default;
+  ResolveTrace(ResolveTrace &&) = default;
+  ResolveTrace &operator=(ResolveTrace &&) = default;
+  virtual ~ResolveTrace() = default;
+  virtual void started(std::string_view step) = 0;
+  virtual void ended(std::string_view step) = 0;
+};
+
+// The trace resolution tells, held in the resolving caller's TickBuffers. None by default.
+struct ResolveTraceSlot {
+  ResolveTrace *Trace = nullptr;
+};
+
 // Calls every registered resolver once, in registration order, then every finisher, passing the
 // buffers to each, and clears the pending resolution.
 void resolveWorld(World &world, TickBuffers &buffers);
@@ -319,6 +341,11 @@ World makeCandidate(const World &world, const CommandQueue &commands, TickBuffer
 // making a new world.
 void makeCandidate(const World &world, const CommandQueue &commands, TickBuffers &buffers,
                    World &into);
+// Makes into the candidate of a change that isn't a queued command: refills it with
+// copyWorld(world, into), calls change(into, context), and resolves it, passing the buffers to
+// every resolver and finisher.
+void makeCandidate(const World &world, void (*change)(World &into, const void *context),
+                   const void *context, TickBuffers &buffers, World &into);
 // The same candidate, resolved with buffers of its own.
 World makeCandidate(const World &world, const CommandQueue &commands);
 // Applies the queued commands in submission order and resolves, without stepping the systems,
