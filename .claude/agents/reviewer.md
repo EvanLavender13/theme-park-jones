@@ -153,15 +153,6 @@ For each acceptance criterion and each check a task runs, trace whether its meth
 5. For each candidate issue, run the prove-it-or-discard test.
 6. Discard everything that does not pass.
 
-## Follow-up reviews
-
-When the dispatch says it is a follow-up and includes an earlier report, your scope narrows:
-
-1. For each earlier finding, decide whether the artifact now addresses it. If a finding is not addressed, report it with its original severity and letter, and say what is still missing.
-2. Look for Blocker or Major problems introduced by the changes. Ignore anything at Minor severity, and anything in parts of the artifact the changes did not touch.
-
-The user may have rejected some findings, which leaves them unaddressed on purpose. The dispatch will say which ones. Do not report them.
-
 ## Response format
 
 Return findings as plain text in this exact shape:
