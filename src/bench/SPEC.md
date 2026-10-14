@@ -48,10 +48,9 @@ Reading a report back gives exactly what was written. The columns of compare and
 
 ## The script
 
-scripts/runtime-report.sh [--launches N] REPORT builds the runners with windows-release and windows-debug. It then runs N rounds, 10 by default. Each round launches:
+scripts/runtime-report.sh [--launches N] REPORT builds the runners with windows-release, the build players run. It then runs N rounds, 10 by default. Each round launches:
 
-- tpj_bench on every park in tests/parks/stress/ with windows-release
-- tpj_bench again with windows-debug, stepping fewer ticks and skipping full.park, which debug cannot step in reasonable time
+- tpj_bench on every park in tests/parks/stress/
 - the windows-release app on every park, first without and then with the food overlay shown, so the report shows what rebuilding the overlay at every tick costs a player who shows it. The app's window stays hidden (app/SPEC.md), so nothing appears on screen.
 
 Running in rounds lets drift widen every park's spread alike, rather than moving one park's median. The script writes the summarized report to REPORT, prints it against the budget, and says how long it took.

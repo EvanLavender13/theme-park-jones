@@ -25,7 +25,7 @@ Activate the git hooks once per clone with `git config core.hooksPath .githooks`
 
 Linux is checked at release, not on every change. scripts/release-check.sh builds linux-debug with AddressSanitizer and UBSan and runs its tests. It also runs scripts/cross-build-check.sh, which checks that windows-release and linux-release, the builds players run, simulate exactly like windows-debug (decisions 0022 and 0036).
 
-scripts/runtime-report.sh times the gameplay runtime on the stress parks with both Windows builds and compares two reports (src/bench/SPEC.md). Timings are reported, not gated.
+scripts/runtime-report.sh times the gameplay runtime on the stress parks with windows-release and compares two reports (src/bench/SPEC.md). Timings are reported, not gated.
 
 To check rendering, run the app with `--capture out.bmp`. It renders a few frames, saves the last one, and exits.
 
