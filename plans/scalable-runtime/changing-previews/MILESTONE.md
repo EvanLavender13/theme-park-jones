@@ -32,16 +32,17 @@ None. The milestone adds, samples, and publishes no fields or flows, and changes
 
 ## Core feature
 
-lean-routes. Route distance and the path networks are about 46% of a preview, the largest share, and most of their time goes to work that repeats or grows with doors times pieces. The feature also adds the bench stages and takes the before measurements, so every later feature reports against them.
+lean-routes. Route distance is about 31% of a preview, the largest share of any resolver, and 42% of its time is heap work. The feature also gives resolvers the kept buffers every later feature fills, makes the medium's resolved entries keep their memory for every publisher, and adds the bench stages and the before measurements, so every later feature reports against them.
 
 ## Features
 
-1. `lean-routes`: tpj_bench's path edit preview, acceptance, and ghost stages and the before measurements; route distance building each network's steps once per resolution; each door's connection found from nearby pieces and paths; both resolvers reusing their storage. For criteria 1, 2, and part of 3. Depends on: none.
-2. `lean-surfaces`: the two surfaces sharing one derivation, guest ground, and the acceptance check and edited surface made once per changed frame and shared by the preview and the ghost, all reusing their storage. For part of criterion 3. Depends on: feature 1.
-3. `quiet-placement`: furniture, best seats, the food, drink, facility, and seat offers, the departure tally, carrying guests onto the new ground, and the finishers reusing their storage, so criterion 4's watch of the preview can pass. Depends on: feature 1.
-4. `kept-candidate`: the candidate copied into a world the preview keeps, reusing its storage, the ghost built into kept lists, and the allocation check watching previews, the preview at each tick, applying a command, and a path tool's press, for criterion 4; and the edits to docs/testing.md, docs/conventions.md, and decision 0041 in criterion 8. Depends on: features 1 to 3.
-5. `thread-rules`: the decision record of criterion 6. Depends on: none.
-6. `ticking-candidate`: each resolver and finisher declaring whether it reads running state, and the kept candidate following ticks by re-running only those, for criterion 7. Depends on: feature 4.
+1. `lean-routes`: tpj_bench's path edit preview, acceptance, and ghost stages and the before measurements; resolvers and finishers taking the caller's kept buffers, as systems do; the medium's resolved entries keeping their memory from one resolution to the next; and route distance building each network's steps once per resolution, searching and publishing in kept lists. For criteria 1, 2, and part of 3. Depends on: none.
+2. `lean-networks`: each door's connection found from the pieces and paths near it, and the path networks built in kept lists. For part of criterion 3. Depends on: feature 1.
+3. `lean-surfaces`: the two surfaces sharing one derivation, guest ground, and the acceptance check and edited surface made once per changed frame and shared by the preview and the ghost, all reusing their storage. For part of criterion 3. Depends on: feature 1.
+4. `quiet-placement`: furniture, best seats, the food, drink, facility, and seat offers, the departure tally, carrying guests onto the new ground, and the finishers reusing their storage, so criterion 4's watch of the preview can pass. Depends on: feature 1.
+5. `kept-candidate`: the candidate copied into a world the preview keeps, reusing its storage, the ghost built into kept lists, and the allocation check watching previews, the preview at each tick, applying a command, and a path tool's press, for criterion 4; and the edits to docs/testing.md, docs/conventions.md, and decision 0041 in criterion 8. Depends on: features 1 to 4.
+6. `thread-rules`: the decision record of criterion 6. Depends on: none.
+7. `ticking-candidate`: each resolver and finisher declaring whether it reads running state, and the kept candidate following ticks by re-running only those, for criterion 7. Depends on: feature 5.
 
 ## Deepening candidates
 
