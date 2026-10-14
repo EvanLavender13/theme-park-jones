@@ -35,7 +35,7 @@ Each connector's door end is a node of its own, anchored to the door's entity. T
 
 connectorWalkways gives a walkway (sim/park/SPEC.md) for each connector of a kind's network, in key order of the connector. It has the connector's width and is joined to that segment. It starts at the connector's door, along the door's face, and runs straight along the connector's first part. If the connector runs straight to the ground line, the walkway ends there. Otherwise it ends straight out of the door, past where the connector meets the paving by half its width, or by the length of the connector's part from there to the ground line if that is less, so its square end lies inside the paving. If the connector meets the segment at a path point, it is joined to the lowest-keyed segment of the kind that ends there.
 
-keyedWalkways gives the same walkways as connectorWalkways, in the same order, each with the key of the connector it was made for.
+keyedWalkways gives the same walkways as connectorWalkways, in the same order, each with the key of the connector it was made for. Both can also append their walkways to a list the caller keeps, keeping the doors they read in TickBuffers the caller keeps. Then they allocate nothing once the lists have grown.
 
 walkedSurface gives the paved surface parkSurface gives with every connector's walkway, the guest walkways first, as the walked-surface resolver kept it when the world last resolved. The walked-surface resolver runs after path-networks. Before a world first resolves, walkedSurface gives an empty surface.
 

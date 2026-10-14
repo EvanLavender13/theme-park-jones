@@ -78,7 +78,7 @@ A kept field holds values that accumulate where movers go. The values persist be
 
 A system calls keepEntry while stepping to set a source's value at a place. A source holds at most one entry per place. Changes become readable at the swap that ends the tick, and the last change at a place in a tick wins. An entry then stays readable, unchanged, until its place is changed again. If the source already holds an entry at a place, changing it costs a binary search.
 
-sampleField and fieldValue read kept values through the owner's rules. keptValue reads one source's value at exactly one place. keptEntries gives a source's entries as held, so its owner can carry them. The owner carries its entries across a resolution in its own finisher, with replaceKeptEntries. replaceKeptEntries refuses entries it cannot hold, such as two at one place, and changes nothing when it refuses.
+sampleField and fieldValue read kept values through the owner's rules. keptValue reads one source's value at exactly one place. keptEntries gives a source's entries as held, so its owner can carry them. The owner carries its entries across a resolution in its own finisher, with replaceKeptEntries. replaceKeptEntries refuses entries it cannot hold, such as two at one place, and changes nothing when it refuses. It can also copy entries from a list the caller keeps into the memory the source's entries already hold, keeping the list it orders them in in TickBuffers the caller keeps. Then it allocates nothing once the lists have grown, unless it adds the source or removes it.
 
 ## Ground fields
 

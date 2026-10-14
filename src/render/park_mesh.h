@@ -181,8 +181,10 @@ void appendWalkway(ParkMesh &mesh, PathKind kind, const std::vector<CarrierPoint
 
 // Adds a walkway for each connector of the world's guest network and then its backstage network,
 // in the kind's path color with the alpha given. A connector is a carrier whose first stop's node
-// is anchored.
-void appendWalkways(ParkMesh &mesh, const World &world, float alpha);
+// is anchored. Reads the walkways into a list the caller keeps, and draws each strip from another,
+// keeping the doors in the buffers. Allocates nothing once the lists and the mesh have grown.
+void appendWalkways(ParkMesh &mesh, const World &world, float alpha, std::vector<Walkway> &walkways,
+                    std::vector<CarrierPoint> &strip, TickBuffers &buffers);
 
 // Every door's walkway in the world, guest then backstage, as connectorWalkways gives them.
 std::vector<Walkway> parkWalkways(const World &world);
@@ -201,8 +203,10 @@ inline constexpr Rgba STARVED_COLOR{0.56f, 0.24f, 0.86f, 1.0f};
 // nothing when the pose has no footprint.
 void appendStarvedMark(ParkMesh &mesh, const Pose &pose, Rgba color);
 // Adds a mark over each shop box whose inspection record says it is starved, in key order, in
-// STARVED_COLOR with the alpha given.
-void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha);
+// STARVED_COLOR with the alpha given. Reads the boxes into a list the caller keeps and the supply
+// routes through the buffers. Allocates nothing once the lists and the mesh have grown.
+void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha,
+                        std::vector<ParkBox> &boxes, TickBuffers &buffers);
 
 // Adds a box over each piece of the world's furniture, in key order, in its kind's color with the
 // alpha given.
@@ -254,6 +258,32 @@ GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
 // The same ghost with the candidate makeCandidate gives for the edit when it is accepted, and none
 // when it is not.
 GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit);
+
+// The lists building a ghost reuses, and the ghost: the boxes, path points, segments, and corners
+// it reads, its stops' positions, a line it draws, the furniture before and after the edit, the
+// walkways, the owners it draws and their part of a surface, the buffers it reads through, and the
+// ghost.
+struct GhostLists {
+  std::vector<ParkBox> Boxes;
+  std::vector<ParkPathPoint> Points;
+  std::vector<ParkSegment> Segments;
+  std::vector<ParkCorner> Corners;
+  std::vector<ParkPoint> Positions;
+  std::vector<CarrierPoint> Line;
+  std::vector<FurniturePiece> Was;
+  std::vector<FurniturePiece> Is;
+  std::vector<Walkway> Walkways;
+  std::vector<EntityKey> Owners;
+  PavedSurface Owned;
+  TickBuffers Buffers;
+  GhostMesh Ghost;
+};
+
+// The ghost buildGhostMesh(world, edit, candidate) gives, put in lists.Ghost, using lists the
+// caller keeps, which it clears first. Apart from what isAccepted, editedSurface, editedSegments,
+// and pathCrossings make, it allocates nothing once the lists have grown.
+void buildGhostMesh(const World &world, const ParkEdit &edit, const std::optional<World> &candidate,
+                    GhostLists &lists);
 
 // A rectangle on the ground.
 struct GroundBounds {

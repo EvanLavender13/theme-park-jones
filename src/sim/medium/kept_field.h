@@ -5,6 +5,7 @@
 #include "sim/medium/field.h"
 #include "sim/medium/network.h"
 #include "sim/schema.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
 #include <algorithm>
@@ -239,56 +240,102 @@ std::span<const KeptEntry> keptEntries(const World &world, EntityKey source) {
   return slot == nullptr ? std::span<const KeptEntry>() : std::span<const KeptEntry>(slot->Entries);
 }
 
+// Checks that the field can take the entries as the source's kept entries, as replaceKeptEntries
+// does, and puts their order by place in order. Returns the field's kept entries.
+template <KeptFieldDefinition F>
+KeptEntries<F> &checkKeptReplacement(World &world, EntityKey source,
+                                     std::span<const KeptEntry> entries,
+                                     std::vector<uint32_t> &order) {
+  // Messages are built only when throwing, since finishers call this on every resolution.
+  const auto name = [] { return std::string(F::Name); };
+  if (!world.isFinishing()) {
+    throw std::logic_error("field " + name() + " takes kept replacements only from finishers");
+  }
+  KeptEntries<F> *kept = findKeptEntries<F>(world);
+  if (kept == nullptr) {
+    throw std::logic_error("field " + name() + " holds no kept entries; resolve the world first");
+  }
+  if (source == NULL_KEY) {
+    throw std::invalid_argument("field " + name() + " takes no entries from the null key");
+  }
+  for (const KeptEntry &entry : entries) {
+    if (std::isnan(entry.At.Distance)) {
+      throw std::invalid_argument("field " + name() + " takes no entry at a NaN distance");
+    }
+    if (entry.Tick > world.Tick) {
+      throw std::invalid_argument("field " + name() + " takes no entry stamped after tick " +
+                                  std::to_string(world.Tick));
+    }
+  }
+  orderItemsByPlace(entries, order);
+  // The order ascends, so two entries at one place are neighbours in it.
+  for (size_t i = 1; i < order.size(); ++i) {
+    if (!placeBefore(entries[order[i - 1]].At, entries[order[i]].At)) {
+      throw std::invalid_argument("field " + name() + " takes one entry at a place");
+    }
+  }
+  return *kept;
+}
+
+// The source's slot in the kept entries, added when it holds none.
+inline KeptSlot &keptSlotFor(std::vector<KeptSlot> &slots, EntityKey source) {
+  auto at = std::ranges::lower_bound(slots, source, {}, &KeptSlot::Source);
+  if (at == slots.end() || at->Source != source) {
+    KeptSlot added;
+    added.Source = source;
+    at = slots.insert(at, std::move(added));
+  }
+  return *at;
+}
+
+// Removes the source's slot from the kept entries, when it holds one.
+inline void dropKeptSlot(std::vector<KeptSlot> &slots, EntityKey source) {
+  const auto at = std::ranges::lower_bound(slots, source, {}, &KeptSlot::Source);
+  if (at != slots.end() && at->Source == source) {
+    slots.erase(at);
+  }
+}
+
 // Makes the source's kept entries the given ones, in the given order; an empty list removes the
 // source. Finishers only. Throws std::logic_error when the finishers are not running or the world
 // holds no kept entries for the field, and std::invalid_argument for the null key, an entry whose
 // distance is NaN or whose tick is later than the world's, or two entries at one place.
 template <KeptFieldDefinition F>
 void replaceKeptEntries(World &world, EntityKey source, std::vector<KeptEntry> entries) {
-  const std::string name(F::Name);
-  if (!world.isFinishing()) {
-    throw std::logic_error("field " + name + " takes kept replacements only from finishers");
-  }
-  KeptEntries<F> *kept = findKeptEntries<F>(world);
-  if (kept == nullptr) {
-    throw std::logic_error("field " + name + " holds no kept entries; resolve the world first");
-  }
-  if (source == NULL_KEY) {
-    throw std::invalid_argument("field " + name + " takes no entries from the null key");
-  }
-  for (const KeptEntry &entry : entries) {
-    if (std::isnan(entry.At.Distance)) {
-      throw std::invalid_argument("field " + name + " takes no entry at a NaN distance");
-    }
-    if (entry.Tick > world.Tick) {
-      throw std::invalid_argument("field " + name + " takes no entry stamped after tick " +
-                                  std::to_string(world.Tick));
-    }
-  }
   std::vector<uint32_t> order;
-  orderItemsByPlace(std::span<const KeptEntry>(entries), order);
-  // The order ascends, so two entries at one place are neighbours in it.
-  for (size_t i = 1; i < order.size(); ++i) {
-    if (!placeBefore(entries[order[i - 1]].At, entries[order[i]].At)) {
-      throw std::invalid_argument("field " + name + " takes one entry at a place");
-    }
-  }
-  auto at = std::ranges::lower_bound(kept->Slots, source, {}, &KeptSlot::Source);
-  const bool held = at != kept->Slots.end() && at->Source == source;
+  KeptEntries<F> &kept =
+      checkKeptReplacement<F>(world, source, std::span<const KeptEntry>(entries), order);
   if (entries.empty()) {
-    if (held) {
-      kept->Slots.erase(at);
-    }
+    dropKeptSlot(kept.Slots, source);
     return;
   }
-  if (!held) {
-    KeptSlot added;
-    added.Source = source;
-    at = kept->Slots.insert(at, std::move(added));
+  KeptSlot &slot = keptSlotFor(kept.Slots, source);
+  slot.Entries = std::move(entries);
+  slot.ByPlace = std::move(order);
+  slot.Ordered = true;
+}
+
+// The list replacing kept entries orders them in.
+struct KeptReplacement {
+  std::vector<uint32_t> Order;
+};
+
+// As above, copying entries the caller keeps into the memory the source's entries already hold,
+// and keeping the list it orders them in in the buffers. Once the lists have grown, it allocates
+// nothing, unless it adds the source or removes it.
+template <KeptFieldDefinition F>
+void replaceKeptEntries(World &world, EntityKey source, std::span<const KeptEntry> entries,
+                        TickBuffers &buffers) {
+  std::vector<uint32_t> &order = buffers.get<KeptReplacement>().Order;
+  KeptEntries<F> &kept = checkKeptReplacement<F>(world, source, entries, order);
+  if (entries.empty()) {
+    dropKeptSlot(kept.Slots, source);
+    return;
   }
-  at->Entries = std::move(entries);
-  at->ByPlace = std::move(order);
-  at->Ordered = true;
+  KeptSlot &slot = keptSlotFor(kept.Slots, source);
+  copyGrowing(slot.Entries, entries);
+  copyGrowing(slot.ByPlace, std::span<const uint32_t>(order));
+  slot.Ordered = true;
 }
 
 // Appends what the field's node rule gives for the source at the node, when the source has an

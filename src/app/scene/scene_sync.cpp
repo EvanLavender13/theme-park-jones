@@ -125,11 +125,11 @@ PreviewMeshes SceneSync::syncLook(const World &world, const ToolPark &park, bool
   if (editBuilt) {
     const Preview &preview = Kept.Made;
     if (preview.Edit) {
-      EditGhost = buildGhostMesh(world, *preview.Edit, preview.Candidate);
+      buildGhostMesh(world, *preview.Edit, preview.Candidate, EditGhost);
     } else {
-      clearMesh(EditGhost.Tints);
-      clearMesh(EditGhost.Lit);
-      clearMesh(EditGhost.Marks);
+      clearMesh(EditGhost.Ghost.Tints);
+      clearMesh(EditGhost.Ghost.Lit);
+      clearMesh(EditGhost.Ghost.Marks);
     }
   }
   const bool lookBuilt = first || *Look != look || LookEdits != Edits;
@@ -144,10 +144,10 @@ PreviewMeshes SceneSync::syncLook(const World &world, const ToolPark &park, bool
       appendGuestEntity(SubjectMark, world, Seated, look.Inspected->Key, HIGHLIGHT_TINT);
     }
     // Assigning reuses the ghost's memory.
-    Ghost.Tints = EditGhost.Tints;
-    Ghost.Lit = EditGhost.Lit;
+    Ghost.Tints = EditGhost.Ghost.Tints;
+    Ghost.Lit = EditGhost.Ghost.Lit;
     appendMesh(Ghost.Lit, LookMarks.Lit);
-    Ghost.Marks = EditGhost.Marks;
+    Ghost.Marks = EditGhost.Ghost.Marks;
     appendMesh(Ghost.Marks, LookMarks.Marks);
     appendMesh(Ghost.Marks, SubjectMark);
     meshes.Ghost = true;
