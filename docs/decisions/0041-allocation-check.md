@@ -20,7 +20,7 @@ The check covers all the work the app repeats in steady play: the park running w
 
 The check lands area by area. Each feature that adds an area to the check makes that area pass in the same change, so the check never fails on main.
 
-Previews of an edit that changes every frame, such as dragging a path, resolve a new world each time. So does a preview that holds a candidate while an overlay is shown: the app makes it again at each tick, because a candidate kept across ticks can't give what makeCandidate gives without resolving. Both stay outside the check until a milestone makes resolution reuse its storage. So does applying a command, and a path tool's press that asks the world whether it accepts the path.
+Previews of an edit that changes every frame, such as dragging a path, resolve a new world each time. So does a preview that holds a candidate while an overlay is shown: the app makes it again at each tick, because a candidate kept across ticks can't give what makeCandidate gives without resolving. Both stay outside the check until changing-previews makes resolution re-derive only what changed, in storage it reuses, and watched-previews extends the check to them. So does applying a command, and a path tool's press that asks the world whether it accepts the path.
 
 ## Consequences
 
@@ -28,6 +28,6 @@ docs/testing.md's list of mechanical checks gains the allocation check. A featur
 
 Code the check doesn't run follows the rule all the same. If a milestone leaves work outside the check, it reads that code before it closes.
 
-scalable-runtime's allocation-free-loops milestone builds the check and fixes steady play area by area. Its changing-previews milestone extends the check to previews of a changing edit and to the preview an overlay makes again at each tick. Features in other capabilities wait until allocation-free-loops closes.
+scalable-runtime's allocation-free-loops milestone builds the check and fixes steady play area by area. Its watched-previews milestone, after changing-previews, extends the check to previews of a changing edit, to the preview an overlay keeps at each tick, and to applying a command. Features in other capabilities wait until allocation-free-loops closes.
 
 Reviews keep the rule too. The reviewer rates a broken docs/conventions.md rule as a Blocker.

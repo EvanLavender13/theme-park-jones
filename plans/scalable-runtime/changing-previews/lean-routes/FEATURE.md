@@ -16,7 +16,7 @@ lean-routes makes the route-distance resolver do its work once and keep its memo
 
 ## Tests
 
-None. The world checks in tests/sim cover candidates and resolution, and the scenarios comparison shows the simulation unchanged. Milestone feature 5's allocation check watches the whole preview once every resolver keeps its memory.
+None. The world checks in tests/sim cover candidates and resolution, and the scenarios comparison shows the simulation unchanged. The watched-previews milestone's allocation check watches the whole preview.
 
 ## Medium
 
@@ -86,9 +86,9 @@ It leaves the loaded world unchanged. Each stage except ticks is warmed up and t
 
 ## Out of scope
 
-- The other resolvers' own lists and returning readers, such as parkSegments and layoutOf. Features 2 to 4 of the milestone take them. They gain the buffers parameter here and ignore it.
-- settleSteppedEntries' comparison of each source's entries by their words, which makes new lists. quiet-placement, feature 4, takes it with the other finishers.
-- The preview's own candidate and buffers. previewEdit and buildGhostMesh still make a candidate with buffers of their own until kept-candidate, feature 5.
+- The other resolvers' own lists and returning readers, such as parkSegments and layoutOf. derived-units, layered-candidate, and spatial-units take them, as each resolver moves onto units. They gain the buffers parameter here and ignore it.
+- settleSteppedEntries' comparison of each source's entries by their words, which makes new lists. derived-units takes it, since early cutoff compares a unit's output with its last one.
+- The preview's own candidate and buffers. previewEdit and buildGhostMesh still make a candidate with buffers of their own until layered-candidate.
 
 ## Open questions
 

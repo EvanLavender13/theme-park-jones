@@ -6,49 +6,95 @@ Status: planned
 
 ## Summary
 
-changing-previews makes editing on full.park cheaper, and makes the previews of a changing edit follow docs/conventions.md's rule against allocating in per-frame work. Each frame the tool's edit changes, the app makes the preview again. It checks that the world accepts the edit, copies the world, applies the edit, and resolves the whole copy. Applying the edit checks acceptance again, and the ghost checks it a third time and derives the edited surface again. On full.park a preview costs about 13 ms on windows-release, and the app also makes it again at every tick while an overlay is shown and the preview holds a candidate. A profile (RESEARCH.md) found that no single resolver dominates. Three resolvers that hold work repeating with no new answer take about 55% of a preview: route distance rebuilds the network's step lists for every source, the connections compare every door with every surface piece, and the walked surface derives the paved surface again. The profile can't separate the repeated part from the rest of each resolver. Heap work is about a fifth. This milestone measures what a drag costs, removes the repeated work, and makes resolution, the candidate, the ghost, and the acceptance check reuse their memory. While the edit is held still and only ticks pass, the kept candidate follows the ticks by re-running only the resolvers that read the park's running state, since route distance, the networks, the surfaces, and furniture derive from intent alone and about 70% of a preview gives the same answer at each tick. The allocation check then watches previews of a changing edit, the preview made again at each tick, and applying a command, as decision 0041 leaves to this milestone. The faster resolution also speeds every committed edit, undo, and redo. The milestone also records the rules that simulation work must follow to run on several threads, so later milestones can resolve across cores or make previews off the frame's thread.
+changing-previews makes dragging a shop and drawing a guest path on full.park smooth.
+
+Today, each frame in which the tool's edit changes copies the whole world, applies the edit, runs every resolver over the whole park, and builds the ghost, which plans a path edit again. On full.park that is about 11 ms for a box edit and about 16 ms for a path edit with its ghost, on windows-release. In play, the Debug panel's frame rate dipped to about 100 while dragging a shop and to about 50 while drawing a path.
+
+The cause is one design flaw, not a slow resolver (RESEARCH.md). Each resolver is a single task that derives its output for the whole park, so any edit makes every one of them run again. Build systems and incremental compilers solve this by deriving in small units and re-running only the units whose inputs changed. This milestone builds that mechanism into resolution and moves the resolvers onto it:
+
+- Derived values are split into units keyed by what they derive from. Spatial values, such as paving, connections, furniture, and guest ground, are split by place. Route distance has one unit per source, and best seats one per seat.
+- Each unit records what it read. When an edit or a tick changes something, only the units that read it run again. When a unit runs again and gives the same output, the units that read it don't run.
+- The candidate is a layer over the world. It holds only what the edit changed and reads everything else from the world, so the world is never copied.
+- Route distance and best seats can't be split by place, because one edit can change a distance far away. Their units are updated by a dynamic shortest-path update, which touches only the nodes whose distance actually changes.
+- Committing an edit, undo, and redo resolve the same way, so they get faster too.
+
+The result must equal, exactly, a resolution from nothing (principle 8, decision 0025). Units are how resolution stores its work. A world's walk, hash, save, and comparison see the same values that a resolution from nothing gives.
 
 ## Acceptance criteria
 
-1. tpj_bench times, on full.park, the preview of a guest path edit that the world accepts, that edit's acceptance check, and the ghost of each previewed edit, next to the existing preview stage. The runtime report before and after the milestone compares them. (check: scripts/runtime-report.sh and its --compare)
-2. The Debug panel's frame rate while dragging a shop and while drawing a guest path on full.park in the windows-release app is read before the milestone and after it. (play)
-3. A resolution does once what repeats today. Route distance builds each network's steps from each node once per resolution, not once per source. Each door's connection is found from the pieces and paths near the door, so that work grows with the doors and not with doors times pieces. The paved surface and the walked surface share one derivation of the layout and its ground, and the walked surface doesn't build the paved surface's pieces a second time. In a frame where the edit changed, the preview and the ghost share one acceptance check and one derivation of the edited surface. Applying the edit to the candidate keeps its own check, so the candidate still equals the world that commits the edit. (check: read each; criterion 1's report)
-4. The allocation check watches previews of a changing edit. It alternates the tool's edit between two edits for each tool, so each watched frame makes the preview, its candidate, its shop context, and its ghost again, and fails if they free a block they allocated. While an overlay is shown and the preview holds a candidate, it watches the preview made again at each tick. It also stops pausing around applying a command in its undo and redo rounds, and around a path tool's press after its first stop. (ctest; check: inside one resolver, add a temporary std::vector, confirm that the check fails and names the preview, and revert)
-5. The simulation and the previews are unchanged. tpj_scenarios --compare of windows-debug output from before and after each feature shows no difference, for its scenarios, every park in tests/parks, and full.park over 300 ticks. A candidate still equals, by worldsEqual, the world that commits the same edit. The runtime report marks no stage result-changed. (check: tpj_scenarios --compare; ctest; the report's --compare)
-6. A decision record states the rules that simulation work must follow to run on more than one thread. Its results must be identical to one thread's whatever the number of threads and the order they finish in. Each worker writes only to what it alone owns, and only one thread changes the world, in a fixed order. No worker reads the clock. The record names the check the first milestone that runs simulation work on threads must add, a tpj_scenarios --compare between one worker and several. It leaves to that milestone whether a preview may trail the pointer (principle 8). (check: read the record)
-7. While an overlay is shown, the edit is unchanged, and only ticks pass, the kept candidate follows each tick without resolving it whole. It takes the world's running state and re-runs only the resolvers and finishers that read running state. Each resolver and finisher declares, where the schema registers it, whether it reads running state. The followed candidate equals, by worldsEqual, makeCandidate of the same edit on the ticked world. (ctest: the world check that a candidate equals the world that commits the same commands, extended to a candidate followed over ticks, on the park files in tests/parks; criterion 1's report)
-8. Every SPEC.md whose public functions now take kept buffers or a kept world says so. docs/testing.md, docs/conventions.md, and decision 0041 say the check watches previews and applying a command. The windows-debug build has no warnings, ctest passes, and scripts/tidy.sh is clean.
+1. Dragging is smooth on full.park. tpj_bench runs two scripted drags through the kept preview on full.park:
+    - A shop moved 0.5 m along a guest path on each frame.
+    - A new guest path drawn from an existing path, its end moving 0.5 m into open ground on each frame.
+
+    One tick passes between every two frames. For each changed frame, the bench times the acceptance check, the candidate, the shop context, and the ghost together. On windows-release, the median frame must be under 1 ms for the shop drag and under 2 ms for the path drawing. Feature 2 measures both drags before anything else changes. (check: scripts/runtime-report.sh and its --compare)
+2. In play on full.park in the windows-release app, the Debug panel's frame rate holds at the display's refresh rate while dragging a shop and while drawing a guest path. The app caps the frame rate at the refresh rate, which is 165 on the user's display. Before the milestone, it dipped to about 100 and about 50. (play)
+3. A changed frame does no whole-park work. In particular:
+    - The world is never copied.
+    - A path edit is planned once per changed frame. The acceptance check, applying the edit, and the ghost all use that one plan.
+    - Each function that criterion 1 times reads only what the edit, and the ticks since the last frame, reach. That covers every resolver and finisher, and also the acceptance check, the shop context, and the ghost.
+    - Only these may grow with the park's size:
+        - Renumbering network nodes.
+        - Visiting each route-distance source once, to update the nodes the change reaches.
+
+    (check: read each function criterion 1 times; criterion 1's report)
+4. The functions criterion 1 times allocate nothing once their lists have grown, as docs/conventions.md requires of per-frame work. That covers the units' recorded reads, the candidate's layer, and the lists lean-routes left to this milestone: the other resolvers' readers, such as parkSegments and layoutOf, and the comparison that settles the stepped entries. The watched-previews milestone extends the allocation check to them. Until then, this milestone reads that code before it closes, as decision 0041 requires. (check: read each function criterion 1 times)
+5. The result is exact. The reference is a resolution from nothing: every unit derived again, with no unit kept. In each of these cases, the result equals that reference by worldsEqual:
+    - The kept candidate, after every frame of both scripted drags, with a tick between frames. The reference is the same edit on the ticked world.
+    - A world that commits each chosen edit of the save checks.
+    - A world that commits a moved box, which the save checks add.
+
+    (ctest: a world check over the scripted drags on full.park and the park files in tests/parks; the save checks)
+6. The simulation is unchanged, except for the two changes the user chose (Decisions below). tpj_scenarios --compare, run on windows-debug output from before and after each feature, shows no difference for:
+    - its scenarios,
+    - every park in tests/parks,
+    - full.park over 300 ticks.
+
+    The exception is a feature that carries out one of those changes. It reports its differences, and every later feature compares against its output. (check: tpj_scenarios --compare; the report's --compare)
+7. A decision record states the rules simulation work must follow to run on more than one thread:
+    - The results are identical to one thread's, whatever the number of threads and the order they finish in.
+    - Each worker writes only to what it alone owns.
+    - Only one thread changes the world, in a fixed order.
+    - No worker reads the clock.
+
+    The record names the check that the first milestone to run simulation work on threads must add: a tpj_scenarios --compare between one worker and several. (check: read the record)
+8. Every SPEC.md whose behavior or public functions change says so. Decision 0025 says that a candidate may be a layer over the world instead of a copy. The windows-debug build has no warnings, ctest passes, and scripts/tidy.sh is clean.
 
 ## Medium
 
-None. The milestone adds, samples, and publishes no fields or flows, and changes no answer the simulation or the display gives. Kept buffers and a kept candidate's storage are never part of a world's walk, hash, save, or comparison.
+None. The milestone adds, samples, and publishes no fields or flows. Units, their recorded reads, the candidate's layer, and kept buffers never appear in a world's walk, hash, save, or comparison.
 
 ## Dependencies
 
-- allocation-free-loops: the allocation check, its rounds of undos and redos, and the kept preview. Complete.
-- Decision 0041, which leaves previews of a changing edit, the preview made again at each tick, and applying a command to this milestone.
-- Decision 0025: a candidate is a whole copy of the world, resolved. The milestone keeps that, and reuses the copy's storage.
+- allocation-free-loops: the kept preview. Complete.
+- Decision 0025: a candidate is the derivation of tentative intent over the world. The milestone keeps that result exactly and changes only how it is stored and resolved.
 - measured-runtime: tpj_bench, the runtime report, and full.park. Complete.
 
 ## Core feature
 
-lean-routes. Route distance is about 31% of a preview, the largest share of any resolver, and 42% of its time is heap work. The feature also gives resolvers the kept buffers every later feature fills, makes the medium's resolved entries keep their memory for every publisher, and adds the bench stages and the before measurements, so every later feature reports against them.
+derived-units. It builds the mechanism: units, recorded reads, re-running only the units whose reads changed, and early cutoff. It also adds the reference resolution from nothing, the world check of criterion 5, and the bench's two drags. The paved surface moves onto it first. That surface's reach is already computed by surfaceAround and pointsAffected, and a shop drag leaves it unchanged. Every later feature moves more resolvers onto the same mechanism, so if the core is wrong, everything after it is wrong.
 
 ## Features
 
-1. `lean-routes`: tpj_bench's path edit preview, acceptance, and ghost stages and the before measurements; resolvers and finishers taking the caller's kept buffers, as systems do; the medium's resolved entries keeping their memory from one resolution to the next; and route distance building each network's steps once per resolution, searching and publishing in kept lists. For criteria 1, 2, and part of 3. Depends on: none.
-2. `lean-networks`: each door's connection found from the pieces and paths near it, and the path networks built in kept lists. For part of criterion 3. Depends on: feature 1.
-3. `lean-surfaces`: the two surfaces sharing one derivation, guest ground, and the acceptance check and edited surface made once per changed frame and shared by the preview and the ghost, all reusing their storage. For part of criterion 3. Depends on: feature 1.
-4. `quiet-placement`: furniture, best seats, the food, drink, facility, and seat offers, the departure tally, carrying guests onto the new ground, and the finishers reusing their storage, so criterion 4's watch of the preview can pass. Depends on: feature 1.
-5. `kept-candidate`: the candidate copied into a world the preview keeps, reusing its storage, the ghost built into kept lists, and the allocation check watching previews, the preview at each tick, applying a command, and a path tool's press, for criterion 4; and the edits to docs/testing.md, docs/conventions.md, and decision 0041 in criterion 8. Depends on: features 1 to 4.
-6. `thread-rules`: the decision record of criterion 6. Depends on: none.
-7. `ticking-candidate`: each resolver and finisher declaring whether it reads running state, and the kept candidate following ticks by re-running only those, for criterion 7. Depends on: feature 5.
+1. `lean-routes`: route distance builds each network's steps once per resolution and keeps its lists, and resolvers take the caller's kept buffers. Merged.
+2. `derived-units`: the mechanism, as the core feature describes, with the paved surface as its first unit kind. It also adds the bench's two scripted drags and their before measurements, the reference resolution from nothing, and the world check of criterion 5. Its units reuse their storage, and early cutoff compares a unit's output with its last one in kept lists, which replaces the settling comparison's new lists. For criteria 1, 3, 4, and 5. Depends on: feature 1.
+3. `layered-candidate`: the candidate as a layer over the world, holding only what the edit changed, with no copy. The world records the tick of each component's last change, so after a tick the units whose reads changed run again. A path edit is planned once per changed frame. The acceptance check and the shop context read only what the edit reaches, in kept lists instead of new copies of parkSegments, layoutOf, and the solids. Depends on: feature 2.
+4. `spatial-units`: the path networks' connections, the walked surface, furniture, guest ground, and the seat, facility, food, and drink offers move onto units split by place. Guest ground's groups are numbered so that a join or split elsewhere leaves them unchanged, and the walk still sees the numbering a resolution from nothing gives. The ghost reads the edited units. Each resolver it moves stops making new lists of the park's segments and layout. Depends on: feature 3.
+5. `graph-updates`: route distance and best seats keep one unit per source or seat. Each unit is updated by a dynamic shortest-path update from the edges that changed, with edge lengths added in whole millimetres (Decisions, 1). Each source's entries and each node's best seats are kept in an order that renumbering nodes doesn't disturb, such as by place. The walk still emits them in node order, as a resolution from nothing does, so no frame rebuilds a source's whole list. Depends on: feature 4.
+6. `local-carrying`: after an edit, only the guests and footfall on carriers or ground that the edit changed are carried and re-aimed (Decisions, 2). Depends on: feature 4.
+7. `thread-rules`: the decision record of criterion 7. Depends on: none.
 
 ## Deepening candidates
 
 Unordered pool this milestone draws later features from.
 
-- Ghost from what the edit changes: build the ghost's surface from the edited segments' pieces alone instead of reading the candidate's whole walked surface. Gated on: criterion 1's ghost stage showing the ghost as a real share of a changed frame.
+- None yet.
+
+## Decisions
+
+The user chose both on 2026-10-13. Each feature that carries one out writes its decision record, and CAPABILITY.md lists it as an exception to the rule that a speedup never changes the answer.
+
+1. Route distance adds edge lengths in whole millimetres (feature 5). An exact dynamic update must give the same distances however an edge is cut, and floating-point sums don't do that. When a shop's connection cuts a path in two, the sum over the halves can differ in its last bit from the old edge's length. That difference reaches every node beyond the cut, for every source whose routes cross it, on every frame of a shop drag. Whole millimetres make the halves sum to exactly the old length. Distances change by under a millimetre per edge, and a tie between two equal routes may break the other way once.
+2. An edit carries and re-aims only the guests whose carrier or ground it changed (feature 6). Today every resolution re-checks every guest against the new ground and resets every guest's aim, so any edit re-aims all 2,000 guests on full.park. A guest standing where it doesn't fit, such as at a door's end, can also be moved by an edit far away. Carrying every guest would keep about 1 ms of work in every changed frame.
 
 ## Open questions
 
@@ -56,9 +102,22 @@ None.
 
 ## Research notes
 
-- A preview on full.park is about 13 ms on windows-release. Route distance takes 31%, the path networks 15%, the walked surface 9%, furniture 9.5%, best seats 8%, carrying guests 7%, copying the world 7%, and the paved surface 5%. Heap work is 19%.
-- Reusing storage alone saves at most about a fifth. The resolvers that hold repeated work, route distance, the connections, and the walked surface, are about 55%, and removing the repeated part saves some share of that.
-- Before the milestone, on windows-release with full.park, the Debug panel's frame rate dipped to about 100 while dragging a shop and to about 50 while drawing a guest path (criterion 2, read in play on 2026-10-13). tpj_bench put a path edit's acceptance check at 0.4 ms, its preview at 15.0 ms, and its ghost at 3.2 ms.
-- Resolving only what the edit touches and resolving off the frame's thread stay deepening candidates of the capability, measured against the leaner resolution.
+- Before the milestone, on windows-release with full.park, the Debug panel's frame rate dipped to about 100 while dragging a shop and to about 50 while drawing a guest path (2026-10-13). After lean-routes, tpj_bench puts these at:
+
+    | Stage | Time |
+    |---|---|
+    | Resolution | 9.3 ms |
+    | Box preview | 11.3 ms |
+    | Path preview | 12.1 ms |
+    | Path acceptance check | 0.4 ms |
+    | Path ghost | 3.3 ms |
+
+- The design follows build systems (minimality and early cutoff), Salsa (recorded reads per keyed call), Recast (rebuilding only the tiles a change overlaps), and Ramalingam–Reps and D* Lite (updating only the distances that change). Furniture's chain hash is already a small case of recorded reads.
+- The projection is an estimate, not a measurement. After features 2 to 6, a changed frame's work covers:
+    - what the edit and the last tick reach,
+    - one cheap visit per route-distance source,
+    - a renumbering of nodes.
+
+    That puts a shop drag frame at about 0.5 to 1 ms, and a path drawing frame at about 1 to 2 ms. Criterion 1 is reached only when features 2 to 6 have all landed. A path that joins two parts of the network, and shortens routes across the park, costs in proportion to the distances it really changes.
 
 The details are in RESEARCH.md.
