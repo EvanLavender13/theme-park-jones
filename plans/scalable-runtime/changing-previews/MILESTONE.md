@@ -58,6 +58,7 @@ None.
 
 - A preview on full.park is about 13 ms on windows-release. Route distance takes 31%, the path networks 15%, the walked surface 9%, furniture 9.5%, best seats 8%, carrying guests 7%, copying the world 7%, and the paved surface 5%. Heap work is 19%.
 - Reusing storage alone saves at most about a fifth. The resolvers that hold repeated work, route distance, the connections, and the walked surface, are about 55%, and removing the repeated part saves some share of that.
+- Before the milestone, on windows-release with full.park, the Debug panel's frame rate dipped to about 100 while dragging a shop and to about 50 while drawing a guest path (criterion 2, read in play on 2026-10-13). tpj_bench put a path edit's acceptance check at 0.4 ms, its preview at 15.0 ms, and its ghost at 3.2 ms.
 - Resolving only what the edit touches and resolving off the frame's thread stay deepening candidates of the capability, measured against the leaner resolution.
 
 The details are in RESEARCH.md.

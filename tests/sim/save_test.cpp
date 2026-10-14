@@ -65,7 +65,7 @@ void advanceProbes(World &world, TickBuffers & /*buffers*/) {
 }
 
 // Each route derives an entity holding its number of points.
-void deriveSlots(World &world) {
+void deriveSlots(World &world, TickBuffers & /*buffers*/) {
   std::vector<std::pair<EntityKey, int64_t>> routes;
   for (const EntityKey key : world.keysWith<Route>()) {
     routes.emplace_back(key, static_cast<int64_t>(world.get<Route>(key).Points.size()));

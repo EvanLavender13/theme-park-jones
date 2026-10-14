@@ -168,7 +168,7 @@ template <FlowDefinition K> Ledger &steppingLedger(World &world) {
 }
 
 // The kind's resolver: creates the entity holding its ledger, with an empty ledger if it has none.
-template <FlowDefinition K> void ensureLedger(World &world) {
+template <FlowDefinition K> void ensureLedger(World &world, TickBuffers & /*buffers*/) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, FLOW_PURPOSE, hashName(K::Name));
   static_cast<void>(world.getOrEmplace<FlowLedger<K>>(key));
 }

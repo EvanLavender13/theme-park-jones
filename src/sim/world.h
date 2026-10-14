@@ -144,10 +144,11 @@ private:
   friend bool worldsEqual(const World &left, const World &right);
   friend uint64_t hashWorld(const World &world);
   friend void validateWorld(const World &world);
-  friend void resolveWorld(World &world);
+  friend void resolveWorld(World &world, TickBuffers &buffers);
   friend void stepWorld(World &world, CommandQueue &commands, TickBuffers &buffers);
-  friend World makeCandidate(const World &world, const CommandQueue &commands);
-  friend void commitCommands(World &world, CommandQueue &commands);
+  friend World makeCandidate(const World &world, const CommandQueue &commands,
+                             TickBuffers &buffers);
+  friend void commitCommands(World &world, CommandQueue &commands, TickBuffers &buffers);
   friend std::string saveWorld(const World &world);
   friend World loadWorld(std::shared_ptr<const WorldSchema> schema, std::string_view text);
 };
@@ -266,12 +267,15 @@ uint64_t hashWorld(const World &world);
 // Throws WorldInvariantError if the walk cannot cover the world fully.
 void validateWorld(const World &world);
 
-// Calls every registered resolver once, in registration order, and clears the pending resolution.
+// Calls every registered resolver once, in registration order, then every finisher, passing the
+// buffers to each, and clears the pending resolution.
+void resolveWorld(World &world, TickBuffers &buffers);
+// The same resolution with buffers of its own, for callers that resolve once.
 void resolveWorld(World &world);
-// One cycle, passing the buffers to every system and swap: resolve if pending, step the systems,
-// advance Tick, run the swaps, apply the queued commands in submission order, and resolve if
-// pending. Empties the queue. Throws std::invalid_argument, changing nothing, if a queued command's
-// type is not registered.
+// One cycle, passing the buffers to every system and swap and to its resolutions: resolve if
+// pending, step the systems, advance Tick, run the swaps, apply the queued commands in submission
+// order, and resolve if pending. Empties the queue. Throws std::invalid_argument, changing nothing,
+// if a queued command's type is not registered.
 void stepWorld(World &world, CommandQueue &commands, TickBuffers &buffers);
 // One cycle with no commands.
 void stepWorld(World &world, TickBuffers &buffers);
@@ -279,13 +283,19 @@ void stepWorld(World &world, TickBuffers &buffers);
 void stepWorld(World &world, CommandQueue &commands);
 // One cycle with no commands and buffers of its own, for callers that step once.
 void stepWorld(World &world);
-// A copy of the world with the commands applied and resolved, not stepped. The world is unchanged.
-// Throws std::invalid_argument if a command's type is not registered.
+// A copy of the world with the commands applied and resolved, not stepped, passing the buffers to
+// every resolver and finisher. The world is unchanged. Throws std::invalid_argument if a command's
+// type is not registered.
+World makeCandidate(const World &world, const CommandQueue &commands, TickBuffers &buffers);
+// The same candidate, resolved with buffers of its own.
 World makeCandidate(const World &world, const CommandQueue &commands);
 // Applies the queued commands in submission order and resolves, without stepping the systems,
 // advancing Tick, or running the swaps, as makeCandidate does to its copy. Empties the queue.
 // Changes nothing when the queue is empty and no resolution is pending. Throws
-// std::invalid_argument, changing nothing, if a queued command's type is not registered.
+// std::invalid_argument, changing nothing, if a queued command's type is not registered. Passes the
+// buffers to every resolver and finisher.
+void commitCommands(World &world, CommandQueue &commands, TickBuffers &buffers);
+// The same, resolving with buffers of its own.
 void commitCommands(World &world, CommandQueue &commands);
 
 } // namespace tpj

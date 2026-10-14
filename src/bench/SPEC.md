@@ -14,15 +14,16 @@ scripts/runtime-report.sh drives both executables. Their command lines and line 
 
 benchPark times the stages a player waits on, on a loaded park, in this order:
 
-- resolution
-- a preview of an edit that leaves the park as it is (only when the park has a box)
+- resolution of a park already resolved, as an edit's resolution is, with buffers kept across repetitions, as the app keeps them
+- a preview of an edit that leaves the park as it is, and its ghost (only when the park has a box)
+- a guest path edit's acceptance check, its preview, and its ghost (only when the park has a guest segment with a ground line). The edit is a path from the middle of a guest segment to a place PATH_SPUR_LENGTH beyond the segment's side. It uses the first such path the world accepts, trying segments in ascending key order and, on each, first the side a quarter turn counter-clockwise from the segment's direction and then the other.
 - the food overlay's shape
 - the food overlay's shades
 - the park mesh
 - the guest mesh
 - a run of ticks with no commands
 
-It leaves the loaded world unchanged. Each stage except ticks is warmed up and then repeated. Ticks times each of its calls. Each stage gives the median, least, and greatest of its times in nanoseconds. It also gives a result computed from its work: a hash, a vertex count, or a count of values. The result keeps the work from being optimized away. If a build did different work, its result is different.
+It leaves the loaded world unchanged. Each stage except ticks is warmed up and then repeated. Ticks times each of its calls. Each stage gives the median, least, and greatest of its times in nanoseconds. It also gives a result computed from its work: a hash, a vertex count, or a count of values. The acceptance check's count is 1. The result keeps the work from being optimized away. If a build did different work, its result is different. If the park has a guest segment with a ground line but the world accepts no such path on any, benchPark throws.
 
 ## tpj_bench
 

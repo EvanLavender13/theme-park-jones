@@ -18,6 +18,8 @@ inline constexpr uint64_t DEFAULT_TICKS = 3600;
 inline constexpr size_t WARM_UPS = 2;
 // The counted calls of every stage but ticks.
 inline constexpr size_t REPETITIONS = 11;
+// How far beyond a guest segment's side the path edit's stages draw their path, in metres.
+inline constexpr double PATH_SPUR_LENGTH = 12.0;
 
 // What a stage's result is: a world's hash, a mesh's vertex count, a count of values, or a count
 // of frames.
@@ -33,10 +35,13 @@ struct StageResult {
   bool operator==(const StageResult &) const = default;
 };
 
-// Times resolution, preview (only when the resolved park holds a box), food-overlay-shape,
-// food-overlay, park-mesh, guest-mesh, and ticks, in that order, on a loaded world, which it leaves
-// unchanged. Throws std::invalid_argument when ticks is 0, and std::runtime_error naming the box
-// when the preview of moving the lowest-keyed box to its own pose has no candidate.
+// Times resolution, preview and ghost (only when the resolved park holds a box), path-acceptance,
+// path-preview, and path-ghost (only when it holds a guest segment with a ground line),
+// food-overlay-shape, food-overlay, park-mesh, guest-mesh, and ticks, in that order, on a loaded
+// world, which it leaves unchanged. Throws std::invalid_argument when ticks is 0,
+// std::runtime_error naming the box when the preview of moving the lowest-keyed box to its own pose
+// has no candidate, and std::runtime_error when the park has a guest segment with a ground line but
+// the world accepts no path from any such segment's side.
 std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks);
 
 // stage <name> count <c> median <m> least <l> greatest <g> <hash|vertices|values|frames> <result>,

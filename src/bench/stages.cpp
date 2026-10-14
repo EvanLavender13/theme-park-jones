@@ -12,6 +12,7 @@
 #include <array>
 #include <charconv>
 #include <chrono>
+#include <cmath>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -76,6 +77,67 @@ StageResult meshStage(std::string name, const World &park, Lists &lists, Build b
   return StageResult{std::move(name), mesh.Times, ResultKind::Vertices, mesh.Last};
 }
 
+// The ghost's vertex count, over its tinted, lit, and marked meshes.
+uint64_t ghostVertices(const GhostMesh &ghost) {
+  return ghost.Tints.Vertices.size() + ghost.Lit.Vertices.size() + ghost.Marks.Vertices.size();
+}
+
+// The path edit the path stages preview: a guest path from the middle of a guest segment to a
+// place PATH_SPUR_LENGTH beyond its side, the first the world accepts, trying segments in ascending
+// key order and, on each, the side a quarter turn counter-clockwise from its direction before the
+// other. None when the park has no guest segment with a ground line. Throws std::runtime_error when
+// it has one but the world accepts no such path.
+std::optional<AddPath> pathSpur(const World &park) {
+  bool tried = false;
+  for (const ParkSegment &segment : parkSegments(park)) {
+    if (segment.Kind != PathKind::Guest || segment.Line.size() < 2) {
+      continue;
+    }
+    tried = true;
+    const CarrierPoint &first = segment.Line.front();
+    const CarrierPoint &last = segment.Line.back();
+    const double length = std::hypot(last.X - first.X, last.Z - first.Z);
+    const double normalX = -(last.Z - first.Z) / length;
+    const double normalZ = (last.X - first.X) / length;
+    const double middleX = 0.5 * (first.X + last.X);
+    const double middleZ = 0.5 * (first.Z + last.Z);
+    const double reach = 0.5 * segment.Width + PATH_SPUR_LENGTH;
+    for (const double side : {1.0, -1.0}) {
+      AddPath path{PathKind::Guest,
+                   {OnSegment{segment.Key, 0.5}, NewPoint{{middleX + normalX * side * reach,
+                                                           middleZ + normalZ * side * reach}}}};
+      if (isAccepted(park, ParkEdit{path})) {
+        return path;
+      }
+    }
+  }
+  if (tried) {
+    throw std::runtime_error("no guest segment of the park accepts a path from its side");
+  }
+  return std::nullopt;
+}
+
+// The preview of the edit on the park and the edit's ghost with its candidate, timed as two stages
+// named for the edit, with the candidate's hash and the ghost's vertex count as their results.
+// Throws std::runtime_error with the message when the preview has no candidate.
+void previewStages(std::vector<StageResult> &stages, const World &park, const ParkEdit &edit,
+                   const std::string &prefix, const std::string &refused) {
+  const std::optional<ParkEdit> held = edit;
+  const auto preview =
+      timeRepeated(nothing, [&park, &held](Nothing /*input*/) { return previewEdit(park, held); });
+  const std::optional<World> &candidate = preview.Last.Candidate;
+  if (!candidate) {
+    throw std::runtime_error(refused);
+  }
+  stages.push_back(
+      StageResult{prefix + "preview", preview.Times, ResultKind::Hash, hashWorld(*candidate)});
+  const auto ghost = timeRepeated(nothing, [&park, &edit, &candidate](Nothing /*input*/) {
+    return buildGhostMesh(park, edit, candidate);
+  });
+  stages.push_back(
+      StageResult{prefix + "ghost", ghost.Times, ResultKind::Vertices, ghostVertices(ghost.Last)});
+}
+
 } // namespace
 
 std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
@@ -84,27 +146,34 @@ std::vector<StageResult> benchPark(const World &loaded, uint64_t ticks) {
   }
   std::vector<StageResult> stages;
 
-  const auto resolution = timeRepeated([&loaded] { return copyWorld(loaded); },
-                                       [](World &copy) {
-                                         resolveWorld(copy);
-                                         return std::move(copy);
-                                       });
-  const World &park = resolution.Last;
+  // A resolution after an edit runs on a park already resolved, so the stage resolves one again,
+  // with buffers kept across its repetitions, as the app keeps its own.
+  TickBuffers resolveBuffers;
+  World resolved = copyWorld(loaded);
+  resolveWorld(resolved, resolveBuffers);
+  const auto resolution = timeRepeated(nothing, [&resolved, &resolveBuffers](Nothing /*input*/) {
+    resolveWorld(resolved, resolveBuffers);
+    return Nothing{};
+  });
+  const World &park = resolved;
   stages.push_back(StageResult{"resolution", resolution.Times, ResultKind::Hash, hashWorld(park)});
 
   const std::vector<ParkBox> boxes = parkBoxes(park);
   if (!boxes.empty()) {
-    const std::optional<ParkEdit> edit = ParkEdit{MoveBox{boxes.front().Key, boxes.front().At}};
-    const auto preview = timeRepeated(
-        nothing, [&park, &edit](Nothing /*input*/) { return previewEdit(park, edit); });
-    const std::optional<World> &candidate = preview.Last.Candidate;
-    if (!candidate) {
-      throw std::runtime_error("moving box " +
-                               std::to_string(static_cast<uint64_t>(boxes.front().Key)) +
-                               " to its own pose is refused, so the park has no preview");
-    }
+    previewStages(stages, park, ParkEdit{MoveBox{boxes.front().Key, boxes.front().At}}, "",
+                  "moving box " + std::to_string(static_cast<uint64_t>(boxes.front().Key)) +
+                      " to its own pose is refused, so the park has no preview");
+  }
+
+  if (const std::optional<AddPath> spur = pathSpur(park)) {
+    const ParkEdit edit{*spur};
+    const auto acceptance = timeRepeated(nothing, [&park, &edit](Nothing /*input*/) {
+      return static_cast<uint64_t>(isAccepted(park, edit) ? 1 : 0);
+    });
     stages.push_back(
-        StageResult{"preview", preview.Times, ResultKind::Hash, hashWorld(*candidate)});
+        StageResult{"path-acceptance", acceptance.Times, ResultKind::Values, acceptance.Last});
+    previewStages(stages, park, edit, "path-",
+                  "the accepted path from a guest segment's side has no preview");
   }
 
   OverlayShapeLists shapeLists;

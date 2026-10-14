@@ -12,9 +12,10 @@
 
 namespace tpj {
 
-// The lists systems and swaps reuse from tick to tick, owned by whoever steps the world. Each is a
-// value of a type a module defines, made on first use and kept. A TickBuffers is never part of a
-// world: walks, hashes, saves, and copies never see it.
+// The lists systems, swaps, resolvers, and finishers reuse from one tick or resolution to the next,
+// owned by whoever steps or resolves the world. Each is a value of a type a module defines, made on
+// first use and kept. A TickBuffers is never part of a world: walks, hashes, saves, and copies
+// never see it.
 class TickBuffers {
 public:
   TickBuffers() = default;

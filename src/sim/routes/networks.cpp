@@ -517,7 +517,7 @@ template <typename Visitor> void visitFields(Visitor &visitor, PreviousNetwork &
   visitor.field("network", previous.Held);
 }
 
-void resolvePathNetworks(World &world) {
+void resolvePathNetworks(World &world, TickBuffers & /*buffers*/) {
   const std::vector<ParkSegment> segments = parkSegments(world);
   const std::vector<ParkEntrance> entrances = parkEntrances(world);
   const std::vector<ParkBox> boxes = parkBoxes(world);
@@ -545,7 +545,7 @@ template <typename Visitor> void visitFields(Visitor &visitor, WalkedSurface &wa
 
 inline constexpr uint64_t WALKED_SURFACE_PURPOSE = hashName("walked-surface");
 
-void resolveWalkedSurface(World &world) {
+void resolveWalkedSurface(World &world, TickBuffers & /*buffers*/) {
   std::vector<Walkway> walkways = connectorWalkways(world, PathKind::Guest);
   for (const Walkway &walkway : connectorWalkways(world, PathKind::Backstage)) {
     walkways.push_back(walkway);
@@ -555,7 +555,7 @@ void resolveWalkedSurface(World &world) {
 }
 
 // Removes both kinds' previous networks, so no resolution ends holding one.
-void dropPreviousNetworks(World &world) {
+void dropPreviousNetworks(World &world, TickBuffers & /*buffers*/) {
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
     world.remove<PreviousNetwork>(networkKey(kind));
   }

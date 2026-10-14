@@ -988,18 +988,17 @@ void publishSeatPlaces(World &world) {
   std::ranges::stable_sort(placed, {}, &std::pair<EntityKey, PlacedEntry<SeatPlace>>::first);
   for (size_t i = 0; i < placed.size();) {
     const EntityKey segment = placed[i].first;
-    std::vector<PlacedEntry<SeatPlace>> entries;
+    std::vector<PlacedEntry<SeatPlace>> &entries = publishResolved<SeatPlaces>(world, segment);
     for (; i < placed.size() && placed[i].first == segment; ++i) {
       entries.push_back(placed[i].second);
     }
-    publishResolved<SeatPlaces>(world, segment, std::move(entries));
   }
 }
 
 // Lays the pieces each furnished guest segment asks for, chain by chain, and removes every piece
 // laid before that this resolution doesn't lay. A chain whose reads are the same as when the last
 // resolution laid it keeps its pieces, which are what laying it again would give.
-void layFurniture(World &world) {
+void layFurniture(World &world, TickBuffers & /*buffers*/) {
   const std::vector<EntityKey> before = world.keysWith<FurniturePieceState>();
   const EntityKey laidKey = deriveKey(NULL_KEY, LAID_PURPOSE, 0);
   std::vector<const LaidChain *> kept;

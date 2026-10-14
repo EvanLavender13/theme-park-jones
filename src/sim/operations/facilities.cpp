@@ -244,12 +244,13 @@ void stepFacilities(World &world, TickBuffers &tick) {
 
 // Publishes the offer of each box of the kind, as for a facility that has not stepped: every place
 // free, so the first guest waits 0.
-template <BoxKind K> void resolveFacilityOffers(World &world) {
+template <BoxKind K> void resolveFacilityOffers(World &world, TickBuffers & /*buffers*/) {
   using Kinds = FacilityKinds<K>;
   const OfferEntry offer{.Relief = Kinds::Relief, .Wait = 0, .Supplied = true};
   for (const ParkBox &box : parkBoxes(world)) {
     if (box.Kind == K) {
-      publishResolved<typename Kinds::Offer>(world, box.Key, offerEntries(world, box.Key, offer));
+      const auto entries = offerEntries(world, box.Key, offer);
+      publishResolved<typename Kinds::Offer>(world, box.Key).assign(entries.begin(), entries.end());
     }
   }
 }

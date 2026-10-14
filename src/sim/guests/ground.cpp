@@ -261,7 +261,7 @@ JoinedGroups joinGuestPaths(const std::vector<ParkSegment> &segments) {
 }
 
 // Joins guest paving into groups and derives the ground guests walk on.
-void resolveGuestGround(World &world) {
+void resolveGuestGround(World &world, TickBuffers & /*buffers*/) {
   const std::vector<ParkSegment> segments = parkSegments(world);
   JoinedGroups joined = joinGuestPaths(segments);
   const std::map<EntityKey, uint32_t> &groups = joined.Groups;

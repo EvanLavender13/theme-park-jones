@@ -116,7 +116,7 @@ void stepFootfall(World &world, TickBuffers &buffers) {
 
 // Carries each kept value from the guest network before the resolution to the new one, holding
 // one entry per stretch at its midpoint and dropping values whose places are retired.
-void carryFootfall(World &world) {
+void carryFootfall(World &world, TickBuffers & /*buffers*/) {
   const Network *before = previousNetwork(world, PathKind::Guest);
   if (before == nullptr) {
     return;

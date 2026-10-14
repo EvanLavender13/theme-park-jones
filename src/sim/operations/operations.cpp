@@ -516,7 +516,7 @@ uint64_t deliveryDelay(const World &world, const DepotRoute &route, EntityKey sh
 // Publishes the offer of the good of each shop box that sells it, as for a shop that has not
 // stepped: with nothing queued, held, or shipped, its first guest waits for the order it places in
 // its first cycle.
-template <Good G> void resolveOffers(World &world) {
+template <Good G> void resolveOffers(World &world, TickBuffers & /*buffers*/) {
   for (const ParkBox &box : parkBoxes(world)) {
     if (box.Kind != BoxKind::Shop || !sells(box.Stock, G)) {
       continue;
@@ -528,8 +528,9 @@ template <Good G> void resolveOffers(World &world) {
                      .Wait = ORDER_DELAY + deliveryDelay(world, *route, box.Key, Layers::Resolved),
                      .Supplied = true};
     }
-    publishResolved<typename GoodKinds<G>::Offer>(world, box.Key,
-                                                  offerEntries(world, box.Key, offer));
+    const auto entries = offerEntries(world, box.Key, offer);
+    publishResolved<typename GoodKinds<G>::Offer>(world, box.Key)
+        .assign(entries.begin(), entries.end());
   }
 }
 
