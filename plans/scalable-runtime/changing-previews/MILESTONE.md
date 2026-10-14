@@ -23,7 +23,7 @@ The result must equal, exactly, a resolution from nothing (principle 8, decision
 ## Acceptance criteria
 
 1. Dragging is smooth on full.park. tpj_bench runs two scripted drags through the kept preview on full.park:
-    - A shop moved 0.5 m along a guest path on each frame.
+    - A shop moved 0.5 m a frame along its face, out to 2 m and back, so it stays clear of the paths beside it.
     - A new guest path drawn from an existing path, its end moving 0.5 m into open ground on each frame.
 
     One tick passes between every two frames. For each changed frame, the bench times the acceptance check, the candidate, the shop context, and the ghost together. On windows-release, the median frame must be under 1 ms for the shop drag and under 2 ms for the path drawing. Feature 2 measures both drags before anything else changes. (check: scripts/runtime-report.sh and its --compare)
@@ -34,16 +34,17 @@ The result must equal, exactly, a resolution from nothing (principle 8, decision
     - Each function that criterion 1 times reads only what the edit, and the ticks since the last frame, reach. That covers every resolver and finisher, and also the acceptance check, the shop context, and the ghost.
     - Only these may grow with the park's size:
         - Renumbering network nodes.
+        - Finding which paths join which, once per edit, as Parkitect's flood fill does.
         - Visiting each route-distance source once, to update the nodes the change reaches.
 
     (check: read each function criterion 1 times; criterion 1's report)
 4. The functions criterion 1 times allocate nothing once their lists have grown, as docs/conventions.md requires of per-frame work. That covers the units' recorded reads, the candidate's layer, and the lists lean-routes left to this milestone: the other resolvers' readers, such as parkSegments and layoutOf, and the comparison that settles the stepped entries. The watched-previews milestone extends the allocation check to them. Until then, this milestone reads that code before it closes, as decision 0041 requires. (check: read each function criterion 1 times)
 5. The result is exact. The reference is a resolution from nothing: every unit derived again, with no unit kept. In each of these cases, the result equals that reference by worldsEqual:
-    - The kept candidate, after every frame of both scripted drags, with a tick between frames. The reference is the same edit on the ticked world.
+    - The kept candidate, after every frame of the candidate check's two drags on warm.park, a moved shop and a drawn path, with a tick between frames. The reference is the same edit on the ticked world, saved, loaded, and resolved.
     - A world that commits each chosen edit of the save checks.
     - A world that commits a moved box, which the save checks add.
 
-    (ctest: a world check over the scripted drags on full.park and the park files in tests/parks; the save checks)
+    (ctest: the candidate check's drags on warm.park, which derived-units adds; the save checks)
 6. The simulation is unchanged, except for the two changes the user chose (Decisions below). tpj_scenarios --compare, run on windows-debug output from before and after each feature, shows no difference for:
     - its scenarios,
     - every park in tests/parks,
@@ -71,17 +72,18 @@ None. The milestone adds, samples, and publishes no fields or flows. Units, thei
 
 ## Core feature
 
-derived-units. It builds the mechanism: units, recorded reads, re-running only the units whose reads changed, and early cutoff. It also adds the reference resolution from nothing, the world check of criterion 5, and the bench's two drags. The paved surface moves onto it first. That surface's reach is already computed by surfaceAround and pointsAffected, and a shop drag leaves it unchanged. Every later feature moves more resolvers onto the same mechanism, so if the core is wrong, everything after it is wrong.
+derived-units. It builds the mechanism: units, the change records they start from, recorded reads, re-running only the units whose reads changed, and early cutoff. It also adds the bench's two drags, measured before anything else changes, the world checks' moved box, which compares an incremental resolution with a load's resolution from nothing, and the world check over the scripted drags, run on a candidate the preview's way, refilled frame after frame with a tick between frames. The path ground, the ground lines and corners that every surface, network, and furniture resolver derives again today, moves onto it first, because every later unit kind reads it. Every later feature moves more resolvers onto the same mechanism, so if the core is wrong, everything after it is wrong.
 
 ## Features
 
 1. `lean-routes`: route distance builds each network's steps once per resolution and keeps its lists, and resolvers take the caller's kept buffers. Merged.
-2. `derived-units`: the mechanism, as the core feature describes, with the paved surface as its first unit kind. It also adds the bench's two scripted drags and their before measurements, the reference resolution from nothing, and the world check of criterion 5. Its units reuse their storage, and early cutoff compares a unit's output with its last one in kept lists, which replaces the settling comparison's new lists. For criteria 1, 3, 4, and 5. Depends on: feature 1.
-3. `layered-candidate`: the candidate as a layer over the world, holding only what the edit changed, with no copy. The world records the tick of each component's last change, so after a tick the units whose reads changed run again. A path edit is planned once per changed frame. The acceptance check and the shop context read only what the edit reaches, in kept lists instead of new copies of parkSegments, layoutOf, and the solids. Depends on: feature 2.
-4. `spatial-units`: the path networks' connections, the walked surface, furniture, guest ground, and the seat, facility, food, and drink offers move onto units split by place. Guest ground's groups are numbered so that a join or split elsewhere leaves them unchanged, and the walk still sees the numbering a resolution from nothing gives. The ghost reads the edited units. Each resolver it moves stops making new lists of the park's segments and layout. Depends on: feature 3.
-5. `graph-updates`: route distance and best seats keep one unit per source or seat. Each unit is updated by a dynamic shortest-path update from the edges that changed, with edge lengths added in whole millimetres (Decisions, 1). Each source's entries and each node's best seats are kept in an order that renumbering nodes doesn't disturb, such as by place. The walk still emits them in node order, as a resolution from nothing does, so no frame rebuilds a source's whole list. Depends on: feature 4.
-6. `local-carrying`: after an edit, only the guests and footfall on carriers or ground that the edit changed are carried and re-aimed (Decisions, 2). Depends on: feature 4.
-7. `thread-rules`: the decision record of criterion 7. Depends on: none.
+2. `derived-units`: the mechanism, as the core feature describes, with the path ground as its first unit kinds. It also adds the bench's two scripted drags and their before measurements, the preview's candidate refilled in place, and the world check over the scripted drags, which each later feature keeps passing. Units reuse their storage, and early cutoff compares a unit's output with its last one. For criteria 1, 3, 4, and 5. Depends on: feature 1.
+3. `unit-surface`: the paved surface and the walked surface move onto units, one per point or segment that owns paving, with hiding checked only against nearby pieces of the same group. The two surfaces share one derivation of the paving, and the walked surface adds only the walkways. Groups are numbered so that a join or split elsewhere leaves them unchanged, and the walk still sees the numbering a resolution from nothing gives. Each resolver it moves stops making new lists of the park's segments and layout. Depends on: feature 2.
+4. `layered-candidate`: the candidate as a layer over the world, holding only what the edit changed, with no copy. The world records the tick of each component's last change, so after a tick the units whose reads changed run again. A path edit is planned once per changed frame. The acceptance check and the shop context read only what the edit reaches, in kept lists instead of new copies of parkSegments, layoutOf, and the solids. Depends on: feature 3.
+5. `spatial-units`: the path networks' connections, furniture, guest ground, and the seat, facility, food, and drink offers move onto units split by place. Guest ground's groups follow unit-surface's numbering. The ghost reads the edited units. Each resolver it moves stops making new lists of the park's segments and layout. Depends on: feature 4.
+6. `graph-updates`: route distance and best seats keep one unit per source or seat. Each unit is updated by a dynamic shortest-path update from the edges that changed, with edge lengths added in whole millimetres (Decisions, 1). Each source's entries and each node's best seats are kept in an order that renumbering nodes doesn't disturb, such as by place. The walk still emits them in node order, as a resolution from nothing does, so no frame rebuilds a source's whole list. The finisher that settles each field's stepped entries compares only the sources that changed, in kept lists instead of the new lists it makes today. Depends on: feature 5.
+7. `local-carrying`: after an edit, only the guests and footfall on carriers or ground that the edit changed are carried and re-aimed (Decisions, 2). Depends on: feature 5.
+8. `thread-rules`: the decision record of criterion 7. Depends on: none.
 
 ## Deepening candidates
 
@@ -93,8 +95,8 @@ Unordered pool this milestone draws later features from.
 
 The user chose both on 2026-10-13. Each feature that carries one out writes its decision record, and CAPABILITY.md lists it as an exception to the rule that a speedup never changes the answer.
 
-1. Route distance adds edge lengths in whole millimetres (feature 5). An exact dynamic update must give the same distances however an edge is cut, and floating-point sums don't do that. When a shop's connection cuts a path in two, the sum over the halves can differ in its last bit from the old edge's length. That difference reaches every node beyond the cut, for every source whose routes cross it, on every frame of a shop drag. Whole millimetres make the halves sum to exactly the old length. Distances change by under a millimetre per edge, and a tie between two equal routes may break the other way once.
-2. An edit carries and re-aims only the guests whose carrier or ground it changed (feature 6). Today every resolution re-checks every guest against the new ground and resets every guest's aim, so any edit re-aims all 2,000 guests on full.park. A guest standing where it doesn't fit, such as at a door's end, can also be moved by an edit far away. Carrying every guest would keep about 1 ms of work in every changed frame.
+1. Route distance adds edge lengths in whole millimetres (feature 6). An exact dynamic update must give the same distances however an edge is cut, and floating-point sums don't do that. When a shop's connection cuts a path in two, the sum over the halves can differ in its last bit from the old edge's length. That difference reaches every node beyond the cut, for every source whose routes cross it, on every frame of a shop drag. Whole millimetres make the halves sum to exactly the old length. Distances change by under a millimetre per edge, and a tie between two equal routes may break the other way once.
+2. An edit carries and re-aims only the guests whose carrier or ground it changed (feature 7). Today every resolution re-checks every guest against the new ground and resets every guest's aim, so any edit re-aims all 2,000 guests on full.park. A guest standing where it doesn't fit, such as at a door's end, can also be moved by an edit far away. Carrying every guest would keep about 1 ms of work in every changed frame.
 
 ## Open questions
 
@@ -113,11 +115,11 @@ None.
     | Path ghost | 3.3 ms |
 
 - The design follows build systems (minimality and early cutoff), Salsa (recorded reads per keyed call), Recast (rebuilding only the tiles a change overlaps), and Ramalingam–Reps and D* Lite (updating only the distances that change). Furniture's chain hash is already a small case of recorded reads.
-- The projection is an estimate, not a measurement. After features 2 to 6, a changed frame's work covers:
+- The projection is an estimate, not a measurement. After features 2 to 7, a changed frame's work covers:
     - what the edit and the last tick reach,
     - one cheap visit per route-distance source,
     - a renumbering of nodes.
 
-    That puts a shop drag frame at about 0.5 to 1 ms, and a path drawing frame at about 1 to 2 ms. Criterion 1 is reached only when features 2 to 6 have all landed. A path that joins two parts of the network, and shortens routes across the park, costs in proportion to the distances it really changes.
+    That puts a shop drag frame at about 0.5 to 1 ms, and a path drawing frame at about 1 to 2 ms. Criterion 1 is reached only when features 2 to 7 have all landed. A path that joins two parts of the network, and shortens routes across the park, costs in proportion to the distances it really changes.
 
 The details are in RESEARCH.md.

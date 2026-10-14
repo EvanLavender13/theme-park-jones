@@ -86,9 +86,9 @@ It leaves the loaded world unchanged. Each stage except ticks is warmed up and t
 
 ## Out of scope
 
-- The other resolvers' own lists and returning readers, such as parkSegments and layoutOf. derived-units, layered-candidate, and spatial-units take them, as each resolver moves onto units. They gain the buffers parameter here and ignore it.
-- settleSteppedEntries' comparison of each source's entries by their words, which makes new lists. derived-units takes it, since early cutoff compares a unit's output with its last one.
-- The preview's own candidate and buffers. previewEdit and buildGhostMesh still make a candidate with buffers of their own until layered-candidate.
+- The other resolvers' own lists and returning readers, such as parkSegments and layoutOf. unit-surface, layered-candidate, and spatial-units take them, as each resolver moves onto units. They gain the buffers parameter here and ignore it.
+- settleSteppedEntries' comparison of each source's entries by their words, which makes new lists. graph-updates takes it, when route distance and best seats move onto units.
+- The preview's own candidate and buffers. previewEdit and buildGhostMesh still make a candidate with buffers of their own until derived-units keeps the preview's candidate and buffers.
 
 ## Open questions
 
