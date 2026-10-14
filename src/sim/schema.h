@@ -83,6 +83,22 @@ using ResolveFunction = void (*)(World &world, TickBuffers &buffers);
 // (principle 10).
 using StepFunction = void (*)(World &world, TickBuffers &buffers);
 
+class UnitTable;
+
+// A unit kind or index a module registered (sim/units.h): its name and type, the type of the intent
+// component Over its units are kept for, the intent types its derivation reads, and a function that
+// makes its empty table. Registering it fills in Over's store index, and the store indices its
+// derivation may read, Over's among them.
+struct UnitTableType {
+  std::string Name;
+  TypeId Id = nullptr;
+  TypeId OverId = nullptr;
+  std::vector<TypeId> ReadIds;
+  std::unique_ptr<UnitTable> (*MakeTable)() = nullptr;
+  size_t Over = 0;
+  std::vector<size_t> Reads;
+};
+
 struct ResolverType {
   std::string Name;
   ResolveFunction Resolve = nullptr;
@@ -120,6 +136,12 @@ public:
   void addFinisher(ResolveFunction finish);
   // Registers T as a command type. Throws std::invalid_argument if T is already registered.
   template <typename T> void addCommand();
+  // Registers a unit kind or index, and its update as a resolver of the same name, which runs it in
+  // resolver order. Marks the stores of its Over and of the types it reads as logged. Throws
+  // std::invalid_argument when Over or a type it reads isn't a registered intent component, when
+  // the type is already registered, or when addResolver refuses the name. addUnits and addUnitIndex
+  // in sim/units.h call it.
+  void addUnitTable(UnitTableType type, ResolveFunction update);
 
   [[nodiscard]] const std::vector<ComponentType> &components() const { return Components; }
   // The type's position in components(), or nothing when it isn't registered.
@@ -133,6 +155,12 @@ public:
   [[nodiscard]] const std::vector<ResolveFunction> &finishers() const { return Finishers; }
   [[nodiscard]] const std::vector<CommandType> &commands() const { return Commands; }
   [[nodiscard]] const CommandType *findCommand(TypeId id) const;
+  [[nodiscard]] const std::vector<UnitTableType> &unitTables() const { return UnitTables; }
+  // The type's position in unitTables(), or nothing when it isn't registered.
+  [[nodiscard]] std::optional<size_t> unitTableOf(TypeId id) const;
+  // True when units read the store at that index, so the world logs each key a command touches in
+  // it.
+  [[nodiscard]] bool isLogged(size_t store) const { return store < Logged.size() && Logged[store]; }
 
 private:
   void addComponentType(ComponentType type);
@@ -145,6 +173,9 @@ private:
   std::vector<ResolverType> Resolvers;
   std::vector<ResolveFunction> Finishers;
   std::vector<CommandType> Commands;
+  std::vector<UnitTableType> UnitTables;
+  // By store index.
+  std::vector<bool> Logged;
 };
 
 // Field types: bool, integers, double, EntityKey, enums, std::vector or FixedList of a field type
@@ -187,6 +218,9 @@ public:
     copy->Items = Items;
     return copy;
   }
+  void assignFrom(const ComponentStore &other) override {
+    assignKeyed(Items, static_cast<const TypedStore &>(other).Items, Spare);
+  }
   [[nodiscard]] bool has(EntityKey key) const override { return Items.contains(key); }
   [[nodiscard]] size_t size() const override { return Items.size(); }
   [[nodiscard]] std::vector<EntityKey> keys() const override {
@@ -197,15 +231,18 @@ public:
     }
     return result;
   }
+  void visitKeys(KeyVisitor &visitor) const override {
+    for (const auto &entry : Items) {
+      visitor.key(entry.first);
+    }
+  }
   // Removes the key's component, keeping its node for a later add. When Spare is full, it makes
   // room for every node the store holds, so it grows again only after every component held then
   // has been removed.
   void erase(EntityKey key) override {
     auto node = Items.extract(key);
     if (node) {
-      if (Spare.size() == Spare.capacity()) {
-        Spare.reserve(Items.size() + Spare.size() + 1);
-      }
+      keepSpare(Spare, Items.size());
       Spare.push_back(std::move(node));
     }
   }

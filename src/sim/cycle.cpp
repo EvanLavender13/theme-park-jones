@@ -1,6 +1,7 @@
 #include "sim/world.h"
 
 #include "core/profile.h"
+#include "sim/unit_space.h"
 
 #include <stdexcept>
 #include <string>
@@ -29,6 +30,10 @@ void applyCommands(World &world, const CommandQueue &commands) {
 
 void resolveWorld(World &world, TickBuffers &buffers) {
   TPJ_PROFILE_ZONE();
+  // The changes stay on the list through the whole resolution, so later steps see what earlier
+  // steps changed.
+  UnitSpace &units = unitSpaceOf(world);
+  units.beginResolution();
   world.Resolving = true;
   try {
     for (const ResolverType &resolver : world.schema().resolvers()) {
@@ -51,6 +56,7 @@ void resolveWorld(World &world, TickBuffers &buffers) {
   }
   world.Finishing = false;
   world.ResolvePending = false;
+  units.endResolution();
 }
 
 void resolveWorld(World &world) {
@@ -115,6 +121,20 @@ World makeCandidate(const World &world, const CommandQueue &commands, TickBuffer
     resolveWorld(candidate, buffers);
   }
   return candidate;
+}
+
+void makeCandidate(const World &world, const CommandQueue &commands, TickBuffers &buffers,
+                   World &into) {
+  TPJ_PROFILE_ZONE();
+  requireRegistered(world, commands);
+  copyWorld(world, into);
+  if (!commands.empty()) {
+    applyCommands(into, commands);
+    into.ResolvePending = true;
+  }
+  if (into.ResolvePending) {
+    resolveWorld(into, buffers);
+  }
 }
 
 World makeCandidate(const World &world, const CommandQueue &commands) {

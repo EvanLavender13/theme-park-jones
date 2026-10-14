@@ -71,6 +71,41 @@ void WorldSchema::addResolver(std::string_view name, ResolveFunction resolve,
   Resolvers.push_back(std::move(resolver));
 }
 
+void WorldSchema::addUnitTable(UnitTableType type, ResolveFunction update) {
+  // The store index of an intent component the table reads.
+  const auto intentStore = [this, &type](TypeId id) {
+    const std::optional<size_t> store = indexOf(id);
+    if (!store || Components[*store].Kind != DataKind::Intent) {
+      throw std::invalid_argument("unit table '" + type.Name +
+                                  "' reads a type that isn't a registered intent component");
+    }
+    return *store;
+  };
+  if (unitTableOf(type.Id)) {
+    throw std::invalid_argument("unit table '" + type.Name + "' is already registered");
+  }
+  type.Over = intentStore(type.OverId);
+  type.Reads = {type.Over};
+  for (const TypeId id : type.ReadIds) {
+    type.Reads.push_back(intentStore(id));
+  }
+  addResolver(type.Name, update);
+  Logged.resize(Components.size());
+  for (const size_t store : type.Reads) {
+    Logged[store] = true;
+  }
+  UnitTables.push_back(std::move(type));
+}
+
+std::optional<size_t> WorldSchema::unitTableOf(TypeId id) const {
+  for (size_t position = 0; position < UnitTables.size(); ++position) {
+    if (UnitTables[position].Id == id) {
+      return position;
+    }
+  }
+  return std::nullopt;
+}
+
 void WorldSchema::addCommandType(CommandType type) {
   if (findCommand(type.Id) != nullptr) {
     throw std::invalid_argument("a command type is already registered");

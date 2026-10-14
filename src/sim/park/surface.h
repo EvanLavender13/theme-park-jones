@@ -124,6 +124,9 @@ double pieceDistance(const SurfacePiece &piece, ParkPoint point);
 
 // The park's paved surface. A segment with an empty ground line adds nothing.
 PavedSurface parkSurface(const World &world);
+// The same surface, keeping the lists that deriving the segments' lines works with in the buffers.
+// It still returns a new surface, so it allocates on every call.
+PavedSurface parkSurface(const World &world, TickBuffers &buffers);
 
 // The park's paved surface as the last resolution derived it with parkSurface, or an empty surface
 // when the world holds none, as before its first resolution. Read it outside resolution, and in
@@ -132,6 +135,10 @@ const PavedSurface &resolvedSurface(const World &world);
 
 // Registers the derived surface and the paved-surface resolver that keeps it for resolvedSurface.
 void addPavedSurface(WorldSchema &schema);
+
+// Registers the units the path ground derives in: an index of segments by their points, then each
+// segment's straight line, each point's arms, each point's corner, and each segment's ground line.
+void addPathGround(WorldSchema &schema);
 
 // A strip of paving from a door to a segment, joined to it: its kind, the segment it joins, the
 // door, the unit direction out of the door's face, where it ends inside the segment's paving, and
@@ -157,6 +164,10 @@ std::optional<SurfacePiece> walkwayPiece(std::span<const ParkSegment> segments,
 
 // The park's paved surface with the walkways added, each joined to its segment.
 PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways);
+// The same surface, keeping the lists that deriving the segments' lines works with in the buffers.
+// It still returns a new surface, so it allocates on every call.
+PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways,
+                         TickBuffers &buffers);
 
 // An edge of the paving at a path point, where its outline turns from one segment's left side, seen
 // walking away from the point, to the right side of the next segment counter-clockwise: the point,

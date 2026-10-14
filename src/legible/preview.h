@@ -1,11 +1,13 @@
 #ifndef TPJ_LEGIBLE_PREVIEW_H
 #define TPJ_LEGIBLE_PREVIEW_H
 
+#include "sim/command_queue.h"
 #include "sim/entity_key.h"
 #include "sim/medium/kept_field.h"
 #include "sim/medium/network.h"
 #include "sim/operations/operations.h"
 #include "sim/park/edits.h"
+#include "sim/tick_buffers.h"
 #include "sim/world.h"
 
 #include <optional>
@@ -40,11 +42,16 @@ Preview previewEdit(const World &world, const std::optional<ParkEdit> &edit);
 const World &previewedWorld(const World &world, const Preview &preview);
 
 // A preview kept between frames, the tick of the world it was made from, or none before the
-// first, and the lists that reading the shop context's footfall again reuses.
+// first, and the lists that reading the shop context's footfall again reuses. Spare holds the world
+// the next candidate is refilled into, Buffers the lists resolving it reuses, and Queue the edit's
+// command, so making the preview again allocates no new world.
 struct KeptPreview {
   std::optional<uint64_t> Tick;
   Preview Made;
   KeptFieldSample Footfall;
+  std::optional<World> Spare;
+  TickBuffers Buffers;
+  CommandQueue Queue;
 };
 
 // Makes the kept preview again, as previewEdit gives it, when nothing is kept, when the edit

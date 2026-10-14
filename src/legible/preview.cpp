@@ -71,17 +71,45 @@ double footfallAt(const World &world, const Place &place) {
   return fieldValue<HungryFootfall>(world, parkNetwork(world, PathKind::Guest), place);
 }
 
+// Makes preview the preview of the edit on the world. Its candidate is made in spare, which it
+// refills when spare holds a world on the world's schema, and then moves into the preview. A
+// candidate the preview held before moves into spare first. When the preview holds no candidate,
+// spare keeps the world it holds.
+void makePreview(Preview &preview, std::optional<World> &spare, CommandQueue &queue,
+                 TickBuffers &buffers, const World &world, const std::optional<ParkEdit> &edit) {
+  // Each preview that holds a candidate took it from spare and left spare empty, so the swap
+  // destroys no world.
+  if (preview.Candidate) {
+    spare.swap(preview.Candidate);
+    preview.Candidate.reset();
+  }
+  preview.Edit = edit;
+  preview.Shop.reset();
+  if (!edit || !isAccepted(world, *edit)) {
+    return;
+  }
+  queue.clear();
+  queueEdit(queue, *edit);
+  if (spare && &spare->schema() == &world.schema()) {
+    makeCandidate(world, queue, buffers, *spare);
+  } else {
+    // A world on the world's schema can only be made by copying it, so the copy is the candidate's
+    // start, and committing the edit to it makes the candidate.
+    spare = copyWorld(world);
+    commitCommands(*spare, queue, buffers);
+  }
+  preview.Candidate.swap(spare);
+  preview.Shop = shopContext(world, *preview.Candidate, *edit);
+}
+
 } // namespace
 
 Preview previewEdit(const World &world, const std::optional<ParkEdit> &edit) {
-  Preview preview{edit, std::nullopt, std::nullopt};
-  if (!edit || !isAccepted(world, *edit)) {
-    return preview;
-  }
+  Preview preview;
+  std::optional<World> spare;
   CommandQueue queue;
-  queueEdit(queue, *edit);
-  preview.Candidate = makeCandidate(world, queue);
-  preview.Shop = shopContext(world, *preview.Candidate, *edit);
+  TickBuffers buffers;
+  makePreview(preview, spare, queue, buffers, world, edit);
   return preview;
 }
 
@@ -100,7 +128,7 @@ bool keepPreview(KeptPreview &kept, const World &world, const std::optional<Park
     }
     return false;
   }
-  kept.Made = previewEdit(world, edit);
+  makePreview(kept.Made, kept.Spare, kept.Queue, kept.Buffers, world, edit);
   kept.Tick = world.Tick;
   return true;
 }

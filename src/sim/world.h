@@ -21,6 +21,8 @@
 
 namespace tpj {
 
+class UnitSpace;
+
 // Simulation time advances in fixed ticks, independent of the render frame rate.
 constexpr double SIM_TICK_SECONDS = 1.0 / 30.0;
 
@@ -48,9 +50,9 @@ public:
   World(std::shared_ptr<const WorldSchema> schema, uint64_t seed);
   World(const World &) = delete;
   World &operator=(const World &) = delete;
-  World(World &&) noexcept = default;
-  World &operator=(World &&) noexcept = default;
-  ~World() = default;
+  World(World &&) noexcept;
+  World &operator=(World &&) noexcept;
+  ~World();
 
   uint64_t Tick = 0;
   uint64_t Seed = 0;
@@ -118,11 +120,12 @@ private:
 
   void addEntity(EntityKey key);
   // T's store, or nullptr when the schema doesn't register T.
-  template <typename T> TypedStore<T> *findStore();
   template <typename T> const TypedStore<T> *findStore() const;
-  // T's store for adding a component to the key. Throws WorldInvariantError if the schema doesn't
-  // register T, or, in debug builds, if the key isn't live.
-  template <typename T> TypedStore<T> &storeToAdd(EntityKey key);
+  // T's store for adding a component to the key, and its index. Throws WorldInvariantError if the
+  // schema doesn't register T, or, in debug builds, if the key isn't live.
+  template <typename T> std::pair<TypedStore<T> &, size_t> storeToAdd(EntityKey key);
+  // Logs a touch of the key's component in the store at the index, when units read that store.
+  void noteChange(size_t store, EntityKey key);
   void emitWords(WordSink &sink) const;
 
   std::shared_ptr<const WorldSchema> Schema;
@@ -139,8 +142,14 @@ private:
   bool Finishing = false;
   // Set only while the systems step, so that functions meant for systems can refuse others.
   bool Stepping = false;
+  // The units resolution keeps, and the keys commands touched in the stores they read. Never
+  // walked, hashed, or saved.
+  std::unique_ptr<UnitSpace> Units;
 
   friend World copyWorld(const World &world);
+  friend void copyWorld(const World &world, World &into);
+  friend UnitSpace &unitSpaceOf(World &world);
+  friend const UnitSpace &unitSpaceOf(const World &world);
   friend bool worldsEqual(const World &left, const World &right);
   friend uint64_t hashWorld(const World &world);
   friend void validateWorld(const World &world);
@@ -148,24 +157,21 @@ private:
   friend void stepWorld(World &world, CommandQueue &commands, TickBuffers &buffers);
   friend World makeCandidate(const World &world, const CommandQueue &commands,
                              TickBuffers &buffers);
+  friend void makeCandidate(const World &world, const CommandQueue &commands, TickBuffers &buffers,
+                            World &into);
   friend void commitCommands(World &world, CommandQueue &commands, TickBuffers &buffers);
   friend std::string saveWorld(const World &world);
   friend World loadWorld(std::shared_ptr<const WorldSchema> schema, std::string_view text);
 };
-
-template <typename T> TypedStore<T> *World::findStore() {
-  const std::optional<size_t> index = Schema->indexOf(typeIdOf<T>());
-  return index ? static_cast<TypedStore<T> *>(Stores[*index].get()) : nullptr;
-}
 
 template <typename T> const TypedStore<T> *World::findStore() const {
   const std::optional<size_t> index = Schema->indexOf(typeIdOf<T>());
   return index ? static_cast<const TypedStore<T> *>(Stores[*index].get()) : nullptr;
 }
 
-template <typename T> TypedStore<T> &World::storeToAdd(EntityKey key) {
-  TypedStore<T> *store = findStore<T>();
-  if (store == nullptr) {
+template <typename T> std::pair<TypedStore<T> &, size_t> World::storeToAdd(EntityKey key) {
+  const std::optional<size_t> index = Schema->indexOf(typeIdOf<T>());
+  if (!index) {
     throw WorldInvariantError("entity " + std::to_string(static_cast<uint64_t>(key)) +
                               " was given a component of a type the world's schema doesn't "
                               "register");
@@ -174,22 +180,35 @@ template <typename T> TypedStore<T> &World::storeToAdd(EntityKey key) {
     throw WorldInvariantError("a component was added to key " +
                               std::to_string(static_cast<uint64_t>(key)) + ", which isn't live");
   }
-  return *store;
+  return {static_cast<TypedStore<T> &>(*Stores[*index]), *index};
 }
 
-template <typename T> T &World::get(EntityKey key) { return findStore<T>()->Items.at(key); }
+template <typename T> T &World::get(EntityKey key) {
+  const std::optional<size_t> index = Schema->indexOf(typeIdOf<T>());
+  if (!index) {
+    throw std::out_of_range("get asked for a type the world's schema doesn't register");
+  }
+  T &component = static_cast<TypedStore<T> &>(*Stores[*index]).Items.at(key);
+  noteChange(*index, key);
+  return component;
+}
 
 template <typename T> const T &World::get(EntityKey key) const {
   return findStore<T>()->Items.at(key);
 }
 
 template <typename T> T *World::tryGet(EntityKey key) {
-  TypedStore<T> *store = findStore<T>();
-  if (store == nullptr) {
+  const std::optional<size_t> index = Schema->indexOf(typeIdOf<T>());
+  if (!index) {
     return nullptr;
   }
-  const auto found = store->Items.find(key);
-  return found == store->Items.end() ? nullptr : &found->second;
+  auto &store = static_cast<TypedStore<T> &>(*Stores[*index]);
+  const auto found = store.Items.find(key);
+  if (found == store.Items.end()) {
+    return nullptr;
+  }
+  noteChange(*index, key);
+  return &found->second;
 }
 
 template <typename T> const T *World::tryGet(EntityKey key) const {
@@ -207,32 +226,37 @@ template <typename T> bool World::has(EntityKey key) const {
 }
 
 template <typename T, typename... Args> void World::emplace(EntityKey key, Args &&...args) {
-  TypedStore<T> &store = storeToAdd<T>(key);
+  auto [store, index] = storeToAdd<T>(key);
   if (!store.Items.contains(key)) {
     store.add(key, std::forward<Args>(args)...);
+    noteChange(index, key);
   }
 }
 
 template <typename T> void World::emplaceOrReplace(EntityKey key, T value) {
-  TypedStore<T> &store = storeToAdd<T>(key);
+  auto [store, index] = storeToAdd<T>(key);
   const auto found = store.Items.find(key);
   if (found != store.Items.end()) {
     found->second = std::move(value);
   } else {
     store.add(key, std::move(value));
   }
+  noteChange(index, key);
 }
 
 template <typename T> T &World::getOrEmplace(EntityKey key) {
   static_assert(!std::is_empty_v<T>, "getOrEmplace needs a type that holds a value");
-  TypedStore<T> &store = storeToAdd<T>(key);
+  auto [store, index] = storeToAdd<T>(key);
+  noteChange(index, key);
   const auto found = store.Items.find(key);
   return found != store.Items.end() ? found->second : store.add(key);
 }
 
 template <typename T> void World::remove(EntityKey key) {
-  if (TypedStore<T> *store = findStore<T>()) {
-    store->erase(key);
+  const std::optional<size_t> index = Schema->indexOf(typeIdOf<T>());
+  if (index && Stores[*index]->has(key)) {
+    Stores[*index]->erase(key);
+    noteChange(*index, key);
   }
 }
 
@@ -260,6 +284,10 @@ template <typename T, typename Visit> void World::forEachWith(Visit &&visit) con
 
 // A world equal to this one, sharing its schema, and independent of it from then on.
 World copyWorld(const World &world);
+// Makes into equal to the world, its units included, reusing into's memory. Throws
+// std::invalid_argument when into doesn't share the world's schema. Allocates nothing once into has
+// held a world as large.
+void copyWorld(const World &world, World &into);
 // True when the walk emits the same words for both worlds.
 bool worldsEqual(const World &left, const World &right);
 // The walk's words folded into 64 bits.
@@ -287,6 +315,10 @@ void stepWorld(World &world);
 // every resolver and finisher. The world is unchanged. Throws std::invalid_argument if a command's
 // type is not registered.
 World makeCandidate(const World &world, const CommandQueue &commands, TickBuffers &buffers);
+// Makes into the candidate makeCandidate gives, refilling it with copyWorld(world, into) instead of
+// making a new world.
+void makeCandidate(const World &world, const CommandQueue &commands, TickBuffers &buffers,
+                   World &into);
 // The same candidate, resolved with buffers of its own.
 World makeCandidate(const World &world, const CommandQueue &commands);
 // Applies the queued commands in submission order and resolves, without stepping the systems,

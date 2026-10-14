@@ -2,6 +2,7 @@
 
 #include "sim/clock.h"
 #include "sim/park/internal/components.h"
+#include "sim/park/internal/ground_units.h"
 #include "sim/park/internal/layout.h"
 
 #include <optional>
@@ -50,7 +51,9 @@ void parkPathPoints(const World &world, std::vector<ParkPathPoint> &points) {
 }
 
 std::vector<ParkSegment> parkSegments(const World &world) {
-  std::vector<ParkSegment> segments = segmentsOf(layoutOf(world));
+  GroundLists lists;
+  worldGround(world, lists);
+  std::vector<ParkSegment> segments = std::move(lists.Ground.Segments);
   for (ParkSegment &segment : segments) {
     if (const auto *left = world.tryGet<LeftFurnishingIntent>(segment.Key)) {
       segment.Furnished.Left = left->Held;
@@ -64,8 +67,7 @@ std::vector<ParkSegment> parkSegments(const World &world) {
 
 void parkSegments(const World &world, std::vector<ParkSegment> &segments, TickBuffers &buffers) {
   GroundLists &lists = buffers.get<GroundLists>();
-  layoutOf(world, lists.Layout);
-  groundOf(lists.Layout, lists);
+  worldGround(world, lists);
   const std::vector<ParkSegment> &ground = lists.Ground.Segments;
   resizeKeeping(segments, ground.size(), lists.CallerSpare);
   for (size_t i = 0; i < ground.size(); ++i) {
@@ -89,12 +91,15 @@ void parkSegments(const World &world, std::vector<ParkSegment> &segments, TickBu
   }
 }
 
-std::vector<ParkCorner> parkCorners(const World &world) { return cornersOf(layoutOf(world)); }
+std::vector<ParkCorner> parkCorners(const World &world) {
+  GroundLists lists;
+  worldGround(world, lists);
+  return std::move(lists.Ground.Corners);
+}
 
 void parkCorners(const World &world, std::vector<ParkCorner> &corners, TickBuffers &buffers) {
   GroundLists &lists = buffers.get<GroundLists>();
-  layoutOf(world, lists.Layout);
-  groundOf(lists.Layout, lists);
+  worldGround(world, lists);
   copyGrowing(corners, std::span<const ParkCorner>(lists.Ground.Corners));
 }
 

@@ -20,6 +20,7 @@ add_library(tpj_sim STATIC
     park/curves.cpp
     park/edits.cpp
     park/geometry.cpp
+    park/ground_units.cpp
     park/intent.cpp
     park/layout.cpp
     park/meetings.cpp
@@ -30,6 +31,7 @@ add_library(tpj_sim STATIC
     routes/route_distance.cpp
     save.cpp
     schema.cpp
+    unit_space.cpp
     walk.cpp
     wayfinding/best_seats.cpp
     world.cpp)

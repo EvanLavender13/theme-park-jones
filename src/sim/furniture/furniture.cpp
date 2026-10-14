@@ -995,10 +995,15 @@ void publishSeatPlaces(World &world) {
   }
 }
 
+// The segments layFurniture reads, kept from one resolution to the next.
+struct FurnitureSegments {
+  std::vector<ParkSegment> Segments;
+};
+
 // Lays the pieces each furnished guest segment asks for, chain by chain, and removes every piece
 // laid before that this resolution doesn't lay. A chain whose reads are the same as when the last
 // resolution laid it keeps its pieces, which are what laying it again would give.
-void layFurniture(World &world, TickBuffers & /*buffers*/) {
+void layFurniture(World &world, TickBuffers &buffers) {
   const std::vector<EntityKey> before = world.keysWith<FurniturePieceState>();
   const EntityKey laidKey = deriveKey(NULL_KEY, LAID_PURPOSE, 0);
   std::vector<const LaidChain *> kept;
@@ -1012,7 +1017,8 @@ void layFurniture(World &world, TickBuffers & /*buffers*/) {
   });
   LaidChains now;
   std::set<EntityKey> laid;
-  const std::vector<ParkSegment> segments = parkSegments(world);
+  std::vector<ParkSegment> &segments = buffers.get<FurnitureSegments>().Segments;
+  parkSegments(world, segments, buffers);
   if (std::ranges::any_of(segments, isFurnished)) {
     Surroundings around = surroundingsOf(world);
     const std::vector<Member> members = membersOf(world, segments, *around.Surface);
