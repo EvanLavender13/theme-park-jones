@@ -116,7 +116,7 @@ struct Corners {
       needed[k] =
           neededAt(*reads.unit<PointArmsUnits>(arms.Bent.FarKeys[k]), arms.Bent.Segments[k]);
     }
-    cornerAt(arms, needed, corner.Round);
+    cornerAt(arms.Bent, needed, corner.Round);
   }
 };
 
@@ -146,14 +146,18 @@ struct GroundLines {
   static void derive(UnitReads &reads, EntityKey key, GroundLine &line) {
     const PathSegmentIntent &segment = *reads.component<PathSegmentIntent>(key);
     const StraightLine &straight = *reads.unit<StraightLines>(key);
-    const Rounding *start = nullptr;
-    const Rounding *end = nullptr;
+    std::span<const ParkPoint> start;
+    std::span<const ParkPoint> end;
     // A segment without a straight line rounds no corner.
     if (!straight.Points.empty()) {
       const Corner *from = reads.unit<Corners>(segment.From);
       const Corner *to = reads.unit<Corners>(segment.To);
-      start = from != nullptr && from->Has ? &from->Round : nullptr;
-      end = to != nullptr && to->Has ? &to->Round : nullptr;
+      if (from != nullptr && from->Has) {
+        start = halfOf(from->Round, key);
+      }
+      if (to != nullptr && to->Has) {
+        end = halfOf(to->Round, key);
+      }
     }
     groundLineOf(key, segment, straight.Points, start, end, line.Segment);
   }

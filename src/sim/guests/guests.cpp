@@ -1133,6 +1133,11 @@ std::optional<RouteStep> carriedTurn(const RouteStep &turn, const Network &befor
   return std::nullopt;
 }
 
+// The guests' keys, which carryGuests keeps in the buffers from resolution to resolution.
+struct CarriedGuests {
+  std::vector<EntityKey> Keys;
+};
+
 // Carries each guest across a resolution by where it stands. While its box fits on guest paving
 // there, it keeps its ground position: on the paving its place is carried to by carryOver when that
 // lies under it, and then at that carried place, and otherwise at the nearest place on the carrier
@@ -1142,7 +1147,7 @@ std::optional<RouteStep> carriedTurn(const RouteStep &turn, const Network &befor
 // resolves, and its guest leaves when it next steps. It keeps its turn only where the edit left the
 // turn's node, and the edge it picked, where they were. Its aim starts again from its place.
 // Nothing changes in a world's first resolution, which has no network before.
-void carryGuests(World &world, TickBuffers & /*buffers*/) {
+void carryGuests(World &world, TickBuffers &buffers) {
   const Network *before = previousNetwork(world, PathKind::Guest);
   if (before == nullptr) {
     return;
@@ -1155,7 +1160,9 @@ void carryGuests(World &world, TickBuffers & /*buffers*/) {
     }
     guest.At = place;
   };
-  for (const EntityKey key : parkGuests(world)) {
+  std::vector<EntityKey> &guests = buffers.get<CarriedGuests>().Keys;
+  parkGuests(world, guests);
+  for (const EntityKey key : guests) {
     Guest &guest = world.get<Guest>(key);
     const std::optional<Place> carried = carryOver(guest.At, *before, after);
     const std::optional<uint32_t> carriedGroup =

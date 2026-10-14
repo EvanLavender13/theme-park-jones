@@ -551,11 +551,16 @@ template <typename Visitor> void visitFields(Visitor &visitor, WalkedSurface &wa
 
 inline constexpr uint64_t WALKED_SURFACE_PURPOSE = hashName("walked-surface");
 
+// The walkways resolveWalkedSurface adds, kept from one resolution to the next.
+struct WalkedWalkways {
+  std::vector<Walkway> Walkways;
+};
+
 void resolveWalkedSurface(World &world, TickBuffers &buffers) {
-  std::vector<Walkway> walkways = connectorWalkways(world, PathKind::Guest);
-  for (const Walkway &walkway : connectorWalkways(world, PathKind::Backstage)) {
-    walkways.push_back(walkway);
-  }
+  std::vector<Walkway> &walkways = buffers.get<WalkedWalkways>().Walkways;
+  walkways.clear();
+  connectorWalkways(world, PathKind::Guest, walkways, buffers);
+  connectorWalkways(world, PathKind::Backstage, walkways, buffers);
   const EntityKey key = world.createDerivedEntity(NULL_KEY, WALKED_SURFACE_PURPOSE, 0);
   world.emplaceOrReplace<WalkedSurface>(key, WalkedSurface{parkSurface(world, walkways, buffers)});
 }
@@ -589,14 +594,24 @@ void parkDoors(const World &world, PathKind kind, std::vector<ParkDoor> &doors,
   doorsServing(lists.Entrances, lists.Boxes, kind, doors);
 }
 
-std::vector<KeyedWalkway> keyedWalkways(const World &world, PathKind kind) {
+namespace {
+
+// The doors the walkways are found from, kept in the buffers.
+struct WalkwayDoors {
+  std::vector<ParkDoor> Doors;
+};
+
+} // namespace
+
+void keyedWalkways(const World &world, PathKind kind, std::vector<KeyedWalkway> &walkways,
+                   TickBuffers &buffers) {
   const Network &network = parkNetwork(world, kind);
-  const std::vector<ParkDoor> doors = parkDoors(world, kind);
+  std::vector<ParkDoor> &doors = buffers.get<WalkwayDoors>().Doors;
+  parkDoors(world, kind, doors, buffers);
   // Only connectors' doors are anchored, so a carrier whose first stop is anchored is a connector.
   const auto isConnector = [&network](const Carrier &carrier) {
     return !carrier.Stops.empty() && network.nodeAnchor(carrier.Stops.front().Node) != NULL_KEY;
   };
-  std::vector<KeyedWalkway> walkways;
   for (const Carrier &carrier : network.carriers()) {
     if (!isConnector(carrier)) {
       continue;
@@ -640,7 +655,32 @@ std::vector<KeyedWalkway> keyedWalkways(const World &world, PathKind kind) {
                                                    .Meets = meets,
                                                    .Width = carrier.Width}});
   }
+}
+
+std::vector<KeyedWalkway> keyedWalkways(const World &world, PathKind kind) {
+  std::vector<KeyedWalkway> walkways;
+  TickBuffers buffers;
+  keyedWalkways(world, kind, walkways, buffers);
   return walkways;
+}
+
+namespace {
+
+// The keyed walkways connectorWalkways reads, kept in the buffers.
+struct KeyedWalkwayList {
+  std::vector<KeyedWalkway> Keyed;
+};
+
+} // namespace
+
+void connectorWalkways(const World &world, PathKind kind, std::vector<Walkway> &walkways,
+                       TickBuffers &buffers) {
+  std::vector<KeyedWalkway> &keyed = buffers.get<KeyedWalkwayList>().Keyed;
+  keyed.clear();
+  keyedWalkways(world, kind, keyed, buffers);
+  for (const KeyedWalkway &walkway : keyed) {
+    walkways.push_back(walkway.Way);
+  }
 }
 
 std::vector<Walkway> connectorWalkways(const World &world, PathKind kind) {

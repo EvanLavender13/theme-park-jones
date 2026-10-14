@@ -73,6 +73,12 @@ struct KeyedWalkway {
 
 // Each walkway connectorWalkways gives, in the same order, with its connector's key.
 std::vector<KeyedWalkway> keyedWalkways(const World &world, PathKind kind);
+// As the returning forms of keyedWalkways and connectorWalkways, appended to a list the caller
+// keeps, keeping the doors they read in the buffers. Allocate nothing once the lists have grown.
+void keyedWalkways(const World &world, PathKind kind, std::vector<KeyedWalkway> &walkways,
+                   TickBuffers &buffers);
+void connectorWalkways(const World &world, PathKind kind, std::vector<Walkway> &walkways,
+                       TickBuffers &buffers);
 
 // The park's paved surface with every connector's walkway, guest walkways first, as the last
 // resolution derived it with parkSurface, or an empty surface when the world holds none, as before

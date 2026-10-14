@@ -141,17 +141,25 @@ void straightLineOf(const PathSegmentIntent &segment, const PathPointIntent *fro
 // it reuses.
 void armsAt(EntityKey key, const PathPointIntent &point, std::span<const ArmInput> ends,
             TickBuffers &scratch, PointArms &arms);
+// The tangent length a point's own bend asks for, or 0 when it has none.
+double askedOf(const PointArms &arms);
 // How far from a point along one of its segments that point's own arc and paving reach at least,
-// given the point's arms.
+// given the tangent length its bend asks for, from askedOf, and its reaches, by segment key.
+double neededAt(double asked, std::span<const SegmentReach> reaches, EntityKey segment);
+// As above, given the point's arms.
 double neededAt(const PointArms &far, EntityKey segment);
-// Puts in rounding the corner the arms' bend makes, given what each of the bend's far ends needs
-// along its segment, from neededAt. The arms must have a bend.
-void cornerAt(const PointArms &arms, std::array<double, 2> needed, Rounding &rounding);
+// Puts in rounding the corner the bend makes, given what each of the bend's far ends needs along
+// its segment, from neededAt.
+void cornerAt(const Bend &bend, std::array<double, 2> needed, Rounding &rounding);
+// The half of the rounding's arc that belongs to the segment, from the arc's middle to where it
+// touches the segment. Never empty.
+std::span<const ParkPoint> halfOf(const Rounding &rounding, EntityKey segment);
 // Puts in out the segment with its ground line: its straight line, rounded at the corner at either
-// end, or null where there is none.
+// end. start and end are the halves of those corners' arcs that belong to the segment, as halfOf
+// gives them, or empty where there is no corner.
 void groundLineOf(EntityKey key, const PathSegmentIntent &segment,
-                  std::span<const CarrierPoint> straight, const Rounding *start,
-                  const Rounding *end, ParkSegment &out);
+                  std::span<const CarrierPoint> straight, std::span<const ParkPoint> start,
+                  std::span<const ParkPoint> end, ParkSegment &out);
 
 PathLayout layoutOf(const World &world);
 // As the returning form, into a layout the caller keeps, clearing its lists first.

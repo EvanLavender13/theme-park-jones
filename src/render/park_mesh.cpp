@@ -269,16 +269,30 @@ void appendGhostSegment(ParkMesh &mesh, PathKind kind, const std::vector<Carrier
   }
 }
 
+// Puts the path's stops' positions, as stopPositions gives them, in lists.Positions, reading the
+// corners only for a path with an OnBend stop. False where stopPositions gives none.
+bool keptStopPositions(const World &world, const AddPath &path, GhostLists &lists) {
+  lists.Corners.clear();
+  if (std::ranges::any_of(
+          path.Stops, [](const PathStop &stop) { return std::holds_alternative<OnBend>(stop); })) {
+    parkCorners(world, lists.Corners, lists.Buffers);
+  }
+  lists.Positions.clear();
+  return std::ranges::all_of(path.Stops, [&](const PathStop &stop) {
+    return appendStopPosition(world, lists.Corners, stop, lists.Positions);
+  });
+}
+
 // Adds an added path's straight segments between its stops, for a path the world refuses so that
 // editedSegments gives none. Nothing when a stop has no position.
-void appendStraightPath(ParkMesh &mesh, const World &world, const AddPath &path, Rgba color) {
-  const std::optional<std::vector<ParkPoint>> positions = stopPositions(world, path);
-  if (!positions) {
+void appendStraightPath(ParkMesh &mesh, const World &world, const AddPath &path, Rgba color,
+                        GhostLists &lists) {
+  if (!keptStopPositions(world, path, lists)) {
     return;
   }
-  for (size_t i = 0; i + 1 < positions->size(); ++i) {
-    appendGhostSegment(mesh, path.Kind, segmentLine((*positions)[i], (*positions)[i + 1]),
-                       pathWidth(path.Kind), color);
+  for (size_t i = 0; i + 1 < lists.Positions.size(); ++i) {
+    segmentLine(lists.Positions[i], lists.Positions[i + 1], lists.Line);
+    appendGhostSegment(mesh, path.Kind, lists.Line, pathWidth(path.Kind), color);
   }
 }
 
@@ -293,9 +307,12 @@ bool isChangedIn(const std::vector<FurniturePiece> &other, const FurniturePiece 
 // Adds to the ghost each piece of the candidate's furniture that the world lacks, or holds with
 // another kind or pose, translucent in its kind's color, and each piece of the world's furniture
 // that the candidate lacks, or holds with another kind or pose, in the delete tint.
-void appendFurnitureChanges(GhostMesh &ghost, const World &world, const World &candidate) {
-  const std::vector<FurniturePiece> was = parkFurniture(world);
-  const std::vector<FurniturePiece> is = parkFurniture(candidate);
+void appendFurnitureChanges(GhostMesh &ghost, const World &world, const World &candidate,
+                            GhostLists &lists) {
+  std::vector<FurniturePiece> &was = lists.Was;
+  std::vector<FurniturePiece> &is = lists.Is;
+  parkFurniture(world, was);
+  parkFurniture(candidate, is);
   for (const FurniturePiece &piece : is) {
     if (isChangedIn(was, piece)) {
       appendBox(ghost.Lit, piece.At, furnitureSize(piece.Kind), furnitureHeight(piece.Kind),
@@ -312,29 +329,32 @@ void appendFurnitureChanges(GhostMesh &ghost, const World &world, const World &c
 
 // Adds, in the delete tint, the box or segment a deletion removes, or both segments at a point
 // RemovePoint merges.
-void appendDeleted(ParkMesh &mesh, const World &world, const ParkEdit &edit) {
+void appendDeleted(ParkMesh &mesh, const World &world, const ParkEdit &edit, GhostLists &lists) {
+  parkBoxes(world, lists.Boxes);
+  parkPathPoints(world, lists.Points);
   if (const auto *remove = std::get_if<RemovePoint>(&edit)) {
-    for (const ParkSegment &segment : parkSegments(world)) {
+    parkSegments(world, lists.Segments, lists.Buffers);
+    for (const ParkSegment &segment : lists.Segments) {
       if (segment.From == remove->Point || segment.To == remove->Point) {
-        appendEntity(mesh, world, segment.Key, DELETE_TINT);
+        appendEntity(mesh, world, lists.Boxes, lists.Points, segment.Key, DELETE_TINT);
       }
     }
   } else if (const auto *segment = std::get_if<DeleteSegment>(&edit)) {
-    appendEntity(mesh, world, segment->Segment, DELETE_TINT);
+    appendEntity(mesh, world, lists.Boxes, lists.Points, segment->Segment, DELETE_TINT);
   } else if (const auto *box = std::get_if<DeleteBox>(&edit)) {
-    appendEntity(mesh, world, box->Box, DELETE_TINT);
+    appendEntity(mesh, world, lists.Boxes, lists.Points, box->Box, DELETE_TINT);
   }
 }
 
 // Adds a join mark at each stop where an added path joins a point, a segment, or an earlier stop,
 // at a moved point's target when it is a point or segment, at an inserted point's place, and at
 // each place pathCrossings gives.
-void appendJoinMarks(ParkMesh &mesh, const World &world, const ParkEdit &edit) {
+void appendJoinMarks(ParkMesh &mesh, const World &world, const ParkEdit &edit, GhostLists &lists) {
   if (const auto *path = std::get_if<AddPath>(&edit)) {
-    if (const std::optional<std::vector<ParkPoint>> positions = stopPositions(world, *path)) {
-      for (size_t i = 0; i < positions->size(); ++i) {
+    if (keptStopPositions(world, *path, lists)) {
+      for (size_t i = 0; i < lists.Positions.size(); ++i) {
         if (!std::holds_alternative<NewPoint>(path->Stops[i])) {
-          appendJoinMark(mesh, (*positions)[i]);
+          appendJoinMark(mesh, lists.Positions[i]);
         }
       }
     }
@@ -448,20 +468,23 @@ std::vector<Walkway> parkWalkways(const World &world) {
   return walkways;
 }
 
-void appendWalkways(ParkMesh &mesh, const World &world, float alpha) {
+void appendWalkways(ParkMesh &mesh, const World &world, float alpha, std::vector<Walkway> &walkways,
+                    std::vector<CarrierPoint> &strip, TickBuffers &buffers) {
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
     const Rgba base = pathColor(kind);
     const Rgba color{base.R, base.G, base.B, alpha};
+    walkways.clear();
+    connectorWalkways(world, kind, walkways, buffers);
     // Each strip runs where the park draws the walkway, not along the connector's turn inside
     // the paving.
-    for (const Walkway &walkway : connectorWalkways(world, kind)) {
+    for (const Walkway &walkway : walkways) {
       const double length =
           std::hypot(walkway.Meets.X - walkway.Door.X, walkway.Meets.Z - walkway.Door.Z);
-      const std::vector<CarrierPoint> points{
-          {.X = walkway.Door.X, .Z = walkway.Door.Z, .Distance = 0.0},
-          {.X = walkway.Meets.X, .Z = walkway.Meets.Z, .Distance = length}};
+      strip.clear();
+      strip.push_back({.X = walkway.Door.X, .Z = walkway.Door.Z, .Distance = 0.0});
+      strip.push_back({.X = walkway.Meets.X, .Z = walkway.Meets.Z, .Distance = length});
       const size_t first = mesh.Vertices.size();
-      appendWalkway(mesh, kind, points, walkway.Width, walkway.Out, color);
+      appendWalkway(mesh, kind, strip, walkway.Width, walkway.Out, color);
       // Lifted as ghost segments are, so the strip never flickers against the paving it meets.
       for (size_t i = first; i < mesh.Vertices.size(); ++i) {
         mesh.Vertices[i].Position[1] += GHOST_LIFT;
@@ -484,10 +507,12 @@ void appendStarvedMark(ParkMesh &mesh, const Pose &pose, Rgba color) {
   }
 }
 
-void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha) {
-  for (const ParkBox &box : parkBoxes(world)) {
+void appendStarvedMarks(ParkMesh &mesh, const World &world, float alpha,
+                        std::vector<ParkBox> &boxes, TickBuffers &buffers) {
+  parkBoxes(world, boxes);
+  for (const ParkBox &box : boxes) {
     // A shop is starved when it has no supply route, as its record says.
-    if (box.Kind == BoxKind::Shop && !nearestDepot(world, box.Key)) {
+    if (box.Kind == BoxKind::Shop && !nearestDepot(world, box.Key, buffers)) {
       appendStarvedMark(mesh, box.At,
                         Rgba{STARVED_COLOR.R, STARVED_COLOR.G, STARVED_COLOR.B, alpha});
     }
@@ -583,12 +608,17 @@ void appendEntity(ParkMesh &mesh, const World &world, std::span<const ParkBox> b
 
 namespace {
 
-// The pieces and edge lines of the surface whose owners are among the keys, which are sorted.
-PavedSurface ownedBy(const PavedSurface &surface, const std::vector<EntityKey> &owners) {
+// Puts in own the pieces and edge lines of the surface whose owners are among the keys, which are
+// sorted, clearing its lists first.
+void ownedBy(const PavedSurface &surface, const std::vector<EntityKey> &owners, PavedSurface &own) {
   const auto owned = [&owners](EntityKey owner) {
     return std::ranges::binary_search(owners, owner);
   };
-  PavedSurface own;
+  own.Pieces.clear();
+  own.Edges.clear();
+  own.EdgePoints.clear();
+  own.Sides.clear();
+  own.SidePoints.clear();
   for (const SurfacePiece &piece : surface.Pieces) {
     if (owned(piece.Owner)) {
       own.Pieces.push_back(piece);
@@ -601,13 +631,11 @@ PavedSurface ownedBy(const PavedSurface &surface, const std::vector<EntityKey> &
       own.EdgePoints.insert(own.EdgePoints.end(), points.begin(), points.end());
     }
   }
-  return own;
 }
 
-// The surface's owners, sorted.
-std::vector<EntityKey> ownersOf(const PavedSurface &surface) {
-  std::vector<EntityKey> owners;
-  owners.reserve(surface.Pieces.size() + surface.Edges.size());
+// Puts the surface's owners, sorted, in owners, clearing it first.
+void ownersOf(const PavedSurface &surface, std::vector<EntityKey> &owners) {
+  owners.clear();
   for (const SurfacePiece &piece : surface.Pieces) {
     owners.push_back(piece.Owner);
   }
@@ -617,35 +645,43 @@ std::vector<EntityKey> ownersOf(const PavedSurface &surface) {
   std::ranges::sort(owners);
   const auto [first, last] = std::ranges::unique(owners);
   owners.erase(first, last);
-  return owners;
 }
 
-// The pieces and edge lines the owners hold in the park's surface with its walkways, so a ghost's
-// walkways join their segments as the committed park's do.
-PavedSurface ownedWithWalkways(const World &world, const std::vector<EntityKey> &owners) {
-  return ownedBy(walkedSurface(world), owners);
-}
-
-// The pieces and edge lines that belong to the segments editedSegments gives: from the candidate's
-// surface with its walkways when there is one, and from editedSurface otherwise.
-PavedSurface reshapedBy(const World &world, const ParkEdit &edit,
-                        const std::optional<World> &candidate) {
-  std::vector<EntityKey> reshaped;
+// Puts in lists.Owned the pieces and edge lines that belong to the segments editedSegments gives:
+// from the candidate's surface with its walkways when there is one, so its walkways join their
+// segments as the committed park's do, and from editedSurface otherwise.
+void reshapedBy(const World &world, const ParkEdit &edit, const std::optional<World> &candidate,
+                GhostLists &lists) {
+  std::vector<EntityKey> &reshaped = lists.Owners;
+  reshaped.clear();
   for (const ParkSegment &segment : editedSegments(world, edit)) {
     reshaped.push_back(segment.Key);
   }
   std::ranges::sort(reshaped);
   if (candidate) {
-    return ownedWithWalkways(*candidate, reshaped);
+    ownedBy(walkedSurface(*candidate), reshaped, lists.Owned);
+    return;
   }
-  return ownedBy(editedSurface(world, edit), reshaped);
+  ownedBy(editedSurface(world, edit), reshaped, lists.Owned);
+}
+
+// Adds the candidate's walkways and starved marks, and the furniture the edit changes.
+void appendCandidate(GhostMesh &ghost, const World &world, const World &candidate,
+                     GhostLists &lists) {
+  appendWalkways(ghost.Lit, candidate, GHOST_ALPHA, lists.Walkways, lists.Line, lists.Buffers);
+  appendStarvedMarks(ghost.Lit, candidate, GHOST_ALPHA, lists.Boxes, lists.Buffers);
+  appendFurnitureChanges(ghost, world, candidate, lists);
 }
 
 } // namespace
 
-GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
-                         const std::optional<World> &candidate) {
-  GhostMesh ghost;
+void buildGhostMesh(const World &world, const ParkEdit &edit, const std::optional<World> &candidate,
+                    GhostLists &lists) {
+  GhostMesh &ghost = lists.Ghost;
+  for (ParkMesh *part : {&ghost.Tints, &ghost.Lit, &ghost.Marks}) {
+    part->Vertices.clear();
+    part->Indices.clear();
+  }
   const bool accepted = isAccepted(world, edit);
   // What the edit adds or changes previews the park, lit as it is, unless the world refuses it and
   // it shows in the invalid tint.
@@ -654,37 +690,42 @@ GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
     appendBox(shape, add->At, boxSize(add->Kind), boxHeight(add->Kind),
               ghostColor(accepted, boxColor(add->Kind)));
   } else if (const auto *move = std::get_if<MoveBox>(&edit)) {
-    for (const ParkBox &box : parkBoxes(world)) {
+    parkBoxes(world, lists.Boxes);
+    for (const ParkBox &box : lists.Boxes) {
       if (box.Key == move->Box) {
         appendBox(shape, move->At, boxSize(box.Kind), boxHeight(box.Kind),
                   ghostColor(accepted, boxColor(box.Kind)));
       }
     }
   }
+  const auto colorOf = [accepted](PathKind kind) { return ghostColor(accepted, pathColor(kind)); };
   if (const auto *del = std::get_if<DeleteSegment>(&edit)) {
     // A segment's deletion shows only what goes, and the segments whose line it reshapes.
-    appendEntity(ghost.Tints, world, del->Segment, accepted ? DELETE_TINT : INVALID_TINT);
-    appendSurface(shape, reshapedBy(world, edit, candidate), GHOST_LIFT,
-                  [accepted](PathKind kind) { return ghostColor(accepted, pathColor(kind)); });
+    parkBoxes(world, lists.Boxes);
+    parkPathPoints(world, lists.Points);
+    appendEntity(ghost.Tints, world, lists.Boxes, lists.Points, del->Segment,
+                 accepted ? DELETE_TINT : INVALID_TINT);
+    reshapedBy(world, edit, candidate, lists);
+    appendSurface(shape, lists.Owned, GHOST_LIFT, colorOf);
     if (candidate) {
-      appendWalkways(ghost.Lit, *candidate, GHOST_ALPHA);
-      appendStarvedMarks(ghost.Lit, *candidate, GHOST_ALPHA);
-      appendFurnitureChanges(ghost, world, *candidate);
+      appendCandidate(ghost, world, *candidate, lists);
     }
-    return ghost;
+    return;
   }
   if (accepted) {
-    appendDeleted(ghost.Tints, world, edit);
+    appendDeleted(ghost.Tints, world, edit, lists);
   }
-  PavedSurface surface = editedSurface(world, edit);
-  if (const auto *path = std::get_if<AddPath>(&edit); path != nullptr && surface.Pieces.empty()) {
-    appendStraightPath(shape, world, *path, ghostColor(accepted, pathColor(path->Kind)));
+  const PavedSurface edited = editedSurface(world, edit);
+  if (const auto *path = std::get_if<AddPath>(&edit); path != nullptr && edited.Pieces.empty()) {
+    appendStraightPath(shape, world, *path, ghostColor(accepted, pathColor(path->Kind)), lists);
   }
-  if (candidate && !surface.Pieces.empty()) {
-    surface = ownedWithWalkways(*candidate, ownersOf(surface));
+  if (candidate && !edited.Pieces.empty()) {
+    ownersOf(edited, lists.Owners);
+    ownedBy(walkedSurface(*candidate), lists.Owners, lists.Owned);
+    appendSurface(shape, lists.Owned, GHOST_LIFT, colorOf);
+  } else {
+    appendSurface(shape, edited, GHOST_LIFT, colorOf);
   }
-  appendSurface(shape, surface, GHOST_LIFT,
-                [accepted](PathKind kind) { return ghostColor(accepted, pathColor(kind)); });
   // A narrower ghost lies inside the path it narrows, in the same color, so its new sides are
   // marked.
   if (std::holds_alternative<SetSegmentWidth>(edit)) {
@@ -692,13 +733,17 @@ GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
       appendSides(ghost.Marks, segment, JOIN_MARK_COLOR);
     }
   }
-  appendJoinMarks(ghost.Marks, world, edit);
+  appendJoinMarks(ghost.Marks, world, edit, lists);
   if (candidate) {
-    appendWalkways(ghost.Lit, *candidate, GHOST_ALPHA);
-    appendStarvedMarks(ghost.Lit, *candidate, GHOST_ALPHA);
-    appendFurnitureChanges(ghost, world, *candidate);
+    appendCandidate(ghost, world, *candidate, lists);
   }
-  return ghost;
+}
+
+GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit,
+                         const std::optional<World> &candidate) {
+  GhostLists lists;
+  buildGhostMesh(world, edit, candidate, lists);
+  return std::move(lists.Ghost);
 }
 
 GhostMesh buildGhostMesh(const World &world, const ParkEdit &edit) {

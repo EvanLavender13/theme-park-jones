@@ -66,6 +66,15 @@ struct FootfallLists {
 struct CarriedEntry {
   size_t Stretch = 0;
   const KeptEntry *Entry = nullptr;
+  // The entry's position in held order.
+  size_t Order = 0;
+};
+
+// The lists carryFootfall keeps in the buffers from resolution to resolution: the entries carried,
+// and the entries they make.
+struct CarryLists {
+  std::vector<CarriedEntry> Carried;
+  std::vector<KeptEntry> Entries;
 };
 
 // One entry at the stretch's midpoint for the entries carried into it: a lone entry keeps its
@@ -116,21 +125,29 @@ void stepFootfall(World &world, TickBuffers &buffers) {
 
 // Carries each kept value from the guest network before the resolution to the new one, holding
 // one entry per stretch at its midpoint and dropping values whose places are retired.
-void carryFootfall(World &world, TickBuffers & /*buffers*/) {
+void carryFootfall(World &world, TickBuffers &buffers) {
   const Network *before = previousNetwork(world, PathKind::Guest);
   if (before == nullptr) {
     return;
   }
   const Network &after = parkNetwork(world, PathKind::Guest);
-  std::vector<CarriedEntry> carried;
+  CarryLists &lists = buffers.get<CarryLists>();
+  std::vector<CarriedEntry> &carried = lists.Carried;
+  carried.clear();
+  size_t order = 0;
   for (const KeptEntry &entry : keptEntries<HungryFootfall>(world, FOOTFALL_SOURCE)) {
     const std::optional<Place> at = carryOver(entry.At, *before, after);
     if (const std::optional<size_t> stretch = at ? stretchOf(after, *at) : std::nullopt) {
-      carried.push_back({.Stretch = *stretch, .Entry = &entry});
+      carried.push_back({.Stretch = *stretch, .Entry = &entry, .Order = order});
     }
+    ++order;
   }
-  std::ranges::stable_sort(carried, {}, &CarriedEntry::Stretch);
-  std::vector<KeptEntry> entries;
+  // Order breaks ties, so this keeps held order within a stretch without stable_sort's buffer.
+  std::ranges::sort(carried, [](const CarriedEntry &a, const CarriedEntry &b) {
+    return a.Stretch != b.Stretch ? a.Stretch < b.Stretch : a.Order < b.Order;
+  });
+  std::vector<KeptEntry> &entries = lists.Entries;
+  entries.clear();
   for (auto group = carried.begin(); group != carried.end();) {
     const size_t stretch = group->Stretch;
     const auto next = std::ranges::find_if(
@@ -139,7 +156,8 @@ void carryFootfall(World &world, TickBuffers & /*buffers*/) {
                                      midpointOf(after.edges()[stretch]), world.Tick));
     group = next;
   }
-  replaceKeptEntries<HungryFootfall>(world, FOOTFALL_SOURCE, std::move(entries));
+  replaceKeptEntries<HungryFootfall>(world, FOOTFALL_SOURCE, std::span<const KeptEntry>(entries),
+                                     buffers);
 }
 
 } // namespace

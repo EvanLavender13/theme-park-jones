@@ -122,9 +122,9 @@ private:
   std::optional<PreviewLook> Look;
   // The edit count the look's marks were built at.
   std::optional<uint64_t> LookEdits;
-  // The ghost's parts, and the ghost put together from them. The look's marks use only Lit and
-  // Marks.
-  GhostMesh EditGhost;
+  // The lists the edit's ghost is built in, with its parts, the look's marks, and the ghost put
+  // together from them. The look's marks use only Lit and Marks.
+  GhostLists EditGhost;
   GhostMesh LookMarks;
   ParkMesh SubjectMark;
   GhostMesh Ghost;

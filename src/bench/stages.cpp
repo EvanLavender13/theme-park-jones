@@ -164,6 +164,7 @@ StageResult timeDrag(std::string name, const World &park, EditAt editAt,
   World stepped = copyWorld(park);
   TickBuffers buffers;
   KeptPreview kept;
+  GhostLists ghost;
   std::vector<int64_t> times;
   times.reserve(REPETITIONS);
   for (size_t frame = 0; frame < WARM_UPS + REPETITIONS; ++frame) {
@@ -176,7 +177,7 @@ StageResult timeDrag(std::string name, const World &park, EditAt editAt,
     const Clock::time_point start = Clock::now();
     keepPreview(kept, stepped, held, false);
     if (kept.Made.Candidate) {
-      const GhostMesh ghost = buildGhostMesh(stepped, edit, kept.Made.Candidate);
+      buildGhostMesh(stepped, edit, kept.Made.Candidate, ghost);
     }
     const Clock::time_point end = Clock::now();
     if (frame >= WARM_UPS) {
