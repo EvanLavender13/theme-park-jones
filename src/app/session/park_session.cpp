@@ -54,7 +54,7 @@ void ParkSession::applyWithoutTick() {
   if (Restore != nullptr) {
     Alone.push(*Restore);
     Restore = nullptr;
-    commitCommands(Current, Alone);
+    commitCommands(Current, Alone, Buffers);
     noteEdits(History, Current);
     ++Edits;
     return;
@@ -62,7 +62,7 @@ void ParkSession::applyWithoutTick() {
   if (Commands.empty()) {
     return;
   }
-  commitCommands(Current, Commands);
+  commitCommands(Current, Commands, Buffers);
   noteEdits(History, Current);
   ++Edits;
 }

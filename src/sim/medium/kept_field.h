@@ -137,7 +137,7 @@ template <KeptFieldDefinition F> double readKeptEntry(const KeptEntry &entry, ui
 }
 
 // The field's resolver: creates the field's entity holding empty kept entries when it holds none.
-template <KeptFieldDefinition F> void emptyKeptEntries(World &world) {
+template <KeptFieldDefinition F> void emptyKeptEntries(World &world, TickBuffers & /*buffers*/) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, FIELD_PURPOSE, hashName(F::Name));
   static_cast<void>(world.getOrEmplace<KeptEntries<F>>(key));
 }

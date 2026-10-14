@@ -180,6 +180,10 @@ template <FieldDefinition F> struct ResolvedEntries {
   std::vector<FieldSlot<typename F::Entry>> Slots;
   bool HasPrevious = false;
   std::vector<FieldSlot<typename F::Entry>> Previous;
+  // Slots the finisher took out of Previous, their lists emptied, kept so that the next
+  // resolution's publishes reuse their memory. Never visited, so walks, saves, hashes, and
+  // comparisons never see them.
+  std::vector<FieldSlot<typename F::Entry>> Retired;
 };
 
 template <typename Visitor, typename F>
@@ -229,16 +233,32 @@ std::vector<uint64_t> entryWords(const std::vector<FieldSlot<Entry>> &slots, Ent
   return collector.words();
 }
 
-// The field's resolver: empties its resolved entries, keeping the previous ones for its finisher,
-// and creates the entity that holds both layers, with an empty stepped layer if it has none.
-template <FieldDefinition F> void emptyResolvedEntries(World &world) {
-  const EntityKey key = world.createDerivedEntity(NULL_KEY, FIELD_PURPOSE, hashName(F::Name));
-  ResolvedEntries<F> next;
-  if (auto *resolved = world.tryGet<ResolvedEntries<F>>(key)) {
-    next.HasPrevious = true;
-    next.Previous = std::move(resolved->Slots);
+// Moves the slots to the retired ones, each emptied and holding the null source, and empties the
+// list, keeping every list's memory.
+template <typename Entry>
+void retireSlots(std::vector<FieldSlot<Entry>> &slots, std::vector<FieldSlot<Entry>> &retired) {
+  for (FieldSlot<Entry> &slot : slots) {
+    slot.Source = NULL_KEY;
+    slot.Entries.clear();
+    slot.ByPlace.clear();
+    slot.Ordered = false;
+    retired.push_back(std::move(slot));
   }
-  world.emplaceOrReplace<ResolvedEntries<F>>(key, std::move(next));
+  slots.clear();
+}
+
+// The field's resolver: empties its resolved entries, keeping the previous ones for its finisher,
+// and creates the entity that holds both layers, with an empty stepped layer if it has none. It
+// changes the entries in place, so their memory serves the publishes that follow.
+template <FieldDefinition F> void emptyResolvedEntries(World &world, TickBuffers & /*buffers*/) {
+  const EntityKey key = world.createDerivedEntity(NULL_KEY, FIELD_PURPOSE, hashName(F::Name));
+  if (auto *resolved = world.tryGet<ResolvedEntries<F>>(key)) {
+    retireSlots(resolved->Previous, resolved->Retired);
+    resolved->Previous.swap(resolved->Slots);
+    resolved->HasPrevious = true;
+  } else {
+    world.emplace<ResolvedEntries<F>>(key);
+  }
   static_cast<void>(world.getOrEmplace<SteppedEntries<F>>(key));
 }
 
@@ -262,7 +282,7 @@ template <FieldDefinition F> void swapSteppedEntries(World &world, TickBuffers &
 // The field's finisher: after a resolution with a previous one to compare with, clears the
 // readable stepped entries of each source whose resolved entries changed, unless the field's owner
 // keeps them, then drops the previous.
-template <FieldDefinition F> void settleSteppedEntries(World &world) {
+template <FieldDefinition F> void settleSteppedEntries(World &world, TickBuffers & /*buffers*/) {
   using Slot = FieldSlot<typename F::Entry>;
   const EntityKey holder = fieldKey(F::Name);
   auto *resolved = world.tryGet<ResolvedEntries<F>>(holder);
@@ -280,7 +300,7 @@ template <FieldDefinition F> void settleSteppedEntries(World &world) {
     return true;
   });
   resolved->HasPrevious = false;
-  resolved->Previous.clear();
+  retireSlots(resolved->Previous, resolved->Retired);
 }
 
 // Registers the field's derived component, <name>-resolved, its state component, <name>-stepped,
@@ -298,35 +318,41 @@ template <FieldDefinition F> void addField(WorldSchema &schema) {
   schema.addFinisher(&settleSteppedEntries<F>);
 }
 
-// Gives a source's entries for this resolution. Resolvers only. Throws std::logic_error when the
-// world is not resolving or holds no resolved entries for the field, and std::invalid_argument for
-// the null key or a source that has already published into the field in this resolution.
+// Gives a source's entries for this resolution, empty, for the resolver to fill. They are readable
+// at once. The list stays valid until the next publish into the field. Resolvers only. Throws
+// std::logic_error when the world is not resolving or holds no resolved entries for the field, and
+// std::invalid_argument for the null key or a source that has already published into the field in
+// this resolution. The field's name is made only for the message, so a publish allocates nothing
+// once the field's retired slots have grown.
 template <FieldDefinition F>
-void publishResolved(World &world, EntityKey source,
-                     std::vector<PlacedEntry<typename F::Entry>> entries) {
+std::vector<PlacedEntry<typename F::Entry>> &publishResolved(World &world, EntityKey source) {
   using Slot = FieldSlot<typename F::Entry>;
-  const std::string name(F::Name);
   if (!world.isResolving()) {
-    throw std::logic_error("field " + name + " takes resolved entries only from resolvers");
+    throw std::logic_error("field " + std::string(F::Name) +
+                           " takes resolved entries only from resolvers");
   }
   auto *resolved = world.tryGet<ResolvedEntries<F>>(fieldKey(F::Name));
   if (resolved == nullptr) {
-    throw std::logic_error("field " + name +
+    throw std::logic_error("field " + std::string(F::Name) +
                            " holds no resolved entries; register it before its publishers");
   }
   if (source == NULL_KEY) {
-    throw std::invalid_argument("field " + name + " takes no entries from the null key");
+    throw std::invalid_argument("field " + std::string(F::Name) +
+                                " takes no entries from the null key");
   }
   std::vector<Slot> &slots = resolved->Slots;
   const auto at = std::ranges::lower_bound(slots, source, {}, &Slot::Source);
   if (at != slots.end() && at->Source == source) {
     throw std::invalid_argument("source " + std::to_string(static_cast<uint64_t>(source)) +
-                                " has already published into field " + name);
+                                " has already published into field " + std::string(F::Name));
   }
   Slot slot;
+  if (!resolved->Retired.empty()) {
+    slot = std::move(resolved->Retired.back());
+    resolved->Retired.pop_back();
+  }
   slot.Source = source;
-  slot.Entries = std::move(entries);
-  slots.insert(at, std::move(slot));
+  return slots.insert(at, std::move(slot))->Entries;
 }
 
 // Gives a source's entries for this tick, empty, for the system to fill. They are readable after
@@ -337,22 +363,25 @@ void publishResolved(World &world, EntityKey source,
 template <FieldDefinition F>
 std::vector<PlacedEntry<typename F::Entry>> &publishStepped(World &world, EntityKey source) {
   using Slot = FieldSlot<typename F::Entry>;
-  const std::string name(F::Name);
   if (!world.isStepping()) {
-    throw std::logic_error("field " + name + " takes stepped entries only from systems");
+    throw std::logic_error("field " + std::string(F::Name) +
+                           " takes stepped entries only from systems");
   }
   auto *stepped = world.tryGet<SteppedEntries<F>>(fieldKey(F::Name));
   if (stepped == nullptr) {
-    throw std::logic_error("field " + name + " holds no stepped entries; resolve the world first");
+    throw std::logic_error("field " + std::string(F::Name) +
+                           " holds no stepped entries; resolve the world first");
   }
   if (source == NULL_KEY) {
-    throw std::invalid_argument("field " + name + " takes no entries from the null key");
+    throw std::invalid_argument("field " + std::string(F::Name) +
+                                " takes no entries from the null key");
   }
   std::vector<Slot> &slots = stepped->Pending;
   const auto at = std::ranges::lower_bound(slots, source, {}, &Slot::Source);
   if (at != slots.end() && at->Source == source) {
     throw std::invalid_argument("source " + std::to_string(static_cast<uint64_t>(source)) +
-                                " has already published into field " + name + " this tick");
+                                " has already published into field " + std::string(F::Name) +
+                                " this tick");
   }
   Slot slot;
   if (!stepped->Retired.empty()) {

@@ -61,8 +61,11 @@ std::shared_ptr<const WorldSchema> makeRecordingSchema() {
   schema->addSystem([](World &world, TickBuffers & /*buffers*/) { record("system 2", world); });
   schema->addSwap([](World &world, TickBuffers & /*buffers*/) { record("swap 1", world); });
   schema->addSwap([](World &world, TickBuffers & /*buffers*/) { record("swap 2", world); });
-  schema->addResolver("zones", [](World &world) { record("resolver zones", world); });
-  schema->addResolver("access", [](World &world) { record("resolver access", world); }, {"zones"});
+  schema->addResolver(
+      "zones", [](World &world, TickBuffers & /*buffers*/) { record("resolver zones", world); });
+  schema->addResolver(
+      "access", [](World &world, TickBuffers & /*buffers*/) { record("resolver access", world); },
+      {"zones"});
   schema->addCommand<Note>();
   schema->addCommand<Mark>();
   return schema;
@@ -111,7 +114,7 @@ void publishCounts(World &world, TickBuffers & /*buffers*/) {
 }
 
 // Each plan derives an entity holding twice its size.
-void deriveTotals(World &world) {
+void deriveTotals(World &world, TickBuffers & /*buffers*/) {
   std::vector<std::pair<EntityKey, int64_t>> plans;
   for (const EntityKey key : world.keysWith<Plan>()) {
     plans.emplace_back(key, world.get<Plan>(key).Size);
@@ -250,7 +253,8 @@ TEST_CASE("in debug builds, createEntity during resolution throws WorldInvariant
     SKIP("world checks run only in debug builds");
   }
   auto schema = std::make_shared<WorldSchema>();
-  schema->addResolver("counter", [](World &world) { world.createEntity(); });
+  schema->addResolver("counter",
+                      [](World &world, TickBuffers & /*buffers*/) { world.createEntity(); });
   World world(schema, 0);
 
   REQUIRE_THROWS_AS(resolveWorld(world), WorldInvariantError);
@@ -295,8 +299,10 @@ TEST_CASE("isStepping, isResolving, and isFinishing are each true exactly while 
   auto schema = std::make_shared<WorldSchema>();
   schema->addSystem([](World &world, TickBuffers & /*buffers*/) { recordFlags("system", world); });
   schema->addSwap([](World &world, TickBuffers & /*buffers*/) { recordFlags("swap", world); });
-  schema->addResolver("watch", [](World &world) { recordFlags("resolver", world); });
-  schema->addFinisher([](World &world) { recordFlags("finisher", world); });
+  schema->addResolver(
+      "watch", [](World &world, TickBuffers & /*buffers*/) { recordFlags("resolver", world); });
+  schema->addFinisher(
+      [](World &world, TickBuffers & /*buffers*/) { recordFlags("finisher", world); });
   schema->addCommand<Look>();
   World world(schema, 0);
   REQUIRE(flagsOf(world) == "none");
@@ -322,10 +328,13 @@ TEST_CASE("isStepping, isResolving, and isFinishing are each true exactly while 
 // explains theirs.
 std::shared_ptr<const WorldSchema> makeFinishingSchema() {
   auto schema = std::make_shared<WorldSchema>();
-  schema->addFinisher([](World &world) { record("finisher 1", world); });
-  schema->addResolver("zones", [](World &world) { record("resolver zones", world); });
-  schema->addFinisher([](World &world) { record("finisher 2", world); });
-  schema->addResolver("access", [](World &world) { record("resolver access", world); }, {"zones"});
+  schema->addFinisher([](World &world, TickBuffers & /*buffers*/) { record("finisher 1", world); });
+  schema->addResolver(
+      "zones", [](World &world, TickBuffers & /*buffers*/) { record("resolver zones", world); });
+  schema->addFinisher([](World &world, TickBuffers & /*buffers*/) { record("finisher 2", world); });
+  schema->addResolver(
+      "access", [](World &world, TickBuffers & /*buffers*/) { record("resolver access", world); },
+      {"zones"});
   return schema;
 }
 

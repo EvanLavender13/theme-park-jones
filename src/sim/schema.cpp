@@ -46,9 +46,9 @@ void WorldSchema::addSystem(StepFunction step) { Systems.push_back(step); }
 
 void WorldSchema::addSwap(StepFunction swap) { Swaps.push_back(swap); }
 
-void WorldSchema::addFinisher(WorldFunction finish) { Finishers.push_back(finish); }
+void WorldSchema::addFinisher(ResolveFunction finish) { Finishers.push_back(finish); }
 
-void WorldSchema::addResolver(std::string_view name, WorldFunction resolve,
+void WorldSchema::addResolver(std::string_view name, ResolveFunction resolve,
                               std::vector<std::string> dependencies) {
   ResolverType resolver{std::string(name), resolve, std::move(dependencies)};
   const auto isRegistered = [this](std::string_view resolverName) {

@@ -39,7 +39,7 @@ void copyStocks(const World &world, EntityKey endpoint, std::vector<FlowStock> &
 
 // Publishes one offer for each seat place, at its place, from its piece, pieces in ascending key
 // order.
-void resolveSeatOffers(World &world) {
+void resolveSeatOffers(World &world, TickBuffers & /*buffers*/) {
   using PieceOffer = std::pair<EntityKey, PlacedEntry<SeatOffer>>;
   std::vector<PieceOffer> offers;
   for (const FieldSlot<SeatPlace> &slot : resolvedSlots<SeatPlaces>(world)) {
@@ -52,8 +52,7 @@ void resolveSeatOffers(World &world) {
   // Each publish then goes at the end of the field's slots.
   std::ranges::sort(offers, {}, &PieceOffer::first);
   for (const PieceOffer &offer : offers) {
-    publishResolved<SeatOffers>(world, offer.first,
-                                std::vector<PlacedEntry<SeatOffer>>{offer.second});
+    publishResolved<SeatOffers>(world, offer.first).push_back(offer.second);
   }
 }
 

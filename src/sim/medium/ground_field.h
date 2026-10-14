@@ -101,7 +101,8 @@ template <GroundFieldDefinition F> GroundEntries<F> *findGroundEntries(World &wo
 
 // The field's resolver: creates the field's entity holding empty entries when it holds none, and
 // leaves entries it holds as they are.
-template <GroundFieldDefinition F> void emptyGroundEntries(World &world) {
+template <GroundFieldDefinition F>
+void emptyGroundEntries(World &world, TickBuffers & /*buffers*/) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, FIELD_PURPOSE, hashName(F::Name));
   static_cast<void>(world.getOrEmplace<GroundEntries<F>>(key));
 }

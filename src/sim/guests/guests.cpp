@@ -1142,7 +1142,7 @@ std::optional<RouteStep> carriedTurn(const RouteStep &turn, const Network &befor
 // resolves, and its guest leaves when it next steps. It keeps its turn only where the edit left the
 // turn's node, and the edge it picked, where they were. Its aim starts again from its place.
 // Nothing changes in a world's first resolution, which has no network before.
-void carryGuests(World &world) {
+void carryGuests(World &world, TickBuffers & /*buffers*/) {
   const Network *before = previousNetwork(world, PathKind::Guest);
   if (before == nullptr) {
     return;
@@ -1184,7 +1184,7 @@ void carryGuests(World &world) {
 
 // The departure tally's resolver: creates its entity holding no departures when it holds none,
 // and leaves a tally it holds as it is.
-void ensureDepartures(World &world) {
+void ensureDepartures(World &world, TickBuffers & /*buffers*/) {
   static_cast<void>(
       world.getOrEmplace<Departures>(world.createDerivedEntity(NULL_KEY, DEPARTURES_PURPOSE, 0)));
 }

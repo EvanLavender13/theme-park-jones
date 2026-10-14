@@ -1394,7 +1394,7 @@ namespace {
 
 inline constexpr uint64_t SURFACE_PURPOSE = hashName("paved-surface");
 
-void resolvePavedSurface(World &world) {
+void resolvePavedSurface(World &world, TickBuffers & /*buffers*/) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, SURFACE_PURPOSE, 0);
   world.emplaceOrReplace<PavedSurface>(key, parkSurface(world));
 }

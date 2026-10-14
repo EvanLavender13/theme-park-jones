@@ -27,12 +27,12 @@ void applyCommands(World &world, const CommandQueue &commands) {
 
 } // namespace
 
-void resolveWorld(World &world) {
+void resolveWorld(World &world, TickBuffers &buffers) {
   TPJ_PROFILE_ZONE();
   world.Resolving = true;
   try {
     for (const ResolverType &resolver : world.schema().resolvers()) {
-      resolver.Resolve(world);
+      resolver.Resolve(world, buffers);
     }
   } catch (...) {
     world.Resolving = false;
@@ -42,8 +42,8 @@ void resolveWorld(World &world) {
   // Finishers run with isResolving false, so they cannot publish after the comparisons they make.
   world.Finishing = true;
   try {
-    for (const WorldFunction finish : world.schema().finishers()) {
-      finish(world);
+    for (const ResolveFunction finish : world.schema().finishers()) {
+      finish(world, buffers);
     }
   } catch (...) {
     world.Finishing = false;
@@ -53,11 +53,16 @@ void resolveWorld(World &world) {
   world.ResolvePending = false;
 }
 
+void resolveWorld(World &world) {
+  TickBuffers buffers;
+  resolveWorld(world, buffers);
+}
+
 void stepWorld(World &world, CommandQueue &commands, TickBuffers &buffers) {
   TPJ_PROFILE_ZONE();
   requireRegistered(world, commands);
   if (world.ResolvePending) {
-    resolveWorld(world);
+    resolveWorld(world, buffers);
   }
   world.Stepping = true;
   try {
@@ -79,7 +84,7 @@ void stepWorld(World &world, CommandQueue &commands, TickBuffers &buffers) {
     commands.clear();
   }
   if (world.ResolvePending) {
-    resolveWorld(world);
+    resolveWorld(world, buffers);
   }
 }
 
@@ -98,7 +103,7 @@ void stepWorld(World &world) {
   stepWorld(world, buffers);
 }
 
-World makeCandidate(const World &world, const CommandQueue &commands) {
+World makeCandidate(const World &world, const CommandQueue &commands, TickBuffers &buffers) {
   TPJ_PROFILE_ZONE();
   requireRegistered(world, commands);
   World candidate = copyWorld(world);
@@ -107,12 +112,17 @@ World makeCandidate(const World &world, const CommandQueue &commands) {
     candidate.ResolvePending = true;
   }
   if (candidate.ResolvePending) {
-    resolveWorld(candidate);
+    resolveWorld(candidate, buffers);
   }
   return candidate;
 }
 
-void commitCommands(World &world, CommandQueue &commands) {
+World makeCandidate(const World &world, const CommandQueue &commands) {
+  TickBuffers buffers;
+  return makeCandidate(world, commands, buffers);
+}
+
+void commitCommands(World &world, CommandQueue &commands, TickBuffers &buffers) {
   TPJ_PROFILE_ZONE();
   requireRegistered(world, commands);
   if (!commands.empty()) {
@@ -121,8 +131,13 @@ void commitCommands(World &world, CommandQueue &commands) {
     commands.clear();
   }
   if (world.ResolvePending) {
-    resolveWorld(world);
+    resolveWorld(world, buffers);
   }
+}
+
+void commitCommands(World &world, CommandQueue &commands) {
+  TickBuffers buffers;
+  commitCommands(world, commands, buffers);
 }
 
 } // namespace tpj

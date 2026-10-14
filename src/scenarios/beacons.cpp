@@ -56,7 +56,7 @@ void applyCommand(World &world, const PlaceBeacon &command) {
 constexpr uint64_t GLOW_PURPOSE = hashName("beacon-glow");
 
 // Gives each beacon one glow per unit of strength, fading with the glow's index.
-void resolveGlows(World &world) {
+void resolveGlows(World &world, TickBuffers & /*buffers*/) {
   for (const EntityKey key : world.keys()) {
     const auto *found = world.tryGet<Beacon>(key);
     if (found == nullptr) {

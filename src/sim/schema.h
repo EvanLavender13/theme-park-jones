@@ -73,9 +73,10 @@ struct ComponentType {
   std::unique_ptr<ComponentStore> (*MakeStore)() = nullptr;
 };
 
-// A resolver or finisher. It takes only the world, so it can hold no state outside it (principle
-// 10).
-using WorldFunction = void (*)(World &world);
+// A resolver or finisher. It takes the world and the resolving caller's buffers. It holds no state
+// outside the world, and clears a buffer before reading it, so its result depends on the world
+// alone (principle 10).
+using ResolveFunction = void (*)(World &world, TickBuffers &buffers);
 
 // A system or swap. It takes the world and the stepping caller's buffers. It holds no state outside
 // the world, and clears a buffer before reading it, so its result depends on the world alone
@@ -84,7 +85,7 @@ using StepFunction = void (*)(World &world, TickBuffers &buffers);
 
 struct ResolverType {
   std::string Name;
-  WorldFunction Resolve = nullptr;
+  ResolveFunction Resolve = nullptr;
   std::vector<std::string> Dependencies;
 };
 
@@ -113,10 +114,10 @@ public:
   void addSwap(StepFunction swap);
   // Registers a resolver after the resolvers it depends on. Throws std::invalid_argument for a
   // malformed or repeated name, or for a dependency that is not an already registered resolver.
-  void addResolver(std::string_view name, WorldFunction resolve,
+  void addResolver(std::string_view name, ResolveFunction resolve,
                    std::vector<std::string> dependencies = {});
   // Every resolution runs the finishers after its resolvers, in registration order.
-  void addFinisher(WorldFunction finish);
+  void addFinisher(ResolveFunction finish);
   // Registers T as a command type. Throws std::invalid_argument if T is already registered.
   template <typename T> void addCommand();
 
@@ -129,7 +130,7 @@ public:
   [[nodiscard]] const std::vector<StepFunction> &systems() const { return Systems; }
   [[nodiscard]] const std::vector<StepFunction> &swaps() const { return Swaps; }
   [[nodiscard]] const std::vector<ResolverType> &resolvers() const { return Resolvers; }
-  [[nodiscard]] const std::vector<WorldFunction> &finishers() const { return Finishers; }
+  [[nodiscard]] const std::vector<ResolveFunction> &finishers() const { return Finishers; }
   [[nodiscard]] const std::vector<CommandType> &commands() const { return Commands; }
   [[nodiscard]] const CommandType *findCommand(TypeId id) const;
 
@@ -142,7 +143,7 @@ private:
   std::vector<StepFunction> Systems;
   std::vector<StepFunction> Swaps;
   std::vector<ResolverType> Resolvers;
-  std::vector<WorldFunction> Finishers;
+  std::vector<ResolveFunction> Finishers;
   std::vector<CommandType> Commands;
 };
 

@@ -53,7 +53,7 @@ A field is a set of entries published at places. Each entry is attributed to the
 
 A field has two layers:
 
-- Resolved entries are derived data (principle 1). Resolvers publish them with publishResolved, and they are readable at once. Every resolution replaces every source's entries in full.
+- Resolved entries are derived data (principle 1). Resolvers publish them with publishResolved, which gives the source's entries for the resolution as an empty list for the resolver to fill. The list is readable at once and stays valid until the next publish into the field. Every resolution replaces every source's entries in full. The field keeps the memory of a resolution's entries for the next resolution's publishes.
 - Stepped entries are state that saves hold. Systems publish them with publishStepped while stepping, which gives the source's entries for the tick as an empty list for the system to fill. They become readable at the swap that ends the tick, and replace that field's previous stepped entries.
 
 Each source publishes into a field at most once per resolution or per tick. If a publish comes outside the right stage, from the null source, or twice, it is refused and changes nothing.

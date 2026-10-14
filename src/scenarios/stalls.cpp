@@ -129,7 +129,7 @@ uint32_t travelDelay(double from, double to) {
 }
 
 // Derives the track's network: one carrier keyed by the track, with a node at each stop.
-void resolveTrack(World &world) {
+void resolveTrack(World &world, TickBuffers & /*buffers*/) {
   const EntityKey owner = lowestKeyWith<Track>(world);
   if (owner == NULL_KEY) {
     return;
@@ -152,12 +152,12 @@ void resolveTrack(World &world) {
 }
 
 // Publishes each stall's offer, its distance over 10, and a crowd of 1 at its place.
-void resolveStallEntries(World &world) {
+void resolveStallEntries(World &world, TickBuffers & /*buffers*/) {
   for (const EntityKey stall : keysWith<Stall>(world)) {
     const double distance = stallDistance(world, stall);
     const Place place = trackPlace(world, distance);
-    publishResolved<StallOffer>(world, stall, {{.At = place, .Value = distance / 10.0}});
-    publishResolved<Crowd>(world, stall, {{.At = place, .Value = 1.0}});
+    publishResolved<StallOffer>(world, stall).push_back({.At = place, .Value = distance / 10.0});
+    publishResolved<Crowd>(world, stall).push_back({.At = place, .Value = 1.0});
   }
 }
 

@@ -15,8 +15,8 @@ namespace {
 using test::Probe;
 using test::Tag;
 
-void resolveNothing(World & /*world*/) {}
-void resolveNothingElse(World & /*world*/) {}
+void resolveNothing(World & /*world*/, TickBuffers & /*buffers*/) {}
+void resolveNothingElse(World & /*world*/, TickBuffers & /*buffers*/) {}
 
 std::vector<std::string> namesOf(const WorldSchema &schema) {
   std::vector<std::string> names;

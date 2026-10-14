@@ -35,15 +35,15 @@ const SeatOffer *offerOf(std::span<const FieldSlot<SeatOffer>> offers, EntityKey
 // Publishes the field's best places from the seeds, under the field's own key, when there are any.
 template <typename F>
 void publishBestSeats(World &world, const Network &network, const std::vector<PlaceSeed> &seeds) {
-  std::vector<PlacedEntry<BestPlace>> entries = bestPlaces(network, seeds, SEAT_CHOICES);
+  const std::vector<PlacedEntry<BestPlace>> entries = bestPlaces(network, seeds, SEAT_CHOICES);
   if (!entries.empty()) {
-    publishResolved<F>(world, fieldKey(F::Name), std::move(entries));
+    publishResolved<F>(world, fieldKey(F::Name)).assign(entries.begin(), entries.end());
   }
 }
 
 // Seeds best rest seats with each piece's rest relief and best meal seats with its meal relief,
 // each when above 0, from the seat places and seat offers, and publishes both.
-void resolveBestSeats(World &world) {
+void resolveBestSeats(World &world, TickBuffers & /*buffers*/) {
   const Network &network = parkNetwork(world, PathKind::Guest);
   const std::span<const FieldSlot<SeatOffer>> offers = resolvedSlots<SeatOffers>(world);
   std::vector<PlaceSeed> rest;
