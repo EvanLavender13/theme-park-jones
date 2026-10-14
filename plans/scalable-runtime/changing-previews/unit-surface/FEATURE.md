@@ -25,7 +25,7 @@ The allocation check's drags and commits, which kept-checks added, watch the sur
 
 ## Acceptance criteria
 
-1. Both drags get faster, measured over the whole changed frame, and nothing else gets slower. The runtime report's --compare against build/flat-ground.report marks shop-drag and path-drag faster on full.park with windows-release. shop-drag's median falls by at least 0.3 ms and path-drag's by at least 0.5 ms. In the derived-units profiles, the paved surface was 4.2% of the shop drag's frame, about 0.40 ms, and 4.8% of the path drag's, about 0.64 ms. No other stage is marked slower. (check: scripts/runtime-report.sh build/unit-surface.report, then --compare with build/flat-ground.report)
+1. Both drags get faster, measured over the whole changed frame, and nothing else gets slower. The runtime report, which times windows-release only, compares build/unit-surface.report with build/unit-surface-before.report, written on main before the change. It marks shop-drag and path-drag faster on full.park. shop-drag's median falls by at least 0.3 ms and path-drag's by at least 0.25 ms. In the kept-checks profiles, the paved surface was 5.7% of the shop drag's frame, about 0.53 ms, and 4.4% of the path drag's, about 0.48 ms. The path drag keeps running the paving units its edit reaches. No other stage is marked slower. (check: scripts/runtime-report.sh build/unit-surface.report, then --compare with build/unit-surface-before.report)
 2. A changed frame derives paving only where its edit reaches. Take eight Very Sleepy profiles of windows-release tpj_bench --ticks 1 on full.park, and look at the samples inside resolveWorld under each drag's timing function:
     - No sample holds buildSurface or hideJoined without also holding walkedSurfaceOf. Only the walked surface still builds and hides the whole park, until unit-connections.
     - Under the shop drag's, no sample holds the paving units' derivations, askAt, fitAt, paveAt, paveSegment, or hideOwner, without walkedSurfaceOf. A moved box changes no path intent.
@@ -215,6 +215,7 @@ In src/sim/park/surface.h, replacing PavedSurface and the two span functions:
 - derived-units: units, recorded reads, early cutoff, the ground units, and the drag stages. Merged.
 - kept-checks: the acceptance check, applying a command, and the ghost plan once in the caller's kept lists, so every surface they build refills kept storage. It also adds the resolve trace and the allocation check's drags and commits.
 - flat-ground: the kept lists of the walkways and the ghost. Merged.
+- kept-checks: the edit checks planned once in kept lists, the resolve trace, and the allocation check's drags and commits. Merged.
 - The milestone's decisions don't bear on this feature.
 
 ## Out of scope

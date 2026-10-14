@@ -38,9 +38,12 @@ Step 2: Record the scenarios.
 Run: `mkdir -p build/unit-surface && build/windows-debug/tpj_scenarios.exe tests/parks/*.park > build/unit-surface/scenarios-before.txt && build/windows-debug/tpj_scenarios.exe --ticks 300 tests/parks/stress/full.park > build/unit-surface/full-before.txt`
 Expected: exit status 0.
 
-Step 3: Create the branch: `git switch -c unit-surface`.
+Step 3: Write the runtime baseline on main, before any change. The report now times windows-release only, so the reports written before kept-checks merged don't compare row for row.
 
-The runtime baseline is build/flat-ground.report. Main hasn't changed since it was written, so no before report is made.
+Run: `cmake.exe --build --preset windows-release && scripts/runtime-report.sh build/unit-surface-before.report`
+Expected: the report is written.
+
+Step 4: Create the branch: `git switch -c unit-surface`.
 
 ### Task 2: Write the specs
 
@@ -319,8 +322,8 @@ Expected: no warning, every test passes, and tidy prints no finding.
 
 Step 2: Write the after report and compare it with the baseline.
 
-Run: `cmake.exe --build --preset windows-release && scripts/runtime-report.sh build/unit-surface.report && scripts/runtime-report.sh --compare build/flat-ground.report build/unit-surface.report`
-Expected: no stage is marked result-changed. On full.park, shop-drag and path-drag are marked faster. shop-drag's median is at least 0.3 ms below 9.48 ms, and path-drag's at least 0.5 ms below 13.33 ms. No other stage is marked slower.
+Run: `cmake.exe --build --preset windows-release && scripts/runtime-report.sh build/unit-surface.report && scripts/runtime-report.sh --compare build/unit-surface-before.report build/unit-surface.report`
+Expected: no stage is marked result-changed. On full.park, shop-drag and path-drag are marked faster. shop-drag's median is at least 0.3 ms below its median in the before report, and path-drag's at least 0.25 ms below. No other stage is marked slower.
 
 Step 3: Profile the drags. Run this eight times, with NAME from unit-surface-1 to unit-surface-8:
 
