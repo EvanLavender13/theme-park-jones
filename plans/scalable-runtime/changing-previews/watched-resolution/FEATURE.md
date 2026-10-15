@@ -44,7 +44,6 @@ MILESTONE.md criterion 4's sentence "The watched-previews milestone extends the 
 - Modify: docs/decisions/0041-allocation-check.md
 - Modify: docs/testing.md
 - Modify: docs/conventions.md
-- Modify: plans/scalable-runtime/changing-previews/MILESTONE.md
 - Modify: plans/scalable-runtime/CAPABILITY.md
 
 ## Dependencies

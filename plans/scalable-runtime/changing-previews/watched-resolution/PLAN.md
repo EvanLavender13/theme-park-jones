@@ -23,14 +23,11 @@ Files:
 - Modify: `docs/decisions/0041-allocation-check.md`
 - Modify: `docs/testing.md:9`
 - Modify: `docs/conventions.md:43`
-- Modify: `plans/scalable-runtime/changing-previews/MILESTONE.md`
 - Modify: `plans/scalable-runtime/CAPABILITY.md:103`
 
-Step 1: Make the changes FEATURE.md gives for decision 0041, docs/testing.md, docs/conventions.md, and MILESTONE.md criterion 4, word for word. Amend 0041 in place.
+Step 1: Make the changes FEATURE.md gives for decision 0041, docs/testing.md, and docs/conventions.md, word for word. MILESTONE.md already has its changes. Amend 0041 in place.
 
-Step 2: In MILESTONE.md's Features, insert before route-updates: "6. `watched-resolution`: the allocation check's drags and commits watch every resolution step except a named exception list of the steps that still allocate, each naming the feature that removes it, and the check fails when an excused step stops allocating. Depends on: feature 5." Renumber route-updates to 7 and change its "Depends on: feature 5." to "Depends on: feature 6.". Renumber thread-rules to 8. After the paragraph that starts "Later features are planned one at a time", add: "The allocation check's exception list names the resolution steps that still allocate. If the milestone stops before its last feature, fix each remaining entry or record it in docs/exceptions.md with its reason. Don't leave it only in the test file."
-
-Step 3: In CAPABILITY.md's watched-previews entry, replace "watches previews of a changing edit, the preview an overlay keeps at each tick," with "watches the preview an overlay keeps at each tick,". changing-previews' drags and commits already watch previews of a changing edit.
+Step 2: In CAPABILITY.md's watched-previews entry, replace "watches previews of a changing edit, the preview an overlay keeps at each tick," with "watches the preview an overlay keeps at each tick,". changing-previews' drags and commits already watch previews of a changing edit.
 
 ### Task 2: Hand freed blocks to a handler
 

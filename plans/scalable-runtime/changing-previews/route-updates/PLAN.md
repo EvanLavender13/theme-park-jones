@@ -25,7 +25,6 @@ Files:
 - Modify: `src/sim/routes/SPEC.md`
 - Create: `docs/decisions/0042-whole-millimetre-routes.md`
 - Modify: `plans/scalable-runtime/CAPABILITY.md:14`
-- Modify: `plans/scalable-runtime/changing-previews/MILESTONE.md`
 
 Step 1: Make the spec changes FEATURE.md lists, word for word.
 
@@ -34,9 +33,7 @@ Step 2: Write decision 0042, "Route distance adds lengths in whole millimetres",
 - Decision: each edge's length is its stops' distances, each rounded to whole millimetres, subtracted. Distances are their sums, published as metres. The user chose it on 2026-10-13.
 - Consequences: distances change by under a millimetre per edge, and a tie between two equal routes may break the other way. tpj_scenarios output changes once, in this feature. A mover walking its next steps adds up the rounded lengths exactly.
 
-Step 3: In MILESTONE.md's list of whole-park work left, add: "Route distance's slot moves: writing a source's changed entries moves the rest of its list, about 1.7 MB per path-drag frame on full.park, growing with sources times nodes."
-
-Step 4: In CAPABILITY.md line 14, after "route distance adds edge lengths in whole millimetres", add " (decision 0042)".
+Step 3: In CAPABILITY.md line 14, after "route distance adds edge lengths in whole millimetres", add " (decision 0042)".
 
 ### Task 2: Keep a field's resolved entries
 

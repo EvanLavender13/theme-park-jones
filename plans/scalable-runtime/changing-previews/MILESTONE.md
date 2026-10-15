@@ -38,7 +38,7 @@ The result must equal, exactly, a resolution from nothing (principle 8, decision
         - Visiting each route-distance source once, to update the nodes the change reaches.
 
     (check: read each function criterion 1 times; criterion 1's report)
-4. The functions criterion 1 times allocate nothing once their lists have grown, as docs/conventions.md requires of per-frame work. That covers the units' recorded reads, the candidate's change records, and the lists lean-routes left to this milestone: the other resolvers' readers, such as parkSegments and layoutOf, and the comparison that settles the stepped entries. The watched-previews milestone extends the allocation check to them. Until then, this milestone reads that code before it closes, as decision 0041 requires. (check: read each function criterion 1 times)
+4. The functions criterion 1 times allocate nothing once their lists have grown, as docs/conventions.md requires of per-frame work. That covers the units' recorded reads, the candidate's change records, and the lists lean-routes left to this milestone: the other resolvers' readers, such as parkSegments and layoutOf, and the comparison that settles the stepped entries. The allocation check watches every resolution step but those on its exception list (watched-resolution). Until then, this milestone reads that code before it closes, as decision 0041 requires. (check: read each function criterion 1 times)
 5. The result is exact. The reference is a resolution from nothing: every unit derived again, with no unit kept. In each of these cases, the result equals that reference by worldsEqual:
     - The kept candidate, after every frame of the candidate check's two drags on warm.park, a moved shop and a drawn path, with a tick between frames. The reference is the same edit on the ticked world, saved, loaded, and resolved.
     - A world that commits each chosen edit of the save checks.
@@ -81,10 +81,13 @@ derived-units. It builds the mechanism: units, the change records they start fro
 3. `kept-checks`: a path edit is planned once per changed frame, into lists the caller keeps. The acceptance check, applying the edit to the candidate, the shop context, and the ghost use that one plan, and a cycle applies commands with its buffers. None of them allocates once its lists have grown, and every surface they build refills storage the caller keeps. Resolution tells a trace each step, so the allocation check watches both drags and a round of commits, pausing only inside the resolvers no feature has moved yet. Merged. Depends on: feature 2.
 4. `unit-surface`: the paved surface moves onto units, one per point or segment that owns paving. Hiding reads only nearby pieces of the same group, through a grid filed from the pieces. Groups are labelled by their lowest point key, so a path drawn from an existing one leaves every label as it was. Both surfaces store their runs per owner and walk the words they walk today, and their readers read the runs. The paved-surface resolver stops making new lists of the park's segments and layout. The allocation check's drags and commits watch its units and the two surface resolvers too. Merged. Depends on: feature 3.
 5. `unit-connections`: each door's connection and walkway, and the walked surface, move onto units. A connection finds nearby paving through unit-surface's grid, and the path networks read the connections from the units instead of measuring every door against every piece. The walked surface shares the paved surface's units and hides again only near walkways. The walked-surface resolver stops making new lists of the park's segments and layout. Merged. Depends on: feature 4.
-6. `route-updates`: route distance updates only the entries an edit changes, instead of searching from every source again. Planned from the code when it starts. Depends on: feature 5.
-7. `thread-rules`: the decision record of criterion 7. Depends on: none.
+6. `watched-resolution`: the allocation check's drags and commits watch every resolution step except a named exception list of the steps that still allocate, each naming the feature that removes it, and the check fails when an excused step stops allocating. Depends on: feature 5.
+7. `route-updates`: route distance adds lengths in whole millimetres and updates only the entries an edit changes, instead of searching from every source again. Depends on: feature 6.
+8. `thread-rules`: the decision record of criterion 7. Depends on: none.
 
 Later features are planned one at a time, from the code, after the last one merges. Each takes the largest whole-park cost still measured in a drag frame (Research notes). After each one, the frame is measured again and played on full.park. Once dragging holds the display's refresh rate in play, the user decides whether to go on to criterion 1.
+
+The allocation check's exception list names the resolution steps that still allocate. If the milestone stops before its last feature, fix each remaining entry or record it in docs/exceptions.md with its reason. Don't leave it only in the test file.
 
 The whole-park work still left after route-updates, with what each part needs from the others:
 
@@ -95,6 +98,7 @@ The whole-park work still left after route-updates, with what each part needs fr
 - Planning a path edit, its acceptance check, and the ghost's edited surface: they copy the layout and derive the whole park's ground (worldGround, keptCurves, surfaceAround, pointsAffected).
 - The ghost's other parts: it compares every furniture piece of both worlds, draws every walkway, and checks every box.
 - Guest ground, the path networks' carriers, and the offers: each rebuilt for the whole park.
+- Route distance's slot moves: writing a source's changed entries moves the rest of its list, about 1.7 MB per path-drag frame on full.park, growing with sources times nodes.
 
 ## Deepening candidates
 
