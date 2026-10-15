@@ -199,14 +199,16 @@ void piecesNear(const PavedSurface &surface, ParkPoint at, double reach, Footpri
   const double grow = reach + FRONTAGE_PUSH + diagonal;
   const Bounds searched{at.X - grow, at.Z - grow, at.X + grow, at.Z + grow};
   near.clear();
-  for (const SurfacePiece &piece : surface.Pieces) {
-    const std::span<const ParkPoint> corners = pieceCorners(piece);
-    if (corners.empty()) {
-      continue;
-    }
-    const Bounds around = boundsOf(corners);
-    if (around.overlaps(searched)) {
-      near.push_back({&piece, around});
+  for (const auto &[owner, paving] : surface.Owners) {
+    for (const SurfacePiece &piece : paving.Pieces) {
+      const std::span<const ParkPoint> corners = pieceCorners(piece);
+      if (corners.empty()) {
+        continue;
+      }
+      const Bounds around = boundsOf(corners);
+      if (around.overlaps(searched)) {
+        near.push_back({&piece, around});
+      }
     }
   }
 }
@@ -387,19 +389,21 @@ Fronting frontingFor(const std::vector<EdgeStep> &steps, const NearestPlace &nea
 
 void edgeSteps(const PavedSurface &surface, PathKind kind, std::vector<EdgeStep> &steps) {
   steps.clear();
-  for (const EdgeLine &edge : surface.Edges) {
-    if (edge.Kind != kind) {
-      continue;
-    }
-    const std::span<const ParkPoint> points = edgePoints(surface, edge);
-    for (size_t i = 0; i + 1 < points.size(); ++i) {
-      const ParkPoint way = minus(points[i + 1], points[i]);
-      const double length = lengthOf(way);
-      if (length < MIN_SEGMENT_LENGTH) {
+  for (const auto &[owner, paving] : surface.Owners) {
+    for (const EdgeLine &edge : paving.Edges) {
+      if (edge.Kind != kind) {
         continue;
       }
-      const ParkPoint along = scaled(way, 1.0 / length);
-      steps.push_back({points[i], along, length, {-along.Z, along.X}});
+      const std::span<const ParkPoint> points = edgePoints(paving, edge);
+      for (size_t i = 0; i + 1 < points.size(); ++i) {
+        const ParkPoint way = minus(points[i + 1], points[i]);
+        const double length = lengthOf(way);
+        if (length < MIN_SEGMENT_LENGTH) {
+          continue;
+        }
+        const ParkPoint along = scaled(way, 1.0 / length);
+        steps.push_back({points[i], along, length, {-along.Z, along.X}});
+      }
     }
   }
 }
@@ -422,8 +426,10 @@ std::optional<Pose> frontagePose(const World &world, ToolPark &park, BoxKind kin
     return std::nullopt;
   }
   const NearestPlace nearest = nearestPlace(steps, point);
-  const bool onPaving = std::ranges::any_of(surface.Pieces, [served, point](const SurfacePiece &p) {
-    return p.Kind == served && pieceDistance(p, point) == 0.0;
+  const bool onPaving = std::ranges::any_of(surface.Owners, [served, point](const auto &owned) {
+    return std::ranges::any_of(owned.second.Pieces, [served, point](const SurfacePiece &p) {
+      return p.Kind == served && pieceDistance(p, point) == 0.0;
+    });
   });
   // A box at the pointer could have its door within CONNECTION_REACH of the paving out to this
   // distance, so it fronts the paving at least that far out.

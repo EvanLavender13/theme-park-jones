@@ -24,7 +24,9 @@ add_library(tpj_sim STATIC
     park/intent.cpp
     park/layout.cpp
     park/meetings.cpp
+    park/paving.cpp
     park/surface.cpp
+    park/surface_units.cpp
     park_schema.cpp
     routes/best_places.cpp
     routes/networks.cpp

@@ -41,6 +41,14 @@ A module can register unit kinds and indexes with the schema, in its resolver or
 
 Resolution keeps each unit's value and what its derivation read. A unit derives again only when its entity gains or loses the component, or when something it read has changed since. A command's use of an intent component counts as a change to it. If a unit derives again and its value comes out equal, word for word as the walk compares values, the units that read it don't derive again for it. So a resolution gives the same units as deriving every unit, whatever units the world kept.
 
+An index can also file each unit of an earlier kind under keys it names from the unit's value. When the unit is added, removed, or derives a different value, the index files it again.
+
+A module can also register a kind that updates its own units. At each resolution, its update reads what earlier kinds and indexes changed, reads their units and entries by key, and sets or removes its own units. At its first update, it is given every entity that holds its intent component. Resolution records a change for each unit the update adds, removes, or sets to a value whose words differ, so the units that read it derive again, as for any kind. A module that registers such a kind makes its units equal to what deriving them from nothing gives.
+
+changedUnits gives the keys of a kind's units that the running resolution added, removed, or changed, in ascending order. A resolver that runs after the kind reads it to change only what changed.
+
+derivedUnits gives the keys of the units of the kind registered under a name that the world's last resolution derived, in ascending order, whether their values came out changed or not. For a kind that updates its own units, it gives the keys the update set or removed. A copy gives none until it resolves. It throws std::invalid_argument when no unit kind or index has the name, and an index derives none.
+
 A new world and a loaded world hold no units, so their first resolution derives every unit. copyWorld carries the units and what they read, so a copy resolves only what changed since. copyWorld(world, into) makes into equal to the world, units included, reusing into's memory. It throws std::invalid_argument when into doesn't share the world's schema object. makeCandidate(world, commands, buffers, into) makes into the candidate. makeCandidate(world, change, context, buffers, into) makes into the candidate of a change that isn't a queued command. It refills into from the world, calls change(into, context), and resolves into. A caller that has already planned an edit uses it to apply the plan without planning it again. If the resolving caller's TickBuffers holds a ResolveTrace in its ResolveTraceSlot, resolution tells it each step's name as the step starts and ends: each resolver by its name, and the finishers together as finishers. Both makeCandidate forms that refill into also tell it copy-world around the refill. Units are never part of the walk, so hashes, saves, and comparisons never see them. unitValue gives a unit's value as the last resolution left it. unitsCurrent says whether a kind's units hold every change made to the world.
 
 ## The clock
@@ -140,5 +148,7 @@ The results also depend on the floating-point environment, which must be round-t
 ## Memory in play
 
 Once its buffers have grown, a cycle with no commands frees no memory it allocated (decision 0041). The world keeps the memory of the entities and components it removes and reuses it for those it adds. Once the park has held as many as it holds, guests arriving and leaving and seat service starting and ending allocate nothing. The allocation check in tests/checks holds a stretch of full.park's ticks to the first sentence.
+
+KeptMap holds values by key in ascending order. It keeps the nodes of removed values for later adds, so adds and removes allocate nothing once it has grown. Copying one copies its values. Assigning one to another reuses the other's nodes and their memory.
 
 Queueing commands and emptying the queue free no memory they allocated once the queue has grown. Applying a command passes the cycle's buffers. The allocation check holds the queue to it over each tool's release and each undo and redo on full.park.

@@ -293,25 +293,30 @@ void resolveGuestGround(World &world, TickBuffers &buffers) {
         {groundPoint(piece->Corners[3]), groundPoint(piece->Corners[0]), group->second, true});
     carriers.push_back({walkway.Connector, group->second});
   }
-  for (const SurfacePiece &piece : surface.Pieces) {
-    const auto group = groups.find(piece.Owner);
-    if (piece.Kind != PathKind::Guest || group == groups.end() ||
-        std::ranges::find(walkwayPieces, piece) != walkwayPieces.end()) {
-      continue;
+  for (const auto &[owner, paving] : surface.Owners) {
+    for (const SurfacePiece &piece : paving.Pieces) {
+      const auto group = groups.find(piece.Owner);
+      if (piece.Kind != PathKind::Guest || group == groups.end() ||
+          std::ranges::find(walkwayPieces, piece) != walkwayPieces.end()) {
+        continue;
+      }
+      const auto atPoint = pointCarriers.find(piece.Owner);
+      pieces.push_back(
+          {piece, group->second, atPoint == pointCarriers.end() ? piece.Owner : atPoint->second});
     }
-    const auto atPoint = pointCarriers.find(piece.Owner);
-    pieces.push_back(
-        {piece, group->second, atPoint == pointCarriers.end() ? piece.Owner : atPoint->second});
   }
-  for (const EdgeLine &line : surface.Edges) {
-    const auto group = groups.find(line.Owner);
-    if (line.Kind != PathKind::Guest || group == groups.end()) {
-      continue;
-    }
-    const std::span<const ParkPoint> points = edgePoints(surface, line);
-    for (size_t i = 1; i < points.size(); ++i) {
-      if (points[i - 1] != points[i]) {
-        walls.push_back({groundPoint(points[i - 1]), groundPoint(points[i]), group->second, false});
+  for (const auto &[owner, paving] : surface.Owners) {
+    for (const EdgeLine &line : paving.Edges) {
+      const auto group = groups.find(line.Owner);
+      if (line.Kind != PathKind::Guest || group == groups.end()) {
+        continue;
+      }
+      const std::span<const ParkPoint> points = edgePoints(paving, line);
+      for (size_t i = 1; i < points.size(); ++i) {
+        if (points[i - 1] != points[i]) {
+          walls.push_back(
+              {groundPoint(points[i - 1]), groundPoint(points[i]), group->second, false});
+        }
       }
     }
   }

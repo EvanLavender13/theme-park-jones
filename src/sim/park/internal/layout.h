@@ -178,6 +178,16 @@ struct GroundLists {
   std::vector<ParkSegment> CallerSpare;
 };
 
+// Empties the owner's lists, keeping their memory.
+void clearPaving(OwnerPaving &paving);
+// Starts refilling the surface: empties every owner's lists, keeping their memory.
+void beginRefill(PavedSurface &surface);
+// Ends refilling the surface: removes each owner whose paving stayed empty, keeping its node and
+// its lists for a later add.
+void endRefill(PavedSurface &surface);
+// The owner's paving in the surface being refilled, added empty when it holds none.
+OwnerPaving &pavingFor(PavedSurface &surface, EntityKey owner);
+
 PathGround groundOf(const PathLayout &layout);
 // As the returning form, into lists.Ground. Allocates nothing once the lists have grown.
 void groundOf(const PathLayout &layout, GroundLists &lists);

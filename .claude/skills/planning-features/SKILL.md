@@ -44,7 +44,7 @@ Create a task for each item. Complete them in order.
     - Every acceptance criterion is observable and names how it is confirmed.
     - Every listed test is one that docs/testing.md allows a feature to add.
     - Every spec statement the feature adds is observable behavior, not implementation.
-    - Every task has exact paths, exact commands, and expected outputs.
+    - Every task has exact paths and exact content.
     - The Placement section places every behavior the tasks add.
     - Every claim about existing code has been checked by reading that code. This includes what a function does, how a test reaches its state, and what a command prints. Run each read-only command, and copy its Expected line from what it printed.
 16. Review. Stage FEATURE.md, PLAN.md, and RESEARCH.md, then dispatch the reviewer with `reviewing`. Give it MILESTONE.md, the SPEC.md of every module the feature touches, and docs/principles.md as context. Handle the findings as `reviewing` describes for planning briefs. Fix Minor findings and settled Major findings yourself. Bring the user only the Major findings that need a design choice, and report the rest in one line.
@@ -99,11 +99,10 @@ Step 1: <Action>
 
 Step 2: <Action>
 
-Run: `exact command`
-Expected: <exact expected output>
+[Exact code, command, or content.]
 ```
 
-Verify each implementation task with the narrowest check that covers it, which is one of these: the windows-debug build of the targets the task changes, a run of the app or a `--capture`, a `tpj_scenarios --compare`, or the listed tests run directly with a filter. Run the full windows-debug build, its ctest run, and `scripts/tidy.sh` once, when you confirm the feature's acceptance criteria (decision 0030).
+Don't give implementation tasks a build or a check. The implementer writes all the code, builds once, and then confirms the criteria. Put every check in the one confirmation task: the full windows-debug build, its ctest run, `scripts/tidy.sh`, and each criterion's means, each run once (decision 0030). If the feature must leave the simulation unchanged, record the scenarios once before the change and compare once after it.
 
 ## FEATURE.md format
 

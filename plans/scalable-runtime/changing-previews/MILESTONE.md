@@ -91,7 +91,7 @@ derived-units. It builds the mechanism: units, the change records they start fro
 
 Unordered pool this milestone draws later features from.
 
-- None yet.
+- Resolve the candidate when the cursor rests: while the cursor moves, each drag frame builds only the ghost and the accept check, about 2.7 ms of a path drag's frame on full.park, and the full candidate resolves when the cursor rests or the edit is placed. It changes what the preview shows during a fast drag, so it's gameplay. The user chose on 2026-10-14 to keep the planned features first and consider this as a final feature.
 
 ## Decisions
 

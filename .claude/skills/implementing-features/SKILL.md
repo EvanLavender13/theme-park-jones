@@ -27,7 +27,7 @@ Create a task for each item. Complete them in order.
     - Then dispatch the `test-writer` agent with the Agent tool, using the template below.
     - When it returns, confirm that its tests build. Confirm that the tests for unimplemented behavior fail for that reason, not because of a compile error or a broken harness.
     - Settle each gap its report lists before implementing. If a gap follows from the principles and specs, record it as a spec decision in FEATURE.md. If it needs a design choice, take it to the user. If it can wait, record it in FEATURE.md's Open questions. Don't leave a gap only in the report.
-5. Do the implementation tasks in order. Perform each task's steps and run its verification before starting the next. Verify narrowly: build only the targets the task changes, and run only the test executables that cover it, filtered to the relevant files or test names. Leave the full build and ctest for step 6.
+5. Do the implementation tasks in order without building or testing between them. When the code is written, build once and fix everything that build reports. Don't run any check twice: step 6 runs each one once.
 6. Confirm every acceptance criterion in FEATURE.md by the means it names: play, a `--capture` run, a `tpj_scenarios --compare` showing the simulation unchanged, or a listed test.
     - If the feature registers state, confirm that a park file in tests/parks/ holds it, so the park world checks cover it.
     - The full windows-debug build must have no warnings, `ctest.exe --preset windows-debug` must pass, and `scripts/tidy.sh` must be clean.

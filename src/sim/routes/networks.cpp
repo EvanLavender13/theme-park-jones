@@ -211,19 +211,21 @@ struct Connection {
 };
 
 // Each owner of the kind's pieces with the least distance from the point to any of its pieces, in
-// ascending key order of the owner. The pieces are in ascending key order of their owner.
-void ownerDistances(std::vector<std::pair<EntityKey, double>> &out,
-                    const std::vector<SurfacePiece> &pieces, PathKind kind, ParkPoint point) {
+// ascending key order of the owner.
+void ownerDistances(std::vector<std::pair<EntityKey, double>> &out, const PavedSurface &surface,
+                    PathKind kind, ParkPoint point) {
   out.clear();
-  for (const SurfacePiece &piece : pieces) {
-    if (piece.Kind != kind) {
-      continue;
-    }
-    const double distance = pieceDistance(piece, point);
-    if (!out.empty() && out.back().first == piece.Owner) {
-      out.back().second = std::min(out.back().second, distance);
-    } else {
-      out.emplace_back(piece.Owner, distance);
+  for (const auto &[owner, paving] : surface.Owners) {
+    for (const SurfacePiece &piece : paving.Pieces) {
+      if (piece.Kind != kind) {
+        continue;
+      }
+      const double distance = pieceDistance(piece, point);
+      if (!out.empty() && out.back().first == piece.Owner) {
+        out.back().second = std::min(out.back().second, distance);
+      } else {
+        out.emplace_back(piece.Owner, distance);
+      }
     }
   }
 }
@@ -297,44 +299,57 @@ std::optional<LineMeeting> nearestLine(const Network &lines, const std::vector<C
   return nearest;
 }
 
-// How far along the ray from the point in the unit direction it first meets a piece of the kind,
-// within the limit, or none. 0 when the point lies on one.
-std::optional<double> rayEntry(const std::vector<SurfacePiece> &pieces, PathKind kind,
-                               ParkPoint from, ParkPoint direction, double limit) {
-  std::optional<double> least;
-  for (const SurfacePiece &piece : pieces) {
-    if (piece.Kind != kind) {
+// How far along the ray from the point in the unit direction it enters the piece, within the
+// limit, or none. 0 when the point lies on it.
+std::optional<double> pieceEntry(const SurfacePiece &piece, ParkPoint from, ParkPoint direction,
+                                 double limit) {
+  const std::span<const ParkPoint> corners = pieceCorners(piece);
+  double enter = 0.0;
+  double leave = limit;
+  bool missed = corners.empty();
+  for (size_t i = 0; !missed && i < corners.size(); ++i) {
+    const ParkPoint &corner = corners[i];
+    const ParkPoint &next = corners[(i + 1) % corners.size()];
+    const double sideX = next.X - corner.X;
+    const double sideZ = next.Z - corner.Z;
+    const double length = std::sqrt((sideX * sideX) + (sideZ * sideZ));
+    if (length < 1e-9) {
       continue;
     }
-    const std::span<const ParkPoint> corners = pieceCorners(piece);
-    double enter = 0.0;
-    double leave = limit;
-    bool missed = corners.empty();
-    for (size_t i = 0; !missed && i < corners.size(); ++i) {
-      const ParkPoint &corner = corners[i];
-      const ParkPoint &next = corners[(i + 1) % corners.size()];
-      const double sideX = next.X - corner.X;
-      const double sideZ = next.Z - corner.Z;
-      const double length = std::sqrt((sideX * sideX) + (sideZ * sideZ));
-      if (length < 1e-9) {
+    // The inside of a counter-clockwise piece lies to the left of each side.
+    const double inwardX = sideZ / length;
+    const double inwardZ = -sideX / length;
+    const double start = ((from.X - corner.X) * inwardX) + ((from.Z - corner.Z) * inwardZ);
+    const double change = (direction.X * inwardX) + (direction.Z * inwardZ);
+    if (change == 0.0) {
+      missed = start < 0.0;
+    } else if (change > 0.0) {
+      enter = std::max(enter, -start / change);
+    } else {
+      leave = std::min(leave, -start / change);
+    }
+    missed = missed || enter > leave;
+  }
+  if (missed) {
+    return std::nullopt;
+  }
+  return enter;
+}
+
+// How far along the ray from the point in the unit direction it first meets a piece of the kind,
+// within the limit, or none. 0 when the point lies on one.
+std::optional<double> rayEntry(const PavedSurface &surface, PathKind kind, ParkPoint from,
+                               ParkPoint direction, double limit) {
+  std::optional<double> least;
+  for (const auto &[owner, paving] : surface.Owners) {
+    for (const SurfacePiece &piece : paving.Pieces) {
+      if (piece.Kind != kind) {
         continue;
       }
-      // The inside of a counter-clockwise piece lies to the left of each side.
-      const double inwardX = sideZ / length;
-      const double inwardZ = -sideX / length;
-      const double start = ((from.X - corner.X) * inwardX) + ((from.Z - corner.Z) * inwardZ);
-      const double change = (direction.X * inwardX) + (direction.Z * inwardZ);
-      if (change == 0.0) {
-        missed = start < 0.0;
-      } else if (change > 0.0) {
-        enter = std::max(enter, -start / change);
-      } else {
-        leave = std::min(leave, -start / change);
+      const std::optional<double> enter = pieceEntry(piece, from, direction, limit);
+      if (enter && (!least || *enter < *least)) {
+        least = enter;
       }
-      missed = missed || enter > leave;
-    }
-    if (!missed && (!least || enter < *least)) {
-      least = enter;
     }
   }
   return least;
@@ -345,7 +360,7 @@ std::optional<double> rayEntry(const std::vector<SurfacePiece> &pieces, PathKind
 // carrier's line, unless the meeting already lies straight out of the face, the ray meets no
 // paving within reach, or the door stands on paving.
 std::pair<std::vector<CarrierPoint>, double> connectorRoute(const Network &lines,
-                                                            const std::vector<SurfacePiece> &pieces,
+                                                            const PavedSurface &surface,
                                                             PathKind kind, const ParkDoor &door,
                                                             const LineMeeting &meeting) {
   std::vector<CarrierPoint> points{
@@ -358,7 +373,7 @@ std::pair<std::vector<CarrierPoint>, double> connectorRoute(const Network &lines
     return {points, meeting.At.Distance};
   }
   const std::optional<double> entry =
-      rayEntry(pieces, kind, door.At, door.Out, CONNECTION_REACH + JUNCTION_TOLERANCE);
+      rayEntry(surface, kind, door.At, door.Out, CONNECTION_REACH + JUNCTION_TOLERANCE);
   if (!entry || !(*entry > 0.0)) {
     return {points, meeting.At.Distance};
   }
@@ -385,9 +400,8 @@ std::pair<std::vector<CarrierPoint>, double> connectorRoute(const Network &lines
 // reach. A carrier's paving is the pieces its segment owns and those of the points it ends at. Of
 // carriers whose paving lies equally near, the one whose line lies nearest wins, then the lower
 // key.
-std::vector<Connection> findConnections(const PathCarriers &paths,
-                                        const std::vector<SurfacePiece> &pieces, PathKind kind,
-                                        const std::vector<ParkDoor> &doors) {
+std::vector<Connection> findConnections(const PathCarriers &paths, const PavedSurface &surface,
+                                        PathKind kind, const std::vector<ParkDoor> &doors) {
   const std::vector<Carrier> &carriers = paths.Carriers;
   std::vector<Connection> connections;
   if (carriers.empty()) {
@@ -397,7 +411,7 @@ std::vector<Connection> findConnections(const PathCarriers &paths,
   std::vector<std::pair<EntityKey, double>> owners;
   std::vector<std::optional<double>> paving(carriers.size());
   for (const ParkDoor &door : doors) {
-    ownerDistances(owners, pieces, kind, door.At);
+    ownerDistances(owners, surface, kind, door.At);
     const std::optional<double> least = pavingDistances(paving, paths, owners);
     if (!least || *least > CONNECTION_REACH) {
       continue;
@@ -414,7 +428,7 @@ std::vector<Connection> findConnections(const PathCarriers &paths,
       continue;
     }
     const auto path = std::ranges::lower_bound(carriers, meeting->At.Carrier, {}, &Carrier::Key);
-    auto [points, pathDistance] = connectorRoute(lines, pieces, kind, door, *meeting);
+    auto [points, pathDistance] = connectorRoute(lines, surface, kind, door, *meeting);
     connections.push_back({.Connector = {.Key = key,
                                          .Width = std::min(pathWidth(kind), door.Width),
                                          .Points = std::move(points),
@@ -479,13 +493,12 @@ uint32_t addStops(std::vector<Carrier> &carriers, const std::vector<Meeting> &me
   return nodeCount;
 }
 
-Network deriveNetwork(const std::vector<ParkSegment> &segments,
-                      const std::vector<SurfacePiece> &pieces, const std::vector<ParkDoor> &doors,
-                      PathKind kind) {
+Network deriveNetwork(const std::vector<ParkSegment> &segments, const PavedSurface &surface,
+                      const std::vector<ParkDoor> &doors, PathKind kind) {
   PathCarriers paths = pathCarriers(segments, kind);
   std::vector<Meeting> meetings = pointMeetings(paths);
   // Each connector meets its path at its connection.
-  std::vector<Connection> connections = findConnections(paths, pieces, kind, doors);
+  std::vector<Connection> connections = findConnections(paths, surface, kind, doors);
   std::vector<Carrier> carriers = std::move(paths.Carriers);
   const size_t pathCount = carriers.size();
   for (Connection &connection : connections) {
@@ -529,8 +542,7 @@ void resolvePathNetworks(World &world, TickBuffers &buffers) {
   const std::vector<ParkBox> boxes = parkBoxes(world);
   const PavedSurface &surface = resolvedSurface(world);
   for (const PathKind kind : {PathKind::Guest, PathKind::Backstage}) {
-    Network network =
-        deriveNetwork(segments, surface.Pieces, doorsServing(entrances, boxes, kind), kind);
+    Network network = deriveNetwork(segments, surface, doorsServing(entrances, boxes, kind), kind);
     const EntityKey key =
         world.createDerivedEntity(NULL_KEY, NETWORK_PURPOSE, static_cast<uint64_t>(kind));
     if (Network *held = world.tryGet<Network>(key)) {
@@ -562,7 +574,7 @@ void resolveWalkedSurface(World &world, TickBuffers &buffers) {
   connectorWalkways(world, PathKind::Guest, walkways, buffers);
   connectorWalkways(world, PathKind::Backstage, walkways, buffers);
   const EntityKey key = world.createDerivedEntity(NULL_KEY, WALKED_SURFACE_PURPOSE, 0);
-  world.emplaceOrReplace<WalkedSurface>(key, WalkedSurface{parkSurface(world, walkways, buffers)});
+  parkSurface(world, walkways, world.getOrEmplace<WalkedSurface>(key).Held, buffers);
 }
 
 // Removes both kinds' previous networks, so no resolution ends holding one.

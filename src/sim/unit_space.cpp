@@ -7,14 +7,16 @@
 #include <algorithm>
 #include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 
 namespace tpj {
 
 std::unique_ptr<UnitTable> IndexTable::clone() const {
   auto copy = std::make_unique<IndexTable>();
   copy->Counter = Counter;
-  copy->Entries = Entries.clone();
-  copy->Filed = Filed.clone();
+  copy->Entries = Entries;
+  copy->Filed = Filed;
   return copy;
 }
 
@@ -49,7 +51,7 @@ std::unique_ptr<UnitSpace> UnitSpace::clone() const {
   }
   copy->Readers.reserve(Readers.size());
   for (const KeptMap<std::vector<UnitRead>> &readers : Readers) {
-    copy->Readers.push_back(readers.clone());
+    copy->Readers.push_back(readers);
   }
   copy->Changes = Changes;
   return copy;
@@ -67,9 +69,11 @@ void UnitSpace::assignFrom(const UnitSpace &other) {
     Readers[table].assignFrom(other.Readers[table]);
   }
   copyGrowing(Changes, std::span<const UnitRead>(other.Changes));
+  Derived.clear();
 }
 
 void UnitSpace::beginResolution() {
+  Derived.clear();
   for (size_t store = 0; store < StoreCount; ++store) {
     for (const EntityKey key : Logs[store]) {
       Changes.push_back(UnitRead{store, key});
@@ -133,6 +137,71 @@ void insertSorted(std::vector<EntityKey> &keys, EntityKey key) {
   if (found == keys.end() || *found != key) {
     keys.insert(found, key);
   }
+}
+
+void fileAgain(IndexTable &index, UnitSpace &space, size_t table, EntityKey key,
+               const std::vector<EntityKey> &keys) {
+  std::vector<EntityKey> *filed = index.Filed.find(key);
+  if (filed != nullptr && *filed == keys) {
+    return;
+  }
+  if (filed != nullptr) {
+    for (const EntityKey old : *filed) {
+      if (std::ranges::binary_search(keys, old)) {
+        continue;
+      }
+      std::vector<EntityKey> &entry = *index.Entries.find(old);
+      eraseSorted(entry, key);
+      if (entry.empty()) {
+        index.Entries.erase(old);
+      }
+      space.Changes.push_back(UnitRead{table, old});
+    }
+  }
+  for (const EntityKey now : keys) {
+    if (filed != nullptr && std::ranges::binary_search(*filed, now)) {
+      continue;
+    }
+    auto [entry, added] = index.Entries.getOrAdd(now);
+    if (added) {
+      entry.clear();
+    }
+    insertSorted(entry, key);
+    space.Changes.push_back(UnitRead{table, now});
+  }
+  if (keys.empty()) {
+    index.Filed.erase(key);
+  } else {
+    std::vector<EntityKey> &kept = index.Filed.getOrAdd(key).first;
+    copyGrowing(kept, std::span<const EntityKey>(keys));
+  }
+}
+
+void changedKeys(const UnitSpace &space, size_t table, std::vector<EntityKey> &keys) {
+  for (const UnitRead &change : space.Changes) {
+    if (change.Table == table) {
+      keys.push_back(change.Key);
+    }
+  }
+  sortUnique(keys);
+}
+
+void derivedUnits(const World &world, std::string_view kind, std::vector<EntityKey> &keys) {
+  const std::vector<UnitTableType> &tables = world.schema().unitTables();
+  const auto found = std::ranges::find(tables, kind, &UnitTableType::Name);
+  if (found == tables.end()) {
+    throw std::invalid_argument("no unit kind or index is registered as '" + std::string(kind) +
+                                "'");
+  }
+  const UnitSpace &space = unitSpaceOf(world);
+  const size_t table = space.StoreCount + static_cast<size_t>(found - tables.begin());
+  keys.clear();
+  for (const UnitRead &derived : space.Derived) {
+    if (derived.Table == table) {
+      keys.push_back(derived.Key);
+    }
+  }
+  sortUnique(keys);
 }
 
 size_t UnitReads::earlierTable(TypeId id) const {

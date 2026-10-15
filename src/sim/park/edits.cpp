@@ -218,10 +218,16 @@ bool meets(const SurfacePiece &piece, const Solid &solid) {
   return true;
 }
 
-// Whether the solid stays in the park and conflicts with no piece of paving and no other solid. A
-// solid holding the same key is the one being moved, so it is skipped.
-bool fits(const Solid &solid, const std::vector<Solid> &solids,
-          const std::vector<SurfacePiece> &pieces) {
+// Whether test(piece) is true for every piece of the surface, in owner order.
+template <typename Test> bool allPieces(const PavedSurface &surface, Test test) {
+  return std::ranges::all_of(surface.Owners, [&test](const auto &owned) {
+    return std::ranges::all_of(owned.second.Pieces, test);
+  });
+}
+
+// Whether the solid stays in the park and conflicts with no piece of the surface and no other
+// solid. A solid holding the same key is the one being moved, so it is skipped.
+bool fits(const Solid &solid, const std::vector<Solid> &solids, const PavedSurface &surface) {
   if (leavesPark(solid)) {
     return false;
   }
@@ -230,8 +236,7 @@ bool fits(const Solid &solid, const std::vector<Solid> &solids,
       })) {
     return false;
   }
-  return std::ranges::none_of(pieces,
-                              [&solid](const SurfacePiece &piece) { return meets(piece, solid); });
+  return allPieces(surface, [&solid](const SurfacePiece &piece) { return !meets(piece, solid); });
 }
 
 // Whether the piece meets no solid.
@@ -1455,53 +1460,28 @@ void applyPlan(Store &store, const EditPlan &plan, std::vector<EntityKey> &keys,
   }
 }
 
-// Sorts the keys and drops repeats.
-void sortUnique(std::vector<EntityKey> &keys) {
-  std::ranges::sort(keys);
-  keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
-}
-
-// Empties the surface's lists, keeping their memory.
-void clearSurface(PavedSurface &surface) {
-  surface.Pieces.clear();
-  surface.Edges.clear();
-  surface.EdgePoints.clear();
-  surface.Sides.clear();
-  surface.SidePoints.clear();
-}
-
-// Puts in changed the pieces and edge lines of after whose owner's pieces or edge lines differ from
-// before's. Both hold the surface of the same owners.
+// Refills changed with the pieces and edge lines of each owner of after whose pieces or edge lines
+// differ from its paving in before: the pieces when they differ, and the edge lines when they do.
 void changedOwners(const PavedSurface &before, const PavedSurface &after, PavedSurface &changed) {
-  // Each owner's run of items in a list in ascending owner order.
-  const auto runOf = [](const auto &items, EntityKey owner) {
-    return std::ranges::equal_range(items, owner, {}, [](const auto &item) { return item.Owner; });
-  };
-  const auto sameEdges = [&before, &after](const auto &was, const auto &is) {
-    return std::ranges::equal(was, is, [&before, &after](const EdgeLine &x, const EdgeLine &y) {
-      return x.Kind == y.Kind && std::ranges::equal(edgePoints(before, x), edgePoints(after, y));
-    });
-  };
-  clearSurface(changed);
-  for (auto first = after.Pieces.begin(); first != after.Pieces.end();) {
-    const auto run = runOf(after.Pieces, first->Owner);
-    if (!std::ranges::equal(runOf(before.Pieces, first->Owner), run)) {
-      changed.Pieces.insert(changed.Pieces.end(), run.begin(), run.end());
+  beginRefill(changed);
+  for (const auto &[owner, paving] : after.Owners) {
+    const OwnerPaving *was = pavingOf(before, owner);
+    const bool piecesDiffer = was == nullptr || !std::ranges::equal(was->Pieces, paving.Pieces);
+    const bool edgesDiffer =
+        was == nullptr ||
+        !std::ranges::equal(was->Edges, paving.Edges, [&](const EdgeLine &x, const EdgeLine &y) {
+          return x.Kind == y.Kind && std::ranges::equal(edgePoints(*was, x), edgePoints(paving, y));
+        });
+    if (piecesDiffer && !paving.Pieces.empty()) {
+      copyGrowing(pavingFor(changed, owner).Pieces, std::span<const SurfacePiece>(paving.Pieces));
     }
-    first = run.end();
-  }
-  for (auto first = after.Edges.begin(); first != after.Edges.end();) {
-    const auto run = runOf(after.Edges, first->Owner);
-    if (!sameEdges(runOf(before.Edges, first->Owner), run)) {
-      for (const EdgeLine &edge : run) {
-        const std::span<const ParkPoint> points = edgePoints(after, edge);
-        changed.Edges.push_back(
-            EdgeLine{edge.Kind, edge.Owner, changed.EdgePoints.size(), points.size()});
-        changed.EdgePoints.insert(changed.EdgePoints.end(), points.begin(), points.end());
-      }
+    if (edgesDiffer && !paving.Edges.empty()) {
+      OwnerPaving &into = pavingFor(changed, owner);
+      copyGrowing(into.Edges, std::span<const EdgeLine>(paving.Edges));
+      copyGrowing(into.EdgePoints, std::span<const ParkPoint>(paving.EdgePoints));
     }
-    first = run.end();
   }
+  endRefill(changed);
 }
 
 // Whether the segment's record or line differs from the one before holds under its key, or before
@@ -1629,7 +1609,7 @@ bool editedFits(const PathGround &groundAfter, const EditLists &lists) {
                                return !segment.Line.empty() &&
                                       !lineLeavesPark(segment.Line, segment.Width);
                              }) &&
-         std::ranges::all_of(lists.Edited.Pieces, [&lists](const SurfacePiece &piece) {
+         allPieces(lists.Edited, [&lists](const SurfacePiece &piece) {
            return !leavesPark(piece) && fits(piece, lists.Solids);
          });
 }
@@ -1991,7 +1971,7 @@ void restoredSolids(const World &world, const RestoreIntent &command, uint64_t f
 bool solidFits(const PathLayout &layout, const PathGround &ground, const Solid &solid,
                EditLists &lists, TickBuffers &buffers) {
   piecesNear(layout, ground, solid, lists, buffers);
-  return fits(solid, lists.Solids, lists.NearSolid.Pieces);
+  return fits(solid, lists.Solids, lists.NearSolid);
 }
 
 // Whether the world accepts the restore: it names what it acts on, every segment it adds or
@@ -2468,7 +2448,7 @@ bool isPhysicallyValid(const World &world) {
   if (std::ranges::any_of(lines, [](const Line &line) { return leavesPark(line); })) {
     return false;
   }
-  return std::ranges::all_of(parkSurface(world).Pieces, [&solids](const SurfacePiece &piece) {
+  return allPieces(parkSurface(world), [&solids](const SurfacePiece &piece) {
     return !leavesPark(piece) && fits(piece, solids);
   });
 }
@@ -2532,7 +2512,8 @@ void editedParts(const World & /*world*/, const PlannedEdit &planned, EditedPart
                  TickBuffers &buffers) {
   const PlanLists &kept = *planned.Lists;
   EditLists &lists = buffers.get<EditLists>();
-  clearSurface(parts.Surface);
+  beginRefill(parts.Surface);
+  endRefill(parts.Surface);
   resizeKeeping(parts.Segments, 0, lists.SpareSegments);
   if (!kept.HasPlan) {
     return;
