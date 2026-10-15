@@ -37,6 +37,7 @@ bool Paused = false;
 bool Overflowed = false;
 uint64_t Tick = 0;
 const char *Work = "";
+void (*FreedHandler)(const FreedBlock &block) = nullptr;
 // The block the last heap call allocated while watching, or a null address when the last call
 // freed one.
 Noted LastAllocated{};
@@ -145,6 +146,9 @@ void forget(void *block) {
       }
       ++FreedCount;
       blockFreed(freed);
+      if (FreedHandler != nullptr) {
+        FreedHandler(freed);
+      }
       return;
     }
   }
@@ -250,6 +254,8 @@ void watchTick(uint64_t tick) { Tick = tick; }
 
 void watchWork(const char *work) { Work = work; }
 
+const char *currentWork() { return Work; }
+
 void stopWatching() {
   Watching = false;
   Paused = false;
@@ -278,6 +284,8 @@ bool tableOverflowed() { return Overflowed; }
   // An empty body the compiler keeps, so a debugger can stop here.
   asm volatile("");
 }
+
+void onFreed(void (*handler)(const FreedBlock &block)) { FreedHandler = handler; }
 
 } // namespace tpj::check
 

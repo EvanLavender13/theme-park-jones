@@ -13,8 +13,9 @@
 // redoes a guest path, and watches the app's work after each, with the watch paused while the
 // session applies the command. Then it drags a shop along its face and draws a guest path out and
 // back, a tick before each frame, through a kept preview and the ghost, and commits edits there
-// and back on a copy of the world. There it watches everything but the resolvers changing-previews
-// hasn't moved yet and the finishers, which a resolve trace pauses the watch around.
+// and back on a copy of the world. There it watches every resolution step, and excuses the blocks
+// the steps on its exception list allocate or free. It fails when an excused step no longer
+// allocates, so the list only shrinks.
 
 #include "watch.h"
 
@@ -52,6 +53,8 @@
 #include <iostream>
 #include <iterator>
 #include <optional>
+#include <span>
+#include <stddef.h>
 #include <stdexcept>
 #include <stdint.h>
 #include <string>
@@ -837,16 +840,18 @@ void editRound(EditRounds &rounds, HiddenFrame &frame, tpj::ParkSession &session
 }
 
 // Prints the blocks freed during the watched work, or that its table overflowed, and gives 1, or
-// prints nothing and gives 0 when it freed none.
-int reportFreed(const char *watched) {
+// prints nothing and gives 0 when it freed none. count is how many it freed, and blocks the first
+// of them.
+int reportBlocks(const char *watched, size_t count,
+                 std::span<const tpj::check::FreedBlock> blocks) {
   if (tpj::check::tableOverflowed()) {
     std::cout << "allocation check: " << watched << " noted more blocks than the table holds\n";
     return 1;
   }
-  if (tpj::check::freedCount() > 0) {
-    std::cout << "allocation check: " << tpj::check::freedCount()
-              << " blocks were allocated and freed during " << watched << '\n';
-    for (const tpj::check::FreedBlock &block : tpj::check::freedBlocks()) {
+  if (count > 0) {
+    std::cout << "allocation check: " << count << " blocks were allocated and freed during "
+              << watched << '\n';
+    for (const tpj::check::FreedBlock &block : blocks) {
       std::cout << "allocation check: " << block.FreedBy << " freed a " << block.Size
                 << "-byte block at tick " << block.Freed << " that " << block.AllocatedBy
                 << " allocated at tick " << block.Allocated << '\n';
@@ -854,6 +859,11 @@ int reportFreed(const char *watched) {
     return 1;
   }
   return 0;
+}
+
+// Prints every block freed during the watched work, as reportBlocks prints them.
+int reportFreed(const char *watched) {
+  return reportBlocks(watched, tpj::check::freedCount(), tpj::check::freedBlocks());
 }
 
 // Steps the park through the app's own session, syncing the scene and the previews after each
@@ -898,40 +908,119 @@ int checkEdits(SteadyPlay &play, tpj::ParkSession &session) {
   return reportFreed("the watched rounds");
 }
 
-// The steps of a resolution that changing-previews has moved, so the drags and commits watch them:
-// the candidate's refill, the path ground's units, the paved surface's units, the units park keeps
-// for other modules, the doors' connections and walkways, the walked surface's units, and both
-// surface resolvers.
-constexpr std::array<std::string_view, 25> WATCHED_STEPS{
-    "copy-world",     "segment-ends",     "straight-lines",     "point-arms",
-    "corners",        "ground-lines",     "group-labels",       "point-asks",
-    "point-fits",     "point-paving",     "segment-paving",     "point-cells",
-    "segment-cells",  "hidden-edges",     "paved-surface",      "park-boxes",
-    "park-entrances", "door-connections", "connection-paths",   "door-walkways",
-    "walkway-cells",  "walkway-joins",    "walked-point-edges", "walked-segment-edges",
-    "walked-surface"};
+// A resolution step that still allocates, and the feature that removes it.
+struct ExcusedStep {
+  std::string_view Step;
+  std::string_view RemovedBy;
+};
 
-// Pauses the watch while a resolution step it doesn't hold runs: each resolver not moved yet, and
-// the finishers. It acts only while Watching is set.
+// The resolution steps that still allocate, each with the feature that removes it. The drags and
+// commits excuse the blocks these steps allocate or free. The check fails when one no longer
+// allocates, so the list only shrinks.
+constexpr std::array EXCUSED_STEPS{
+    ExcusedStep{"path-networks", "a later feature: the path networks' carriers"},
+    ExcusedStep{"guest-ground", "a later feature: guest ground"},
+    ExcusedStep{"furniture", "a later feature: furniture"},
+    ExcusedStep{"best-seats", "a later feature: best seats"},
+    ExcusedStep{"food-offer", "a later feature: the offers"},
+    ExcusedStep{"drink-offer", "a later feature: the offers"},
+    ExcusedStep{"rest-offer", "a later feature: the offers"},
+    ExcusedStep{"toilet-offer", "a later feature: the offers"},
+    ExcusedStep{"seat-offers", "a later feature: the offers"},
+    ExcusedStep{"finishers", "a later feature: carrying guests and footfall"},
+};
+
+// Which excused steps allocated or freed a block the drags or the commits freed, across both.
+std::array<bool, EXCUSED_STEPS.size()> SeenSteps{};
+// How many blocks the watched drags or commits freed that no excused step allocated or freed, and
+// the first REPORTED_BLOCKS of them.
+size_t UnexcusedCount = 0;
+std::array<tpj::check::FreedBlock, tpj::check::REPORTED_BLOCKS> Unexcused{};
+
+// The excused step the work names, or EXCUSED_STEPS.size() when it names none.
+size_t excusedStep(const char *work) {
+  const std::string_view name(work);
+  return static_cast<size_t>(std::ranges::find(EXCUSED_STEPS, name, &ExcusedStep::Step) -
+                             EXCUSED_STEPS.begin());
+}
+
+// Excuses a block an excused step allocated or freed, marking that step seen, and keeps any other
+// block. Called from operator delete, so it allocates nothing.
+void excuseOrKeep(const tpj::check::FreedBlock &block) {
+  const size_t allocatedBy = excusedStep(block.AllocatedBy);
+  const size_t freedBy = excusedStep(block.FreedBy);
+  if (allocatedBy < EXCUSED_STEPS.size()) {
+    SeenSteps.at(allocatedBy) = true;
+  }
+  if (freedBy < EXCUSED_STEPS.size()) {
+    SeenSteps.at(freedBy) = true;
+  }
+  if (allocatedBy < EXCUSED_STEPS.size() || freedBy < EXCUSED_STEPS.size()) {
+    return;
+  }
+  if (UnexcusedCount < Unexcused.size()) {
+    Unexcused.at(UnexcusedCount) = block;
+  }
+  ++UnexcusedCount;
+}
+
+// Starts watching resolutions at the tick: the blocks kept so far are forgotten, and the steps
+// seen so far stay seen.
+void startWatchingSteps(uint64_t tick) {
+  tpj::check::startWatching(tick);
+  UnexcusedCount = 0;
+  tpj::check::onFreed(excuseOrKeep);
+}
+
+void stopWatchingSteps() {
+  tpj::check::stopWatching();
+  tpj::check::onFreed(nullptr);
+}
+
+// Prints the blocks the watched resolutions freed that no excused step allocated or freed, as
+// reportBlocks prints them.
+int reportUnexcused(const char *watched) {
+  return reportBlocks(watched, UnexcusedCount,
+                      std::span<const tpj::check::FreedBlock>(Unexcused).first(
+                          std::min(UnexcusedCount, Unexcused.size())));
+}
+
+// Prints each excused step that allocated or freed no block the drags and the commits freed, and
+// gives 1, or prints nothing and gives 0 when every one did.
+int reportStaleSteps() {
+  int failed = 0;
+  for (size_t i = 0; i < EXCUSED_STEPS.size(); ++i) {
+    if (!SeenSteps.at(i)) {
+      std::cout << "allocation check: " << EXCUSED_STEPS.at(i).Step
+                << " no longer allocates; remove it from EXCUSED_STEPS\n";
+      failed = 1;
+    }
+  }
+  return failed;
+}
+
+// Counts the watch's work against each resolution step while it runs, and against the work around
+// it again once it ends. It acts only while Watching is set.
 class WatchedSteps : public tpj::ResolveTrace {
 public:
   bool Watching = false;
 
   void started(std::string_view step) override {
-    if (Watching && !holds(step)) {
-      tpj::check::pauseWatching();
+    if (Watching) {
+      Outer = tpj::check::currentWork();
+      // A step's name is a resolver's name in the schema or a string literal, both ending in a
+      // null and outliving the watch.
+      tpj::check::watchWork(step.data());
     }
   }
-  void ended(std::string_view step) override {
-    if (Watching && !holds(step)) {
-      tpj::check::resumeWatching();
+  void ended(std::string_view /*step*/) override {
+    if (Watching) {
+      tpj::check::watchWork(Outer);
     }
   }
 
 private:
-  static bool holds(std::string_view step) {
-    return std::ranges::find(WATCHED_STEPS, step) != WATCHED_STEPS.end();
-  }
+  const char *Outer = "";
 };
 
 // Frames of each drag to warm up, and to watch.
@@ -1038,7 +1127,8 @@ template <typename EditAt> void dragFrames(Drag &drag, size_t frames, EditAt edi
 }
 
 // Drags the lowest-keyed shop along its face and draws a guest path out and back from a guest
-// segment, each on its own copy of the world, and reports the blocks the watched frames freed.
+// segment, each on its own copy of the world, and reports the blocks the watched frames freed that
+// no excused step allocated or freed.
 int checkDrags(const tpj::World &world) {
   const tpj::ParkBox shop = lowestShop(world);
   Drag shopDrag(world);
@@ -1064,15 +1154,15 @@ int checkDrags(const tpj::World &world) {
   };
   dragFrames(shopDrag, WARM_FRAMES, moveShop);
   dragFrames(pathDrag, WARM_FRAMES, drawPathOut);
-  tpj::check::startWatching(world.Tick);
+  startWatchingSteps(world.Tick);
   shopDrag.Steps.Watching = true;
   pathDrag.Steps.Watching = true;
   dragFrames(shopDrag, WATCHED_FRAMES, moveShop);
   dragFrames(pathDrag, WATCHED_FRAMES, drawPathOut);
   shopDrag.Steps.Watching = false;
   pathDrag.Steps.Watching = false;
-  tpj::check::stopWatching();
-  return reportFreed("the watched drags");
+  stopWatchingSteps();
+  return reportUnexcused("the watched drags");
 }
 
 // Whether the world accepts the move of the point, with no crossings.
@@ -1123,7 +1213,7 @@ std::pair<tpj::RestoreIntent, tpj::RestoreIntent> widthThereAndBack(const tpj::W
 }
 
 // Commits each edit there and back, round after round, on a copy of the world, and reports the
-// blocks the watched rounds freed.
+// blocks the watched rounds freed that no excused step allocated or freed.
 int checkCommits(const tpj::World &start) {
   tpj::World world = tpj::copyWorld(start);
   const tpj::ParkBox shop = lowestShop(world);
@@ -1153,15 +1243,15 @@ int checkCommits(const tpj::World &start) {
   for (uint64_t warm = 0; warm < WARM_ROUNDS; ++warm) {
     round();
   }
-  tpj::check::startWatching(world.Tick);
+  startWatchingSteps(world.Tick);
   tpj::check::watchWork("the commits");
   steps.Watching = true;
   for (uint64_t watched = 0; watched < WATCHED_ROUNDS; ++watched) {
     round();
   }
   steps.Watching = false;
-  tpj::check::stopWatching();
-  return reportFreed("the watched commits");
+  stopWatchingSteps();
+  return reportUnexcused("the watched commits");
 }
 
 } // namespace
@@ -1178,8 +1268,14 @@ int main() {
     tpj::resolveWorld(world);
     tpj::ParkSession session(std::move(world));
     SteadyPlay play;
-    if (checkTicks(play, session) != 0 || checkEdits(play, session) != 0 ||
-        checkDrags(session.world()) != 0 || checkCommits(session.world()) != 0) {
+    if (checkTicks(play, session) != 0 || checkEdits(play, session) != 0) {
+      return 1;
+    }
+    // The drags and the commits both run before the stale steps are found, since an excused step
+    // is seen across both.
+    const int drags = checkDrags(session.world());
+    const int commits = checkCommits(session.world());
+    if (drags != 0 || commits != 0 || reportStaleSteps() != 0) {
       return 1;
     }
     std::cout << "allocation check: " << WATCHED_TICKS
@@ -1188,7 +1284,8 @@ int main() {
               << WATCHED_ROUNDS << " undos and redos with the app's work after each, "
               << WATCHED_FRAMES << " frames each of the watched drags of a shop and a path, and "
               << WATCHED_ROUNDS
-              << " rounds of the watched commits, freed no block they allocated\n";
+              << " rounds of the watched commits, freed no block they allocated but those of the "
+              << EXCUSED_STEPS.size() << " excused resolution steps\n";
     return 0;
   } catch (const std::exception &error) {
     std::cout << "allocation check: " << error.what() << '\n';

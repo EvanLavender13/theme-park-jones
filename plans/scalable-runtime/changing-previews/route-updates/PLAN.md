@@ -103,14 +103,7 @@ Step 1: publishRouteDistance<Kind> gathers the sources, the anchored entities of
 
 Step 2: With a previous network, it fills the leaving steps once and does Task 4. It drops each slot whose source the new network doesn't anchor. It searches in full each source with no slot, and each source with an anchored node in Touched. It updates every other source with Task 5. When no touched node has an old distance for the source, nothing the edit changed was reachable from it, so the update returns after loading them.
 
-### Task 7: Watch route distance in the allocation check
-
-Files:
-- Modify: `tests/checks/allocations/allocation_check.cpp`
-
-Step 1: Remove route-distance, guest-route-distance-field, and backstage-route-distance-field from EXCUSED_STEPS. The check fails while any of them still allocates, and also if one is left on the list after it stops.
-
-### Task 8: Confirm the feature
+### Task 7: Confirm the feature
 
 Files: none.
 
@@ -121,7 +114,7 @@ Step 1: Build both presets, run the tests, tidy, and the scenarios.
 Run: `cmake.exe --build --preset windows-debug && cmake.exe --build --preset windows-release && ctest.exe --preset windows-debug && scripts/tidy.sh && build/windows-debug/tpj_scenarios.exe tests/parks/*.park > build/route-updates-scenarios.txt && build/windows-debug/tpj_scenarios.exe --ticks 300 tests/parks/stress/full.park > build/route-updates-full.txt; build/windows-debug/tpj_scenarios.exe --compare build/unit-connections-scenarios.txt build/route-updates-scenarios.txt; build/windows-debug/tpj_scenarios.exe --compare build/unit-connections-full.txt build/route-updates-full.txt`
 Expected: no warning, every test passes, tidy prints "tidy: clean.", and both comparisons exit non-zero: every world with a guest path hashes differently. Read millimetresOf, the leaving steps' lengths, and searchEntries' sums for criterion 4.
 
-Step 2: Dispatch the reviewer on the staged diff now, as Task 9 says, while the report runs.
+Step 2: Dispatch the reviewer on the staged diff now, as Task 8 says, while the report runs.
 
 Step 3: Write the after report and compare it.
 
@@ -132,7 +125,7 @@ Step 4: Profile the shop and path drags with Very Sleepy, with four runs of wind
 
 Step 5: Read resolveRouteDistance and everything it calls. Confirm criterion 2, and that nothing allocates once its lists have grown.
 
-### Task 9: Review and commit
+### Task 8: Review and commit
 
 Step 1: Stage only this feature's paths by pathspec, never with `git add -A`, and dispatch the reviewer on the staged diff through the reviewing skill. Present its findings verbatim.
 
