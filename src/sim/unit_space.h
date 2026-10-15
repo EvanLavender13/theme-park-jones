@@ -43,6 +43,10 @@ public:
   [[nodiscard]] virtual std::unique_ptr<UnitTable> clone() const = 0;
   // Makes this table equal to the other, which has the same kind, reusing its memory.
   virtual void assignFrom(const UnitTable &other) = 0;
+  // Whether the table holds a unit for the key, or files an entity under it.
+  [[nodiscard]] virtual bool holds(EntityKey key) const = 0;
+  // Appends every key the table holds a unit for, or files an entity under, ascending.
+  virtual void appendKeys(std::vector<EntityKey> &keys) const = 0;
 
   // The space's counter when the table was last updated, or none before its first update.
   std::optional<uint64_t> Counter;
@@ -68,6 +72,12 @@ public:
     Counter = table.Counter;
     Units.assignFrom(table.Units);
   }
+  [[nodiscard]] bool holds(EntityKey key) const override { return Units.find(key) != nullptr; }
+  void appendKeys(std::vector<EntityKey> &keys) const override {
+    for (const auto &[key, unit] : Units) {
+      keys.push_back(key);
+    }
+  }
 
   KeptMap<KindUnit<Value>> Units;
 };
@@ -78,6 +88,8 @@ class IndexTable final : public UnitTable {
 public:
   [[nodiscard]] std::unique_ptr<UnitTable> clone() const override;
   void assignFrom(const UnitTable &other) override;
+  [[nodiscard]] bool holds(EntityKey key) const override;
+  void appendKeys(std::vector<EntityKey> &keys) const override;
 
   KeptMap<std::vector<EntityKey>> Entries;
   KeptMap<std::vector<EntityKey>> Filed;

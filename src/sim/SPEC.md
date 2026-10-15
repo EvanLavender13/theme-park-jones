@@ -45,6 +45,8 @@ An index can also file each unit of an earlier kind under keys it names from the
 
 A module can also register a kind that updates its own units. At each resolution, its update reads what earlier kinds and indexes changed, reads their units and entries by key, and sets or removes its own units. At its first update, it is given every entity that holds its intent component. Resolution records a change for each unit the update adds, removes, or sets to a value whose words differ, so the units that read it derive again, as for any kind. A module that registers such a kind makes its units equal to what deriving them from nothing gives.
 
+A unit kind can also be kept over earlier kinds instead of over an intent component. It keeps a unit for each key that any of those kinds holds a unit for, and its units are added and removed with theirs. Its module names those kinds with UnitsOf. The module that owns them can declare them in its public header without defining them, so the kind's module learns nothing of their values except what that module's public functions give.
+
 changedUnits gives the keys of a kind's units that the running resolution added, removed, or changed, in ascending order. A resolver that runs after the kind reads it to change only what changed.
 
 derivedUnits gives the keys of the units of the kind registered under a name that the world's last resolution derived, in ascending order, whether their values came out changed or not. For a kind that updates its own units, it gives the keys the update set or removed. A copy gives none until it resolves. It throws std::invalid_argument when no unit kind or index has the name, and an index derives none.

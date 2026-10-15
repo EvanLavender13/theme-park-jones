@@ -77,16 +77,11 @@ PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways) 
 
 PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways,
                          TickBuffers &buffers) {
-  PavedSurface surface;
-  parkSurface(world, walkways, surface, buffers);
-  return surface;
-}
-
-void parkSurface(const World &world, std::span<const Walkway> walkways, PavedSurface &into,
-                 TickBuffers &buffers) {
   GroundLists &lists = buffers.get<GroundLists>();
   worldGround(world, lists);
-  walkedSurfaceOf(lists.Layout, lists.Ground, walkways, into, buffers);
+  PavedSurface surface;
+  walkedSurfaceOf(lists.Layout, lists.Ground, walkways, surface, buffers);
+  return surface;
 }
 
 std::vector<ParkTaper> parkTapers(const World &world) {

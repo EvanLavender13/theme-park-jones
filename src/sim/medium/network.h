@@ -219,6 +219,15 @@ private:
 // passing over it. It allows for rounding where a producer cuts a line into new carriers.
 constexpr double ON_GROUND_TOLERANCE = 0.001;
 
+// The place nearestPlaceOn gives on a carrier with the key and points, or none when the point isn't
+// finite or there are no points.
+[[nodiscard]] std::optional<Place>
+nearestPlaceOnLine(EntityKey carrier, std::span<const CarrierPoint> points, GroundPoint point);
+// The ground position groundPoint gives at the distance on a carrier with the points, or none when
+// the distance is outside the line or not a number.
+[[nodiscard]] std::optional<GroundPoint> groundPointOnLine(std::span<const CarrierPoint> points,
+                                                           double distance);
+
 // Moves a place held across a re-derivation from the network before to the network after. It is
 // kept when its carrier's points are unchanged. Otherwise, if a carrier after passes within
 // ON_GROUND_TOLERANCE of its old ground position, it stays at that ground position: on its own
