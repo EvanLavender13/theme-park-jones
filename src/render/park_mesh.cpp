@@ -252,12 +252,16 @@ void appendPiece(ParkMesh &mesh, const SurfacePiece &piece, float lift, Rgba col
 // its kind, and then each edge line EDGE_LIFT higher in that color's edgeColor.
 template <typename ColorOf>
 void appendSurface(ParkMesh &mesh, const PavedSurface &surface, float lift, ColorOf colorOf) {
-  for (const SurfacePiece &piece : surface.Pieces) {
-    appendPiece(mesh, piece, lift, colorOf(piece.Kind));
+  for (const auto &[owner, paving] : surface.Owners) {
+    for (const SurfacePiece &piece : paving.Pieces) {
+      appendPiece(mesh, piece, lift, colorOf(piece.Kind));
+    }
   }
-  for (const EdgeLine &edge : surface.Edges) {
-    appendEdgeLine(mesh, edgePoints(surface, edge), pathLift(edge.Kind) + lift + EDGE_LIFT,
-                   edgeColor(colorOf(edge.Kind)));
+  for (const auto &[owner, paving] : surface.Owners) {
+    for (const EdgeLine &edge : paving.Edges) {
+      appendEdgeLine(mesh, edgePoints(paving, edge), pathLift(edge.Kind) + lift + EDGE_LIFT,
+                     edgeColor(colorOf(edge.Kind)));
+    }
   }
 }
 
@@ -603,14 +607,11 @@ void appendEntity(ParkMesh &mesh, const World &world, std::span<const ParkBox> b
       return;
     }
   }
-  bool owned = false;
-  for (const SurfacePiece &piece : resolvedSurface(world).Pieces) {
-    if (piece.Owner == key) {
+  const OwnerPaving *paving = pavingOf(resolvedSurface(world), key);
+  if (paving != nullptr && !paving->Pieces.empty()) {
+    for (const SurfacePiece &piece : paving->Pieces) {
       appendPiece(mesh, piece, GHOST_LIFT, color);
-      owned = true;
     }
-  }
-  if (owned) {
     return;
   }
   for (const ParkPathPoint &point : points) {
@@ -624,42 +625,35 @@ void appendEntity(ParkMesh &mesh, const World &world, std::span<const ParkBox> b
 namespace {
 
 // Puts in own the pieces and edge lines of the surface whose owners are among the keys, which are
-// sorted, clearing its lists first.
+// sorted. Empties own first, keeping its owners' memory for the owners it adds.
 void ownedBy(const PavedSurface &surface, const std::vector<EntityKey> &owners, PavedSurface &own) {
-  const auto owned = [&owners](EntityKey owner) {
-    return std::ranges::binary_search(owners, owner);
-  };
-  own.Pieces.clear();
-  own.Edges.clear();
-  own.EdgePoints.clear();
-  own.Sides.clear();
-  own.SidePoints.clear();
-  for (const SurfacePiece &piece : surface.Pieces) {
-    if (owned(piece.Owner)) {
-      own.Pieces.push_back(piece);
+  own.Owners.eraseIf([](const OwnerPaving & /*paving*/) { return true; });
+  for (const EntityKey owner : owners) {
+    const OwnerPaving *paving = pavingOf(surface, owner);
+    if (paving == nullptr || (paving->Pieces.empty() && paving->Edges.empty())) {
+      continue;
     }
-  }
-  for (const EdgeLine &edge : surface.Edges) {
-    if (owned(edge.Owner)) {
-      const std::span<const ParkPoint> points = edgePoints(surface, edge);
-      own.Edges.push_back(EdgeLine{edge.Kind, edge.Owner, own.EdgePoints.size(), points.size()});
-      own.EdgePoints.insert(own.EdgePoints.end(), points.begin(), points.end());
-    }
+    OwnerPaving &into = own.Owners.getOrAdd(owner).first;
+    into.Pieces.assign(paving->Pieces.begin(), paving->Pieces.end());
+    into.Edges.assign(paving->Edges.begin(), paving->Edges.end());
+    into.EdgePoints.assign(paving->EdgePoints.begin(), paving->EdgePoints.end());
+    into.Sides.clear();
+    into.SidePoints.clear();
   }
 }
 
 // Puts the surface's owners, sorted, in owners, clearing it first.
 void ownersOf(const PavedSurface &surface, std::vector<EntityKey> &owners) {
   owners.clear();
-  for (const SurfacePiece &piece : surface.Pieces) {
-    owners.push_back(piece.Owner);
+  for (const auto &[owner, paving] : surface.Owners) {
+    owners.push_back(owner);
   }
-  for (const EdgeLine &edge : surface.Edges) {
-    owners.push_back(edge.Owner);
-  }
-  std::ranges::sort(owners);
-  const auto [first, last] = std::ranges::unique(owners);
-  owners.erase(first, last);
+}
+
+// Whether any owner of the surface holds a piece.
+bool hasPieces(const PavedSurface &surface) {
+  return std::ranges::any_of(surface.Owners,
+                             [](const auto &owned) { return !owned.second.Pieces.empty(); });
 }
 
 // Puts in lists.Owned the pieces and edge lines that belong to the edited segments in lists.Parts:
@@ -737,10 +731,10 @@ void buildGhostMesh(const World &world, const ParkEdit &edit, const PlannedEdit 
     appendDeleted(ghost.Tints, world, edit, lists);
   }
   const PavedSurface &edited = lists.Parts.Surface;
-  if (const auto *path = std::get_if<AddPath>(&edit); path != nullptr && edited.Pieces.empty()) {
+  if (const auto *path = std::get_if<AddPath>(&edit); path != nullptr && !hasPieces(edited)) {
     appendStraightPath(shape, world, *path, ghostColor(accepted, pathColor(path->Kind)), lists);
   }
-  if (candidate && !edited.Pieces.empty()) {
+  if (candidate && hasPieces(edited)) {
     ownersOf(edited, lists.Owners);
     ownedBy(walkedSurface(*candidate), lists.Owners, lists.Owned);
     appendSurface(shape, lists.Owned, GHOST_LIFT, colorOf);

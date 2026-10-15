@@ -1,6 +1,6 @@
 # 0037. Tests guard determinism and saves; gameplay is checked by playing
 
-Status: Accepted, 2026-10-04. Supersedes 0032, 0033, and 0034.
+Status: Accepted, 2026-10-04, amended 2026-10-14. Supersedes 0032, 0033, and 0034.
 
 ## Context
 
@@ -18,7 +18,9 @@ The suite consists of three parts:
 - the integration tests in tests/integration;
 - the mechanical checks: tests/checks and the sim symbol check.
 
-A feature adds a test only in two cases. A test reproduces each bug the feature fixes. A test also covers each consequence across modules that the player depends on and that the feature's FEATURE.md names, stated as cause and effect, as supply_route_test does. State a feature registers is covered by the park world checks once a park file in tests/parks/ holds it, so a feature adds to a park file rather than writing a test. Each test a feature adds is listed in its FEATURE.md, which the user approves. No agent derives tests from specs or criteria.
+The sim root's tests also check that resolution derives units as predicted: which units an edit derives again. A wrong derivation is as silent as a broken copy, because the results stay right while every edit derives the whole park again. A feature that registers unit kinds adds a test of which of its units an edit derives.
+
+A feature adds a test only in three cases. A test reproduces each bug the feature fixes. A test covers each consequence across modules that the player depends on and that the feature's FEATURE.md names, stated as cause and effect, as supply_route_test does. A feature that registers unit kinds adds a test of which of its units an edit derives. State a feature registers is covered by the park world checks once a park file in tests/parks/ holds it, so a feature adds to a park file rather than writing a test. Each test a feature adds is listed in its FEATURE.md, which the user approves. No agent derives tests from specs or criteria.
 
 A feature is otherwise verified by playing it, by `--capture`, by `tpj_scenarios --compare` when the simulation must not change, and by the release checks.
 

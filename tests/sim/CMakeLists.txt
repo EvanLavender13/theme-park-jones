@@ -8,6 +8,7 @@ add_executable(tpj_sim_tests
     save_test.cpp
     schema_test.cpp
     sim_math_test.cpp
+    unit_reach_test.cpp
     walk_test.cpp
     world_checks_test.cpp)
 target_link_libraries(tpj_sim_tests PRIVATE tpj_sim Catch2::Catch2WithMain)

@@ -25,7 +25,12 @@ The allocation check's drags and commits, which kept-checks added, watch the sur
 
 ## Acceptance criteria
 
-1. Both drags get faster, measured over the whole changed frame, and nothing else gets slower. The runtime report, which times windows-release only, compares build/unit-surface.report with build/unit-surface-before.report, written on main before the change. It marks shop-drag and path-drag faster on full.park. shop-drag's median falls by at least 0.3 ms and path-drag's by at least 0.25 ms. In the kept-checks profiles, the paved surface was 5.7% of the shop drag's frame, about 0.53 ms, and 4.4% of the path drag's, about 0.48 ms. The path drag keeps running the paving units its edit reaches. No other stage is marked slower. (check: scripts/runtime-report.sh build/unit-surface.report, then --compare with build/unit-surface-before.report)
+1. Neither drag gets slower, measured over the whole changed frame, and each stage that gets slower has a later feature that removes its cause. The runtime report, which times windows-release only, compares build/unit-surface-3.report with build/unit-surface-before.report, written on main before the change. The user amended this criterion on 2026-10-14 after three reports. It first asked for both drags marked faster, with shop-drag's median falling by at least 0.3 ms and path-drag's by at least 0.25 ms. The drags gained 0.25 to 0.5 ms each, about as much as one report differs from the next, so neither is marked faster. The stages marked slower, and the features that remove their causes:
+    - preview and path-preview on winding-path copy the whole world, whose surface and units now hold a list per owner. The app copies a world only on a drag's first frame. layered-candidate removes the copy.
+    - path-ghost on full.park and ghost on winding-path build the surface around the edit from layouts, twice. layered-candidate and spatial-units make the ghost read the units.
+    - park-mesh on full.park walks the surface's runs per owner, 8 µs more than the flat lists.
+
+    (check: scripts/runtime-report.sh build/unit-surface-3.report, then --compare with build/unit-surface-before.report)
 2. A changed frame derives paving only where its edit reaches. Take eight Very Sleepy profiles of windows-release tpj_bench --ticks 1 on full.park, and look at the samples inside resolveWorld under each drag's timing function:
     - No sample holds buildSurface or hideJoined without also holding walkedSurfaceOf. Only the walked surface still builds and hides the whole park, until unit-connections.
     - Under the shop drag's, no sample holds the paving units' derivations, askAt, fitAt, paveAt, paveSegment, or hideOwner, without walkedSurfaceOf. A moved box changes no path intent.
@@ -41,11 +46,17 @@ The allocation check's drags and commits, which kept-checks added, watch the sur
     (ctest; tpj_scenarios --compare; the report's --compare)
 4. The allocation check's drags and commits watch the surface's eight units and the paved-surface and walked-surface resolvers, which they paused around until now. They still pause only around the resolvers no feature has moved yet and the finishers. The check fails if watched work frees a block that watched work allocated. (ctest: the allocation check)
 5. Every reader of either surface reads its runs in owner order: the path networks, guest ground, furniture, the acceptance check and edited surface, the ghost, the render meshes, the paving overlay, and the tools. The paved-surface resolver reads no whole-park list: no worldGround, layoutOf, or parkSegments. (check: read each reader and the resolver)
-6. src/sim/SPEC.md describes the new mechanisms, and src/sim/park/SPEC.md the surface's runs and the new unit names. The windows-debug build has no warnings, ctest passes, and scripts/tidy.sh is clean.
+6. Edits derive the units predicted: nothing when nothing changed or the edit is one no unit reads, the same units however much else the park holds, and none past what a change's values reach. (the listed tests)
+7. src/sim/SPEC.md describes the new mechanisms, and src/sim/park/SPEC.md the surface's runs and the new unit names. The windows-debug build has no warnings, ctest passes, and scripts/tidy.sh is clean.
 
 ## Tests
 
-None. The save checks and the candidate check's drags already compare incremental units with units derived from nothing, and the allocation check gains the drags as criterion 4 says.
+The save checks and the candidate check's drags already compare incremental units with units derived from nothing, and the allocation check gains the drags as criterion 4 says. These tests check which units an edit derives, through derivedUnits, for the ground's kinds and the surface's: straight-lines, point-arms, corners, ground-lines, group-labels, point-asks, point-fits, point-paving, segment-paving, and hidden-edges.
+
+1. Nothing changed: load full.park, which resolves it, then resolve it again with no command. No unit of any kind the world's schema registers derives, so a kind a later feature registers is covered without a change to this test.
+2. An edit no unit reads: on full.park, commit a MoveBox that moves a shop a few meters along its paving, and check the box moved. No unit of any of the ten kinds derives.
+3. Park size: take a small park from tests/parks, and a copy of it with a long branch added by AddPath commands. The branch starts from a point of the small park's network, so it joins that network, and runs out to at least 100 meters from where the edit happens. Resolve both. In both, commit the same AddPath from the same existing point of the small park to a new point a few meters away, far from the branch. For each kind, the units derived for keys that existed before the edit are the same in both worlds, and as many units derive for keys the edit made. A kind that refilled the whole joined network would derive more in the copy.
+4. A change nothing downstream sees: in a park with a point where exactly two segments of the same width meet, commit SetTaperLength on that point with a length above 0, and check the point holds it. The taper only shapes a point where widths differ, so units derive only for that point, its two segments, and the points at their other ends. No group-labels unit derives.
 
 ## Medium
 

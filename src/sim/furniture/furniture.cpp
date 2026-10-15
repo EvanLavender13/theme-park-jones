@@ -340,8 +340,10 @@ Surroundings surroundingsOf(const World &world) {
     }
   }
   found.Surface = &walkedSurface(world);
-  for (const SurfacePiece &piece : found.Surface->Pieces) {
-    found.Blocking.add(Outline{piece.Corners, piece.Count}, true);
+  for (const auto &[owner, paving] : found.Surface->Owners) {
+    for (const SurfacePiece &piece : paving.Pieces) {
+      found.Blocking.add(Outline{piece.Corners, piece.Count}, true);
+    }
   }
   for (const ParkBox &box : parkBoxes(world)) {
     if (const std::optional<Footprint> footprint = footprintOf(box.At, boxSize(box.Kind))) {
@@ -458,6 +460,11 @@ struct StepSpan {
   double Sign = 1.0;
 };
 
+// The positions the side runs through, from its segment's paving in the surface, which holds it.
+std::span<const ParkPoint> pointsOf(const PavedSurface &surface, const SegmentSide &side) {
+  return sidePoints(*pavingOf(surface, side.Segment), side);
+}
+
 // The line a chain's pieces stand on, their centers' line: its sides' lines joined end to end and
 // moved off the paving by the distance. Places on it are given by their length along it, which
 // wraps around a closed chain.
@@ -472,7 +479,7 @@ public:
     std::vector<std::array<size_t, 3>> rawSpans;
     for (const Step &step : chain.Steps) {
       const SegmentSide &side = *members[step.Member].Side;
-      const std::span<const ParkPoint> points = sidePoints(surface, side);
+      const std::span<const ParkPoint> points = pointsOf(surface, side);
       const size_t count = points.size();
       const size_t start = raw.empty() ? 0 : raw.size() - 1;
       for (size_t k = 0; k < count; ++k) {
@@ -858,13 +865,12 @@ void layChain(World &world, Obstacles &blocking, const std::vector<Member> &memb
 
 // The side of the segment the surface gives, or none.
 const SegmentSide *sideOf(const PavedSurface &surface, EntityKey segment, bool left) {
-  const auto first = std::ranges::lower_bound(surface.Sides, segment, {}, &SegmentSide::Segment);
-  for (auto it = first; it != surface.Sides.end() && it->Segment == segment; ++it) {
-    if (it->Left == left) {
-      return &*it;
-    }
+  const OwnerPaving *paving = pavingOf(surface, segment);
+  if (paving == nullptr) {
+    return nullptr;
   }
-  return nullptr;
+  const auto found = std::ranges::find(paving->Sides, left, &SegmentSide::Left);
+  return found != paving->Sides.end() ? &*found : nullptr;
 }
 
 // Every furnished side of a guest segment that the surface gives, as a member, in key order of the
@@ -939,7 +945,7 @@ std::array<uint64_t, 2> readBy(const std::vector<Member> &members, const Chain &
     add(side.Body);
     add(side.RunsOn[0].Segment != NULL_KEY ? 1U : 0U);
     add(side.RunsOn[1].Segment != NULL_KEY ? 1U : 0U);
-    const std::span<const ParkPoint> points = sidePoints(surface, side);
+    const std::span<const ParkPoint> points = pointsOf(surface, side);
     add(points.size());
     for (size_t k = 0; k < points.size(); ++k) {
       addPoint(points[k]);

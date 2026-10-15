@@ -3,6 +3,7 @@
 
 #include "sim/component_store.h"
 #include "sim/entity_key.h"
+#include "sim/kept_map.h"
 
 #include <compare>
 #include <map>
@@ -27,59 +28,6 @@ struct UnitRead {
 
   auto operator<=>(const UnitRead &) const = default;
   bool operator==(const UnitRead &) const = default;
-};
-
-// Values by key, in ascending key order, whose removed nodes are kept for later adds, as a store's
-// are, so that adds and removes allocate nothing once the map has grown.
-template <typename Value> class KeptMap {
-public:
-  using Map = std::map<EntityKey, Value>;
-
-  [[nodiscard]] Value *find(EntityKey key) {
-    const auto found = Items.find(key);
-    return found == Items.end() ? nullptr : &found->second;
-  }
-  [[nodiscard]] const Value *find(EntityKey key) const {
-    const auto found = Items.find(key);
-    return found == Items.end() ? nullptr : &found->second;
-  }
-  // The key's value, and whether it was added. An added value may still hold what a removed one
-  // held, for the caller to overwrite.
-  std::pair<Value &, bool> getOrAdd(EntityKey key) {
-    const auto found = Items.lower_bound(key);
-    if (found != Items.end() && found->first == key) {
-      return {found->second, false};
-    }
-    if (Spare.empty()) {
-      return {Items.emplace_hint(found, key, Value{})->second, true};
-    }
-    auto node = std::move(Spare.back());
-    Spare.pop_back();
-    node.key() = key;
-    return {Items.insert(found, std::move(node))->second, true};
-  }
-  // Removes the key's value, keeping its node. Returns whether the key held one.
-  bool erase(EntityKey key) {
-    auto node = Items.extract(key);
-    if (!node) {
-      return false;
-    }
-    keepSpare(Spare, Items.size());
-    Spare.push_back(std::move(node));
-    return true;
-  }
-  // Makes this map hold exactly the other's values, reusing its nodes and their memory.
-  void assignFrom(const KeptMap &other) { assignKeyed(Items, other.Items, Spare); }
-  // A copy holding the same values, without the kept nodes.
-  [[nodiscard]] KeptMap clone() const {
-    KeptMap copy;
-    copy.Items = Items;
-    return copy;
-  }
-
-private:
-  Map Items;
-  std::vector<typename Map::node_type> Spare;
 };
 
 // One unit kind's or index's table. The schema makes one empty table for each.
@@ -112,7 +60,7 @@ public:
   [[nodiscard]] std::unique_ptr<UnitTable> clone() const override {
     auto copy = std::make_unique<KindTable>();
     copy->Counter = Counter;
-    copy->Units = Units.clone();
+    copy->Units = Units;
     return copy;
   }
   void assignFrom(const UnitTable &other) override {
@@ -155,7 +103,8 @@ public:
     }
   }
   [[nodiscard]] bool isLogged(size_t store) const { return Logged[store]; }
-  // Puts each logged store's log on the change list, as changes to that store.
+  // Puts each logged store's log on the change list, as changes to that store, and empties the
+  // list of derived units.
   void beginResolution();
   // Empties the logs and the change list.
   void endResolution();
@@ -178,6 +127,10 @@ public:
   // What the running resolution changed: each logged store's touched keys, each index entry that
   // changed, and each unit that was added, removed, or derived a different value.
   std::vector<UnitRead> Changes;
+  // The units the last resolution derived, and those a kind that updates its own units set or
+  // removed, in the order it did so. Kept until the next resolution begins. A copy starts with
+  // none.
+  std::vector<UnitRead> Derived;
 
 private:
   UnitSpace() = default;

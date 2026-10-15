@@ -272,8 +272,10 @@ const ParkSegment *guestSegmentAt(const ToolPark &park, const World &world, Park
   }
   // Walkways are guest paving too.
   const PavedSurface &surface = walkedSurface(world);
-  const bool onPaving = std::ranges::any_of(surface.Pieces, [point](const SurfacePiece &piece) {
-    return piece.Kind == PathKind::Guest && pieceDistance(piece, point) == 0.0;
+  const bool onPaving = std::ranges::any_of(surface.Owners, [point](const auto &owned) {
+    return std::ranges::any_of(owned.second.Pieces, [point](const SurfacePiece &piece) {
+      return piece.Kind == PathKind::Guest && pieceDistance(piece, point) == 0.0;
+    });
   });
   return onPaving ? nearest : nullptr;
 }

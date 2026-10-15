@@ -2,6 +2,8 @@
 #define TPJ_SIM_PARK_SURFACE_H
 
 #include "sim/entity_key.h"
+#include "sim/field_text.h"
+#include "sim/kept_map.h"
 #include "sim/park/intent.h"
 #include "sim/tick_buffers.h"
 #include "sim/world.h"
@@ -10,6 +12,9 @@
 #include <optional>
 #include <span>
 #include <stddef.h>
+#include <stdexcept>
+#include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace tpj {
@@ -36,7 +41,7 @@ template <typename Visitor> void visitFields(Visitor &visitor, SurfacePiece &pie
 }
 
 // A run of positions along the paving's outline, with the paving on its left seen from above: the
-// Count positions of its surface's EdgePoints from First. Owner is the point it runs around.
+// Count positions of its owner's EdgePoints from First. Owner is the point it runs around.
 struct EdgeLine {
   PathKind Kind = PathKind::Guest;
   EntityKey Owner = NULL_KEY;
@@ -69,7 +74,7 @@ template <typename Visitor> void visitFields(Visitor &visitor, SideLink &link) {
 }
 
 // One side of a segment, seen walking from its From point to its To point: its segment, whether it
-// is the left side, the Count positions of its surface's SidePoints from First that it runs
+// is the left side, the Count positions of its owner's SidePoints from First that it runs
 // through, from its From end to its To end, the index among them of where its body starts, and,
 // at its From end and at its To end, the side it runs on into there, or none where it stops.
 struct SegmentSide {
@@ -93,11 +98,10 @@ template <typename Visitor> void visitFields(Visitor &visitor, SegmentSide &side
   visitor.field("runs-on-to", side.RunsOn[1]);
 }
 
-// The paving the park's segments make: its pieces and its edge lines, each list in ascending key
-// order of its owner, the positions the edge lines run through, the sides of each segment, in
-// ascending key order of the segment, the left side first, and the positions the sides run
-// through.
-struct PavedSurface {
+// One owner's paving: its pieces, its edge lines, the positions they run through, its sides, and
+// the positions they run through. Each EdgeLine's and SegmentSide's First counts from the start of
+// this owner's positions.
+struct OwnerPaving {
   std::vector<SurfacePiece> Pieces;
   std::vector<EdgeLine> Edges;
   std::vector<ParkPoint> EdgePoints;
@@ -105,20 +109,72 @@ struct PavedSurface {
   std::vector<ParkPoint> SidePoints;
 };
 
+// The paving the park's segments make, by owner, in ascending key order. Owners with no paving
+// are left out.
+struct PavedSurface {
+  KeptMap<OwnerPaving> Owners;
+};
+
+// Walks the list of each owner's paving as one list: its count, then each item, in owner order.
+template <typename Visitor, typename Item>
+void visitJoined(Visitor &visitor, const PavedSurface &surface, std::string_view name,
+                 std::vector<Item> OwnerPaving::*list) {
+  size_t count = 0;
+  for (const auto &[owner, paving] : surface.Owners) {
+    count += (paving.*list).size();
+  }
+  visitor.field(name, count);
+  for (const auto &[owner, paving] : surface.Owners) {
+    for (Item item : paving.*list) {
+      visitor.field(name, item);
+    }
+  }
+}
+
+// Walks the list of each owner's edge lines or sides as one list, as visitJoined does, with each
+// First counted from the start of every owner's positions in points.
+template <typename Visitor, typename Item>
+void visitShifted(Visitor &visitor, const PavedSurface &surface, std::string_view name,
+                  std::vector<Item> OwnerPaving::*list,
+                  std::vector<ParkPoint> OwnerPaving::*points) {
+  size_t count = 0;
+  for (const auto &[owner, paving] : surface.Owners) {
+    count += (paving.*list).size();
+  }
+  visitor.field(name, count);
+  size_t before = 0;
+  for (const auto &[owner, paving] : surface.Owners) {
+    for (Item item : paving.*list) {
+      item.First += before;
+      visitor.field(name, item);
+    }
+    before += (paving.*points).size();
+  }
+}
+
+// Walks every owner's pieces as one list, then every edge line, its positions, every side, and
+// its positions, each list in owner order, with each First counted from the start of the whole
+// list. A surface is derived, so saves never hold it and it is never read back.
 template <typename Visitor> void visitFields(Visitor &visitor, PavedSurface &surface) {
-  visitor.field("pieces", surface.Pieces);
-  visitor.field("edges", surface.Edges);
-  visitor.field("edge-points", surface.EdgePoints);
-  visitor.field("sides", surface.Sides);
-  visitor.field("side-points", surface.SidePoints);
+  if constexpr (std::is_same_v<Visitor, FieldReader>) {
+    throw std::logic_error("a paved surface is derived and is never read");
+  } else {
+    visitJoined(visitor, surface, "pieces", &OwnerPaving::Pieces);
+    visitShifted(visitor, surface, "edges", &OwnerPaving::Edges, &OwnerPaving::EdgePoints);
+    visitJoined(visitor, surface, "edge-points", &OwnerPaving::EdgePoints);
+    visitShifted(visitor, surface, "sides", &OwnerPaving::Sides, &OwnerPaving::SidePoints);
+    visitJoined(visitor, surface, "side-points", &OwnerPaving::SidePoints);
+  }
 }
 
 // The piece's corners.
 std::span<const ParkPoint> pieceCorners(const SurfacePiece &piece);
-// The positions the edge line of the surface runs through.
-std::span<const ParkPoint> edgePoints(const PavedSurface &surface, const EdgeLine &edge);
-// The positions the side of the surface runs through.
-std::span<const ParkPoint> sidePoints(const PavedSurface &surface, const SegmentSide &side);
+// The owner's paving, or null when it owns none.
+const OwnerPaving *pavingOf(const PavedSurface &surface, EntityKey owner);
+// The positions the edge line of the owner's paving runs through.
+std::span<const ParkPoint> edgePoints(const OwnerPaving &paving, const EdgeLine &edge);
+// The positions the side of the owner's paving runs through.
+std::span<const ParkPoint> sidePoints(const OwnerPaving &paving, const SegmentSide &side);
 // How far the point lies from the piece, in meters: 0 when it lies on the piece.
 double pieceDistance(const SurfacePiece &piece, ParkPoint point);
 
@@ -133,7 +189,8 @@ PavedSurface parkSurface(const World &world, TickBuffers &buffers);
 // resolvers that depend on paved-surface; read parkSurface where intent may have changed since.
 const PavedSurface &resolvedSurface(const World &world);
 
-// Registers the derived surface and the paved-surface resolver that keeps it for resolvedSurface.
+// Registers the derived surface, the units it derives in, and the paved-surface resolver that keeps
+// it from them for resolvedSurface.
 void addPavedSurface(WorldSchema &schema);
 
 // Registers the units the path ground derives in: an index of segments by their points, then each
@@ -168,6 +225,10 @@ PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways);
 // It still returns a new surface, so it allocates on every call.
 PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways,
                          TickBuffers &buffers);
+// As the walked form, refilling into and keeping the lists it works with in the buffers. Allocates
+// nothing once into and the lists have grown.
+void parkSurface(const World &world, std::span<const Walkway> walkways, PavedSurface &into,
+                 TickBuffers &buffers);
 
 // An edge of the paving at a path point, where its outline turns from one segment's left side, seen
 // walking away from the point, to the right side of the next segment counter-clockwise: the point,

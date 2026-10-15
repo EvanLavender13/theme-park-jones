@@ -62,9 +62,11 @@ ParkSegment mainStreet(const World &world) {
 }
 
 bool onGuestPaving(const PavedSurface &surface, GroundPoint point) {
-  return std::ranges::any_of(surface.Pieces, [&](const SurfacePiece &piece) {
-    return piece.Kind == PathKind::Guest &&
-           pieceDistance(piece, ParkPoint{point.X, point.Z}) == 0.0;
+  return std::ranges::any_of(surface.Owners, [&](const auto &owned) {
+    return std::ranges::any_of(owned.second.Pieces, [&](const SurfacePiece &piece) {
+      return piece.Kind == PathKind::Guest &&
+             pieceDistance(piece, ParkPoint{point.X, point.Z}) == 0.0;
+    });
   });
 }
 

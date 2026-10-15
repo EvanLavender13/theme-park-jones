@@ -271,9 +271,11 @@ void buildOverlayShape(const World &world, OverlayShapeLists &lists) {
   addLines(world, lists.Segments, shape, scratch);
   std::vector<EntityKey> &owners = scratch.Owners;
   owners.clear();
-  for (const SurfacePiece &piece : resolvedSurface(world).Pieces) {
-    if (piece.Kind == PathKind::Guest && addPiece(shape, piece, scratch.Ends)) {
-      owners.push_back(piece.Owner);
+  for (const auto &[owner, paving] : resolvedSurface(world).Owners) {
+    for (const SurfacePiece &piece : paving.Pieces) {
+      if (piece.Kind == PathKind::Guest && addPiece(shape, piece, scratch.Ends)) {
+        owners.push_back(piece.Owner);
+      }
     }
   }
   findOverlaps(shape, owners, scratch);
