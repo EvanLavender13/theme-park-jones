@@ -17,7 +17,7 @@ After this feature:
 2. A changed frame updates only the route entries its edit changes. For every source but one whose anchors changed, route distance visits only the nodes whose distance changes, their neighbours, and the nodes on the carriers whose stops changed. It doesn't search from each source again. Once per resolution, it matches the new network's nodes to the old network's and compares the two networks' carriers, which grows with the network, as milestone criterion 3 allows for renumbering nodes. (check: read the resolver; a Very Sleepy profile of the shop drag puts route distance under 5% of the frame)
 3. The result is exact. The save checks pass on every chosen edit: a world that commits each edit updates route distance in place, and the world loaded from its save searches from nothing. The candidate check's drags on warm.park pass on every frame. (ctest)
 4. Route distance is whole millimetres. Every published distance at a node is a whole number of millimetres, and equals the sum of its route's edge lengths, each its two stops' distances rounded to whole millimetres and subtracted. tpj_scenarios --compare of windows-debug output before and after the feature differs, since every world with a guest path hashes differently; if it doesn't differ, the rounding is missing. Later features compare against this feature's output. (check: read millimetresOf, the leaving steps' lengths, and searchEntries' sums; tpj_scenarios --compare exits non-zero)
-5. The allocation check's exception list no longer holds route-distance or the two fields' resolvers, guest-route-distance-field and backstage-route-distance-field, so the drags and commits watch them. (ctest: the allocation check)
+5. Route distance stays off the allocation check's exception list. watched-resolution found that route-distance, guest-route-distance-field, and backstage-route-distance-field already allocate nothing in the drags and commits. The lists this feature keeps allocate nothing once they have grown, so the check still passes. (ctest: the allocation check)
 6. Decision 0042 records whole-millimetre route lengths, CAPABILITY.md lists it among the exceptions, and src/sim/medium/SPEC.md and src/sim/routes/SPEC.md state the new behaviour. The windows-debug build has no warnings, ctest passes, and scripts/tidy.sh is clean.
 
 ## Tests
@@ -53,11 +53,10 @@ src/sim/routes/SPEC.md, Route distance section:
 - Modify: src/sim/routes/route_distance.cpp
 - Modify: src/sim/routes/route_distance.h
 - Modify: src/sim/routes/SPEC.md
-- Modify: tests/checks/allocations/allocation_check.cpp
 
 ## Dependencies
 
-watched-resolution, which gives the allocation check its exception list. PreviousNetwork, which path-networks already keeps through every resolution until the finisher drops it.
+watched-resolution, whose allocation check watches route distance in the drags and commits. PreviousNetwork, which path-networks already keeps through every resolution until the finisher drops it.
 
 ## Out of scope
 

@@ -29,6 +29,8 @@ void watchTick(uint64_t tick);
 // The work the next allocations and frees are counted against. The name must outlive the watch, as
 // a string literal does.
 void watchWork(const char *work);
+// The work the allocations and frees are counted against now.
+const char *currentWork();
 void stopWatching();
 // Pauses and resumes watching. While paused, no block is noted, and freeing a noted block removes
 // its note without finding it. That can hide a free but never finds a false one, so work the check
@@ -51,6 +53,9 @@ void watchedFree(void *block);
 
 // Called at each noted block freed while watching. Stop here in a debugger to see who frees it.
 void blockFreed(const FreedBlock &block);
+// Gives the function called with each noted block freed while watching, after it is counted, or
+// none for a null handler. The handler must not allocate.
+void onFreed(void (*handler)(const FreedBlock &block));
 
 } // namespace tpj::check
 
