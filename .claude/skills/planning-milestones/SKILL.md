@@ -32,15 +32,17 @@ Create a task for each item. Complete them in order.
 5. Research tactical patterns with the `researching` skill. It writes findings to plans/<capability-slug>/<milestone-slug>/RESEARCH.md.
 6. Ask clarifying questions, one at a time. Cover scope boundaries, acceptance criteria, and feature granularity.
 7. Propose two or three ways to split the milestone into features, each with trade-offs.
-8. Map the medium: for each feature, the fields and flows it samples, emits, draws, or supplies. Apply the principles gate from `planning-overview`. If a feature reaches into another feature's internals, rework it before you list it.
-9. Name the core feature: the first feature that makes the milestone partly usable.
-10. Map feature dependencies, bottom-up.
-11. Separate committed features from speculative ones. Commit only the features that current evidence supports, and send the rest to `maintaining-backlog`.
-12. Write MILESTONE.md at plans/<capability-slug>/<milestone-slug>/MILESTONE.md in the format below.
-13. If the milestone is not already in the parent CAPABILITY.md's Milestones list, add it.
-14. Self-review, and fix problems inline. Look for placeholders, contradictions, scope drift, vague acceptance criteria, and interactions that bypass the medium. Check every claim about existing code, and every count or listing taken from the repository, by reading that code or running the read-only command.
-15. Review. Stage MILESTONE.md and RESEARCH.md, then dispatch the reviewer with `reviewing`. Give it CAPABILITY.md as context, and SLICE.md too for a slice member. Handle the findings as `reviewing` describes for planning briefs. Fix Minor findings and settled Major findings yourself. Bring the user only the Major findings that need a design choice, and report the rest in one line.
-16. Ask the user to approve.
+8. Size every feature from the code it will change. Read that code: every function the feature rewrites and every caller of what it changes. List those files and functions under the feature. If a feature rewrites more than one module's resolver, system, or major function group, split it now. Don't leave a split for feature planning to find.
+9. If the milestone is a speedup, measure before you order the features. Profile the target on the stress park, and give each feature the measured share of time it removes. Order the features by that share, largest first, unless a dependency forces another order. If a feature removes little, put it last or leave it out.
+10. Map the medium: for each feature, the fields and flows it samples, emits, draws, or supplies. Apply the principles gate from `planning-overview`. If a feature reaches into another feature's internals, rework it before you list it.
+11. Name the core feature: the first feature that makes the milestone partly usable.
+12. Map feature dependencies, bottom-up.
+13. Separate committed features from speculative ones. Commit only the features that current evidence supports, and send the rest to `maintaining-backlog`.
+14. Write MILESTONE.md at plans/<capability-slug>/<milestone-slug>/MILESTONE.md in the format below.
+15. If the milestone is not already in the parent CAPABILITY.md's Milestones list, add it.
+16. Self-review, and fix problems inline. Look for placeholders, contradictions, scope drift, vague acceptance criteria, interactions that bypass the medium, and a feature whose listed code is too much for one feature. Check every claim about existing code, and every count or listing taken from the repository, by reading that code or running the read-only command.
+17. Review. Stage MILESTONE.md and RESEARCH.md, then dispatch the reviewer with `reviewing`. Give it CAPABILITY.md as context, and SLICE.md too for a slice member. Ask it to read the code listed under each feature and check the feature's size and order. Handle the findings as `reviewing` describes for planning briefs. Fix Minor findings and settled Major findings yourself. Bring the user only the Major findings that need a design choice, and report the rest in one line.
+18. Ask the user to approve.
 
 ## Closing a milestone
 
@@ -94,7 +96,7 @@ The first feature to build. Two to three sentences of justification.
 
 ## Features
 
-In order. Each entry gives a slug, a one-sentence description, and dependencies.
+In order. Each entry gives a slug, a one-sentence description, the files and functions it changes, its measured share for a speedup, and dependencies.
 
 1. `<feature-slug>`: One sentence. Depends on: none.
 2. `<feature-slug>`: One sentence. Depends on: feature 1.
