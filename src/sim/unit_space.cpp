@@ -27,6 +27,14 @@ void IndexTable::assignFrom(const UnitTable &other) {
   Filed.assignFrom(table.Filed);
 }
 
+bool IndexTable::holds(EntityKey key) const { return Filed.find(key) != nullptr; }
+
+void IndexTable::appendKeys(std::vector<EntityKey> &keys) const {
+  for (const auto &[key, filed] : Filed) {
+    keys.push_back(key);
+  }
+}
+
 UnitSpace::UnitSpace(const WorldSchema &schema)
     : StoreCount(schema.components().size()), Logged(StoreCount), Logs(StoreCount),
       Readers(StoreCount + schema.unitTables().size()) {

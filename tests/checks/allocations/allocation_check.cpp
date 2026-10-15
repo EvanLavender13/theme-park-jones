@@ -899,13 +899,17 @@ int checkEdits(SteadyPlay &play, tpj::ParkSession &session) {
 }
 
 // The steps of a resolution that changing-previews has moved, so the drags and commits watch them:
-// the candidate's refill, the path ground's units, the paved surface's units, and both surface
-// resolvers.
-constexpr std::array<std::string_view, 16> WATCHED_STEPS{
-    "copy-world",    "segment-ends", "straight-lines", "point-arms",
-    "corners",       "ground-lines", "group-labels",   "point-asks",
-    "point-fits",    "point-paving", "segment-paving", "point-cells",
-    "segment-cells", "hidden-edges", "paved-surface",  "walked-surface"};
+// the candidate's refill, the path ground's units, the paved surface's units, the units park keeps
+// for other modules, the doors' connections and walkways, the walked surface's units, and both
+// surface resolvers.
+constexpr std::array<std::string_view, 25> WATCHED_STEPS{
+    "copy-world",     "segment-ends",     "straight-lines",     "point-arms",
+    "corners",        "ground-lines",     "group-labels",       "point-asks",
+    "point-fits",     "point-paving",     "segment-paving",     "point-cells",
+    "segment-cells",  "hidden-edges",     "paved-surface",      "park-boxes",
+    "park-entrances", "door-connections", "connection-paths",   "door-walkways",
+    "walkway-cells",  "walkway-joins",    "walked-point-edges", "walked-segment-edges",
+    "walked-surface"};
 
 // Pauses the watch while a resolution step it doesn't hold runs: each resolver not moved yet, and
 // the finishers. It acts only while Watching is set.

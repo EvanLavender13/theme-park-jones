@@ -44,6 +44,11 @@ The save checks and the candidate check's drags already compare incremental unit
     - door-walkways derives only for the shop and for entities that share a path with it. An entity shares a path with the shop when, in the network before or after, one of its connectors' last stop is at a node that also holds a segment's carrier that the last stop of one of the shop's connectors holds. A connector is a carrier whose first stop's node is anchored. nodeAnchor gives its entity, and stopPlaces gives the carriers at a node.
     - walked-point-edges and walked-segment-edges derive only for keys that are owners of the walked surface, before or after, whose pieces or edge-line positions come within 40 m of the shop's position before or after. Segments that a walkway of an entity in the door-walkways list joins, before or after, are allowed too. keyedWalkways gives each walkway's Joins.
 
+Spec decisions from the test pass:
+
+- Test 5 reads the networks, the walked surface, and the walkways before the move from a copy of the world taken before the commit. A copy carries its derived values, as the copy check already shows.
+- In test 5, the segments allowed for the walked kinds are those joined by walkways of the entities door-walkways actually derived. If door-walkways derives too much, its own check fails first.
+
 ## Medium
 
 None. Units, their indexes, and the reads park offers are how resolution stores its work. They never appear in a world's walk. The walked surface, the networks, and the walkways keep the values they had, so no field or flow changes.

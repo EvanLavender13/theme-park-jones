@@ -188,6 +188,9 @@ PavedSurface parkSurface(const World &world, TickBuffers &buffers);
 // when the world holds none, as before its first resolution. Read it outside resolution, and in
 // resolvers that depend on paved-surface; read parkSurface where intent may have changed since.
 const PavedSurface &resolvedSurface(const World &world);
+// Adds to the owners those whose run in the paved surface the running resolution added, removed,
+// or changed, keeping the list ascending without repeats.
+void changedPavingOwners(const World &world, std::vector<EntityKey> &owners);
 
 // Registers the derived surface, the units it derives in, and the paved-surface resolver that keeps
 // it from them for resolvedSurface.
@@ -225,10 +228,6 @@ PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways);
 // It still returns a new surface, so it allocates on every call.
 PavedSurface parkSurface(const World &world, std::span<const Walkway> walkways,
                          TickBuffers &buffers);
-// As the walked form, refilling into and keeping the lists it works with in the buffers. Allocates
-// nothing once into and the lists have grown.
-void parkSurface(const World &world, std::span<const Walkway> walkways, PavedSurface &into,
-                 TickBuffers &buffers);
 
 // An edge of the paving at a path point, where its outline turns from one segment's left side, seen
 // walking away from the point, to the right side of the next segment counter-clockwise: the point,

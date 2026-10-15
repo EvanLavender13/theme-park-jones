@@ -97,11 +97,11 @@ const Carrier *findCarrier(const std::vector<Carrier> &carriers, EntityKey key) 
 
 // Projects the point onto each segment of the carrier, replacing best only with a strictly nearer
 // projection, so earlier carriers and then lower distances win ties.
-void projectOnto(const Carrier &carrier, GroundPoint point, std::optional<Place> &best,
-                 double &bestSquared) {
-  for (size_t i = 0; i + 1 < carrier.Points.size(); ++i) {
-    const CarrierPoint &a = carrier.Points[i];
-    const CarrierPoint &b = carrier.Points[i + 1];
+void projectOntoLine(EntityKey key, std::span<const CarrierPoint> points, GroundPoint point,
+                     std::optional<Place> &best, double &bestSquared) {
+  for (size_t i = 0; i + 1 < points.size(); ++i) {
+    const CarrierPoint &a = points[i];
+    const CarrierPoint &b = points[i + 1];
     const double dx = b.X - a.X;
     const double dz = b.Z - a.Z;
     const double lengthSquared = dx * dx + dz * dz;
@@ -121,10 +121,15 @@ void projectOnto(const Carrier &carrier, GroundPoint point, std::optional<Place>
     const double offZ = point.Z - projected.Z;
     const double squared = offX * offX + offZ * offZ;
     if (!best || squared < bestSquared) {
-      best = Place{carrier.Key, projected.Distance};
+      best = Place{key, projected.Distance};
       bestSquared = squared;
     }
   }
+}
+
+void projectOnto(const Carrier &carrier, GroundPoint point, std::optional<Place> &best,
+                 double &bestSquared) {
+  projectOntoLine(carrier.Key, carrier.Points, point, best, bestSquared);
 }
 
 // The snapped place, when its ground position lies within ON_GROUND_TOLERANCE of the point.
@@ -298,16 +303,7 @@ std::optional<GroundPoint> Network::groundPoint(const Place &place) const {
   if (!index) {
     return std::nullopt;
   }
-  const std::vector<CarrierPoint> &points = Carriers[*index].Points;
-  // The first point at or beyond the distance. It exists because the last point is at the length.
-  const auto after = std::ranges::lower_bound(points, place.Distance, {}, &CarrierPoint::Distance);
-  if (after->Distance == place.Distance) {
-    return GroundPoint{after->X, after->Z};
-  }
-  const CarrierPoint &a = *(after - 1);
-  const CarrierPoint &b = *after;
-  const double t = (place.Distance - a.Distance) / (b.Distance - a.Distance);
-  return GroundPoint{a.X + t * (b.X - a.X), a.Z + t * (b.Z - a.Z)};
+  return groundPointOnLine(Carriers[*index].Points, place.Distance);
 }
 
 std::optional<double> Network::widthAt(const Place &place) const {
@@ -359,10 +355,35 @@ std::optional<Place> Network::nearestPlaceOn(EntityKey carrier, GroundPoint poin
   if (found == nullptr || !isFinite(point.X) || !isFinite(point.Z)) {
     return std::nullopt;
   }
+  return nearestPlaceOnLine(found->Key, found->Points, point);
+}
+
+std::optional<Place> nearestPlaceOnLine(EntityKey carrier, std::span<const CarrierPoint> points,
+                                        GroundPoint point) {
+  if (points.empty() || !isFinite(point.X) || !isFinite(point.Z)) {
+    return std::nullopt;
+  }
   std::optional<Place> best;
   double bestSquared = 0.0;
-  projectOnto(*found, point, best, bestSquared);
+  projectOntoLine(carrier, points, point, best, bestSquared);
   return best;
+}
+
+std::optional<GroundPoint> groundPointOnLine(std::span<const CarrierPoint> points,
+                                             double distance) {
+  if (points.empty() || std::isnan(distance) || distance < 0.0 ||
+      distance > points.back().Distance) {
+    return std::nullopt;
+  }
+  // The first point at or beyond the distance. It exists because the last point is at the length.
+  const auto after = std::ranges::lower_bound(points, distance, {}, &CarrierPoint::Distance);
+  if (after->Distance == distance) {
+    return GroundPoint{after->X, after->Z};
+  }
+  const CarrierPoint &a = *(after - 1);
+  const CarrierPoint &b = *after;
+  const double t = (distance - a.Distance) / (b.Distance - a.Distance);
+  return GroundPoint{a.X + t * (b.X - a.X), a.Z + t * (b.Z - a.Z)};
 }
 
 std::optional<Place> carryOver(const Place &place, const Network &before, const Network &after) {

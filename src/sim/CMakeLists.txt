@@ -27,10 +27,13 @@ add_library(tpj_sim STATIC
     park/paving.cpp
     park/surface.cpp
     park/surface_units.cpp
+    park/unit_reads.cpp
     park_schema.cpp
     routes/best_places.cpp
+    routes/connections.cpp
     routes/networks.cpp
     routes/route_distance.cpp
+    routes/walked_surface.cpp
     save.cpp
     schema.cpp
     unit_space.cpp

@@ -7,6 +7,7 @@
 #include "sim/park/edits.h"
 #include "sim/park/intent.h"
 #include "sim/park/surface.h"
+#include "sim/park/unit_reads.h"
 #include "sim/routes/networks.h"
 #include "sim/wayfinding/best_seats.h"
 
@@ -15,7 +16,8 @@ namespace tpj {
 void addPark(WorldSchema &schema) {
   // The medium's types come first, since every capability builds on them. Capabilities register
   // their park types after them, in dependency order, starting with park intent, its commands, the
-  // units its path ground derives in, and its paved surface, then the routes that derive the park's
+  // units its path ground derives in, its paved surface, and the units it keeps for other modules'
+  // units, then the routes that derive the park's
   // networks, then the furniture its segments' furnishing lays, then the operations that run its
   // shops and depots, then the wayfinding that leads guests to the best of many places, then the
   // guests who visit them. The previous networks are dropped last, once every finisher that carries
@@ -25,6 +27,7 @@ void addPark(WorldSchema &schema) {
   addParkEdits(schema);
   addPathGround(schema);
   addPavedSurface(schema);
+  addParkUnits(schema);
   addRoutes(schema);
   addFurniture(schema);
   addOperations(schema);

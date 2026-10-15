@@ -84,8 +84,20 @@ void WorldSchema::addUnitTable(UnitTableType type, ResolveFunction update) {
   if (unitTableOf(type.Id)) {
     throw std::invalid_argument("unit table '" + type.Name + "' is already registered");
   }
-  type.Over = intentStore(type.OverId);
-  type.Reads = {type.Over};
+  type.Reads.clear();
+  if (type.OverKindIds.empty()) {
+    type.Over = intentStore(type.OverId);
+    type.Reads.push_back(type.Over);
+  }
+  type.OverKinds.clear();
+  for (const TypeId id : type.OverKindIds) {
+    const std::optional<size_t> position = unitTableOf(id);
+    if (!position) {
+      throw std::invalid_argument("unit table '" + type.Name +
+                                  "' is kept over a unit kind that isn't registered");
+    }
+    type.OverKinds.push_back(*position);
+  }
   for (const TypeId id : type.ReadIds) {
     type.Reads.push_back(intentStore(id));
   }

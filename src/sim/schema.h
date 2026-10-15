@@ -88,14 +88,18 @@ class UnitTable;
 // A unit kind or index a module registered (sim/units.h): its name and type, the type of the intent
 // component Over its units are kept for, the intent types its derivation reads, and a function that
 // makes its empty table. Registering it fills in Over's store index, and the store indices its
-// derivation may read, Over's among them.
+// derivation may read, Over's among them. A kind kept over earlier unit kinds names their types in
+// OverKindIds instead, and registering it fills in their positions in the unit tables, OverKinds,
+// leaving Over unused.
 struct UnitTableType {
   std::string Name;
   TypeId Id = nullptr;
   TypeId OverId = nullptr;
+  std::vector<TypeId> OverKindIds;
   std::vector<TypeId> ReadIds;
   std::unique_ptr<UnitTable> (*MakeTable)() = nullptr;
   size_t Over = 0;
+  std::vector<size_t> OverKinds;
   std::vector<size_t> Reads;
 };
 
@@ -148,9 +152,9 @@ public:
   template <typename T> void addCommand();
   // Registers a unit kind or index, and its update as a resolver of the same name, which runs it in
   // resolver order. Marks the stores of its Over and of the types it reads as logged. Throws
-  // std::invalid_argument when Over or a type it reads isn't a registered intent component, when
-  // the type is already registered, or when addResolver refuses the name. addUnits and addUnitIndex
-  // in sim/units.h call it.
+  // std::invalid_argument when Over or a type it reads isn't a registered intent component, when a
+  // kind it is kept over isn't a registered unit table, when the type is already registered, or
+  // when addResolver refuses the name. addUnits and addUnitIndex in sim/units.h call it.
   void addUnitTable(UnitTableType type, ResolveFunction update);
 
   [[nodiscard]] const std::vector<ComponentType> &components() const { return Components; }

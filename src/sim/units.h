@@ -55,7 +55,21 @@ private:
 template <typename T> struct IsTuple : std::false_type {};
 template <typename... Types> struct IsTuple<std::tuple<Types...>> : std::true_type {};
 
-// A unit kind: a Name, an intent component Over that each unit's entity holds, a Value with a
+// Names the earlier unit kinds a kind is kept over, as its Over, in place of an intent component:
+// it keeps a unit for each key any of them holds a unit for. A kind's module can declare it without
+// defining it.
+template <typename... Kinds> struct UnitsOf {};
+
+template <typename T> struct IsUnitsOf : std::false_type {};
+template <typename... Kinds> struct IsUnitsOf<UnitsOf<Kinds...>> : std::true_type {};
+
+template <typename T> struct UnitsOfIds;
+template <typename... Kinds> struct UnitsOfIds<UnitsOf<Kinds...>> {
+  static std::vector<TypeId> ids() { return {typeIdOf<Kinds>()...}; }
+};
+
+// A unit kind: a Name, an intent component Over that each unit's entity holds, or a UnitsOf naming
+// the earlier kinds whose keys it keeps units for, a Value with a
 // visitFields function, compared by the walk's words, Reads, a std::tuple of the intent types its
 // derivation reads, and derive(UnitReads &, EntityKey, Value &). The value derive is given may hold
 // another unit's value, so derive sets every field.
@@ -200,6 +214,57 @@ template <UnitIndex I> void updateIndex(World &world, TickBuffers &buffers) {
   index.Counter = space.Counter;
 }
 
+// Puts in dirty the keys of the units of the kind at the position to derive again: every key that
+// holds what it is kept over before its first update, and after that each key a command touched in
+// its Over, or each key whose unit its over-kinds changed, and each unit whose reads changed.
+template <typename Over>
+void dirtyUnits(const World &world, const UnitSpace &space, size_t position, bool updated,
+                std::vector<EntityKey> &dirty) {
+  const UnitTableType &type = world.schema().unitTables()[position];
+  if (!updated) {
+    if constexpr (IsUnitsOf<Over>::value) {
+      dirty.clear();
+      for (const size_t of : type.OverKinds) {
+        space.Tables[of]->appendKeys(dirty);
+      }
+      sortUnique(dirty);
+    } else {
+      world.keysWith<Over>(dirty);
+    }
+    return;
+  }
+  if constexpr (IsUnitsOf<Over>::value) {
+    dirty.clear();
+    for (const size_t of : type.OverKinds) {
+      changedKeys(space, space.StoreCount + of, dirty);
+    }
+  } else {
+    copyGrowing(dirty, std::span<const EntityKey>(space.Logs[type.Over]));
+  }
+  const size_t table = space.StoreCount + position;
+  for (const UnitRead &change : space.Changes) {
+    if (const std::vector<UnitRead> *readers = space.Readers[change.Table].find(change.Key)) {
+      for (const UnitRead &reader : *readers) {
+        if (reader.Table == table) {
+          dirty.push_back(reader.Key);
+        }
+      }
+    }
+  }
+  sortUnique(dirty);
+}
+
+// Whether the key holds what the kind at the position keeps units over.
+template <typename Over>
+bool holdsOver(const World &world, const UnitSpace &space, size_t position, EntityKey key) {
+  if constexpr (IsUnitsOf<Over>::value) {
+    return std::ranges::any_of(world.schema().unitTables()[position].OverKinds,
+                               [&](size_t of) { return space.Tables[of]->holds(key); });
+  } else {
+    return world.has<Over>(key);
+  }
+}
+
 // Derives again each unit of K whose entity a command touched, or whose reads this resolution
 // changed, or every unit before the first update, in ascending key order. Puts each unit that was
 // added, removed, or derived a different value on the change list.
@@ -208,30 +273,14 @@ template <UnitKind K> void updateUnits(World &world, TickBuffers &buffers) {
   using Value = typename K::Value;
   const World &read = world;
   UnitSpace &space = unitSpaceOf(world);
-  const WorldSchema &schema = read.schema();
-  const size_t position = tablePosition<K>(schema);
+  const size_t position = tablePosition<K>(read.schema());
   const UnitRead table{space.StoreCount + position, NULL_KEY};
   auto &units = static_cast<KindTable<Value> &>(*space.Tables[position]);
   auto &lists = buffers.get<KindUpdateLists<Value>>();
-  if (units.Counter) {
-    const size_t over = schema.unitTables()[position].Over;
-    copyGrowing(lists.Dirty, std::span<const EntityKey>(space.Logs[over]));
-    for (const UnitRead &change : space.Changes) {
-      if (const std::vector<UnitRead> *readers = space.Readers[change.Table].find(change.Key)) {
-        for (const UnitRead &reader : *readers) {
-          if (reader.Table == table.Table) {
-            lists.Dirty.push_back(reader.Key);
-          }
-        }
-      }
-    }
-    sortUnique(lists.Dirty);
-  } else {
-    read.keysWith<Over>(lists.Dirty);
-  }
+  dirtyUnits<Over>(read, space, position, units.Counter.has_value(), lists.Dirty);
   for (const EntityKey key : lists.Dirty) {
     const UnitRead unit{table.Table, key};
-    if (!read.has<Over>(key)) {
+    if (!holdsOver<Over>(read, space, position, key)) {
       if (const KindUnit<Value> *gone = units.Units.find(key)) {
         space.removeReader(unit, gone->Reads);
         units.Units.erase(key);
@@ -390,7 +439,11 @@ UnitTableType unitTableType(std::unique_ptr<UnitTable> (*makeTable)()) {
   UnitTableType type;
   type.Name = std::string(T::Name);
   type.Id = typeIdOf<T>();
-  type.OverId = typeIdOf<Over>();
+  if constexpr (IsUnitsOf<Over>::value) {
+    type.OverKindIds = UnitsOfIds<Over>::ids();
+  } else {
+    type.OverId = typeIdOf<Over>();
+  }
   type.ReadIds = {typeIdOf<Reads>()...};
   type.MakeTable = makeTable;
   return type;
