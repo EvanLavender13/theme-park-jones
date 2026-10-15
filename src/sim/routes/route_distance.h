@@ -54,6 +54,8 @@ template <PathKind NetworkKind> struct RouteDistance {
   static constexpr std::string_view Name =
       NetworkKind == PathKind::Guest ? "guest-route-distance" : "backstage-route-distance";
   static constexpr FieldKind Kind = FieldKind::Entry;
+  // Route distance updates only the sources an edit changes, keeping the rest.
+  static constexpr bool KeepsResolved = true;
 
   static void sampleEdge(const EdgeSample<RouteEntry> &sample, std::vector<RouteEntry> &out) {
     sampleRouteEdge(sample, out);
@@ -67,9 +69,10 @@ std::optional<RouteEntry> routeEntryAt(const World &world, PathKind kind, const 
                                        const Place &place, EntityKey source);
 
 // The source's entry at each node of the network, indexed by node, none where no route joins the
-// node to one the source anchors. Distances are least route lengths added from the source's end,
-// and each next step is the lowest by carrier key, then toward lower distances, then From, of
-// those that achieve its node's distance.
+// node to one the source anchors. Distances are least route lengths in whole millimetres, each
+// edge's length its stops' distances rounded to whole millimetres and subtracted, and each next
+// step is the lowest by carrier key, then toward lower distances, then From, of those that achieve
+// its node's distance.
 std::vector<std::optional<RouteEntry>> routeEntries(const Network &network, EntityKey source);
 
 // Registers the guest and then the backstage route distance field, and then the resolver

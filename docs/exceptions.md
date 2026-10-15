@@ -11,4 +11,9 @@ Each entry gives:
 - the reason;
 - what would remove it.
 
-No exceptions yet.
+## Route distance shifts each source's entries on an update
+
+- Location: src/sim/routes/route_distance.cpp, mergeWrites.
+- Rule it breaks: docs/conventions.md's growth rule. Work in a changed frame must not grow with a product of counts.
+- Reason: a field keeps each source's entries in one list in place order, because saves, hashes, and world comparisons walk them in that order. Writing a source's changed entries moves the rest of its list after the first change. On full.park that is every guest source times the nodes after the first change. Measured with Very Sleepy on windows-release, it is at most 0.6% of a shop-drag frame, about 0.03 ms (route-updates).
+- What would remove it: a later changing-previews feature that keeps each source's entries in a fixed slot per node, and puts them in place order only when the world is walked.

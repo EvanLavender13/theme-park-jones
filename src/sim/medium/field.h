@@ -45,8 +45,8 @@ template <typename Entry> struct FieldSlot {
   EntityKey Source = NULL_KEY;
   std::vector<PlacedEntry<Entry>> Entries;
   // The positions of Entries ordered by place, made on the slot's first sample when Ordered is
-  // false. Derived from Entries, which nothing changes in place, and never visited, so saves,
-  // hashes, and comparisons never see it.
+  // false. Derived from Entries, and never visited, so saves, hashes, and comparisons never see
+  // it. Whoever changes Entries in place sets Ordered to false.
   mutable std::vector<uint32_t> ByPlace;
   mutable bool Ordered = false;
 };
@@ -104,13 +104,17 @@ void orderItemsByPlace(std::span<const Item> items, std::vector<uint32_t> &order
       order.push_back(i);
     }
   }
-  // Positions break ties, so this gives the stable order without stable_sort's buffer.
-  std::ranges::sort(order, [items](uint32_t a, uint32_t b) {
+  // Positions break ties, so this gives the stable order without stable_sort's buffer. Entries a
+  // resolver keeps in place order are already in it.
+  const auto before = [items](uint32_t a, uint32_t b) {
     if (placeBefore(items[a].At, items[b].At)) {
       return true;
     }
     return !placeBefore(items[b].At, items[a].At) && a < b;
-  });
+  };
+  if (!std::ranges::is_sorted(order, before)) {
+    std::ranges::sort(order, before);
+  }
 }
 
 // The positions of the entries whose distance is not NaN, each once, ordered by carrier key, then
@@ -195,6 +199,14 @@ concept KeptFieldDefinition =
     FieldDefinition<F> && (F::Kind == FieldKind::Scalar) && requires(double value, uint64_t ticks) {
       { F::readKept(value, ticks) } -> std::same_as<double>;
     };
+
+// A field whose resolver edits its resolved entries in place and keeps the rest from one
+// resolution to the next, through editResolved and dropResolved:
+//   static constexpr bool KeepsResolved = true;
+template <typename F>
+concept KeepsResolvedEntries = FieldDefinition<F> && requires {
+  { F::KeepsResolved } -> std::convertible_to<bool>;
+} && F::KeepsResolved;
 
 inline constexpr uint64_t FIELD_PURPOSE = hashName("field");
 
@@ -294,13 +306,19 @@ void retireSlots(std::vector<FieldSlot<Entry>> &slots, std::vector<FieldSlot<Ent
 
 // The field's resolver: empties its resolved entries, keeping the previous ones for its finisher,
 // and creates the entity that holds both layers, with an empty stepped layer if it has none. It
-// changes the entries in place, so their memory serves the publishes that follow.
+// changes the entries in place, so their memory serves the publishes that follow. A field that
+// keeps its resolved entries keeps them as they are, with no previous ones until its resolver
+// edits a source.
 template <FieldDefinition F> void emptyResolvedEntries(World &world, TickBuffers & /*buffers*/) {
   const EntityKey key = world.createDerivedEntity(NULL_KEY, FIELD_PURPOSE, hashName(F::Name));
   if (auto *resolved = world.tryGet<ResolvedEntries<F>>(key)) {
     retireSlots(resolved->Previous, resolved->Retired);
-    resolved->Previous.swap(resolved->Slots);
-    resolved->HasPrevious = true;
+    if constexpr (KeepsResolvedEntries<F>) {
+      resolved->HasPrevious = false;
+    } else {
+      resolved->Previous.swap(resolved->Slots);
+      resolved->HasPrevious = true;
+    }
   } else {
     world.emplace<ResolvedEntries<F>>(key);
   }
@@ -336,6 +354,13 @@ template <FieldDefinition F> void settleSteppedEntries(World &world, TickBuffers
   }
   auto &stepped = world.get<SteppedEntries<F>>(holder);
   std::erase_if(stepped.Readable, [&](const Slot &slot) {
+    if constexpr (KeepsResolvedEntries<F>) {
+      // Previous holds a copy of each source the resolver edited, so a source it lacks kept its
+      // resolved entries.
+      if (!std::ranges::binary_search(resolved->Previous, slot.Source, {}, &Slot::Source)) {
+        return false;
+      }
+    }
     if (entryWords(resolved->Previous, slot.Source) == entryWords(resolved->Slots, slot.Source)) {
       return false;
     }
@@ -398,6 +423,100 @@ std::vector<PlacedEntry<typename F::Entry>> &publishResolved(World &world, Entit
   }
   slot.Source = source;
   return slots.insert(at, std::move(slot))->Entries;
+}
+
+// Throws as publishResolved does when the world is not resolving, holds no resolved entries for
+// the field, or the source is the null key.
+template <KeepsResolvedEntries F>
+ResolvedEntries<F> &editableResolved(World &world, EntityKey source) {
+  if (!world.isResolving()) {
+    throw std::logic_error("field " + std::string(F::Name) +
+                           " takes resolved entries only from resolvers");
+  }
+  auto *resolved = world.tryGet<ResolvedEntries<F>>(fieldKey(F::Name));
+  if (resolved == nullptr) {
+    throw std::logic_error("field " + std::string(F::Name) +
+                           " holds no resolved entries; register it before its publishers");
+  }
+  if (source == NULL_KEY) {
+    throw std::invalid_argument("field " + std::string(F::Name) +
+                                " takes no entries from the null key");
+  }
+  return *resolved;
+}
+
+// Takes a slot for the source from the retired ones, or a new one.
+template <FieldDefinition F>
+FieldSlot<typename F::Entry> takeRetired(ResolvedEntries<F> &resolved, EntityKey source) {
+  FieldSlot<typename F::Entry> slot;
+  if (!resolved.Retired.empty()) {
+    slot = std::move(resolved.Retired.back());
+    resolved.Retired.pop_back();
+  }
+  slot.Source = source;
+  return slot;
+}
+
+// Before the first edit of a source with readable stepped entries in this resolution, puts a copy
+// of its resolved entries in Previous, so the finisher can tell whether they changed.
+template <KeepsResolvedEntries F>
+void keepPrevious(World &world, ResolvedEntries<F> &resolved, EntityKey source) {
+  using Slot = FieldSlot<typename F::Entry>;
+  const auto *stepped = world.tryGet<SteppedEntries<F>>(fieldKey(F::Name));
+  if (stepped == nullptr ||
+      !std::ranges::binary_search(stepped->Readable, source, {}, &Slot::Source)) {
+    return;
+  }
+  const auto at = std::ranges::lower_bound(resolved.Previous, source, {}, &Slot::Source);
+  if (at != resolved.Previous.end() && at->Source == source) {
+    return;
+  }
+  Slot copy = takeRetired(resolved, source);
+  const auto current = std::ranges::lower_bound(resolved.Slots, source, {}, &Slot::Source);
+  if (current != resolved.Slots.end() && current->Source == source) {
+    keepAssign(copy, *current);
+  }
+  resolved.Previous.insert(at, std::move(copy));
+  resolved.HasPrevious = true;
+}
+
+// Gives a source's resolved entries for this resolution to change in place, adding an empty list
+// for a source that has none. They are readable at once. The list stays valid until the next edit,
+// drop, or publish into the field. Resolvers only, for a field that keeps its resolved entries.
+// Throws as publishResolved does when the world is not resolving, holds no resolved entries for
+// the field, or the source is the null key. Allocates nothing once the field's retired and
+// previous slots have grown.
+template <KeepsResolvedEntries F>
+std::vector<PlacedEntry<typename F::Entry>> &editResolved(World &world, EntityKey source) {
+  using Slot = FieldSlot<typename F::Entry>;
+  ResolvedEntries<F> &resolved = editableResolved<F>(world, source);
+  keepPrevious<F>(world, resolved, source);
+  std::vector<Slot> &slots = resolved.Slots;
+  auto at = std::ranges::lower_bound(slots, source, {}, &Slot::Source);
+  if (at == slots.end() || at->Source != source) {
+    at = slots.insert(at, takeRetired(resolved, source));
+  }
+  at->Ordered = false;
+  return at->Entries;
+}
+
+// Removes a source's resolved entries, if it has any. Resolvers only, for a field that keeps its
+// resolved entries, and throws as editResolved does.
+template <KeepsResolvedEntries F> void dropResolved(World &world, EntityKey source) {
+  using Slot = FieldSlot<typename F::Entry>;
+  ResolvedEntries<F> &resolved = editableResolved<F>(world, source);
+  std::vector<Slot> &slots = resolved.Slots;
+  const auto at = std::ranges::lower_bound(slots, source, {}, &Slot::Source);
+  if (at == slots.end() || at->Source != source) {
+    return;
+  }
+  keepPrevious<F>(world, resolved, source);
+  at->Source = NULL_KEY;
+  at->Entries.clear();
+  at->ByPlace.clear();
+  at->Ordered = false;
+  resolved.Retired.push_back(std::move(*at));
+  slots.erase(at);
 }
 
 // Gives a source's entries for this tick, empty, for the system to fill. They are readable after
