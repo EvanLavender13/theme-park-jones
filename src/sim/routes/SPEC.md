@@ -45,26 +45,26 @@ previousNetwork returns a kind's network as the previous resolution derived it. 
 
 ## Route distance
 
-Route distance covers each entity anchored on a network and each node that can reach it. For each such pair, it gives the least length of a route along edges from the node to the entity, and the next step to take. The result is a RouteEntry of a Distance and a Next RouteStep. A RouteStep is an edge of a carrier, walked from one stop toward another. At the entity's own nodes, Next has carrier NULL_KEY to show the route has arrived. If a node can't reach the entity, it has no entry for it. Distances and steps depend only on the network, not on the order a search visits nodes in (principle 10).
+Route distance covers each entity anchored on a network and each node that can reach it. For each such pair, it gives the least length of a route along edges from the node to the entity, and the next step to take. The result is a RouteEntry of a Distance and a Next RouteStep. A RouteStep is an edge of a carrier, walked from one stop toward another. At the entity's own nodes, Next has carrier NULL_KEY to show the route has arrived. If a node can't reach the entity, it has no entry for it. Distances and steps depend only on the network, not on the order a search visits nodes in (principle 10). An edge's length is the difference of its two stops' distances, each rounded to whole millimetres. A distance is the sum of those lengths, so every distance at a node is a whole number of millimetres. Cutting an edge in two leaves every distance the same (decision 0042).
 
 Route distance is published as two entry fields, one per network:
 
 - RouteDistance<PathKind::Guest>, named guest-route-distance;
 - RouteDistance<PathKind::Backstage>, named backstage-route-distance.
 
-This keeps an entity's entries on its two networks apart. If an entity is anchored on a network, it is a source on that network. Only resolved entries are published, so a resolved park's save holds the fields empty.
+This keeps an entity's entries on its two networks apart. If an entity is anchored on a network, it is a source on that network. Only resolved entries are published, so a resolved park's save holds the fields empty. A source's entries are ordered by place: carrier key, then distance.
 
 At a place inside an edge, a source's entry is the better of the edge's two ends. Its distance adds the distance along the carrier to that end, and its Next steps toward that end (principle 4).
 
 routeEntryAt(world, kind, network, place, source) returns exactly the entry sampleField gives that source at the place, or none. If a mover follows one source, it pays for that source alone, because routeEntryAt reads only that source's entries and allocates nothing except the slot's order by place, on its first read.
 
-Suppose a mover samples at a place, walks Next along Next's carrier to Next.To, and samples again there. Doing this repeatedly, it arrives at the source's node. The lengths it walks add up exactly to the distance it first sampled.
+Suppose a mover samples at a place, walks Next along Next's carrier to Next.To, and samples again there. Doing this repeatedly, it arrives at the source's node. The lengths it walks add up exactly to the distance it first sampled, taking each edge's length rounded to whole millimetres, and a first stretch from a place inside an edge as it is.
 
 ## Best places
 
 bestPlaces finds the best few of many seeds from every node of a network, in one search. A PlaceSeed has a key, an owner, a place on the network, and a value, where a higher value is better. If a seed's place doesn't resolve, it is left out. If two seeds share a key, bestPlaces throws std::invalid_argument.
 
-A seed's distance from a place is the least length of a route along edges from that place to the seed's place, added from the seed's end, as route distance's are (principle 4). From a place, one seed dominates another when its distance there is no longer, its value is no lower, and it comes first in order of distance, then higher value, then lower key. At each node, bestPlaces gives the seeds that fewer than a given number of other seeds dominate there, in that order. Each comes as a BestPlace: the seed's key, owner, place, and value, its distance, and the next step toward it. A node's entries are at its nodePlace. A seed whose place lies strictly inside an edge also gets one entry at its own place. Where a seed's place lies, its entry has distance 0 and a Next with carrier NULL_KEY, to show the route has arrived.
+A seed's distance from a place is the least length of a route along edges from that place to the seed's place, added from the seed's end (principle 4). From a place, one seed dominates another when its distance there is no longer, its value is no lower, and it comes first in order of distance, then higher value, then lower key. At each node, bestPlaces gives the seeds that fewer than a given number of other seeds dominate there, in that order. Each comes as a BestPlace: the seed's key, owner, place, and value, its distance, and the next step toward it. A node's entries are at its nodePlace. A seed whose place lies strictly inside an edge also gets one entry at its own place. Where a seed's place lies, its entry has distance 0 and a Next with carrier NULL_KEY, to show the route has arrived.
 
 A next step follows an edge as route distance's does, except that a step into the edge holding the seed's place ends at that place. Of the steps that achieve a node's distance, the one first by route distance's rule is taken, so the result depends only on the network and the seeds (principle 10).
 

@@ -11,7 +11,7 @@ It owns two things:
 - measuring where the time goes, on parks as large as the game means to support;
 - the speedups that the measurements point to.
 
-A speedup changes how fast the game gets an answer, not the answer itself. There is one exception. Decision 0031 rebuilt one metric to follow its movers, and that metric's answer may change in its last bits, under the rule its spec states. changing-previews adds two more, each under its own decision record: route distance adds edge lengths in whole millimetres, and an edit carries and re-aims only the guests whose carrier or ground it changed.
+A speedup changes how fast the game gets an answer, not the answer itself. There is one exception. Decision 0031 rebuilt one metric to follow its movers, and that metric's answer may change in its last bits, under the rule its spec states. changing-previews adds two more, each under its own decision record: route distance adds edge lengths in whole millimetres (decision 0042), and an edit carries and re-aims only the guests whose carrier or ground it changed.
 
 This matters because a park can get slow without anyone noticing. Drawing one 3 km guest path pushed the food overlay's rebuild to 38 ms a tick on windows-debug, past the 33 ms between ticks. On windows-release it took 2 ms, with one shop. Nothing measured it until someone played it, and nothing yet says what it costs with 30 shops.
 
