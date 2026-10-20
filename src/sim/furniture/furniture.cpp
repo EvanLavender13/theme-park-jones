@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <compare>
 #include <iterator>
@@ -107,13 +108,30 @@ EntityKey chainKey(SideKey lowest) {
   return deriveKey(lowest.Segment, CHAIN_PURPOSE, lowest.Left ? 0 : 1);
 }
 
+// A rectangle on the ground, from its least to its greatest coordinates.
+struct GroundRect {
+  double MinX = 0.0;
+  double MinZ = 0.0;
+  double MaxX = 0.0;
+  double MaxZ = 0.0;
+};
+
 // One chain furniture laid: its lowest side, which orders it among the chains, its sides in the
-// order it walks them, the keys of the pieces it laid, and the cells its laying reads, ascending.
+// order it walks them, the keys of the pieces it laid, the cells its laying reads, ascending, the
+// rectangles its laying reads, a box around each side's rectangles, two hashes of the obstacles
+// other than furniture whose bounds meet a rectangle, and two hashes of everything its laying
+// read.
 struct LaidChain {
   SideKey Order;
   std::vector<SideKey> Members;
   std::vector<EntityKey> Pieces;
   std::vector<EntityKey> Cells;
+  std::vector<GroundRect> Rects;
+  std::vector<GroundRect> Boxes;
+  uint64_t Read = 0;
+  uint64_t ReadCheck = 0;
+  uint64_t Whole = 0;
+  uint64_t WholeCheck = 0;
 };
 
 // Derived, on its own entity: every chain laid, by its key, the chains whose laying reads each
@@ -247,13 +265,7 @@ public:
     return found;
   }
 
-  // A rectangle on the ground, from its least to its greatest coordinates.
-  struct Rect {
-    double MinX = 0.0;
-    double MinZ = 0.0;
-    double MaxX = 0.0;
-    double MaxZ = 0.0;
-  };
+  using Rect = GroundRect;
 
 private:
   static constexpr size_t CELLS = static_cast<size_t>(PARK_SIZE / GRID_CELL);
@@ -814,6 +826,13 @@ struct PieceBefore {
   FurniturePieceState State;
 };
 
+// An obstacle other than furniture near a chain: its outline, its bounds, and whether it is paving.
+struct NearObstacle {
+  Outline Shape;
+  GroundRect Bounds;
+  bool Paving = false;
+};
+
 // Every list layFurniture works with, kept from one resolution to the next so that it allocates
 // nothing once they have grown.
 struct FurnitureLists {
@@ -847,7 +866,14 @@ struct FurnitureLists {
   std::vector<EntityKey> Merged;
   // One chain's laying: its reach rectangles and cells, its obstacles and what fills them, its
   // pieces before and after, and the cells a changed piece covers.
-  std::vector<Obstacles::Rect> Rects;
+  std::vector<GroundRect> Rects;
+  std::vector<GroundRect> StepBoxes;
+  std::vector<NearObstacle> Near;
+  std::vector<std::array<uint64_t, 2>> NearHashes;
+  std::array<uint64_t, 2> NearRead{};
+  std::vector<std::array<uint64_t, 2>> EarlierHashes;
+  std::array<uint64_t, 2> WholeRead{};
+  std::vector<EntityKey> Candidates;
   std::vector<EntityKey> ChainCells;
   Obstacles Blocking;
   std::vector<const SurfacePiece *> NearPaving;
@@ -1067,16 +1093,23 @@ void reachOfChain(const std::vector<Member> &members, const Chain &chain,
                   const PavedSurface &surface, FurnitureLists &lists) {
   const double reach = reachOf(members[chain.Steps.front().Member].Furnishing.Kind);
   lists.Rects.clear();
+  lists.StepBoxes.clear();
   lists.ChainCells.clear();
   for (const Step &step : chain.Steps) {
     const std::span<const ParkPoint> points = pointsOf(surface, *members[step.Member].Side);
     for (size_t k = 0; k < points.size(); ++k) {
       const ParkPoint previous = points[k > 0 ? k - 1 : k];
-      const Obstacles::Rect rect{
+      const GroundRect rect{
           std::min(previous.X, points[k].X) - reach, std::min(previous.Z, points[k].Z) - reach,
           std::max(previous.X, points[k].X) + reach, std::max(previous.Z, points[k].Z) + reach};
       lists.Rects.push_back(rect);
       pavingCells({rect.MinX, rect.MinZ}, {rect.MaxX, rect.MaxZ}, lists.ChainCells);
+      if (k == 0) {
+        lists.StepBoxes.push_back(rect);
+      }
+      GroundRect &box = lists.StepBoxes.back();
+      box = GroundRect{std::min(box.MinX, rect.MinX), std::min(box.MinZ, rect.MinZ),
+                       std::max(box.MaxX, rect.MaxX), std::max(box.MaxZ, rect.MaxZ)};
     }
   }
   sortUnique(lists.ChainCells);
@@ -1102,17 +1135,74 @@ template <typename T> void uniqueSorted(std::vector<T> &list) {
   list.erase(std::unique(list.begin(), list.end()), list.end());
 }
 
-// Puts in the lists, once each, the paving of either kind, walkways, frontage strips, boxes, and
-// entrances near the chain's rectangles.
-void gatherNear(const World &world, FurnitureLists &lists, TickBuffers &buffers) {
+// The rectangle that holds the outline.
+GroundRect boundsOfOutline(const Outline &outline) {
+  GroundRect box{outline.Corners[0].X, outline.Corners[0].Z, outline.Corners[0].X,
+                 outline.Corners[0].Z};
+  for (size_t i = 1; i < outline.Count; ++i) {
+    box.MinX = std::min(box.MinX, outline.Corners[i].X);
+    box.MaxX = std::max(box.MaxX, outline.Corners[i].X);
+    box.MinZ = std::min(box.MinZ, outline.Corners[i].Z);
+    box.MaxZ = std::max(box.MaxZ, outline.Corners[i].Z);
+  }
+  return box;
+}
+
+// Two hashes of an obstacle: whether it is paving, and its corners.
+std::array<uint64_t, 2> outlineHash(const Outline &shape, bool paving) {
+  std::array<Hasher, 2> hashers;
+  hashers[1].add(1);
+  for (Hasher &hasher : hashers) {
+    hasher.add(paving ? 1U : 0U);
+    hasher.add(shape.Count);
+    for (size_t i = 0; i < shape.Count; ++i) {
+      hasher.add(std::bit_cast<uint64_t>(shape.Corners[i].X));
+      hasher.add(std::bit_cast<uint64_t>(shape.Corners[i].Z));
+    }
+  }
+  return {hashers[0].value(), hashers[1].value()};
+}
+
+// Two hashes of a set of obstacles' hashes, which it sorts, so they don't depend on the order the
+// obstacles were read in or where they lie in memory.
+std::array<uint64_t, 2> setHash(std::vector<std::array<uint64_t, 2>> &hashes) {
+  uniqueSorted(hashes);
+  std::array<Hasher, 2> read;
+  read[1].add(1);
+  for (const std::array<uint64_t, 2> &hash : hashes) {
+    read[0].add(hash[0]);
+    read[1].add(hash[1]);
+  }
+  return {read[0].value(), read[1].value()};
+}
+
+// Whether the bounds meet one of the chain's rectangles.
+bool meetsReach(const GroundRect &bounds, const FurnitureLists &lists) {
+  return std::ranges::any_of(lists.Rects, [&bounds](const GroundRect &rect) {
+    return bounds.MinX <= rect.MaxX && bounds.MaxX >= rect.MinX && bounds.MinZ <= rect.MaxZ &&
+           bounds.MaxZ >= rect.MinZ;
+  });
+}
+
+// Adds the outline to the near obstacles when its bounds meet one of the chain's rectangles.
+void keepNear(const Outline &outline, bool paving, FurnitureLists &lists) {
+  const GroundRect bounds = boundsOfOutline(outline);
+  if (meetsReach(bounds, lists)) {
+    lists.Near.push_back(NearObstacle{outline, bounds, paving});
+  }
+}
+
+// Gathers the pointers the near read gives for each of the chain's boxes into the list of all,
+// once each.
+void gatherPointers(const World &world, FurnitureLists &lists, TickBuffers &buffers) {
   lists.Paving.clear();
   lists.Walkways.clear();
   lists.Strips.clear();
   lists.Boxes.clear();
   lists.Entrances.clear();
-  for (const Obstacles::Rect &rect : lists.Rects) {
-    const ParkPoint least{rect.MinX, rect.MinZ};
-    const ParkPoint most{rect.MaxX, rect.MaxZ};
+  for (const GroundRect &box : lists.StepBoxes) {
+    const ParkPoint least{box.MinX, box.MinZ};
+    const ParkPoint most{box.MaxX, box.MaxZ};
     pavingNear(world, least, most, lists.NearPaving, buffers);
     appendTo(lists.Paving, lists.NearPaving);
     walkwaysNear(world, least, most, lists.NearWalkways, lists.NearStrips, buffers);
@@ -1125,26 +1215,56 @@ void gatherNear(const World &world, FurnitureLists &lists, TickBuffers &buffers)
   }
   uniqueSorted(lists.Paving);
   uniqueSorted(lists.Walkways);
-  std::ranges::sort(lists.Strips,
-                    [](const std::array<ParkPoint, 4> &a, const std::array<ParkPoint, 4> &b) {
-                      for (size_t i = 0; i < a.size(); ++i) {
-                        if (a[i].X != b[i].X) {
-                          return a[i].X < b[i].X;
-                        }
-                        if (a[i].Z != b[i].Z) {
-                          return a[i].Z < b[i].Z;
-                        }
-                      }
-                      return false;
-                    });
-  lists.Strips.erase(std::unique(lists.Strips.begin(), lists.Strips.end()), lists.Strips.end());
   uniqueSorted(lists.Boxes);
   uniqueSorted(lists.Entrances);
+}
+
+// Puts in the near obstacles the paving of either kind, walkways, frontage strips, boxes, and
+// entrances whose bounds meet one of the chain's rectangles, and puts in NearRead two hashes of
+// them that don't depend on where they lie in memory or the order they were read in.
+void gatherNear(const World &world, FurnitureLists &lists, TickBuffers &buffers) {
+  gatherPointers(world, lists, buffers);
+  lists.Near.clear();
+  for (const std::array<ParkPoint, 4> &strip : lists.Strips) {
+    keepNear(Outline{strip, 4}, false, lists);
+  }
+  for (const SurfacePiece *piece : lists.Paving) {
+    keepNear(Outline{piece->Corners, piece->Count}, true, lists);
+  }
+  for (const SurfacePiece *piece : lists.Walkways) {
+    keepNear(Outline{piece->Corners, piece->Count}, true, lists);
+  }
+  for (const ParkBox *box : lists.Boxes) {
+    if (const std::optional<Footprint> footprint = footprintOf(box->At, boxSize(box->Kind))) {
+      keepNear(outlineOf(*footprint), false, lists);
+    }
+  }
+  for (const ParkEntrance *entrance : lists.Entrances) {
+    if (const std::optional<Footprint> footprint = footprintOf(entrance->At, ENTRANCE_SIZE)) {
+      keepNear(outlineOf(*footprint), false, lists);
+    }
+  }
+  lists.NearHashes.clear();
+  for (const NearObstacle &near : lists.Near) {
+    lists.NearHashes.push_back(outlineHash(near.Shape, near.Paving));
+  }
+  lists.NearRead = setHash(lists.NearHashes);
+}
+
+// Whether the obstacles other than furniture that the chain's rectangles reach differ from those
+// it was laid against.
+bool nearChanged(const World &world, const LaidChain &chain, FurnitureLists &lists,
+                 TickBuffers &buffers) {
+  copyGrowing(lists.Rects, std::span<const GroundRect>(chain.Rects));
+  copyGrowing(lists.StepBoxes, std::span<const GroundRect>(chain.Boxes));
+  gatherNear(world, lists, buffers);
+  return lists.NearRead[0] != chain.Read || lists.NearRead[1] != chain.ReadCheck;
 }
 
 // Adds to the obstacles the pieces of the chains before the order filed in the chain's cells.
 void addEarlierPieces(const World &world, const LaidChains &laid, SideKey order,
                       FurnitureLists &lists) {
+  lists.EarlierHashes.clear();
   lists.NearChains.clear();
   for (const EntityKey cell : lists.ChainCells) {
     if (const std::vector<EntityKey> *chains = laid.ByCell.find(cell)) {
@@ -1161,6 +1281,9 @@ void addEarlierPieces(const World &world, const LaidChains &laid, SideKey order,
       if (const FurniturePieceState *state = world.tryGet<FurniturePieceState>(piece)) {
         if (const std::optional<Outline> grown = grownPiece(*state)) {
           lists.Blocking.add(*grown, false);
+          if (meetsReach(boundsOfOutline(*grown), lists)) {
+            lists.EarlierHashes.push_back(outlineHash(*grown, false));
+          }
         }
       }
     }
@@ -1175,24 +1298,8 @@ void fillObstacles(const World &world, const LaidChains &laid, SideKey order, Fu
   Obstacles &blocking = lists.Blocking;
   blocking.clear();
   gatherNear(world, lists, buffers);
-  for (const std::array<ParkPoint, 4> &strip : lists.Strips) {
-    blocking.add(Outline{strip, 4}, false);
-  }
-  for (const SurfacePiece *piece : lists.Paving) {
-    blocking.add(Outline{piece->Corners, piece->Count}, true);
-  }
-  for (const SurfacePiece *piece : lists.Walkways) {
-    blocking.add(Outline{piece->Corners, piece->Count}, true);
-  }
-  for (const ParkBox *box : lists.Boxes) {
-    if (const std::optional<Footprint> footprint = footprintOf(box->At, boxSize(box->Kind))) {
-      blocking.add(outlineOf(*footprint), false);
-    }
-  }
-  for (const ParkEntrance *entrance : lists.Entrances) {
-    if (const std::optional<Footprint> footprint = footprintOf(entrance->At, ENTRANCE_SIZE)) {
-      blocking.add(outlineOf(*footprint), false);
-    }
+  for (const NearObstacle &near : lists.Near) {
+    blocking.add(near.Shape, near.Paving);
   }
   addEarlierPieces(world, laid, order, lists);
 }
@@ -1278,6 +1385,102 @@ const FurniturePieceState *stateBefore(const World &world, const FurnitureLists 
   return world.tryGet<FurniturePieceState>(key);
 }
 
+// Keeps the chain as just laid, in place of how it was laid before, filed under its cells and its
+// segments, whose seat places are published again.
+void keepChain(LaidChains &laid, const FormedChain &formed, const std::vector<Member> &members,
+               FurnitureLists &lists) {
+  auto [chain, added] = laid.Chains.getOrAdd(formed.Key);
+  if (!added) {
+    unfileChain(laid, chain, formed.Key, lists);
+  }
+  chain.Order = formed.Order;
+  chain.Members.clear();
+  for (const Step &step : formed.Walk.Steps) {
+    chain.Members.push_back(sideKeyOf(members[step.Member]));
+  }
+  copyGrowing(chain.Pieces, std::span<const EntityKey>(lists.Pieces));
+  copyGrowing(chain.Cells, std::span<const EntityKey>(lists.ChainCells));
+  copyGrowing(chain.Rects, std::span<const GroundRect>(lists.Rects));
+  copyGrowing(chain.Boxes, std::span<const GroundRect>(lists.StepBoxes));
+  chain.Read = lists.NearRead[0];
+  chain.ReadCheck = lists.NearRead[1];
+  chain.Whole = lists.WholeRead[0];
+  chain.WholeCheck = lists.WholeRead[1];
+  file(laid.ByCell, chain.Cells, formed.Key);
+  for (const SideKey &side : chain.Members) {
+    file(laid.BySegment, std::span<const EntityKey>(&side.Segment, 1), formed.Key);
+    lists.Republish.push_back(side.Segment);
+  }
+}
+
+// Two hashes of everything laying the chain reads: its furnishing, each of its sides with its line
+// and its segment's stations, and the obstacles within reach, furniture laid before it included.
+std::array<uint64_t, 2> wholeRead(const std::vector<Member> &members, const Chain &chain,
+                                  const PavedSurface &surface, FurnitureLists &lists) {
+  const SideFurnishing &furnishing = members[chain.Steps.front().Member].Furnishing;
+  std::array<Hasher, 2> hashers;
+  hashers[1].add(1);
+  const auto add = [&hashers](uint64_t word) {
+    for (Hasher &hasher : hashers) {
+      hasher.add(word);
+    }
+  };
+  const auto addPoint = [&add](ParkPoint point) {
+    add(std::bit_cast<uint64_t>(point.X));
+    add(std::bit_cast<uint64_t>(point.Z));
+  };
+  add(static_cast<uint64_t>(furnishing.Kind));
+  add(std::bit_cast<uint64_t>(furnishing.Spacing));
+  add(chain.Closed ? 1U : 0U);
+  for (const Step &step : chain.Steps) {
+    const Member &member = members[step.Member];
+    const SegmentSide &side = *member.Side;
+    add(static_cast<uint64_t>(member.Segment));
+    add(member.Left ? 1U : 0U);
+    add(step.Reversed ? 1U : 0U);
+    addPoint(member.From);
+    addPoint(member.Along);
+    add(side.Body);
+    add(side.RunsOn[0].Segment != NULL_KEY ? 1U : 0U);
+    add(side.RunsOn[1].Segment != NULL_KEY ? 1U : 0U);
+    const std::span<const ParkPoint> points = pointsOf(surface, side);
+    add(points.size());
+    for (const ParkPoint point : points) {
+      addPoint(point);
+    }
+  }
+  add(lists.NearRead[0]);
+  add(lists.NearRead[1]);
+  const std::array<uint64_t, 2> earlier = setHash(lists.EarlierHashes);
+  add(earlier[0]);
+  add(earlier[1]);
+  return {hashers[0].value(), hashers[1].value()};
+}
+
+// Whether the chain was laid before from the same reads and its pieces still stand as it laid
+// them, which laying it again would give. Then its pieces count as laid in this resolution.
+bool keptAsLaid(const World &world, const LaidChains &laid, const FormedChain &formed,
+                FurnitureLists &lists) {
+  const LaidChain *before = laid.Chains.find(formed.Key);
+  if (before == nullptr || before->Whole != lists.WholeRead[0] ||
+      before->WholeCheck != lists.WholeRead[1]) {
+    return false;
+  }
+  const bool standing = std::ranges::all_of(before->Pieces, [&](EntityKey key) {
+    return !holds(lists.LaidPieces, key) && world.has<FurniturePieceState>(key);
+  });
+  if (!standing) {
+    return false;
+  }
+  copyGrowing(lists.Pieces, std::span<const EntityKey>(before->Pieces));
+  copyGrowing(lists.SortedPieces, std::span<const EntityKey>(before->Pieces));
+  std::ranges::sort(lists.SortedPieces);
+  lists.Merged.clear();
+  std::ranges::merge(lists.LaidPieces, lists.SortedPieces, std::back_inserter(lists.Merged));
+  lists.LaidPieces.swap(lists.Merged);
+  return true;
+}
+
 // Lays one chain against the obstacles its cells hold, keeps it, destroys the pieces it laid
 // before and doesn't now, and queues the later chains that each changed piece reaches.
 void layOne(World &world, LaidChains &laid, const FormedChain &formed,
@@ -1285,6 +1488,11 @@ void layOne(World &world, LaidChains &laid, const FormedChain &formed,
             TickBuffers &buffers) {
   reachOfChain(members, formed.Walk, surface, lists);
   fillObstacles(world, laid, formed.Order, lists, buffers);
+  lists.WholeRead = wholeRead(members, formed.Walk, surface, lists);
+  if (keptAsLaid(world, laid, formed, lists)) {
+    keepChain(laid, formed, members, lists);
+    return;
+  }
   lists.Before.clear();
   if (const LaidChain *before = laid.Chains.find(formed.Key)) {
     for (const EntityKey key : before->Pieces) {
@@ -1317,22 +1525,7 @@ void layOne(World &world, LaidChains &laid, const FormedChain &formed,
   lists.Merged.clear();
   std::ranges::merge(lists.LaidPieces, lists.SortedPieces, std::back_inserter(lists.Merged));
   lists.LaidPieces.swap(lists.Merged);
-  auto [chain, added] = laid.Chains.getOrAdd(formed.Key);
-  if (!added) {
-    unfileChain(laid, chain, formed.Key, lists);
-  }
-  chain.Order = formed.Order;
-  chain.Members.clear();
-  for (const Step &step : formed.Walk.Steps) {
-    chain.Members.push_back(sideKeyOf(members[step.Member]));
-  }
-  copyGrowing(chain.Pieces, std::span<const EntityKey>(lists.Pieces));
-  copyGrowing(chain.Cells, std::span<const EntityKey>(lists.ChainCells));
-  file(laid.ByCell, chain.Cells, formed.Key);
-  for (const SideKey &side : chain.Members) {
-    file(laid.BySegment, std::span<const EntityKey>(&side.Segment, 1), formed.Key);
-    lists.Republish.push_back(side.Segment);
-  }
+  keepChain(laid, formed, members, lists);
 }
 
 // Forms a queued chain again from the sides it holds, which didn't change, into the queued lists.
@@ -1404,18 +1597,25 @@ void formEveryChain(const World &world, const PavedSurface &surface, FurnitureLi
 }
 
 // Finds the chains to lay after a world's first resolution: the chains holding a side of a segment
-// that changed, the chains reading a cell where an obstacle changed, every chain holding a side
-// joined to theirs, and the chains new furnishing forms.
+// that changed, the chains whose obstacles within reach changed, every chain holding a side joined
+// to theirs, and the chains new furnishing forms.
 void formDirtyChains(const World &world, const LaidChains &laid, const PavedSurface &surface,
                      FurnitureLists &lists, TickBuffers &buffers) {
   lists.ChangedCells.clear();
   changedParkCells(world, lists.ChangedCells, buffers);
   changedWalkwayCells(world, lists.ChangedCells, buffers);
+  lists.Candidates.clear();
   for (const EntityKey cell : lists.ChangedCells) {
     if (const std::vector<EntityKey> *chains = laid.ByCell.find(cell)) {
-      for (const EntityKey key : *chains) {
-        markDirty(laid, key, lists);
-      }
+      appendTo(lists.Candidates, *chains);
+    }
+  }
+  sortUnique(lists.Candidates);
+  // A cell is coarser than a chain's reach, so a chain in a changed cell is dirty only when the
+  // obstacles it reaches changed.
+  for (const EntityKey key : lists.Candidates) {
+    if (nearChanged(world, *laid.Chains.find(key), lists, buffers)) {
+      markDirty(laid, key, lists);
     }
   }
   for (const EntityKey segment : lists.ChangedSegments) {
@@ -1477,8 +1677,8 @@ void removeChains(World &world, LaidChains &laid, FurnitureLists &lists) {
 }
 
 // Lays the pieces each furnished guest segment asks for, chain by chain in order of their lowest
-// sides, laying again only the chains an edit reaches: those whose sides changed, those reading a
-// cell where an obstacle changed, and the later chains a changed piece reaches. The rest keep their
+// sides, laying again only the chains an edit reaches: those whose sides changed, those whose
+// obstacles within reach changed, and the later chains a changed piece reaches. The rest keep their
 // pieces, which are what laying them again would give.
 void layFurniture(World &world, TickBuffers &buffers) {
   FurnitureLists &lists = buffers.get<FurnitureLists>();

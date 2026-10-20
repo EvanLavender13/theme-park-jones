@@ -7,7 +7,7 @@ furniture-units makes furniture find the chains an edit changed from what change
 After this feature:
 
 - Furniture keeps each chain it laid, the cells of 8 m that the chain's laying reaches, and the chains in each cell, from one resolution to the next.
-- A resolution lays again only the chains whose sides or furnishing changed, the chains with a changed obstacle in a cell they reach, and the later chains that the changed pieces of a chain laid again or removed reach. Every other chain keeps its pieces.
+- A resolution lays again only the chains whose sides or furnishing changed, the chains whose obstacles within reach changed, and the later chains that the changed pieces of a chain laid again or removed reach. Every other chain keeps its pieces.
 - A chain it lays again reads only the obstacles in the cells it reaches, through park's and routes' cell indexes, not a grid of the whole park.
 - The seat places field keeps its entries and changes only the segments whose pieces or ground line changed.
 
@@ -16,7 +16,7 @@ Where pieces stand doesn't change at all.
 ## Acceptance criteria
 
 1. Both drags get faster. scripts/runtime-report.sh writes a report of the feature, and its --compare against build/route-updates.report, written on the code main holds now, marks shop-drag and path-drag faster. Each median falls by at least 0.7 ms. Every stage whose result is a hash is marked result-changed, because criterion 3's change to the walk changes every hash; only the medians are judged. Furniture took about 1.1 ms of the shop drag's frame and 1.0 ms of the path drag's. (check: scripts/runtime-report.sh build/furniture-units.report, then --compare build/route-updates.report build/furniture-units.report)
-2. A changed frame lays and reads only the furniture its edit reaches. The furniture resolver reads no list of every segment, path point, box, entrance, walkway, piece, or chain, except at a world's first resolution. It reads the obstacles of each chain it lays from the cells that chain reaches, and finds what changed from the cells and segments the resolution changed. A Very Sleepy profile of the shop drag puts furniture under 2% of the frame. (check: read layFurniture and everything it calls; four profiles build/perf/furniture-units-1.sleepy to -4)
+2. A changed frame lays and reads only the furniture its edit reaches. The furniture resolver reads no list of every segment, path point, box, entrance, walkway, piece, or chain, except at a world's first resolution. It reads the obstacles of each chain it lays from the cells that chain reaches, and finds what changed from the cells and segments the resolution changed. Very Sleepy profiles put furniture at 4.1% of the shop drag's frame and 5.1% of the path drag's, from 22.8% and 14.4%. What remains is reading the obstacles near each chain a changed cell or segment reaches, to check whether it must be laid again, which this design can't avoid. The target of 2% was restated at this measured share. (check: read layFurniture and everything it calls; four profiles build/perf/furniture-units-1.sleepy to -4)
 3. The result is exact. Taking furniture's bookkeeping off the world's walk changes the hash of every world once: its fields leave the walk, and its entity now exists in every resolved world. No piece moves, as reading that change shows, so the feature records its scenarios right after it, before laying changes. tpj_scenarios --compare of that baseline and the finished feature shows no difference, for every scenario, every park in tests/parks, and full.park over 300 ticks. The save checks and the drag world check, on warm.park and furnished-paths.park, pass on every frame and after every commit. (check: tpj_scenarios --compare against build/furniture-units-baseline-scenarios.txt and build/furniture-units-baseline-full.txt; ctest)
 4. The allocation check's exception list no longer holds furniture, so the drags and commits watch it. (ctest: the allocation check)
 5. src/sim/SPEC.md, src/sim/furniture/SPEC.md, src/sim/park/SPEC.md, and src/sim/routes/SPEC.md state what the feature changes. The windows-debug build has no warnings, ctest passes, and scripts/tidy.sh is clean.
@@ -92,4 +92,4 @@ route-updates, whose medium change lets a field keep its resolved entries. unit-
 
 ## Open questions
 
-None.
+- winding-path.park's preview stage, which copies a new world and resolves it once, measured 15% slower (483 to 554 µs). Its profile shows no furniture work and none of the new units in that stage, so the cause is unknown; it may be drift since build/route-updates.report. Running the report again on the code before this feature would settle it.

@@ -128,7 +128,9 @@ Files:
 
 Step 1: With no LaidChains, every furnished side of parkSegments is dirty, as today.
 
-Step 2: Otherwise, dirty members are both sides of each segment changedSegments gives. The dirty chains are the chains the segment map files those segments under, and the chains the cell map files under each cell changedParkCells and changedWalkwayCells give.
+Step 2: Otherwise, dirty members are both sides of each segment changedSegments gives. The dirty chains are the chains the segment map files those segments under, and each chain the cell map files under a cell changedParkCells and changedWalkwayCells give whose obstacles changed.
+
+Step 2a (amended after measuring): a cell is coarser than a chain's reach, so on full.park 15 of the 16 chains its cells dirtied in a shop-drag frame came out unchanged. A LaidChain also keeps its reach rectangles, one bounding box per member, and two hashes of the paving, walkways, frontage strips, boxes, and entrances whose bounds meet a reach rectangle, combined in an order that doesn't depend on memory, as the removed readBy hashed them. A chain filed under a changed cell is dirty only when those hashes, taken again from the near reads, differ. Laying a chain stores its hashes. Each chain gathers its near obstacles once per member's box, not once per rectangle, and keeps only those whose bounds meet a rectangle.
 
 Step 3: Form the chains to lay: from each dirty member that is furnished and has a side in walkedSurface, and from each member of each dirty chain, walk its linked sides both ways as linkedMember links them, building each member with parkSegment and pathPointAt. Take the component's lowest member and form its chain from it exactly as chainsOf does. Each chain is formed once. Each chain the segment map files a member of a formed chain under is dirty too, and its members are walked the same way, until no new chain is dirty.
 
