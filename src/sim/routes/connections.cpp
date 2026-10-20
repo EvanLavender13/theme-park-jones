@@ -3,6 +3,7 @@
 #include "sim/park/geometry.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <optional>
 #include <span>
@@ -452,7 +453,111 @@ void DoorWalkways::derive(UnitReads &reads, EntityKey key, DoorWalkwayList &walk
         walkwayPiece(std::span<const ParkSegment>(&joined, 1), walkway.Way);
     walkway.HasPiece = piece.has_value();
     walkway.Piece = piece.value_or(SurfacePiece{});
+    walkway.DoorWidth = connection.Door.Width;
   }
+}
+
+bool frontageStrip(const DoorWalkway &walkway, std::array<ParkPoint, 4> &corners) {
+  const ParkPoint at = walkway.Way.Door;
+  const ParkPoint out = walkway.Way.Out;
+  const double depth =
+      ((walkway.Way.Meets.X - at.X) * out.X) + ((walkway.Way.Meets.Z - at.Z) * out.Z);
+  if (!(depth > 0.0)) {
+    return false;
+  }
+  // The door's left, a quarter turn counter-clockwise of out seen from above.
+  const double half = walkway.DoorWidth / 2.0;
+  const ParkPoint across{out.Z * half, -out.X * half};
+  const ParkPoint ahead{out.X * depth, out.Z * depth};
+  corners = {ParkPoint{at.X - across.X, at.Z - across.Z},
+             ParkPoint{at.X + across.X, at.Z + across.Z},
+             ParkPoint{(at.X + across.X) + ahead.X, (at.Z + across.Z) + ahead.Z},
+             ParkPoint{(at.X - across.X) + ahead.X, (at.Z - across.Z) + ahead.Z}};
+  return true;
+}
+
+void FrontageCells::keysOf(const DoorWalkwayList &walkways, std::vector<EntityKey> &keys) {
+  keys.clear();
+  std::array<ParkPoint, 4> corners{};
+  for (const DoorWalkway &walkway : walkways.Ways) {
+    if (!frontageStrip(walkway, corners)) {
+      continue;
+    }
+    ParkPoint least = corners.front();
+    ParkPoint most = corners.front();
+    for (const ParkPoint &corner : corners) {
+      least = {std::min(least.X, corner.X), std::min(least.Z, corner.Z)};
+      most = {std::max(most.X, corner.X), std::max(most.Z, corner.Z)};
+    }
+    pavingCells(least, most, keys);
+  }
+}
+
+namespace {
+
+// The lists walkwaysNear and changedWalkwayCells keep: the cells, the entities filed there, and
+// the keys of the units that changed.
+struct WalkwayNearLists {
+  std::vector<EntityKey> Cells;
+  std::vector<EntityKey> Entities;
+  std::vector<EntityKey> UnitKeys;
+};
+
+// Puts in the entities, clearing it first, those the index files in the cells, ascending, once
+// each.
+template <typename I>
+void filedInCells(const World &world, std::span<const EntityKey> cells,
+                  std::vector<EntityKey> &entities) {
+  entities.clear();
+  for (const EntityKey cell : cells) {
+    const std::span<const EntityKey> filed = filedIn<I>(world, cell);
+    entities.insert(entities.end(), filed.begin(), filed.end());
+  }
+  sortUnique(entities);
+}
+
+} // namespace
+
+void walkwaysNear(const World &world, ParkPoint least, ParkPoint most,
+                  std::vector<const SurfacePiece *> &pieces,
+                  std::vector<std::array<ParkPoint, 4>> &strips, TickBuffers &buffers) {
+  pieces.clear();
+  strips.clear();
+  WalkwayNearLists &lists = buffers.get<WalkwayNearLists>();
+  lists.Cells.clear();
+  pavingCells(least, most, lists.Cells);
+  filedInCells<WalkwayCells>(world, lists.Cells, lists.Entities);
+  for (const EntityKey entity : lists.Entities) {
+    for (const DoorWalkway &walkway : unitValue<DoorWalkways>(world, entity)->Ways) {
+      if (walkway.HasPiece) {
+        pieces.push_back(&walkway.Piece);
+      }
+    }
+  }
+  filedInCells<FrontageCells>(world, lists.Cells, lists.Entities);
+  std::array<ParkPoint, 4> corners{};
+  for (const EntityKey entity : lists.Entities) {
+    for (const DoorWalkway &walkway : unitValue<DoorWalkways>(world, entity)->Ways) {
+      if (frontageStrip(walkway, corners)) {
+        strips.push_back(corners);
+      }
+    }
+  }
+}
+
+void changedWalkwayCells(const World &world, std::vector<EntityKey> &cells, TickBuffers &buffers) {
+  WalkwayNearLists &lists = buffers.get<WalkwayNearLists>();
+  changedUnits<WalkwayCells>(world, cells);
+  changedUnits<FrontageCells>(world, cells);
+  lists.UnitKeys.clear();
+  changedUnits<DoorWalkways>(world, lists.UnitKeys);
+  for (const EntityKey key : lists.UnitKeys) {
+    const std::span<const EntityKey> walkways = filedUnder<WalkwayCells>(world, key);
+    cells.insert(cells.end(), walkways.begin(), walkways.end());
+    const std::span<const EntityKey> strips = filedUnder<FrontageCells>(world, key);
+    cells.insert(cells.end(), strips.begin(), strips.end());
+  }
+  sortUnique(cells);
 }
 
 void WalkwayCells::keysOf(const DoorWalkwayList &walkways, std::vector<EntityKey> &keys) {
@@ -486,6 +591,7 @@ void addConnectionUnits(WorldSchema &schema) {
   addUnitIndex<ConnectionPaths>(schema);
   addUnits<DoorWalkways>(schema);
   addUnitIndex<WalkwayCells>(schema);
+  addUnitIndex<FrontageCells>(schema);
   addUnitIndex<WalkwayJoins>(schema);
 }
 

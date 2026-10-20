@@ -4,7 +4,7 @@ This module serves the effortless-building capability (plans/effortless-building
 
 ## Boundary
 
-furniture reads intent only through parkSegments, parkPathPoints, parkBoxes, parkEntrances, and footprintOf (sim/park/SPEC.md), and doors, walkways, and the paved surface with its walkways only through routes' parkDoors, keyedWalkways, and walkedSurface (sim/routes/SPEC.md). It reads the guest network through routes' parkNetwork. addFurniture registers the derived types furniture-piece and laid-furniture, the field seat places, and the furniture resolver. addPark calls it after addRoutes. Other modules read the furniture through parkFurniture, furniturePiece, and furnitureSize, and its seats through the seat places field, furnitureSeats, and seatPose.
+furniture reads intent only through parkSegments, parkSegment, pathPointAt, pavingNear, boxesNear, entrancesNear, changedSegments, changedParkCells, and footprintOf (sim/park/SPEC.md), and walkways and the paved surface with its walkways only through routes' walkwaysNear, changedWalkwayCells, and walkedSurface (sim/routes/SPEC.md). It reads the guest network through routes' parkNetwork. addFurniture registers the derived types furniture-piece and laid-furniture, the field seat places, and the furniture resolver. addPark calls it after addRoutes. Other modules read the furniture through parkFurniture, furniturePiece, and furnitureSize, and its seats through the seat places field, furnitureSeats, and seatPose.
 
 ## Pieces
 

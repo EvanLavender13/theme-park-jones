@@ -44,13 +44,13 @@ The result must equal, exactly, a resolution from nothing (principle 8, decision
     - A world that commits each chosen edit of the save checks.
     - A world that commits a moved box, which the save checks add.
 
-    (ctest: the candidate check's drags on warm.park, which derived-units adds; the save checks)
+    (ctest: the drag world check on warm.park, which derived-units adds, and on furnished-paths.park, with a world committing each frame, which furniture-units adds; the save checks)
 6. The simulation is unchanged, except for the two changes the user chose (Decisions below). tpj_scenarios --compare, run on windows-debug output from before and after each feature, shows no difference for:
     - its scenarios,
     - every park in tests/parks,
     - full.park over 300 ticks.
 
-    The exception is a feature that carries out one of those changes. It reports its differences, and every later feature compares against its output. (check: tpj_scenarios --compare; the report's --compare)
+    The exception is a feature that carries out one of those changes. It reports its differences, and every later feature compares against its output. A feature may also take resolution bookkeeping off the world's walk, which changes every hash once and nothing else. It does that in a step of its own, shows by reading that step's diff that nothing the walk still covers changes, and records its outputs right after it to compare against. (check: tpj_scenarios --compare; the report's --compare)
 7. A decision record states the rules simulation work must follow to run on more than one thread:
     - The results are identical to one thread's, whatever the number of threads and the order they finish in.
     - Each worker writes only to what it alone owns.
@@ -83,7 +83,8 @@ derived-units. It builds the mechanism: units, the change records they start fro
 5. `unit-connections`: each door's connection and walkway, and the walked surface, move onto units. A connection finds nearby paving through unit-surface's grid, and the path networks read the connections from the units instead of measuring every door against every piece. The walked surface shares the paved surface's units and hides again only near walkways. The walked-surface resolver stops making new lists of the park's segments and layout. Merged. Depends on: feature 4.
 6. `watched-resolution`: the allocation check's drags and commits watch every resolution step except a named exception list of the steps that still allocate, each naming the feature that removes it, and the check fails when an excused step stops allocating. Depends on: feature 5.
 7. `route-updates`: route distance adds lengths in whole millimetres and updates only the entries an edit changes, instead of searching from every source again. Depends on: feature 6.
-8. `thread-rules`: the decision record of criterion 7. Depends on: none.
+8. `furniture-units`: furniture lays again only the chains an edit reaches, and reads only the obstacles near them, instead of hashing every chain's surroundings on every resolution. Depends on: feature 7.
+9. `thread-rules`: the decision record of criterion 7. Depends on: none.
 
 Later features are planned one at a time, from the code, after the last one merges. Each takes the largest whole-park cost still measured in a drag frame (Research notes). After each one, the frame is measured again and played on full.park. Once dragging holds the display's refresh rate in play, the user decides whether to go on to criterion 1.
 
@@ -91,7 +92,7 @@ The allocation check's exception list names the resolution steps that still allo
 
 The whole-park work still left after route-updates, with what each part needs from the others:
 
-- Furniture: lays every chain again. Its obstacles include boxes, entrances, and the pieces earlier chains laid, which no grid files yet.
+- Furniture: laid only where an edit reaches it (furniture-units).
 - Best seats: one search over the whole network into one slot. It needs to know which seats changed, which the seat places and seat offers don't record yet.
 - Carrying guests and footfall: every guest is carried. Carrying only some needs to know which guest ground changed, which needs guest ground on units first.
 - Copying the world into the candidate.

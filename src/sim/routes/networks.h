@@ -8,6 +8,7 @@
 #include "sim/park/surface.h"
 #include "sim/tick_buffers.h"
 
+#include <array>
 #include <stdint.h>
 #include <vector>
 
@@ -80,6 +81,18 @@ void keyedWalkways(const World &world, PathKind kind, std::vector<KeyedWalkway> 
                    TickBuffers &buffers);
 void connectorWalkways(const World &world, PathKind kind, std::vector<Walkway> &walkways,
                        TickBuffers &buffers);
+
+// Puts in pieces and strips, clearing them first, the walkway pieces and the doors' frontage strips
+// whose bounds meet the rectangle from least to most, each entity's once, in key order. It can also
+// put in others. A frontage strip runs straight out from a door's face, as wide as the door, to
+// where the door's walkway ends. For a resolver. Allocates nothing once the lists have grown.
+void walkwaysNear(const World &world, ParkPoint least, ParkPoint most,
+                  std::vector<const SurfacePiece *> &pieces,
+                  std::vector<std::array<ParkPoint, 4>> &strips, TickBuffers &buffers);
+// Adds to the cells, keeping the list ascending without repeats, the cells of pavingCells' grid
+// where the running resolution added, removed, or changed a walkway piece or a frontage strip.
+// Allocates nothing once the lists have grown.
+void changedWalkwayCells(const World &world, std::vector<EntityKey> &cells, TickBuffers &buffers);
 
 // The park's paved surface with every connector's walkway, guest walkways first, as the last
 // resolution derived it with parkSurface, or an empty surface when the world holds none, as before
