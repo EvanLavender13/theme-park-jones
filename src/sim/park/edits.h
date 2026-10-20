@@ -324,6 +324,12 @@ struct EditedParts {
 // plan, clearing them first and keeping the lists it works with in the buffers.
 void editedParts(const World &world, const PlannedEdit &planned, EditedParts &parts,
                  TickBuffers &buffers);
+// As above, from the edit's candidate: a copy of the world, which is resolved, with the edit
+// applied and then resolved once, as makeCandidate and the preview make it, and not resolved
+// again since. It compares the paving and ground lines the candidate's last resolution derived
+// with the world's, and derives none.
+void editedParts(const World &world, const PlannedEdit &planned, const World &candidate,
+                 EditedParts &parts, TickBuffers &buffers);
 
 // Whether the command would be applied to the world: it describes a physical object, names what it
 // acts on, and conflicts with nothing: no footprints overlap, no segment comes within half its
