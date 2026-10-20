@@ -10,6 +10,7 @@
 #include "sim/schema.h"
 #include "sim/units.h"
 
+#include <array>
 #include <span>
 #include <string_view>
 #include <tuple>
@@ -89,12 +90,14 @@ struct DoorConnections {
   static void derive(UnitReads &reads, EntityKey key, DoorConnectionList &connections);
 };
 
-// A connector's walkway: the connector's key, the walkway, and its piece, when it has one.
+// A connector's walkway: the connector's key, the walkway, its piece, when it has one, and the
+// width of its door.
 struct DoorWalkway {
   EntityKey Connector = NULL_KEY;
   Walkway Way;
   bool HasPiece = false;
   SurfacePiece Piece;
+  double DoorWidth = 0.0;
 };
 
 template <typename Visitor> void visitFields(Visitor &visitor, DoorWalkway &walkway) {
@@ -108,7 +111,12 @@ template <typename Visitor> void visitFields(Visitor &visitor, DoorWalkway &walk
   visitor.field("width", way.Width);
   visitor.field("has-piece", walkway.HasPiece);
   visitor.field("piece", walkway.Piece);
+  visitor.field("door-width", walkway.DoorWidth);
 }
+
+// Puts in corners the walkway's frontage strip: from its door's face, as wide as the door, straight
+// out to where the walkway ends. False when the strip has no depth.
+bool frontageStrip(const DoorWalkway &walkway, std::array<ParkPoint, 4> &corners);
 
 // The walkways of an entity's connections, in their order.
 struct DoorWalkwayList {
@@ -138,6 +146,14 @@ struct WalkwayCells {
   static void keysOf(const DoorWalkwayList &walkways, std::vector<EntityKey> &keys);
 };
 
+// Files each entity under the cells its walkways' frontage strips cover.
+struct FrontageCells {
+  static constexpr std::string_view Name = "frontage-cells";
+  using Of = DoorWalkways;
+
+  static void keysOf(const DoorWalkwayList &walkways, std::vector<EntityKey> &keys);
+};
+
 // Files each entity under the segments its walkways with pieces join.
 struct WalkwayJoins {
   static constexpr std::string_view Name = "walkway-joins";
@@ -146,7 +162,8 @@ struct WalkwayJoins {
   static void keysOf(const DoorWalkwayList &walkways, std::vector<EntityKey> &keys);
 };
 
-// Registers door-connections, connection-paths, door-walkways, walkway-cells, and walkway-joins.
+// Registers door-connections, connection-paths, door-walkways, walkway-cells, frontage-cells, and
+// walkway-joins.
 void addConnectionUnits(WorldSchema &schema);
 
 } // namespace tpj

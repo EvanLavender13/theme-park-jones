@@ -113,6 +113,11 @@ template <UnitKind K> void addUnits(WorldSchema &schema);
 template <SelfUpdatingKind K> void addUnits(WorldSchema &schema);
 template <UnitKind K> const typename K::Value *unitValue(const World &world, EntityKey key);
 template <UnitKind K> bool unitsCurrent(const World &world);
+// The keys the index files under the key, ascending, or none, for a resolver outside a unit
+// derivation. Allocates nothing.
+template <typename I> std::span<const EntityKey> filedIn(const World &world, EntityKey key);
+// The keys the index files the entity under, ascending, or none. Allocates nothing.
+template <typename I> std::span<const EntityKey> filedUnder(const World &world, EntityKey key);
 // Adds to the keys those of the kind's units that the running resolution added, removed, or
 // changed, keeping the list ascending without repeats.
 template <typename K> void changedUnits(const World &world, std::vector<EntityKey> &keys);
@@ -527,6 +532,20 @@ template <UnitKind K> const typename K::Value *unitValue(const World &world, Ent
       static_cast<const KindTable<typename K::Value> &>(*unitSpaceOf(world).Tables[*position]);
   const KindUnit<typename K::Value> *found = table.Units.find(key);
   return found == nullptr ? nullptr : &found->Held;
+}
+
+template <typename I> std::span<const EntityKey> filedIn(const World &world, EntityKey key) {
+  const auto &index =
+      static_cast<const IndexTable &>(*unitSpaceOf(world).Tables[tablePosition<I>(world.schema())]);
+  const std::vector<EntityKey> *entry = index.Entries.find(key);
+  return entry == nullptr ? std::span<const EntityKey>() : std::span<const EntityKey>(*entry);
+}
+
+template <typename I> std::span<const EntityKey> filedUnder(const World &world, EntityKey key) {
+  const auto &index =
+      static_cast<const IndexTable &>(*unitSpaceOf(world).Tables[tablePosition<I>(world.schema())]);
+  const std::vector<EntityKey> *filed = index.Filed.find(key);
+  return filed == nullptr ? std::span<const EntityKey>() : std::span<const EntityKey>(*filed);
 }
 
 template <UnitKind K> bool unitsCurrent(const World &world) {

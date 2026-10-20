@@ -920,7 +920,6 @@ struct ExcusedStep {
 constexpr std::array EXCUSED_STEPS{
     ExcusedStep{"path-networks", "a later feature: the path networks' carriers"},
     ExcusedStep{"guest-ground", "a later feature: guest ground"},
-    ExcusedStep{"furniture", "a later feature: furniture"},
     ExcusedStep{"best-seats", "a later feature: best seats"},
     ExcusedStep{"food-offer", "a later feature: the offers"},
     ExcusedStep{"drink-offer", "a later feature: the offers"},

@@ -1009,32 +1009,67 @@ std::vector<ParkEdit> shopDragFrames(const World &start) {
   return {};
 }
 
-// Each frame's edit of a guest path drawn from the middle of a guest segment, its end square to the
-// segment and DRAG_STEP further out on each frame. The segment is the first under a guest heading
-// to a shop, and the side the first, where the world accepts every frame.
-std::vector<ParkEdit> pathDragFrames(const World &start) {
+// Each frame's edit of a guest path drawn from the middle of the segment, its end square to the
+// segment and DRAG_STEP further out on each frame, on the first side where the world accepts every
+// frame, or none when neither side accepts every frame.
+std::optional<std::vector<ParkEdit>> pathDragFramesFrom(const World &start, EntityKey segmentKey) {
   constexpr double START_REACH = 6.0;
+  const OnSegment middle{segmentKey, 0.5};
+  const std::optional<ParkPoint> middlePosition = stopPosition(start, middle);
+  REQUIRE(middlePosition.has_value());
+  const ParkPoint middlePoint = middlePosition.value_or(ParkPoint{});
+  const ParkPoint square = squareToSegment(start, segmentKey);
+  for (const double side : {1.0, -1.0}) {
+    std::vector<ParkEdit> frames;
+    for (size_t frame = 1; frame <= DRAG_FRAMES; ++frame) {
+      const double reach = side * (START_REACH + (DRAG_STEP * static_cast<double>(frame)));
+      const ParkPoint end{middlePoint.X + (reach * square.X), middlePoint.Z + (reach * square.Z)};
+      frames.emplace_back(AddPath{PathKind::Guest, {middle, NewPoint{end}}});
+    }
+    if (acceptsEvery(start, frames)) {
+      return frames;
+    }
+  }
+  return std::nullopt;
+}
+
+// The path drag's frames from the first guest segment under a guest heading to a shop where the
+// world accepts every frame.
+std::vector<ParkEdit> pathDragFrames(const World &start) {
   for (const EntityKey segmentKey : guestSegmentsUnderGuestsHeadingToShop(start)) {
-    const OnSegment middle{segmentKey, 0.5};
-    const std::optional<ParkPoint> middlePosition = stopPosition(start, middle);
-    REQUIRE(middlePosition.has_value());
-    const ParkPoint middlePoint = middlePosition.value_or(ParkPoint{});
-    const ParkPoint square = squareToSegment(start, segmentKey);
-    for (const double side : {1.0, -1.0}) {
-      std::vector<ParkEdit> frames;
-      for (size_t frame = 1; frame <= DRAG_FRAMES; ++frame) {
-        const double reach = side * (START_REACH + (DRAG_STEP * static_cast<double>(frame)));
-        const ParkPoint end{middlePoint.X + (reach * square.X), middlePoint.Z + (reach * square.Z)};
-        frames.emplace_back(AddPath{PathKind::Guest, {middle, NewPoint{end}}});
-      }
-      if (acceptsEvery(start, frames)) {
-        return frames;
-      }
+    std::optional<std::vector<ParkEdit>> frames = pathDragFramesFrom(start, segmentKey);
+    if (frames.has_value()) {
+      return std::move(*frames);
     }
   }
   FAIL("no guest segment under a guest heading to a shop accepts every frame of a path drawn out "
        "from its middle");
   return {};
+}
+
+// The lowest-keyed guest segment with furnishing on both sides.
+EntityKey firstGuestSegmentFurnishedOnBothSides(const World &world) {
+  for (const ParkSegment &segment : parkSegments(world)) {
+    if (segment.Kind == PathKind::Guest && segment.Furnished.Left.has_value() &&
+        segment.Furnished.Right.has_value()) {
+      return segment.Key;
+    }
+  }
+  return NULL_KEY;
+}
+
+// The path drag's frames from the lowest-keyed guest segment furnished on both sides, so every
+// frame's edit splits a segment that furniture is laid along.
+std::vector<ParkEdit> furnishedPathDragFrames(const World &start) {
+  const EntityKey segmentKey = firstGuestSegmentFurnishedOnBothSides(start);
+  REQUIRE(segmentKey != NULL_KEY);
+  std::optional<std::vector<ParkEdit>> frames = pathDragFramesFrom(start, segmentKey);
+  if (!frames.has_value()) {
+    FAIL("neither side of the furnished guest segment accepts every frame of a path drawn out from "
+         "its middle");
+    return {};
+  }
+  return std::move(*frames);
 }
 
 // What applying a frame's plan to the refilled candidate needs.
@@ -1049,37 +1084,74 @@ void applyPlannedChange(World &into, const void *context) {
   applyPlanned(into, *change.Edit, *change.Planned, *change.Buffers);
 }
 
-// Plans each frame's edit once and refills one kept candidate by applying that plan, as the
-// preview does, after the world steps a tick. A world loaded from the kept candidate's save derives
-// every unit from nothing, so it differs from the kept candidate if the candidate kept a stale unit
-// from an earlier frame.
+// A world the preview's way: it steps a tick before each frame, plans the frame's edit once, and
+// refills one kept candidate by applying that plan.
+struct PreviewedDrag {
+  explicit PreviewedDrag(const World &opened)
+      : Ticked(copyWorld(opened)), Kept(copyWorld(opened)) {}
+
+  World Ticked;
+  World Kept;
+  TickBuffers StepBuffers;
+  TickBuffers Buffers;
+  PlannedEdit Planned;
+  CommandQueue Commands;
+};
+
+// A world loaded from the kept candidate's save derives every unit from nothing, so it differs from
+// the kept candidate if the candidate kept a stale unit from an earlier frame.
+void checkPreviewedFrame(PreviewedDrag &drag, const ParkEdit &edit) {
+  stepWorld(drag.Ticked, drag.StepBuffers);
+  planEdit(drag.Ticked, edit, drag.Planned, drag.Buffers);
+  REQUIRE(isAccepted(drag.Planned));
+  const PlannedChange change{&edit, &drag.Planned, &drag.Buffers};
+  makeCandidate(drag.Ticked, applyPlannedChange, &change, drag.Buffers, drag.Kept);
+  drag.Commands.clear();
+  queueEdit(drag.Commands, edit);
+  CHECK(worldsEqual(drag.Kept, makeCandidate(drag.Ticked, drag.Commands)));
+  World loaded = loadWorld(makeParkSchema(), saveWorld(drag.Kept));
+  resolveWorld(loaded);
+  CHECK(worldsEqual(drag.Kept, loaded));
+}
+
+// A world that steps a tick before each frame and then commits the frame's edit.
+struct CommittedDrag {
+  explicit CommittedDrag(const World &opened) : Committing(copyWorld(opened)) {}
+
+  World Committing;
+  TickBuffers Buffers;
+  CommandQueue Commands;
+};
+
+// The committing world resolves each time from its own last resolution, so bookkeeping that one
+// resolution leaves wrong shows in the next one's result.
+void checkCommittedFrame(CommittedDrag &drag, const ParkEdit &edit) {
+  stepWorld(drag.Committing, drag.Buffers);
+  // An edit the committing world refused would leave it as it was and check nothing new.
+  REQUIRE(isAccepted(drag.Committing, edit));
+  drag.Commands.clear();
+  queueEdit(drag.Commands, edit);
+  commitCommands(drag.Committing, drag.Commands, drag.Buffers);
+  World loaded = loadWorld(makeParkSchema(), saveWorld(drag.Committing));
+  resolveWorld(loaded);
+  CHECK(worldsEqual(drag.Committing, loaded));
+}
+
+// Runs the drag's frames on a previewed world and a committing world, both from the opened park.
 void checkKeptCandidateThroughDrag(const World &opened, const std::vector<ParkEdit> &frames) {
-  World world = copyWorld(opened);
-  World kept = copyWorld(opened);
-  TickBuffers stepBuffers;
-  TickBuffers buffers;
-  PlannedEdit planned;
-  CommandQueue commands;
+  PreviewedDrag previewed(opened);
+  CommittedDrag committed(opened);
   for (size_t frame = 0; frame < frames.size(); ++frame) {
     INFO("frame " << (frame + 1));
-    stepWorld(world, stepBuffers);
-    const ParkEdit &edit = frames[frame];
-    planEdit(world, edit, planned, buffers);
-    REQUIRE(isAccepted(planned));
-    const PlannedChange change{&edit, &planned, &buffers};
-    makeCandidate(world, applyPlannedChange, &change, buffers, kept);
-    commands.clear();
-    queueEdit(commands, edit);
-    CHECK(worldsEqual(kept, makeCandidate(world, commands)));
-    World loaded = loadWorld(makeParkSchema(), saveWorld(kept));
-    resolveWorld(loaded);
-    CHECK(worldsEqual(kept, loaded));
+    checkPreviewedFrame(previewed, frames[frame]);
+    checkCommittedFrame(committed, frames[frame]);
   }
 }
 
-TEST_CASE("A candidate kept and refilled on each frame of a drag on warm.park, with a tick before "
-          "each frame, equals the candidate made new for the frame's edit and the world loaded "
-          "from its save") {
+TEST_CASE("On each frame of a drag on warm.park, with a tick before each frame, a candidate kept "
+          "and refilled equals the candidate made new for the frame's edit and the world loaded "
+          "from its save, and a world committing the frame's edit equals the world loaded from its "
+          "save") {
   const World opened = openParkNamed("warm.park");
   const World start = steppedOnce(opened);
   SECTION("dragging the shop along its face") {
@@ -1087,6 +1159,20 @@ TEST_CASE("A candidate kept and refilled on each frame of a drag on warm.park, w
   }
   SECTION("drawing a guest path out from the middle of a guest segment") {
     checkKeptCandidateThroughDrag(opened, pathDragFrames(start));
+  }
+}
+
+TEST_CASE("On each frame of a drag on furnished-paths.park, with a tick before each frame, a "
+          "candidate kept and refilled equals the candidate made new for the frame's edit and the "
+          "world loaded from its save, and a world committing the frame's edit equals the world "
+          "loaded from its save") {
+  const World opened = openParkNamed("furnished-paths.park");
+  const World start = steppedOnce(opened);
+  SECTION("dragging the shop along its face") {
+    checkKeptCandidateThroughDrag(opened, shopDragFrames(start));
+  }
+  SECTION("drawing a guest path out from the middle of a guest segment furnished on both sides") {
+    checkKeptCandidateThroughDrag(opened, furnishedPathDragFrames(start));
   }
 }
 

@@ -86,11 +86,12 @@ template <typename Visitor> void visitFields(Visitor &visitor, SeatPlace &place)
 }
 
 // The seat places field: each furnished segment's pieces, at the places on its ground line nearest
-// them.
+// them. Its resolver edits only the segments whose pieces or ground line changed.
 struct SeatPlaces {
   using Entry = SeatPlace;
   static constexpr std::string_view Name = "seat-places";
   static constexpr FieldKind Kind = FieldKind::Entry;
+  static constexpr bool KeepsResolved = true;
 };
 
 // Registers the derived types furniture-piece and laid-furniture, the field seat places, and the
