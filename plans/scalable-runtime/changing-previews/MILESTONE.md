@@ -145,6 +145,7 @@ None.
     | Offers | 3% | 3% |
     | Planning the edit | 2% | 3% |
 
+- After furniture-units, the shop-drag frame is 3.85 ms and the path-drag frame 5.97 ms. The largest cost in the path drag's frame is the ghost's edited surface, 22% (about 1.3 ms). The largest in the shop drag's is copying the world, 23%, which is 14% of the path drag's. Best seats is 20% and 14% (candidate-ghost/RESEARCH.md, build/perf/next-1.sleepy to -4).
 - The design follows build systems (minimality and early cutoff), Salsa (recorded reads per keyed call), Recast (rebuilding only the tiles a change overlaps), and Ramalingam–Reps and D* Lite (updating only the distances that change). Furniture's chain hash is already a small case of recorded reads.
 - The projection is an estimate, not a measurement. After the remaining features, a changed frame's work covers:
     - what the edit and the last tick reach,
