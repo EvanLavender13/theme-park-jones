@@ -9,6 +9,7 @@
 #include "sim/park/internal/layout.h"
 #include "sim/park/internal/meetings.h"
 #include "sim/park/internal/plan.h"
+#include "sim/park/internal/surface_units.h"
 
 #include <algorithm>
 #include <array>
@@ -20,6 +21,7 @@
 #include <span>
 #include <stddef.h>
 #include <stdint.h>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -884,7 +886,8 @@ bool finishPlan(EditPlan &plan) {
 //   changes;
 // - the indexes of the edited segments in the after ground;
 // - a restore's names, added keys, and extra points;
-// - the focus and the surface of the pieces near a solid.
+// - the focus and the surface of the pieces near a solid;
+// - the units a candidate's resolution derived, and the owners among them.
 struct EditLists {
   std::vector<ParkCorner> Meeting;
   std::vector<ParkPoint> Positions;
@@ -909,6 +912,8 @@ struct EditLists {
   std::vector<EntityKey> Focus;
   PavedSurface NearSolid;
   std::vector<ParkSegment> SpareSegments;
+  std::vector<EntityKey> Derived;
+  std::vector<EntityKey> Owners;
 };
 
 // The plan of an AddPath that names what it acts on, in kept. False when it names nothing.
@@ -1460,26 +1465,32 @@ void applyPlan(Store &store, const EditPlan &plan, std::vector<EntityKey> &keys,
   }
 }
 
+// Adds to changed the owner's pieces when they differ from its paving in was, and its edge lines
+// when they do. was is null when the owner had no paving.
+void addIfChanged(const OwnerPaving *was, EntityKey owner, const OwnerPaving &paving,
+                  PavedSurface &changed) {
+  const bool piecesDiffer = was == nullptr || !std::ranges::equal(was->Pieces, paving.Pieces);
+  const bool edgesDiffer =
+      was == nullptr ||
+      !std::ranges::equal(was->Edges, paving.Edges, [&](const EdgeLine &x, const EdgeLine &y) {
+        return x.Kind == y.Kind && std::ranges::equal(edgePoints(*was, x), edgePoints(paving, y));
+      });
+  if (piecesDiffer && !paving.Pieces.empty()) {
+    copyGrowing(pavingFor(changed, owner).Pieces, std::span<const SurfacePiece>(paving.Pieces));
+  }
+  if (edgesDiffer && !paving.Edges.empty()) {
+    OwnerPaving &into = pavingFor(changed, owner);
+    copyGrowing(into.Edges, std::span<const EdgeLine>(paving.Edges));
+    copyGrowing(into.EdgePoints, std::span<const ParkPoint>(paving.EdgePoints));
+  }
+}
+
 // Refills changed with the pieces and edge lines of each owner of after whose pieces or edge lines
 // differ from its paving in before: the pieces when they differ, and the edge lines when they do.
 void changedOwners(const PavedSurface &before, const PavedSurface &after, PavedSurface &changed) {
   beginRefill(changed);
   for (const auto &[owner, paving] : after.Owners) {
-    const OwnerPaving *was = pavingOf(before, owner);
-    const bool piecesDiffer = was == nullptr || !std::ranges::equal(was->Pieces, paving.Pieces);
-    const bool edgesDiffer =
-        was == nullptr ||
-        !std::ranges::equal(was->Edges, paving.Edges, [&](const EdgeLine &x, const EdgeLine &y) {
-          return x.Kind == y.Kind && std::ranges::equal(edgePoints(*was, x), edgePoints(paving, y));
-        });
-    if (piecesDiffer && !paving.Pieces.empty()) {
-      copyGrowing(pavingFor(changed, owner).Pieces, std::span<const SurfacePiece>(paving.Pieces));
-    }
-    if (edgesDiffer && !paving.Edges.empty()) {
-      OwnerPaving &into = pavingFor(changed, owner);
-      copyGrowing(into.Edges, std::span<const EdgeLine>(paving.Edges));
-      copyGrowing(into.EdgePoints, std::span<const ParkPoint>(paving.EdgePoints));
-    }
+    addIfChanged(pavingOf(before, owner), owner, paving, changed);
   }
   endRefill(changed);
 }
@@ -2376,23 +2387,26 @@ OwnPlan planOnce(const World &world, const ParkEdit &edit) {
   return own;
 }
 
+// Copies the segment into one the caller keeps, keeping its line's memory, with no furnishing.
+void copySegment(const ParkSegment &from, ParkSegment &segment) {
+  segment.Key = from.Key;
+  segment.Kind = from.Kind;
+  segment.From = from.From;
+  segment.To = from.To;
+  segment.Width = from.Width;
+  copyGrowing(segment.Line, std::span<const CarrierPoint>(from.Line));
+  segment.FromEdge = from.FromEdge;
+  segment.ToEdge = from.ToEdge;
+  segment.Furnished = {};
+}
+
 // Each segment the PlanLists' after ground holds at an index in the list, refilled into a list
 // the caller keeps as parkSegments' kept form refills one, with no furnishing.
 void editedSegmentsOf(const PathGround &groundAfter, const std::vector<size_t> &indexes,
                       std::vector<ParkSegment> &segments, std::vector<ParkSegment> &spare) {
   resizeKeeping(segments, indexes.size(), spare);
   for (size_t i = 0; i < indexes.size(); ++i) {
-    const ParkSegment &from = groundAfter.Segments[indexes[i]];
-    ParkSegment &segment = segments[i];
-    segment.Key = from.Key;
-    segment.Kind = from.Kind;
-    segment.From = from.From;
-    segment.To = from.To;
-    segment.Width = from.Width;
-    copyGrowing(segment.Line, std::span<const CarrierPoint>(from.Line));
-    segment.FromEdge = from.FromEdge;
-    segment.ToEdge = from.ToEdge;
-    segment.Furnished = {};
+    copySegment(groundAfter.Segments[indexes[i]], segments[i]);
   }
 }
 
@@ -2533,6 +2547,62 @@ void editedParts(const World & /*world*/, const PlannedEdit &planned, EditedPart
   }
   parts.Surface = lists.Edited;
   editedSegmentsOf(groundAfter, lists.EditedSegments, parts.Segments, lists.SpareSegments);
+}
+
+// Every paving unit and ground line the edit changes was derived by the candidate's resolution,
+// since the candidate's units equalled the world's before it. The comparison drops those that came
+// out the same.
+void editedParts(const World &world, const PlannedEdit &planned, const World &candidate,
+                 EditedParts &parts, TickBuffers &buffers) {
+  const PlanLists &kept = *planned.Lists;
+  EditLists &lists = buffers.get<EditLists>();
+  beginRefill(parts.Surface);
+  endRefill(parts.Surface);
+  resizeKeeping(parts.Segments, 0, lists.SpareSegments);
+  if (!kept.HasPlan) {
+    return;
+  }
+  derivedUnits(candidate, GroundLines::Name, lists.Derived);
+  std::vector<EntityKey> &edited = lists.Changed;
+  edited.clear();
+  for (const EntityKey key : lists.Derived) {
+    const GroundLine *now = unitValue<GroundLines>(candidate, key);
+    if (now == nullptr) {
+      continue;
+    }
+    const GroundLine *was = unitValue<GroundLines>(world, key);
+    if (was != nullptr && was->Segment.Line == now->Segment.Line &&
+        was->Segment.Width == now->Segment.Width) {
+      continue;
+    }
+    // An edit whose added or reshaped segment has no ground line shows nothing.
+    if (now->Segment.Line.empty()) {
+      return;
+    }
+    edited.push_back(key);
+  }
+  resizeKeeping(parts.Segments, edited.size(), lists.SpareSegments);
+  for (size_t i = 0; i < edited.size(); ++i) {
+    copySegment(unitValue<GroundLines>(candidate, edited[i])->Segment, parts.Segments[i]);
+  }
+  std::vector<EntityKey> &owners = lists.Owners;
+  owners.clear();
+  for (const std::string_view kind :
+       {PointPavingUnits::Name, SegmentPavingUnits::Name, HiddenEdges::Name}) {
+    derivedUnits(candidate, kind, lists.Derived);
+    owners.insert(owners.end(), lists.Derived.begin(), lists.Derived.end());
+  }
+  sortUnique(owners);
+  const PavedSurface &before = resolvedSurface(world);
+  const PavedSurface &after = resolvedSurface(candidate);
+  beginRefill(parts.Surface);
+  for (const EntityKey owner : owners) {
+    // An owner the edit leaves with no paving is not part of the edited surface.
+    if (const OwnerPaving *paving = pavingOf(after, owner)) {
+      addIfChanged(pavingOf(before, owner), owner, *paving, parts.Surface);
+    }
+  }
+  endRefill(parts.Surface);
 }
 
 void queueEdit(CommandQueue &queue, const ParkEdit &edit) {

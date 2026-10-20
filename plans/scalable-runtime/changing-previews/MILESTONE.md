@@ -84,7 +84,8 @@ derived-units. It builds the mechanism: units, the change records they start fro
 6. `watched-resolution`: the allocation check's drags and commits watch every resolution step except a named exception list of the steps that still allocate, each naming the feature that removes it, and the check fails when an excused step stops allocating. Depends on: feature 5.
 7. `route-updates`: route distance adds lengths in whole millimetres and updates only the entries an edit changes, instead of searching from every source again. Depends on: feature 6.
 8. `furniture-units`: furniture lays again only the chains an edit reaches, and reads only the obstacles near them, instead of hashing every chain's surroundings on every resolution. Depends on: feature 7.
-9. `thread-rules`: the decision record of criterion 7. Depends on: none.
+9. `candidate-ghost`: with a candidate, the ghost reads the surface an edit changes from the units the candidate's resolution derived, instead of deriving the paving around the edit before and after it. Depends on: feature 8.
+10. `thread-rules`: the decision record of criterion 7. Depends on: none.
 
 Later features are planned one at a time, from the code, after the last one merges. Each takes the largest whole-park cost still measured in a drag frame (Research notes). After each one, the frame is measured again and played on full.park. Once dragging holds the display's refresh rate in play, the user decides whether to go on to criterion 1.
 
@@ -96,7 +97,8 @@ The whole-park work still left after route-updates, with what each part needs fr
 - Best seats: one search over the whole network into one slot. It needs to know which seats changed, which the seat places and seat offers don't record yet.
 - Carrying guests and footfall: every guest is carried. Carrying only some needs to know which guest ground changed, which needs guest ground on units first.
 - Copying the world into the candidate.
-- Planning a path edit, its acceptance check, and the ghost's edited surface: they copy the layout and derive the whole park's ground (worldGround, keptCurves, surfaceAround, pointsAffected).
+- The ghost's edited surface: read from the candidate (candidate-ghost). A refused edit has no candidate, so its ghost still derives the paving around it.
+- Planning a path edit and its acceptance check: they copy the layout, derive the whole park's ground (worldGround, keptCurves, groundOf), compare every segment before and after (pointsChanged, withFarEnds), and derive the paving around the edit, before and after (surfaceAround).
 - The ghost's other parts: it compares every furniture piece of both worlds, draws every walkway, and checks every box.
 - Guest ground, the path networks' carriers, and the offers: each rebuilt for the whole park.
 - Route distance's slot moves: writing a source's changed entries moves the rest of its list, about 1.7 MB per path-drag frame on full.park, growing with sources times nodes.

@@ -708,7 +708,11 @@ void buildGhostMesh(const World &world, const ParkEdit &edit, const PlannedEdit 
     part->Indices.clear();
   }
   const bool accepted = isAccepted(planned);
-  editedParts(world, planned, lists.Parts, lists.Buffers);
+  if (candidate) {
+    editedParts(world, planned, *candidate, lists.Parts, lists.Buffers);
+  } else {
+    editedParts(world, planned, lists.Parts, lists.Buffers);
+  }
   // What the edit adds or changes previews the park, lit as it is, unless the world refuses it and
   // it shows in the invalid tint.
   ParkMesh &shape = accepted ? ghost.Lit : ghost.Tints;
